@@ -27,6 +27,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.ir.unsupported_method_template import (
@@ -145,6 +146,7 @@ def lower_constant_pd_timedelta(context, builder, ty, pyval):
 
 # 6. Implement the constructor
 @overload(pd.Timedelta, no_unliteral=True)
+@overload(bd.Timedelta, no_unliteral=True)
 def pd_timedelta(
     value=_no_input,
     unit="ns",

@@ -39,6 +39,7 @@ from numba.extending import (
 
 import bodo
 import bodo.libs.str_ext
+import bodo.pandas as bd
 import bodo.pandas_compat
 import bodo.types
 from bodo.hiframes.datetime_date_ext import (
@@ -435,7 +436,10 @@ def tz_has_transition_times(tz: str | int | None):
     return False
 
 
+# Overload regular Pandas and our exported Pandas Timestamp so
+# "import bodo.pandas as pd" works correctly inside JIT as well.
 @overload(pd.Timestamp, no_unliteral=True, jit_options={"cache": True})
+@overload(bd.Timestamp, no_unliteral=True, jit_options={"cache": True})
 def overload_pd_timestamp(
     ts_input=_no_input,
     freq=None,
