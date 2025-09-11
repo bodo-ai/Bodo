@@ -28,6 +28,8 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/expression/bound_subquery_expression.hpp"
+#include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_copy_to_file.hpp"
@@ -359,6 +361,18 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
             throw std::runtime_error("make_unary_expr unsupported etype " +
                                      std::to_string(static_cast<int>(etype)));
     }
+}
+
+duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
+    std::unique_ptr<duckdb::LogicalOperator> &left,
+    std::unique_ptr<duckdb::LogicalOperator> &right) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto left_duck = to_duckdb(left);
+    auto right_duck = to_duckdb(right);
+    auto logical_cp = duckdb::make_uniq<duckdb::LogicalCrossProduct>(
+        std::move(left_duck), std::move(right_duck));
+
+    return logical_cp;
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(

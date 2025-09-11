@@ -78,6 +78,7 @@ from bodo.pandas.utils import (
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    insert_bodo_scalar,
     wrap_plan,
 )
 
@@ -198,26 +199,44 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         with the given operator "op".
         """
         from bodo.pandas.base import _empty_like
+        from bodo.pandas.scalar import BodoScalar
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
-        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
-        # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            other = other._plan
+        zero_size_other = (
+            _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
+        )
 
         # Compute schema of new series.
         empty_data = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
+        # The plan of the parent table without the Series projection node.
+        lhs_plan = self._plan.args[0]
+
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
-        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+
+        # If other is a lazy BodoScalar we need to insert it into the plan.
+        if type(other) is BodoScalar and other.is_lazy_plan():
+            lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
+            # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+            lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
+
+        # If other is a LazyPlan we need to extract the expression.
+        elif hasattr(other, "_plan") and isinstance(other._plan, LazyPlan):
+            rhs = get_proj_expr_single(other._plan)
+        # If other is a Pandas Series or a scalar we can use it directly.
+        else:
+            rhs = other
+
+        # Match the source plans of lhs and rhs, if they don't match return None, None
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
             raise BodoLibNotImplementedException(
-                "binary operation arguments should have the same dataframe source."
+                "binary operation arguments must have the same dataframe source."
             )
+
         expr = ComparisonOpExpression(
             empty_data,
             lhs,
@@ -231,8 +250,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LogicalProjection(
             empty_data,
-            # Use the original table without the Series projection node.
-            self._plan.args[0],
+            lhs_plan,
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
@@ -240,6 +258,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
         from bodo.pandas.base import _empty_like
+        from bodo.pandas.scalar import BodoScalar
 
         if not (
             (
@@ -248,18 +267,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 and other.dtype.type is bool
             )
             or isinstance(other, bool)
+            or type(other) is BodoScalar
+            and other.wrapped_series.dtype.type is bool
         ):
             raise BodoLibNotImplementedException(
-                "'other' should be boolean BodoSeries or a bool. "
+                "'other' should be boolean BodoSeries, BodoScalar or a bool. "
                 f"Got {type(other).__name__} instead."
             )
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
-        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
-        # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            other = other._plan
+        zero_size_other = (
+            _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
+        )
 
         # Compute schema of new series.
         empty_data = getattr(zero_size_self, op)(zero_size_other)
@@ -267,9 +287,25 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "_conjunction_binop: empty_data is not a Series"
         )
 
+        # The plan of the parent table without the Series projection node.
+        lhs_plan = self._plan.args[0]
+
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
-        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+
+        # If other is a lazy BodoScalar we need to insert it into the plan.
+        if type(other) is BodoScalar and other.is_lazy_plan():
+            lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
+            # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+            lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
+
+        # If other is a LazyPlan we need to extract the expression.
+        elif hasattr(other, "_plan") and isinstance(other._plan, LazyPlan):
+            rhs = get_proj_expr_single(other._plan)
+        # If other is a Pandas Series or a scalar we can use it directly.
+        else:
+            rhs = other
+
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
             raise BodoLibNotImplementedException(
@@ -289,7 +325,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
-            self._plan.args[0],
+            lhs_plan,
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
@@ -342,6 +378,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
+
         if is_numeric(other):
             return self._numeric_binop(other, op, reverse)
 
@@ -350,13 +387,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def _numeric_binop(self, other, op, reverse):
         """Handles op(self, other) when other is a numeric BodoSeries or scalar."""
         from bodo.pandas.base import _empty_like
+        from bodo.pandas.scalar import BodoScalar
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
-        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
-        # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            other = other._plan
+        zero_size_other = (
+            _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
+        )
 
         # Compute schema of new series.
         empty_data = getattr(zero_size_self, op)(zero_size_other)
@@ -364,9 +401,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "_numeric_binop: empty_data is not a Series"
         )
 
+        # The plan of the parent table without the Series projection node.
+        lhs_plan = self._plan.args[0]
+
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
-        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+
+        # If other is a lazy BodoScalar we need to insert it into the plan.
+        if type(other) is BodoScalar and other.is_lazy_plan():
+            lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
+            # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+            lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
+
+        # If other is a LazyPlan we need to extract the expression.
+        elif hasattr(other, "_plan") and isinstance(other._plan, LazyPlan):
+            rhs = get_proj_expr_single(other._plan)
+        # If other is a Pandas Series or a scalar we can use it directly.
+        else:
+            rhs = other
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
             raise BodoLibNotImplementedException(
@@ -385,7 +437,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
-            self._plan.args[0],
+            lhs_plan,
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
@@ -460,7 +512,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __getitem__(self, key):
-        """Called when df[key] is used."""
+        """Called when series[key] is used."""
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
