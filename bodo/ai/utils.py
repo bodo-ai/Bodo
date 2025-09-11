@@ -16,8 +16,9 @@ def get_default_bedrock_request_formatter(modelId: str) -> Callable[[str], str]:
     elif "anthropic.claude" in modelId:
         return lambda input: json.dumps(
             {
-                "prompt": f"\n\nHuman: {input}\n\nAssistant:",
-                "max_tokens_to_sample": 4000,
+                "messages": [{"role": "user", "content": input}],
+                "max_tokens": 4000,
+                "anthropic_version": "bedrock-2023-05-31",
             }
         )
     elif "openai" in modelId:
@@ -43,7 +44,7 @@ def get_default_bedrock_response_formatter(
     elif "amazon.titan-embed" in modelId:
         return lambda output: json.loads(output)["embedding"]
     elif "anthropic.claude" in modelId:
-        return lambda output: json.loads(output)["completion"]
+        return lambda output: json.loads(output)["content"][0]["text"]
     elif "openai" in modelId:
         return lambda output: json.loads(output)["choices"][0]["message"]["content"]
 
