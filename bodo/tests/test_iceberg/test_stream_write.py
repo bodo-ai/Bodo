@@ -387,7 +387,7 @@ def test_iceberg_write_part_sort(
     and verify that the append was done correctly, i.e. validate
     that each file is correctly sorted and partitioned.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     table_name = (
         f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}"

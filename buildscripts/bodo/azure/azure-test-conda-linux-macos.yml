@@ -137,7 +137,7 @@ jobs:
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
 
       if [[ "${{ parameters.test_type }}" == "SPAWN" || "${{ parameters.test_type }}" == "DF_LIB" ]]; then
-        # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT upfront.
+        # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
         PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
       fi
 

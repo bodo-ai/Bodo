@@ -8076,9 +8076,8 @@ def test_timestamptz_gb_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
-@pytest.mark.parametrize(
-    "fstr, expected",
-    [
+@pytest.fixture(
+    params=[
         pytest.param(
             "count",
             pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
@@ -8151,18 +8150,20 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
     ],
 )
-def expected_timestamptz_gb_agg(request):
+def fstr_expected(request):
     """Fixture to lazily evaluate expected parameter to avoid importing
     compiler at collection time."""
     import bodo.decorators  # noqa
 
-    expected = request.param
+    fstr, lazy_expected = request.param
+    expected = lazy_expected() if callable(lazy_expected) else lazy_expected
 
-    return expected() if callable(expected) else expected
+    return fstr, expected
 
 
-def test_timestamptz_gb_agg(fstr, expected_timestamptz_gb_agg, memory_leak_check):
+def test_timestamptz_gb_agg(fstr_expected, memory_leak_check):
     """Tests groupby with timestamptz column and aggregation"""
+    fstr, expected = fstr_expected
 
     def impl(df):
         return df.groupby("A", as_index=False, dropna=False).agg(fstr)
@@ -8190,7 +8191,7 @@ def test_timestamptz_gb_agg(fstr, expected_timestamptz_gb_agg, memory_leak_check
     check_func(
         impl,
         (df,),
-        py_output=expected_timestamptz_gb_agg,
+        py_output=expected,
         sort_output=True,
         reset_index=True,
     )

@@ -1511,54 +1511,29 @@ def series_value(request):
     return request.param
 
 
-@pytest.mark.parametrize(
-    "date_fields",
-    [
-        "year",
-        "month",
-        "day",
-        "hour",
-        "minute",
-        "second",
-        "microsecond",
-        "nanosecond",
-        "quarter",
-        "dayofyear",
-        "day_of_year",
-        "dayofweek",
-        "day_of_week",
-        "daysinmonth",
-        "days_in_month",
-        "is_leap_year",
-        "is_month_start",
-        "is_month_end",
-        "is_quarter_start",
-        "is_quarter_end",
-        "is_year_start",
-        "is_year_end",
-        "weekday",
-    ],
-)
-def test_dt_extract(series_value, date_fields, memory_leak_check):
+def test_dt_extract(series_value, memory_leak_check):
     """Test Series.dt extraction"""
-    func_text = "def impl(S, date_fields):\n"
-    func_text += f"  return S.dt.{date_fields}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
-    check_func(impl, (series_value, date_fields), check_dtype=False)
+
+    for date_field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        func_text = "def impl(S, date_fields):\n"
+        func_text += f"  return S.dt.{date_field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+        check_func(impl, (series_value, date_field), check_dtype=False)
 
 
-@pytest.mark.parametrize("date_methods", ["normalize", "day_name", "month_name"])
-def test_dt_date_methods(series_value, date_methods, memory_leak_check):
+def test_dt_date_methods(series_value, memory_leak_check):
     """Test Series.dt datetime methods"""
-    func_text = "def impl(S, date_methods):\n"
-    func_text += f"  return S.dt.{date_methods}()\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
 
-    check_func(impl, (series_value, date_methods))
+    for date_method in bodo.hiframes.pd_timestamp_ext.date_methods:
+        func_text = "def impl(S, date_methods):\n"
+        func_text += f"  return S.dt.{date_method}()\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+
+        check_func(impl, (series_value, date_method))
 
 
 def test_dt_extract_date(series_value, memory_leak_check):
@@ -1697,32 +1672,31 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
         check_func(impl, (series_value_no_bad_dates, freq))
 
 
-@pytest.mark.parametrize(
-    "timedelta_fields", ["days", "seconds", "microseconds", "nanoseconds"]
-)
-def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
+def test_dt_timedelta_fields(memory_leak_check):
     """Test Series.dt for timedelta64 fields"""
-    func_text = "def impl(S, date_fields):\n"
-    func_text += f"  return S.dt.{timedelta_fields}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
 
-    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
-    check_func(impl, (S, timedelta_fields), check_dtype=False)
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        func_text = "def impl(S, date_fields):\n"
+        func_text += f"  return S.dt.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+
+        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        check_func(impl, (S, field), check_dtype=False)
 
 
-@pytest.mark.parametrize("timedelta_methods", ["total_seconds", "to_pytimedelta"])
-def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
+def test_dt_timedelta_methods(memory_leak_check):
     """Test Series.dt for timedelta64 methods"""
-    func_text = "def impl(S, timedelta_methods):\n"
-    func_text += f"  return S.dt.{timedelta_methods}()\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    for method in bodo.hiframes.pd_timestamp_ext.timedelta_methods:
+        func_text = "def impl(S, timedelta_methods):\n"
+        func_text += f"  return S.dt.{method}()\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
 
-    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
-    check_func(impl, (S, timedelta_methods))
+        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        check_func(impl, (S, method))
 
 
 def test_series_dt64_timestamp_cmp(memory_leak_check):

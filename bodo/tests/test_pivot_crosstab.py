@@ -1607,7 +1607,7 @@ def test_pivot_to_parquet(df):
     """
     import pyarrow.parquet as pq
 
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     output_filename = "bodo_temp.pq"
 

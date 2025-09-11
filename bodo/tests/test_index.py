@@ -1693,44 +1693,17 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        "year",
-        "month",
-        "day",
-        "hour",
-        "minute",
-        "second",
-        "microsecond",
-        "nanosecond",
-        "quarter",
-        "dayofyear",
-        "day_of_year",
-        "dayofweek",
-        "day_of_week",
-        "daysinmonth",
-        "days_in_month",
-        "is_leap_year",
-        "is_month_start",
-        "is_month_end",
-        "is_quarter_start",
-        "is_quarter_end",
-        "is_year_start",
-        "is_year_end",
-        "weekday",
-    ],
-)
-def test_datetime_field(dti_val, field, memory_leak_check):
+def test_datetime_field(dti_val, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
 
-    func_text = "def impl(A):\n"
-    func_text += f"  return A.{field}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        func_text = "def impl(A):\n"
+        func_text += f"  return A.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
 
-    check_func(impl, (dti_val,))
+        check_func(impl, (dti_val,))
 
 
 def test_datetime_date(dti_val, memory_leak_check):
@@ -2128,17 +2101,17 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
-@pytest.mark.parametrize("field", ["days", "seconds", "microseconds", "nanoseconds"])
-def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
+def test_timedelta_field(timedelta_index_val, memory_leak_check):
     """tests timedelta index.field. This should be inlined in series pass"""
 
-    func_text = "def impl(A):\n"
-    func_text += f"  return A.{field}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        func_text = "def impl(A):\n"
+        func_text += f"  return A.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
 
-    check_func(impl, (timedelta_index_val,))
+        check_func(impl, (timedelta_index_val,))
 
 
 @pytest.mark.parametrize(

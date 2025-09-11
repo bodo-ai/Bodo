@@ -3236,6 +3236,9 @@ def test_get_cpu_id(memory_leak_check):
 
 def bcast_intercomm(data):
     """broadcast data using spawner's intercomm"""
+    # Import compiler for bodo.libs
+    import bodo.decorators  # isort:skip # noqa
+
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.BROADCAST.value, bcast_root)

@@ -223,7 +223,7 @@ def test_basic_write_new_append(
     Test basic Iceberg table write + append on new table
     (append to table written by Bodo)
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
@@ -481,7 +481,7 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
     Helper function for test_iceberg_field_ids_in_pq_schema. This is
     used for testing both the streaming and non-streaming versions.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     passed = 1
     err = "Setup step failed. See error on rank 0"
@@ -543,7 +543,7 @@ def _verify_pq_schema_in_files(
     files written by Bodo have the expected schema,
     including the metadata fields.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     passed = 1
     err = "Parquet field schema metadata validation failed. See error on rank 0"
@@ -632,7 +632,7 @@ def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
     and the schema metadata should have an encoded JSON describing
     the Iceberg schema (with the correct schema id).
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     table_name = "schema_evolution_eg_table"
 
@@ -816,7 +816,7 @@ def test_basic_write_upcasting(
     arrays types are nullable by default
     TODO: [BE-41] Update when nullable floating point arrays are supported
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
@@ -1657,7 +1657,7 @@ def test_write_partitioned(
     We then also read the table back using Spark and Bodo and validate
     that the contents are as expected.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     table_name = part_table_name(base_name, part_spec)
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1794,7 +1794,7 @@ def test_write_sorted(
     We then also read the table back using Spark and Bodo and validate
     that the contents are as expected.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     base_name, sort_order, table_name = sort_cases
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1918,7 +1918,7 @@ def test_write_part_sort(
     Then read the table using Spark and Bodo and validate that the
     output is as expected.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}"
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
@@ -2097,7 +2097,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     We also explicitly test the table-format case since the codegen
     for it is slightly different.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     S = pa.DictionaryArray.from_arrays(
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),

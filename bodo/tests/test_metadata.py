@@ -619,7 +619,7 @@ def test_index_type_return(metadata_supported_index_types):
     Tests that the index typing information is properly preserved when returning a dataframe
     to pandas.
     """
-    from bodo.tests.utils import reduce_sum
+    from bodo.tests.utils_jit import reduce_sum
 
     idx = metadata_supported_index_types[:1]
     is_obj_index = pd.api.types.is_object_dtype(idx)
