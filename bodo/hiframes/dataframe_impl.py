@@ -37,6 +37,7 @@ from numba.extending import (
 )
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import (
     _no_input,
@@ -3071,7 +3072,13 @@ def overload_isna(obj):
 overload(pd.isna, inline="always")(overload_isna)
 overload(pd.isnull, inline="always")(overload_isna)
 
+# Enable Bodo's exports of Pandas
+overload(bd.isna, inline="always")(overload_isna)
+overload(bd.isnull, inline="always")(overload_isna)
 
+
+@overload(bd.isna)
+@overload(bd.isnull)
 @overload(pd.isna)
 @overload(pd.isnull)
 def overload_isna_scalar(obj):
@@ -3156,6 +3163,9 @@ def overload_notna(obj):
 # Use function decorator to enable stacked inlining
 overload(pd.notna, inline="always", no_unliteral=True)(overload_notna)
 overload(pd.notnull, inline="always", no_unliteral=True)(overload_notna)
+
+overload(bd.notna, inline="always", no_unliteral=True)(overload_notna)
+overload(bd.notnull, inline="always", no_unliteral=True)(overload_notna)
 
 
 def _get_pd_dtype_str(t):
@@ -3460,6 +3470,7 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     jit_options={"cache": True},
 )
 @overload(pd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_dataframe_merge(
     left,
     right,
@@ -4392,6 +4403,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
 
 
 @overload(pd.pivot, inline="always", no_unliteral=True)
+@overload(bd.pivot, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot", inline="always", no_unliteral=True)
 def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     """
@@ -4474,6 +4486,7 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
 
 
 @overload(pd.pivot_table, inline="always", no_unliteral=True)
+@overload(bd.pivot_table, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot_table", inline="always", no_unliteral=True)
 def overload_dataframe_pivot_table(
     data,
@@ -4640,6 +4653,7 @@ def overload_dataframe_pivot_table(
 
 
 @overload(pd.melt, inline="always", no_unliteral=True)
+@overload(bd.melt, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "melt", inline="always", no_unliteral=True)
 def overload_dataframe_melt(
     frame,
@@ -4815,6 +4829,7 @@ def overload_dataframe_melt(
 
 
 @overload(pd.crosstab, inline="always", no_unliteral=True)
+@overload(bd.crosstab, inline="always", no_unliteral=True)
 def crosstab_overload(
     index,
     columns,
@@ -5776,6 +5791,7 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
 
 
 @overload(pd.read_excel, no_unliteral=True)
+@overload(bd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,
     sheet_name=0,

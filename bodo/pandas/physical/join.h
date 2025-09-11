@@ -145,15 +145,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             probe_col_inds_rev[probe_col_inds[i]] = i;
         }
 
-        initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
-                                bound_right_inds);
-        initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols,
-                                bound_left_inds);
-
         std::shared_ptr<bodo::Schema> build_table_schema_reordered =
             build_table_schema->Project(build_col_inds);
         std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
             probe_table_schema->Project(probe_col_inds);
+
+        std::set<uint64_t> left_non_equi_keys;
+        std::set<uint64_t> right_non_equi_keys;
 
         for (const duckdb::JoinCondition& cond : conditions) {
             if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
@@ -166,21 +164,23 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             auto& right_bce =
                 cond.right->Cast<duckdb::BoundColumnRefExpression>();
 
+            uint64_t left_cond_col_ind = left_col_ref_map[{
+                left_bce.binding.table_index, left_bce.binding.column_index}];
+            uint64_t right_cond_col_ind = right_col_ref_map[{
+                right_bce.binding.table_index, right_bce.binding.column_index}];
+            left_non_equi_keys.insert(left_cond_col_ind);
+            right_non_equi_keys.insert(right_cond_col_ind);
+
             std::shared_ptr<PhysicalExpression> new_phys_expr =
-                std::static_pointer_cast<
-                    PhysicalExpression>(std::make_shared<
-                                        PhysicalComparisonExpression>(
-                    std::make_shared<PhysicalColumnRefExpression>(
-                        this->probe_col_inds_rev[getColRefMap(
-                            left_bindings)[{left_bce.binding.table_index,
-                                            left_bce.binding.column_index}]],
-                        left_bce.GetName(), true),
-                    std::make_shared<PhysicalColumnRefExpression>(
-                        this->build_col_inds_rev[getColRefMap(
-                            right_bindings)[{right_bce.binding.table_index,
-                                             right_bce.binding.column_index}]],
-                        right_bce.GetName(), false),
-                    cond.comparison));
+                std::static_pointer_cast<PhysicalExpression>(
+                    std::make_shared<PhysicalComparisonExpression>(
+                        std::make_shared<PhysicalColumnRefExpression>(
+                            this->probe_col_inds_rev[left_cond_col_ind],
+                            left_bce.GetName(), true),
+                        std::make_shared<PhysicalColumnRefExpression>(
+                            this->build_col_inds_rev[right_cond_col_ind],
+                            right_bce.GetName(), false),
+                        cond.comparison));
             // If we have more than one non-equi join condition then 'and'
             // them together.
             if (physExprTree) {
@@ -192,6 +192,12 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 physExprTree = new_phys_expr;
             }
         }
+
+        initOutputColumnMapping(build_kept_cols, right_keys,
+                                right_non_equi_keys, n_build_cols,
+                                bound_right_inds);
+        initOutputColumnMapping(probe_kept_cols, left_keys, left_non_equi_keys,
+                                n_probe_cols, bound_left_inds);
 
         // ---------------------------------------------------
 
@@ -610,12 +616,15 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L746
      * @param col_inds output mapping to fill
      * @param keys key column indices
+     * @param non_equi_keys set of key columns that are part of non-equi join
+     * conditions
      * @param ncols number of columns in the table
      * @param bound_inds set of column indices that need to be produced in the
      * output according to bindings
      */
     static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
                                         const std::vector<uint64_t>& keys,
+                                        const std::set<uint64_t>& non_equi_keys,
                                         uint64_t ncols,
                                         std::set<int64_t>& bound_inds) {
         // Map key column index to its position in keys vector
@@ -626,6 +635,15 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         uint64_t data_offset = keys.size();
 
         for (uint64_t i = 0; i < ncols; i++) {
+            // Handle keys to non-equi conditions that are not part of the
+            // output or equality keys. They just change the index of the other
+            // columns.
+            if ((non_equi_keys.find(i) != non_equi_keys.end()) &&
+                (bound_inds.find(i) == bound_inds.end()) &&
+                (key_positions.find(i) == key_positions.end())) {
+                data_offset++;
+                continue;
+            }
             if (bound_inds.find(i) == bound_inds.end()) {
                 continue;
             }
