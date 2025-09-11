@@ -336,13 +336,12 @@ def test_sort_values_1col_ascending(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_sort_values_1col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl(df):
         df.sort_values(by="A", kind="mergesort", inplace=True)
@@ -373,13 +372,12 @@ def test_sort_values_2col(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_sort_values_2col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl(df):
         df.sort_values(
@@ -1364,491 +1362,538 @@ def test_sort_values_input_boundaries(memory_leak_check):
         impl(df, A)
 
 
-@pytest.mark.skipif(bodo.get_size() > 3, reason="Only implemented for up to 3 ranks.")
-@pytest.mark.parametrize(
-    "dfs, bounds_list, min_val, max_val",
-    [
+@pytest.fixture(
+    params=[
         ## Edge Cases
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": [0, 6, 7, 7] * 10,
-                        "B": [10, 7, 7, 8] * 10,
-                    }
-                )
-            ],
-            [
-                np.array([0, 5, 10], dtype=np.int64),
-            ],
-            float("-inf"),
-            float("inf"),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": [0, 6, 7, 7] * 10,
+                            "B": [10, 7, 7, 8] * 10,
+                        }
+                    )
+                ],
+                [
+                    np.array([0, 5, 10], dtype=np.int64),
+                ],
+                float("-inf"),
+                float("inf"),
+            ),
             id="edge_case",
         ),
         ## Very simple test
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.arange(0, 100, 5, dtype=np.int64),
-                        "B": np.arange(0, 200, 10, dtype=np.int64),
-                    }
-                ),
-            ],
-            [
-                np.array([0, 100, 200], dtype=np.int64),
-            ],
-            float("-inf"),
-            float("inf"),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.arange(0, 100, 5, dtype=np.int64),
+                            "B": np.arange(0, 200, 10, dtype=np.int64),
+                        }
+                    ),
+                ],
+                [
+                    np.array([0, 100, 200], dtype=np.int64),
+                ],
+                float("-inf"),
+                float("inf"),
+            ),
             id="simple",
         ),
         ## Test that it works in the empty table case
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.arange(0, dtype=np.int64),
-                        "B": np.arange(0, dtype=np.int64),
-                    }
-                ),
-            ],
-            [
-                np.array([0, 100, 200], dtype=np.int64),
-            ],
-            float("-inf"),
-            float("inf"),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.arange(0, dtype=np.int64),
+                            "B": np.arange(0, dtype=np.int64),
+                        }
+                    ),
+                ],
+                [
+                    np.array([0, 100, 200], dtype=np.int64),
+                ],
+                float("-inf"),
+                float("inf"),
+            ),
             id="empty",
         ),
         ## Integers: Data x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.arange(0, 100, 5, dtype=np.int64),
-                        "B": np.arange(0, 200, 10, dtype=np.int64),
-                    }
-                ),
-            ],
-            [
-                np.array([-10, 20], dtype=np.int64),
-                np.array([10, 20], dtype=np.int64),
-                np.array([20, 20], dtype=np.int64),
-                np.array([20, 2000], dtype=np.int64),
-            ],
-            float("-inf"),
-            float("inf"),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.arange(0, 100, 5, dtype=np.int64),
+                            "B": np.arange(0, 200, 10, dtype=np.int64),
+                        }
+                    ),
+                ],
+                [
+                    np.array([-10, 20], dtype=np.int64),
+                    np.array([10, 20], dtype=np.int64),
+                    np.array([20, 20], dtype=np.int64),
+                    np.array([20, 2000], dtype=np.int64),
+                ],
+                float("-inf"),
+                float("inf"),
+            ),
             id="int64",
         ),
         ## Nullable Integers: Data (with nulls, without nulls)  x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": pd.array(
-                            [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, 0, 4, 8, 12, 16],
-                            dtype="Int64",
-                        ),
-                        "B": pd.array(
-                            [pd.NA, pd.NA, 20, 24, 28, 32, 36, pd.NA, pd.NA, pd.NA],
-                            dtype="Int64",
-                        ),
-                    }
-                ),
-            ],
-            [
-                pd.array([10, 20], dtype="Int64"),
-                pd.array([10, pd.NA], dtype="Int64"),
-                pd.array([pd.NA, pd.NA], dtype="Int64"),
-                pd.array([20, 20], dtype="Int64"),
-            ],
-            np.iinfo(np.int64).min,
-            np.iinfo(np.int64).max,
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": pd.array(
+                                [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, 0, 4, 8, 12, 16],
+                                dtype="Int64",
+                            ),
+                            "B": pd.array(
+                                [pd.NA, pd.NA, 20, 24, 28, 32, 36, pd.NA, pd.NA, pd.NA],
+                                dtype="Int64",
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    pd.array([10, 20], dtype="Int64"),
+                    pd.array([10, pd.NA], dtype="Int64"),
+                    pd.array([pd.NA, pd.NA], dtype="Int64"),
+                    pd.array([20, 20], dtype="Int64"),
+                ],
+                np.iinfo(np.int64).min,
+                np.iinfo(np.int64).max,
+            ),
             id="Int64",
         ),
         ## Floats: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.4], [10, 20], [20, 20])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.arange(0, 20, 4, dtype=np.float64),
-                        "B": np.arange(20, 40, 4, dtype=np.float64),
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": np.concatenate(
-                            (
-                                np.array([np.nan] * 5, dtype=np.float64),
-                                np.arange(0, 20, 4, dtype=np.float64),
-                            )
-                        ),
-                        "B": np.concatenate(
-                            (
-                                np.array([np.nan] * 2, dtype=np.float64),
-                                np.arange(20, 40, 4, dtype=np.float64),
-                                np.array([np.nan] * 3, dtype=np.float64),
-                            )
-                        ),
-                    }
-                ),
-            ],
-            [
-                np.array([10.5, np.nan], dtype=np.float64),
-                np.array([np.nan, np.nan], dtype=np.float64),
-                np.array([10, 20.4], dtype=np.float64),
-                np.array([10, 20], dtype=np.float64),
-                np.array([20, 20], dtype=np.float64),
-            ],
-            float("-inf"),
-            float("inf"),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.arange(0, 20, 4, dtype=np.float64),
+                            "B": np.arange(20, 40, 4, dtype=np.float64),
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": np.concatenate(
+                                (
+                                    np.array([np.nan] * 5, dtype=np.float64),
+                                    np.arange(0, 20, 4, dtype=np.float64),
+                                )
+                            ),
+                            "B": np.concatenate(
+                                (
+                                    np.array([np.nan] * 2, dtype=np.float64),
+                                    np.arange(20, 40, 4, dtype=np.float64),
+                                    np.array([np.nan] * 3, dtype=np.float64),
+                                )
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    np.array([10.5, np.nan], dtype=np.float64),
+                    np.array([np.nan, np.nan], dtype=np.float64),
+                    np.array([10, 20.4], dtype=np.float64),
+                    np.array([10, 20], dtype=np.float64),
+                    np.array([20, 20], dtype=np.float64),
+                ],
+                float("-inf"),
+                float("inf"),
+            ),
             id="float64",
         ),
         ## Date: Data (with nulls, without nulls)  x bounds ([D1, NA], [NA, NA], [D1, D2], [D2, D2])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": pd.date_range(
-                            start="2016-01-01", end="2022-12-12", periods=15
-                        ).date,
-                        "B": pd.date_range(
-                            start="2018-01-01", end="2024-12-12", periods=15
-                        ).date,
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": np.concatenate(
-                            (
-                                np.array([pd.NA] * 5),
-                                pd.date_range(
-                                    start="2016-01-01", end="2022-12-12", periods=15
-                                ).date,
-                            )
-                        ),
-                        "B": np.concatenate(
-                            (
-                                np.array([pd.NA] * 3),
-                                pd.date_range(
-                                    start="2016-01-01", end="2022-12-12", periods=15
-                                ).date,
-                                np.array([pd.NA] * 2),
-                            )
-                        ),
-                    }
-                ),
-            ],
-            [
-                pd.array([date(2018, 12, 12), None], dtype=pd.ArrowDtype(pa.date32())),
-                pd.array([date(2018, 12, 12), pd.NA], dtype=pd.ArrowDtype(pa.date32())),
-                pd.array([pd.NA, pd.NA], dtype=pd.ArrowDtype(pa.date32())),
-                pd.array([None, None], dtype=pd.ArrowDtype(pa.date32())),
-                pd.array(
-                    [date(2018, 12, 12), date(2019, 12, 12)],
-                    dtype=pd.ArrowDtype(pa.date32()),
-                ),
-                pd.array(
-                    [date(2019, 12, 12), date(2019, 12, 12)],
-                    dtype=pd.ArrowDtype(pa.date32()),
-                ),
-            ],
-            date.min,
-            date.max,
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": pd.date_range(
+                                start="2016-01-01", end="2022-12-12", periods=15
+                            ).date,
+                            "B": pd.date_range(
+                                start="2018-01-01", end="2024-12-12", periods=15
+                            ).date,
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": np.concatenate(
+                                (
+                                    np.array([pd.NA] * 5),
+                                    pd.date_range(
+                                        start="2016-01-01", end="2022-12-12", periods=15
+                                    ).date,
+                                )
+                            ),
+                            "B": np.concatenate(
+                                (
+                                    np.array([pd.NA] * 3),
+                                    pd.date_range(
+                                        start="2016-01-01", end="2022-12-12", periods=15
+                                    ).date,
+                                    np.array([pd.NA] * 2),
+                                )
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    pd.array(
+                        [date(2018, 12, 12), None], dtype=pd.ArrowDtype(pa.date32())
+                    ),
+                    pd.array(
+                        [date(2018, 12, 12), pd.NA], dtype=pd.ArrowDtype(pa.date32())
+                    ),
+                    pd.array([pd.NA, pd.NA], dtype=pd.ArrowDtype(pa.date32())),
+                    pd.array([None, None], dtype=pd.ArrowDtype(pa.date32())),
+                    pd.array(
+                        [date(2018, 12, 12), date(2019, 12, 12)],
+                        dtype=pd.ArrowDtype(pa.date32()),
+                    ),
+                    pd.array(
+                        [date(2019, 12, 12), date(2019, 12, 12)],
+                        dtype=pd.ArrowDtype(pa.date32()),
+                    ),
+                ],
+                date.min,
+                date.max,
+            ),
             id="date",
         ),
         ## Datetime: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.array(
-                            pd.date_range(
-                                start="2016-01-01", end="2022-12-12", periods=15
-                            ),
-                            dtype="datetime64[ns]",
-                        ),
-                        "B": np.array(
-                            pd.date_range(
-                                start="2018-01-01", end="2024-12-12", periods=15
-                            ),
-                            dtype="datetime64[ns]",
-                        ),
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": np.concatenate(
-                            (
-                                np.array([None] * 5, dtype="datetime64[ns]"),
-                                np.array(
-                                    pd.date_range(
-                                        start="2016-01-01",
-                                        end="2022-12-12",
-                                        periods=15,
-                                    ),
-                                    dtype="datetime64[ns]",
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.array(
+                                pd.date_range(
+                                    start="2016-01-01", end="2022-12-12", periods=15
                                 ),
+                                dtype="datetime64[ns]",
                             ),
-                            dtype="datetime64[ns]",
-                        ),
-                        "B": np.concatenate(
-                            (
-                                np.array([None] * 3, dtype="datetime64[ns]"),
-                                np.array(
-                                    pd.date_range(
-                                        start="2016-01-01",
-                                        end="2022-12-12",
-                                        periods=15,
-                                    ),
-                                    dtype="datetime64[ns]",
+                            "B": np.array(
+                                pd.date_range(
+                                    start="2018-01-01", end="2024-12-12", periods=15
                                 ),
-                                np.array([None] * 2, dtype="datetime64[ns]"),
+                                dtype="datetime64[ns]",
                             ),
-                            dtype="datetime64[ns]",
-                        ),
-                    }
-                ),
-            ],
-            [
-                np.array(
-                    [datetime(2018, 12, 12, 15, 23, 45), None], dtype="datetime64[ns]"
-                ),
-                np.array([None, None], dtype="datetime64[ns]"),
-                np.array(
-                    [
-                        datetime(2018, 12, 12, 15, 23, 45),
-                        datetime(2019, 12, 12, 21, 34, 21),
-                    ],
-                    dtype="datetime64[ns]",
-                ),
-                np.array(
-                    [
-                        datetime(2019, 12, 12, 21, 34, 21),
-                        datetime(2019, 12, 12, 21, 34, 21),
-                    ],
-                    dtype="datetime64[ns]",
-                ),
-            ],
-            pd.Timestamp.min,
-            pd.Timestamp.max,
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": np.concatenate(
+                                (
+                                    np.array([None] * 5, dtype="datetime64[ns]"),
+                                    np.array(
+                                        pd.date_range(
+                                            start="2016-01-01",
+                                            end="2022-12-12",
+                                            periods=15,
+                                        ),
+                                        dtype="datetime64[ns]",
+                                    ),
+                                ),
+                                dtype="datetime64[ns]",
+                            ),
+                            "B": np.concatenate(
+                                (
+                                    np.array([None] * 3, dtype="datetime64[ns]"),
+                                    np.array(
+                                        pd.date_range(
+                                            start="2016-01-01",
+                                            end="2022-12-12",
+                                            periods=15,
+                                        ),
+                                        dtype="datetime64[ns]",
+                                    ),
+                                    np.array([None] * 2, dtype="datetime64[ns]"),
+                                ),
+                                dtype="datetime64[ns]",
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    np.array(
+                        [datetime(2018, 12, 12, 15, 23, 45), None],
+                        dtype="datetime64[ns]",
+                    ),
+                    np.array([None, None], dtype="datetime64[ns]"),
+                    np.array(
+                        [
+                            datetime(2018, 12, 12, 15, 23, 45),
+                            datetime(2019, 12, 12, 21, 34, 21),
+                        ],
+                        dtype="datetime64[ns]",
+                    ),
+                    np.array(
+                        [
+                            datetime(2019, 12, 12, 21, 34, 21),
+                            datetime(2019, 12, 12, 21, 34, 21),
+                        ],
+                        dtype="datetime64[ns]",
+                    ),
+                ],
+                pd.Timestamp.min,
+                pd.Timestamp.max,
+            ),
             id="datetime",
         ),
         ## Timedelta: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.array(
-                            pd.timedelta_range(
-                                start="1 day", end="500 day", periods=15
-                            ),
-                            dtype="timedelta64[ns]",
-                        ),
-                        "B": np.array(
-                            pd.timedelta_range(
-                                start="10 days", end="300 day", periods=15
-                            ),
-                            dtype="timedelta64[ns]",
-                        ),
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": np.concatenate(
-                            (
-                                np.array([None] * 5, dtype="timedelta64[ns]"),
-                                np.array(
-                                    pd.timedelta_range(
-                                        start="1 day", end="500 day", periods=15
-                                    ),
-                                    dtype="timedelta64[ns]",
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.array(
+                                pd.timedelta_range(
+                                    start="1 day", end="500 day", periods=15
                                 ),
+                                dtype="timedelta64[ns]",
                             ),
-                            dtype="timedelta64[ns]",
-                        ),
-                        "B": np.concatenate(
-                            (
-                                np.array([None] * 2, dtype="timedelta64[ns]"),
-                                np.array(
-                                    pd.timedelta_range(
-                                        start="10 days", end="300 day", periods=15
-                                    ),
-                                    dtype="timedelta64[ns]",
+                            "B": np.array(
+                                pd.timedelta_range(
+                                    start="10 days", end="300 day", periods=15
                                 ),
-                                np.array([None] * 3, dtype="timedelta64[ns]"),
+                                dtype="timedelta64[ns]",
                             ),
-                            dtype="timedelta64[ns]",
-                        ),
-                    }
-                ),
-            ],
-            [
-                np.array([pd.Timedelta("5 day"), None], dtype="timedelta64[ns]"),
-                np.array([None, None], dtype="timedelta64[ns]"),
-                np.array(
-                    [pd.Timedelta("5 day"), pd.Timedelta("600 day")],
-                    dtype="timedelta64[ns]",
-                ),
-                np.array(
-                    [pd.Timedelta("400 day"), pd.Timedelta("400 day")],
-                    dtype="timedelta64[ns]",
-                ),
-            ],
-            pd.Timedelta.min,
-            pd.Timedelta.max,
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": np.concatenate(
+                                (
+                                    np.array([None] * 5, dtype="timedelta64[ns]"),
+                                    np.array(
+                                        pd.timedelta_range(
+                                            start="1 day", end="500 day", periods=15
+                                        ),
+                                        dtype="timedelta64[ns]",
+                                    ),
+                                ),
+                                dtype="timedelta64[ns]",
+                            ),
+                            "B": np.concatenate(
+                                (
+                                    np.array([None] * 2, dtype="timedelta64[ns]"),
+                                    np.array(
+                                        pd.timedelta_range(
+                                            start="10 days", end="300 day", periods=15
+                                        ),
+                                        dtype="timedelta64[ns]",
+                                    ),
+                                    np.array([None] * 3, dtype="timedelta64[ns]"),
+                                ),
+                                dtype="timedelta64[ns]",
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    np.array([pd.Timedelta("5 day"), None], dtype="timedelta64[ns]"),
+                    np.array([None, None], dtype="timedelta64[ns]"),
+                    np.array(
+                        [pd.Timedelta("5 day"), pd.Timedelta("600 day")],
+                        dtype="timedelta64[ns]",
+                    ),
+                    np.array(
+                        [pd.Timedelta("400 day"), pd.Timedelta("400 day")],
+                        dtype="timedelta64[ns]",
+                    ),
+                ],
+                pd.Timedelta.min,
+                pd.Timedelta.max,
+            ),
             id="timedelta",
         ),
         ## Time: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": [
-                            bodo.types.Time(12, 0),
-                            bodo.types.Time(1, 1, 3),
-                            bodo.types.Time(2),
-                            bodo.types.Time(12, 0),
-                            bodo.types.Time(6, 7, 13),
-                            bodo.types.Time(2),
-                            bodo.types.Time(17, 1, 3),
-                        ],
-                        "B": [
-                            bodo.types.Time(15, 10),
-                            bodo.types.Time(1, 2, 3),
-                            bodo.types.Time(5),
-                            bodo.types.Time(12, 10),
-                            bodo.types.Time(6, 7, 13),
-                            bodo.types.Time(20),
-                            bodo.types.Time(19, 1, 10),
-                        ],
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": [
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            bodo.types.Time(12, 0),
-                            bodo.types.Time(1, 1, 3),
-                            bodo.types.Time(2),
-                            bodo.types.Time(12, 0),
-                            bodo.types.Time(6, 7, 13),
-                            bodo.types.Time(2),
-                            bodo.types.Time(17, 1, 3),
-                        ],
-                        "B": [
-                            None,
-                            None,
-                            None,
-                            bodo.types.Time(15, 10),
-                            bodo.types.Time(1, 2, 3),
-                            bodo.types.Time(5),
-                            bodo.types.Time(12, 10),
-                            bodo.types.Time(6, 7, 13),
-                            bodo.types.Time(20),
-                            bodo.types.Time(19, 1, 10),
-                            None,
-                            None,
-                        ],
-                    }
-                ),
-            ],
-            [
-                pd.array(
-                    [bodo.types.Time(4, 10, 45), None], pd.ArrowDtype(pa.time64("ns"))
-                ),
-                pd.array([None, None], pd.ArrowDtype(pa.time64("ns"))),
-                pd.array(
-                    [bodo.types.Time(4, 10, 45), bodo.types.Time(18, 14, 59)],
-                    pd.ArrowDtype(pa.time64("ns")),
-                ),
-                pd.array(
-                    [bodo.types.Time(18, 10, 45), bodo.types.Time(18, 10, 45)],
-                    pd.ArrowDtype(pa.time64("ns")),
-                ),
-            ],
-            bodo.types.Time(0, 0, 0, 0, 0, 0, 9),
-            bodo.types.Time(23, 59, 59, 999, 999, 999, 9),
+            lambda: (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": [
+                                bodo.types.Time(12, 0),
+                                bodo.types.Time(1, 1, 3),
+                                bodo.types.Time(2),
+                                bodo.types.Time(12, 0),
+                                bodo.types.Time(6, 7, 13),
+                                bodo.types.Time(2),
+                                bodo.types.Time(17, 1, 3),
+                            ],
+                            "B": [
+                                bodo.types.Time(15, 10),
+                                bodo.types.Time(1, 2, 3),
+                                bodo.types.Time(5),
+                                bodo.types.Time(12, 10),
+                                bodo.types.Time(6, 7, 13),
+                                bodo.types.Time(20),
+                                bodo.types.Time(19, 1, 10),
+                            ],
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": [
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                bodo.types.Time(12, 0),
+                                bodo.types.Time(1, 1, 3),
+                                bodo.types.Time(2),
+                                bodo.types.Time(12, 0),
+                                bodo.types.Time(6, 7, 13),
+                                bodo.types.Time(2),
+                                bodo.types.Time(17, 1, 3),
+                            ],
+                            "B": [
+                                None,
+                                None,
+                                None,
+                                bodo.types.Time(15, 10),
+                                bodo.types.Time(1, 2, 3),
+                                bodo.types.Time(5),
+                                bodo.types.Time(12, 10),
+                                bodo.types.Time(6, 7, 13),
+                                bodo.types.Time(20),
+                                bodo.types.Time(19, 1, 10),
+                                None,
+                                None,
+                            ],
+                        }
+                    ),
+                ],
+                [
+                    pd.array(
+                        [bodo.types.Time(4, 10, 45), None],
+                        pd.ArrowDtype(pa.time64("ns")),
+                    ),
+                    pd.array([None, None], pd.ArrowDtype(pa.time64("ns"))),
+                    pd.array(
+                        [bodo.types.Time(4, 10, 45), bodo.types.Time(18, 14, 59)],
+                        pd.ArrowDtype(pa.time64("ns")),
+                    ),
+                    pd.array(
+                        [bodo.types.Time(18, 10, 45), bodo.types.Time(18, 10, 45)],
+                        pd.ArrowDtype(pa.time64("ns")),
+                    ),
+                ],
+                bodo.types.Time(0, 0, 0, 0, 0, 0, 9),
+                bodo.types.Time(23, 59, 59, 999, 999, 999, 9),
+            ),
             id="time",
         ),
         ## Decimals: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.5], [10, 20], [20, 20])
         pytest.param(
-            [
-                pd.DataFrame(
-                    {
-                        "A": np.array(
-                            [Decimal(d) for d in np.arange(0, 20, 4, dtype=np.float64)]
-                        ),
-                        "B": np.array(
-                            [Decimal(d) for d in np.arange(20, 40, 4, dtype=np.float64)]
-                        ),
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "A": np.concatenate(
-                            (
-                                np.array([None] * 5),
-                                np.array(
-                                    [
-                                        Decimal(d)
-                                        for d in np.arange(0, 20, 4, dtype=np.float64)
-                                    ]
-                                ),
-                            )
-                        ),
-                        "B": np.concatenate(
-                            (
-                                np.array([None] * 2),
-                                np.array(
-                                    [
-                                        Decimal(d)
-                                        for d in np.arange(20, 40, 4, dtype=np.float64)
-                                    ]
-                                ),
-                                np.array([None] * 3),
-                            )
-                        ),
-                    }
-                ),
-            ],
-            [
-                pd.array(
-                    [Decimal(10.5), None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))
-                ),
-                pd.array([None, None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))),
-                pd.array(
-                    [Decimal(10.0), Decimal(20.5)],
-                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
-                ),
-                pd.array(
-                    [Decimal(10.0), Decimal(20.0)],
-                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
-                ),
-                pd.array(
-                    [Decimal(20.0), Decimal(20.0)],
-                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
-                ),
-            ],
-            # Using Decimal("-Infinity") and Decimal("Infinity") leads to unrelated issues.
-            # For our purposes, just using large values should be sufficient.
-            Decimal(-99999999),
-            Decimal(99999999),
+            (
+                [
+                    pd.DataFrame(
+                        {
+                            "A": np.array(
+                                [
+                                    Decimal(d)
+                                    for d in np.arange(0, 20, 4, dtype=np.float64)
+                                ]
+                            ),
+                            "B": np.array(
+                                [
+                                    Decimal(d)
+                                    for d in np.arange(20, 40, 4, dtype=np.float64)
+                                ]
+                            ),
+                        }
+                    ),
+                    pd.DataFrame(
+                        {
+                            "A": np.concatenate(
+                                (
+                                    np.array([None] * 5),
+                                    np.array(
+                                        [
+                                            Decimal(d)
+                                            for d in np.arange(
+                                                0, 20, 4, dtype=np.float64
+                                            )
+                                        ]
+                                    ),
+                                )
+                            ),
+                            "B": np.concatenate(
+                                (
+                                    np.array([None] * 2),
+                                    np.array(
+                                        [
+                                            Decimal(d)
+                                            for d in np.arange(
+                                                20, 40, 4, dtype=np.float64
+                                            )
+                                        ]
+                                    ),
+                                    np.array([None] * 3),
+                                )
+                            ),
+                        }
+                    ),
+                ],
+                [
+                    pd.array(
+                        [Decimal(10.5), None],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                    ),
+                    pd.array([None, None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))),
+                    pd.array(
+                        [Decimal(10.0), Decimal(20.5)],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                    ),
+                    pd.array(
+                        [Decimal(10.0), Decimal(20.0)],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                    ),
+                    pd.array(
+                        [Decimal(20.0), Decimal(20.0)],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                    ),
+                ],
+                # Using Decimal("-Infinity") and Decimal("Infinity") leads to unrelated issues.
+                # For our purposes, just using large values should be sufficient.
+                Decimal(-99999999),
+                Decimal(99999999),
+            ),
             id="decimal",
         ),
     ],
 )
-def test_sort_table_for_interval_join(
-    dfs: list[pd.DataFrame], bounds_list, min_val, max_val, memory_leak_check
-):
+def sort_args(request):
+    """Lazily evaluate args to avoid importing compiler on test collection."""
+    import bodo.decorators  # noqa
+
+    args = request.param
+
+    return args() if callable(args) else args
+
+
+@pytest.mark.skipif(bodo.get_size() > 3, reason="Only implemented for up to 3 ranks.")
+def test_sort_table_for_interval_join(sort_args, memory_leak_check):
     """
     Test the sort_table_for_interval_join for multiple data types.
     Tests both the point (n_keys=1) and interval (n_keys=2) cases.
     """
     from bodo.tests.utils_jit import reduce_sum
+
+    dfs, bounds_list, min_val, max_val = sort_args
 
     @bodo.jit(distributed=["df"])
     def impl_point(df, bounds):

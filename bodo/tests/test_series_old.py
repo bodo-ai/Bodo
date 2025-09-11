@@ -578,11 +578,12 @@ class TestSeries(unittest.TestCase):
             bodo_func(df.A), test_impl(df.A), check_names=False, check_dtype=False
         )
 
-    @pytest.mark.skipif(
-        bodo.hiframes.boxing._use_dict_str_type,
-        reason="not supported for dict string type",
-    )
     def test_series_fillna_str_inplace1(self):
+        from bodo.hiframes.boxing import _use_dict_str_type
+
+        if _use_dict_str_type:
+            pytest.skip("not supported for dict string type")
+
         def test_impl(A):
             A.fillna("dd", inplace=True)
             return A
@@ -596,11 +597,12 @@ class TestSeries(unittest.TestCase):
         # test_impl(S2)
         # np.testing.assert_array_equal(S1, S2)
 
-    @pytest.mark.skipif(
-        bodo.hiframes.boxing._use_dict_str_type,
-        reason="not supported for dict string type",
-    )
     def test_series_fillna_str_inplace_empty1(self):
+        from bodo.hiframes.boxing import _use_dict_str_type
+
+        if _use_dict_str_type:
+            pytest.skip("not supported for dict string type")
+
         def test_impl(A):
             A.fillna("", inplace=True)
             return A

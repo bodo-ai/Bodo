@@ -375,6 +375,7 @@ def array_agg_data(request):
     val = request.param
     if callable(val):
         val = val()
+
     data, array_dtype = val
     keys = [
         "AABAABCBAABCDCBA"[int(10 * np.tan(i + len(data))) % 16]

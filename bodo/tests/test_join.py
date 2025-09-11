@@ -1297,6 +1297,9 @@ def test_interval_join_detection(memory_leak_check):
     ],
 )
 def interval_join_test_tables(request):
+    # Import compiler for Time type.
+    import bodo.decorators  # noqa
+
     ldf, rdf = request.param
     ldf = ldf() if callable(ldf) else ldf
     rdf = rdf() if callable(rdf) else rdf

@@ -1249,9 +1249,8 @@ def test_index_argminmax(index, memory_leak_check):
     check_func(impl2, (index,), only_1D=True)
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
+@pytest.fixture(
+    params=[
         pytest.param(
             pd.Index([1, 5, 2, 1, 0, None], dtype=pd.Int32Dtype()), id="integer"
         ),
@@ -1379,8 +1378,18 @@ def test_index_argminmax(index, memory_leak_check):
         ),
     ],
 )
-def test_index_min_max(index):
-    index = index() if callable(index) else index
+def min_max_index(request):
+    """Fixture to lazily evaluate index parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    index = request.param
+
+    return index() if callable(index) else index
+
+
+def test_index_min_max(min_max_index):
+    index = min_max_index
 
     def impl1(I):
         return I.min()

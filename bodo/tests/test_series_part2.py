@@ -189,17 +189,26 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
-@pytest.mark.df_lib
-@pytest.mark.slow
-def test_series_map_global_jit(memory_leak_check):
-    """Test UDF defined as a global jit function"""
+def _make_global_g2():
+    """Register g2 at the module level to avoid eagerly importing JIT at
+    test collection time."""
 
     @bodo.jit
     def g2(a):
         return 2 * a + 3
 
+    globals()["g2"] = g2
+    return g2
+
+
+@pytest.mark.df_lib
+@pytest.mark.slow
+def test_series_map_global_jit(memory_leak_check):
+    """Test UDF defined as a global jit function"""
+    _make_global_g2()
+
     def test_impl(S):
-        return S.map(g2)
+        return S.map(g2)  # noqa
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl, (S,))
@@ -1750,9 +1759,6 @@ def test_series_fillna_specific_method(
     check_func(test_impl, (fillna_series,), check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 @pytest.mark.parametrize(
     "S,value",
     [
@@ -1769,6 +1775,11 @@ def test_series_fillna_specific_method(
     ],
 )
 def test_series_fillna_inplace(S, value, memory_leak_check):
+    from bodo.hiframes.boxing import _use_dict_str_type
+
+    if _use_dict_str_type:
+        pytest.skip("not supported for dict string type")
+
     def test_impl(A, val):
         return A.fillna(val, inplace=True)
 

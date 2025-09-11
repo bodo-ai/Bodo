@@ -737,20 +737,61 @@ def test_nested_in_struct_metadata_handling(cursor):
         ).equals(f)
 
 
-# TODO: Use numba_from_pyarrow to simplify parameterization
+@pytest.fixture
+def bodo_schema(request):
+    """Lazily create Bodo schemas to avoid importing JIT at collection time."""
+    import bodo.decorators  # noqa
+
+    val = request.param
+
+    # TODO: Use numba_from_pyarrow to simplify parameterization
+    if val == "bodo_int64":
+        return bodo.types.DataFrameType(
+            data=(
+                types.Array(types.int64, 1, "C"),
+                types.Array(types.int64, 1, "C"),
+                types.Array(types.int64, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_int32":
+        return bodo.types.DataFrameType(
+            data=(
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_decimal":
+        return bodo.types.DataFrameType(
+            data=(
+                bodo.types.DecimalArrayType(38, 0),
+                bodo.types.DecimalArrayType(38, 0),
+                bodo.types.DecimalArrayType(18, 0),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_decimal_int":
+        return bodo.types.DataFrameType(
+            data=(
+                bodo.types.DecimalArrayType(38, 0),
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+
 @pytest.mark.parametrize(
     "bodo_schema,pa_schema",
     [
         # All larger int
         (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_int64",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.int64(), nullable=False),
@@ -761,14 +802,7 @@ def test_nested_in_struct_metadata_handling(cursor):
         ),
         # Last column is larger int
         (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_int32",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.int32(), nullable=False),
@@ -778,6 +812,7 @@ def test_nested_in_struct_metadata_handling(cursor):
             ),
         ),
     ],
+    indirect=["bodo_schema"],
 )
 def test_snowflake_runtime_upcasting_int_to_int(
     mocker: "MockerFixture",
@@ -825,14 +860,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
     [
         # All are larger decimal
         (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(18, 0),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_decimal",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
@@ -843,14 +871,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
         ),
         # First column is larger decimal
         (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_decimal_int",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
@@ -860,6 +881,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
             ),
         ),
     ],
+    indirect=["bodo_schema"],
 )
 def test_snowflake_runtime_upcasting_int_to_decimal(
     mocker: "MockerFixture",

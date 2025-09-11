@@ -168,8 +168,19 @@ def test_getitem_slice(map_arr_value):
     check_func(test_impl, (map_arr_value, idx), dist_test=False)
 
 
+@pytest.fixture
+def map_contains_arr(request):
+    """Fixture to lazily evaluate arr parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    lazy_arr = request.param
+
+    return lazy_arr()
+
+
 @pytest.mark.parametrize(
-    "arr,answer",
+    "map_contains_arr,answer",
     [
         pytest.param(
             lambda: bodo.types.MapArrayType(bodo.types.int64, bodo.types.float64),
@@ -228,11 +239,9 @@ def test_getitem_slice(map_arr_value):
             id="struct_false",
         ),
     ],
+    indirect=["map_contains_arr"],
 )
-def test_contains_map_array(arr, answer):
+def test_contains_map_array(map_contains_arr, answer):
     from bodo.libs.map_arr_ext import contains_map_array
 
-    if callable(arr):
-        arr = arr()
-
-    assert contains_map_array(arr) == answer
+    assert contains_map_array(map_contains_arr) == answer

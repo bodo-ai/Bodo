@@ -1193,7 +1193,7 @@ def permute_df_and_answer(df, answer):
             id="moment_family-all_null",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # ANY_VALUE on a nullable integer array
@@ -1347,7 +1347,7 @@ def permute_df_and_answer(df, answer):
             id="last_value-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # LAST_VALUE on a nullable boolean array with a prefix frame
@@ -1498,6 +1498,9 @@ def window_args(request):
             begining vs the end when sorting.
     - answer: the expected result of the call to groupby.window.
     """
+    import bodo.decorators  # noqa
+
+    # evaluates arguments potentially lazily to avoid importing the compiler at test collection time.
     val = request.param
     if callable(val):
         return val()

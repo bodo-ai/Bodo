@@ -20,6 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.utils.typing import BodoError  # noqa TID253
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -169,13 +170,6 @@ def test_score(data, average, memory_leak_check):
 # ---------------------------------- log_loss ----------------------------------
 
 
-def bodo_error():
-    """Import BodoError not at the global scope to avoid testing issues."""
-    from bodo.utils.typing import BodoError
-
-    return BodoError
-
-
 @pytest.mark.parametrize(
     "data",
     # Examples taken from https://github.com/scikit-learn/scikit-learn/blob/632384f4314d84d55de1ba8f4234f7cdc8f37824/sklearn/metrics/tests/test_classification.py#L2466
@@ -239,7 +233,7 @@ def bodo_error():
                 None,
                 None,
             ),
-            marks=pytest.mark.xfail(raises=bodo_error()),
+            marks=pytest.mark.xfail(raises=BodoError),
         ),
     ],
 )

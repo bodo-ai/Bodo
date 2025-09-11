@@ -498,12 +498,12 @@ def test_astype_str(memory_leak_check):
     check_func(test_impl, (pd.array((["AA", "B"] + gen_nonascii_list(2)) * 4),))
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_str_copy_inplace(memory_leak_check):
     """Test inplace string copy optimization across arrays in series pass"""
     from bodo.tests.utils_jit import SeqTestPipeline
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     # scalar case
     def impl1(A):
@@ -564,11 +564,11 @@ def _check_str_item_length(impl):
     assert dist_IR_contains(fir, "get_str_arr_str_length")
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_str_length_inplace(memory_leak_check):
     """Test optimizing len(A[i]) with inplace item length in series pass"""
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl1(A):
         return len(A[0])

@@ -7708,9 +7708,8 @@ def test_bit_agg(data, dtype, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "data_col",
-    [
+@pytest.fixture(
+    params=[
         # Note string/binary is not supported inside Snowflake
         # https://docs.snowflake.com/en/sql-reference/functions/boolor_agg.html#usage-notes
         pd.Series(["afde", "Rewr"] * 6),
@@ -7735,12 +7734,20 @@ def test_bit_agg(data, dtype, memory_leak_check):
         pd.Series(pd.Categorical(["afde", "Rewr"] * 6)),
     ],
 )
+def data_col(request):
+    """Fixture to lazily evaluate data_col parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    data_col = request.param
+
+    return data_col() if callable(data_col) else data_col
+
+
 def test_boolagg_or_invalid(data_col, memory_leak_check):
     """Tests calling a groupby with boolagg_or, a function used by
     BodoSQL and not part or regular pandas, on unsupported datatypes."""
     from bodo.utils.typing import BodoError
-
-    data_col = data_col() if callable(data_col) else data_col
 
     @bodo.jit
     def impl(df):
@@ -8144,10 +8151,18 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
     ],
 )
-def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
-    """Tests groupby with timestamptz column and aggregation"""
+def expected_timestamptz_gb_agg(request):
+    """Fixture to lazily evaluate expected parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
 
-    expected = expected() if callable(expected) else expected
+    expected = request.param
+
+    return expected() if callable(expected) else expected
+
+
+def test_timestamptz_gb_agg(fstr, expected_timestamptz_gb_agg, memory_leak_check):
+    """Tests groupby with timestamptz column and aggregation"""
 
     def impl(df):
         return df.groupby("A", as_index=False, dropna=False).agg(fstr)
@@ -8172,7 +8187,13 @@ def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
             "B": tz_arr,
         }
     )
-    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+    check_func(
+        impl,
+        (df,),
+        py_output=expected_timestamptz_gb_agg,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 def test_timestamptz_gb_mode(memory_leak_check):

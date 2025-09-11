@@ -22,13 +22,24 @@ pytestmark = [
 
 @pytest.fixture(
     params=(
-        pytest.param(bodo.jit, id="jit_no_kwargs"),
-        pytest.param(bodo.jit(spawn=False, distributed=False), id="jit_no_spawn"),
-        pytest.param(bodo.jit(cache=True), id="jit_with_cache"),
+        "jit_no_kwargs",
+        "jit_no_spawn",
+        "jit_with_cache",
     ),
     scope="module",
 )
 def engine(request):
+    val = request.param
+
+    if val == "jit_no_kwargs":
+        return bodo.jit
+
+    elif val == "jit_no_spawn":
+        return bodo.jit(spawn=False, distributed=False)
+
+    elif val == "jit_with_cache":
+        return bodo.jit(cache=True)
+
     return request.param
 
 
