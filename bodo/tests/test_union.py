@@ -134,6 +134,7 @@ def test_stream_union_integer_promotion(memory_leak_check):
     Logic is based on investigation from:
     https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import TableType
     from bodo.libs.streaming.union import UnionStateType
 
@@ -173,6 +174,7 @@ def test_stream_union_float_promotion(memory_leak_check):
     but assuming float == Snowflake Float != Snowflake Number
     so can never cast float => decimal
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import TableType
     from bodo.libs.streaming.union import UnionStateType
 
@@ -217,6 +219,7 @@ def test_stream_union_decimal_promotion(memory_leak_check):
     - Truncation of integer + decimal => float allowed
         Decimal has at most 38 sig-figs, float has up to 15, integer 18
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import TableType
     from bodo.libs.streaming.union import UnionStateType
 
@@ -287,6 +290,7 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
     - Dictionary Encoded and Null Array
     - Dictionary Encoded, String, and Null Arrays
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import TableType
     from bodo.libs.streaming.union import UnionStateType
 
@@ -334,6 +338,7 @@ def test_stream_union_null(memory_leak_check):
     - Non-nullable and nullable array (of same type)
     - 2 Null Arrays
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import TableType
     from bodo.libs.streaming.union import UnionStateType
 

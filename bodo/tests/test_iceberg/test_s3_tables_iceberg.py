@@ -5,7 +5,6 @@ from io import StringIO
 import boto3
 import pandas as pd
 
-import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -91,6 +90,7 @@ def test_basic_write(memory_leak_check):
     """
     Test writing a complete Iceberg table to S3 Tables
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     @bodo.jit(distributed=["df"])

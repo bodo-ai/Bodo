@@ -2690,6 +2690,8 @@ def test_dataframe_binary_add(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_binary_op(op, memory_leak_check):
+    import bodo.decorators  # isort:skip # noqa
+
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         # TODO: test parallelism
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
@@ -2784,6 +2786,8 @@ def test_dataframe_binary_iadd(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_inplace_binary_op(memory_leak_check):
+    import bodo.decorators  # isort:skip # noqa
+
     for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
         func_text = "def test_impl(df, other):\n"

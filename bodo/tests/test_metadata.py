@@ -33,6 +33,7 @@ def metadata_supported_index_types(request):
 @pytest.mark.slow
 def test_metadata_typemaps():
     """checks that _one_to_one_enum_to_type_map, and _one_to_one_type_to_enum_map are reflections of each other"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _one_to_one_enum_to_type_map,
         _one_to_one_type_to_enum_map,
@@ -111,7 +112,7 @@ def test_dtype_converter_non_literal_values(typ_val):
         Scalar boolean, datetime date (no specific reason, but it was trivial to support them)
     """
     from numba.core import types
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _dtype_to_type_enum_list,
@@ -171,7 +172,7 @@ def test_dtype_converter_literal_values(typ_val):
         These are tested seperatley, as we've previously had some segfaulting errors when handling boxing
         certain constants.
     """
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         SeriesDtypeEnum,
         _dtype_from_type_enum_list,
@@ -206,6 +207,7 @@ def check_series_typing_metadata(orig_series, output_series):
     from the metadata will be the same as the infered dtype of the original series
     (original series must contain >= 1 non null element)
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _infer_series_arr_type,
@@ -234,6 +236,7 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     from the metadata will be the same as the infered dtypes of the original dataframe
     (original dataframe must contain 1 >= columns, each containing >= 1 non null element)
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _infer_series_arr_type,
@@ -456,6 +459,7 @@ def test_df_return_metadata(gen_use_df_funcs):
     a dataframe that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the dataframe's column's type was infered as the default (string).
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import _dtype_from_type_enum_list
     from bodo.tests.utils_jit import reduce_sum
 
@@ -568,6 +572,7 @@ def test_series_return_metadata(gen_use_series_funcs):
     a series that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the series dtype was infered as the default (string).
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import _dtype_from_type_enum_list
     from bodo.tests.utils_jit import reduce_sum
 

@@ -397,6 +397,7 @@ def test_s3_parquet_write_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     request.getfixturevalue(bucket_fixture)
@@ -429,6 +430,7 @@ def test_s3_parquet_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D distributed
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -459,6 +461,7 @@ def test_s3_parquet_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D var
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -494,6 +497,7 @@ def test_s3_csv_write_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     request.getfixturevalue(bucket_fixture)
@@ -536,6 +540,7 @@ def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D distributed
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -580,6 +585,7 @@ def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D var
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -624,6 +630,7 @@ def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header sequentially
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -651,6 +658,7 @@ def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header in 1D distributed
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -689,6 +697,7 @@ def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_d
     """
     test s3 to_csv with header in 1D var
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -777,6 +786,7 @@ def test_s3_json_write_records_lines_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     request.getfixturevalue(bucket_fixture)
@@ -815,6 +825,7 @@ def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, te
     """
     test s3 to_json(orient="records", lines=True) in 1D distributed
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
@@ -848,6 +859,7 @@ def test_s3_json_write_records_lines_1D_var(
     """
     test s3 to_json(orient="records", lines=True) in 1D var
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     def test_write(test_df):

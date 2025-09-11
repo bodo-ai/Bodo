@@ -1898,6 +1898,7 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     if is_variant and write_type == "replace":

@@ -1,10 +1,10 @@
-import bodo
 from bodo.tests.utils import pytest_mark_one_rank
 
 
 @pytest_mark_one_rank
 def test_numba_to_cpp_types_decimal():
     """Verifies that decimal types are properly serialized by creating a nested type with decimals are different levels"""
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import (
         CArrayTypeEnum,
         CTypeEnum,

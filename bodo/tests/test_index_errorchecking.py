@@ -123,6 +123,7 @@ def all_index_types(request):
 @pytest.mark.slow
 def test_all_idx_unsupported_methods(all_index_types):
     """tests that the unsupported index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import index_unsupported_methods
 
     for unsupported_method in index_unsupported_methods:
@@ -134,6 +135,7 @@ def test_all_idx_unsupported_methods(all_index_types):
 @pytest.mark.slow
 def test_all_idx_unsupported_attrs(all_index_types):
     """tests that the unsupported index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import index_unsupported_atrs
 
     for unsupported_attr in index_unsupported_atrs:
@@ -145,6 +147,7 @@ def test_all_idx_unsupported_attrs(all_index_types):
 @pytest.mark.slow
 def test_cat_idx_unsupported_methods():
     """tests that the unsupported categorical index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import cat_idx_unsupported_methods
 
     for unsupported_method in cat_idx_unsupported_methods:
@@ -158,6 +161,7 @@ def test_cat_idx_unsupported_methods():
 @pytest.mark.slow
 def test_interval_idx_unsupported_methods():
     """tests that the unsupported interval index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import interval_idx_unsupported_methods
 
     for unsupported_method in interval_idx_unsupported_methods:
@@ -171,6 +175,7 @@ def test_interval_idx_unsupported_methods():
 @pytest.mark.slow
 def test_multi_idx_unsupported_methods():
     """tests that the unsupported multi_index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import multi_index_unsupported_methods
 
     for unsupported_method in multi_index_unsupported_methods:
@@ -187,6 +192,7 @@ def test_multi_idx_unsupported_methods():
 @pytest.mark.slow
 def test_dt_idx_unsupported_methods():
     """tests that the unsupported datetime index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import dt_index_unsupported_methods
 
     for unsupported_method in dt_index_unsupported_methods:
@@ -207,6 +213,7 @@ def test_dt_idx_unsupported_methods():
 @pytest.mark.slow
 def test_td_idx_unsupported_methods():
     """tests that the unsupported timedelta index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import td_index_unsupported_methods
 
     for unsupported_method in td_index_unsupported_methods:
@@ -227,6 +234,7 @@ def test_td_idx_unsupported_methods():
 @pytest.mark.slow
 def test_period_idx_unsupported_methods():
     """tests that the unsupported period index methods raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import period_index_unsupported_methods
 
     for unsupported_method in period_index_unsupported_methods:
@@ -240,6 +248,7 @@ def test_period_idx_unsupported_methods():
 @pytest.mark.slow
 def test_cat_idx_unsupported_atrs():
     """tests that the categorical index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import cat_idx_unsupported_atrs
 
     for unsupported_atr in cat_idx_unsupported_atrs:
@@ -253,6 +262,7 @@ def test_cat_idx_unsupported_atrs():
 @pytest.mark.slow
 def test_interval_idx_unsupported_atrs():
     """tests that the interval index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import interval_idx_unsupported_atrs
 
     for unsupported_atr in interval_idx_unsupported_atrs:
@@ -266,6 +276,7 @@ def test_interval_idx_unsupported_atrs():
 @pytest.mark.slow
 def test_multi_idx_unsupported_atrs():
     """tests that the categorical index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import multi_index_unsupported_atrs
 
     for unsupported_atr in multi_index_unsupported_atrs:
@@ -282,6 +293,7 @@ def test_multi_idx_unsupported_atrs():
 @pytest.mark.slow
 def test_dt_idx_unsupported_atrs():
     """tests that the datetime index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import dt_index_unsupported_atrs
 
     for unsupported_atr in dt_index_unsupported_atrs:
@@ -302,6 +314,7 @@ def test_dt_idx_unsupported_atrs():
 @pytest.mark.slow
 def test_td_idx_unsupported_atrs():
     """tests that the timedelta index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import td_index_unsupported_atrs
 
     for unsupported_atr in td_index_unsupported_atrs:
@@ -322,6 +335,7 @@ def test_td_idx_unsupported_atrs():
 @pytest.mark.slow
 def test_period_idx_unsupported_atrs():
     """tests that the period index attributes raise the propper errors"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_index_ext import period_index_unsupported_atrs
 
     for unsupported_atr in period_index_unsupported_atrs:

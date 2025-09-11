@@ -1775,6 +1775,7 @@ def test_series_fillna_specific_method(
     ],
 )
 def test_series_fillna_inplace(S, value, memory_leak_check):
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import _use_dict_str_type
 
     if _use_dict_str_type:

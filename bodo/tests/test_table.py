@@ -22,6 +22,7 @@ from bodo.tests.utils import (
 
 @pytest.fixture
 def table_value(request):
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import Table
 
     return Table(
@@ -61,6 +62,7 @@ def test_constant_lowering(table_value, memory_leak_check):
 
 def test_logical_table(memory_leak_check):
     """Test converting a logical table to TableType"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.table import Table
     from bodo.tests.utils_jit import ColumnDelTestPipeline, SeriesOptTestPipeline
     from bodo.utils.utils import find_build_tuple, is_call_assign

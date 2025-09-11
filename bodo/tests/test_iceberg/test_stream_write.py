@@ -540,6 +540,7 @@ def test_iceberg_max_pq_chunksize(
     Test that number of raw bytes written to each parquet file are less than "write.target-file-size-bytes"
     and that number of files generated is also consistent with the threshold
     """
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     table_name = "SIMPLE_INT_TABLE_test_pq_chunksize"

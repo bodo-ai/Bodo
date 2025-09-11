@@ -445,6 +445,7 @@ def test_dtype(memory_leak_check):
 @pytest.mark.slow
 def test_nbytes(memory_leak_check):
     """Test nbytes for string arrays"""
+    import bodo.decorators  # noqa
 
     def impl(arr):
         return arr.nbytes

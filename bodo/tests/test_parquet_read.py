@@ -1166,7 +1166,7 @@ def test_read_partitions_large(memory_leak_check):
 )
 def test_from_parquet_partition_bitsize(datapath):
     """Tests an issue with the bitsize of a partitioned dataframe"""
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_series_ext import get_series_data
 
     path = datapath("test_partition_bitwidth.pq/")

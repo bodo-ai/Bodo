@@ -2422,6 +2422,7 @@ def test_loc_setitem(memory_leak_check):
 
 def test_loc_setitem_str(memory_leak_check):
     """test df.iloc[idx, col_ind] setitem for string array"""
+    import bodo.decorators  # noqa
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -2460,6 +2461,8 @@ def test_iat_getitem(df_value, memory_leak_check):
 
 def test_iat_setitem_all_types(df_value, memory_leak_check):
     """test df.iat[] setitem (single value)"""
+    import bodo.decorators  # noqa
+
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
 
@@ -2628,6 +2631,8 @@ def test_df_drop_column_check(memory_leak_check):
 
 def test_df_fillna_str_inplace(memory_leak_check):
     """Make sure inplace fillna for string columns is reflected in output"""
+    import bodo.decorators  # noqa
+
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
 
@@ -2767,7 +2772,7 @@ def test_dataframe_empty_with_index():
     """Make sure dataframe boxing works when dataframe has no columns but has a
     non-empty Index.
     """
-    from bodo.hiframes.pd_dataframe_ext import ColNamesMetaType
+    from bodo.utils.typing import ColNamesMetaType
 
     col_names = ColNamesMetaType(())
 

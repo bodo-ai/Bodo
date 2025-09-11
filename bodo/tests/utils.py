@@ -203,6 +203,8 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
+    # Import the compiler for bodo.utils.utils. TODO(scott): remove dependency on bodo.decorators here.
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
 
     # If dataframe_library_enabled then run compiler tests as df library tests
@@ -1228,6 +1230,9 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
+    # Import compiler for bodo.utils.utils
+    # TODO(Scott) remove dependency on bodo.decorators here
+    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import is_distributable_typ
 
     try:

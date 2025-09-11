@@ -340,6 +340,8 @@ def test_sort_values_1col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
+    import bodo.decorators  # noqa
+
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
 
@@ -376,6 +378,8 @@ def test_sort_values_2col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
+    import bodo.decorators  # noqa
+
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
 
