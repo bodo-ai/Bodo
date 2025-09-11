@@ -49,6 +49,7 @@ from bodo.pandas.plan import (
     _get_df_python_func_plan,
     make_col_ref_exprs,
 )
+from bodo.pandas.scalar import BodoScalar
 from bodo.pandas.series import BodoSeries, _get_series_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
@@ -79,6 +80,9 @@ def from_pandas(df):
     sample_size = 100
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+    for col in df.select_dtypes(include=["object"]).columns:
+        if len(df[col]) > 0 and isinstance(df[col].iloc[0], BodoScalar):
+            df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
     pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
     empty_df = arrow_to_empty_df(pa_schema)
     n_rows = len(df)

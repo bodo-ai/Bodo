@@ -25,6 +25,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,
@@ -519,6 +520,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
 @overload(pd.api.types.CategoricalDtype, no_unliteral=True)
+@overload(bd.api.types.CategoricalDtype, no_unliteral=True)
 def cat_overload_dummy(val_list):
     return lambda val_list: 1  # pragma: no cover
 
@@ -932,6 +934,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
 # NOTE: not using inline="always" since fix_arr_dtype() fails due to Bodo IR nodes.
 # Inlined in Series pass.
 @overload(pd.Categorical, no_unliteral=True)
+@overload(bd.Categorical, no_unliteral=True)
 def pd_categorical_overload(
     values,
     categories=None,

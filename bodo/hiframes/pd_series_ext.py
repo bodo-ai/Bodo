@@ -23,6 +23,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
@@ -974,6 +975,7 @@ str2bool_methods = (
 
 
 @overload(pd.Series, no_unliteral=True)
+@overload(bd.Series, no_unliteral=True)
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
 ):

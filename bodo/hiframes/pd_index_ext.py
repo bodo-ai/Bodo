@@ -31,6 +31,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 import bodo.hiframes
+import bodo.pandas as bd
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
@@ -666,6 +667,7 @@ class DatetimeIndexAttribute(AttributeTemplate):
 
 
 @overload(pd.DatetimeIndex, no_unliteral=True, jit_options={"cache": True})
+@overload(bd.DatetimeIndex, no_unliteral=True, jit_options={"cache": True})
 def pd_datetimeindex_overload(
     data=None,
     freq=None,
@@ -815,6 +817,7 @@ def overload_binop_dti_str(op):
 
 
 @overload(pd.Index, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.Index, inline="always", no_unliteral=True, jit_options={"cache": True})
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "pandas.Index()")
 
@@ -1109,6 +1112,7 @@ def _dummy_convert_none_to_int(val):
 
 
 @overload(pd.date_range, inline="always", jit_options={"cache": True})
+@overload(bd.date_range, inline="always", jit_options={"cache": True})
 def pd_date_range_overload(
     start=None,
     end=None,
@@ -1226,6 +1230,7 @@ def pd_date_range_overload(
 
 
 @overload(pd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
+@overload(bd.timedelta_range, no_unliteral=True, jit_options={"cache": True})
 def pd_timedelta_range_overload(
     start=None,
     end=None,
@@ -1718,6 +1723,7 @@ _install_tdi_time_fields()
 
 
 @overload(pd.TimedeltaIndex, no_unliteral=True, jit_options={"cache": True})
+@overload(bd.TimedeltaIndex, no_unliteral=True, jit_options={"cache": True})
 def pd_timedelta_index_overload(
     data=None,
     unit=None,

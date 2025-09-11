@@ -318,7 +318,7 @@ def test_llm_generate_bedrock_custom_formatters():
     "modelId",
     [
         "us.amazon.nova-lite-v1:0",
-        "anthropic.claude-v2:1",
+        "anthropic.claude-3-haiku-20240307-v1:0",
         "amazon.titan-text-lite-v1",
     ],
 )
