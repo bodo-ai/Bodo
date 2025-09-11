@@ -12,7 +12,7 @@ NOTE: This script assumes that you have the file `nyc_taxi_precipitation.py`
 copied in your current workspace.
 
 usage:
-    python run_bodo.py --num_workers NUM_WORKERS
+    python run_bodo.py --num_workers NUM_WORKERS [--use_jit]
 """
 
 import argparse

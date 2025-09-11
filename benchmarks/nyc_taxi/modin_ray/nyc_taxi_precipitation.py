@@ -2,9 +2,10 @@ import time
 
 import modin.pandas as pd
 import ray
+from modin.pandas.io import to_ray
 
 
-def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, out_path):
+def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     start_read = time.time()
     central_park_weather_observations = pd.read_csv(
         weather_dataset, parse_dates=["DATE"], storage_options={"anon": True}
@@ -83,7 +84,8 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, out_path):
     print("Monthly Taxi Travel Times Computation Time: ", end - start_compute)
 
     start_write = time.time()
-    monthly_trips_weather.to_parquet(out_path)
+    monthly_trips_weather_ray = to_ray(monthly_trips_weather)
+    monthly_trips_weather_ray.write_parquet("local:///tmp/data/modin_result.pq")
     end = time.time()
     print("Writing time:", (end - start_write))
     print("Total E2E time:", (end - start_read))
@@ -96,6 +98,5 @@ if __name__ == "__main__":
     print("RAY CPU COUNT: ", cpu_count)
 
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
-    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata"
-    out_path = "modin_result.pq"
-    get_monthly_travels_weather(weather_dataset, hvfhv_dataset, out_path)
+    hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
+    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)

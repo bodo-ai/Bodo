@@ -42,16 +42,16 @@ resource "aws_emr_cluster" "emr_cluster" {
     instance_type = "r6i.16xlarge"
   }
 
-  # core_instance_group {
-  #   instance_type  = "r6i.16xlarge"
-  #   instance_count = 3
+  core_instance_group {
+    instance_type  = "r6i.16xlarge"
+    instance_count = 3
 
-  #   ebs_config {
-  #     size                 = "40"
-  #     type                 = "gp3"
-  #     volumes_per_instance = 1
-  #   }
-  # }
+    ebs_config {
+      size                 = "40"
+      type                 = "gp3"
+      volumes_per_instance = 1
+    }
+  }
 
   bootstrap_action {
     name = "Install Python Dependencies"

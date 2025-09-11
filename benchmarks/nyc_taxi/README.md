@@ -71,12 +71,24 @@ In order to run the Bodo benchmark:
     </div>
 4. Set the environment variables `BODO_CLIENT_ID` and `BODO_SECRET_KEY` to your Client ID and Secret Key.
 5. Install the Bodo SDK using `pip install bodosdk`.
-6. Run the script: `python bodo/run_bodo.py` which will create a cluster, run the benchmark 3 times and print the results to your local terminal. You can optionally specify number of workers using the `--num_workers` flag, which can be used to reproduce the single node results:
+6. Run the script: `python bodo/run_bodo.py --use_jit` which will create a cluster, run the benchmark 3 times and print the results to your local terminal. You can optionally specify number of workers using the `--num_workers` flag, which can be used to reproduce the single node results:
     ``` bash
-    python bodo/run_bodo.py --num_workers 1
+    python bodo/run_bodo.py --num_workers 1 --use_jit
     ```
 
 > :warning: The Bodo Platform uses a forked version of Arrow to improve parquet read performance. The fork can be found [here](https://github.com/bodo-ai/arrow-cpp-feedstock) and [here](https://github.com/bodo-ai/pyarrow-feedstock).
+
+### Bodo DataFrames
+
+To run the benchmark with Bodo DataFrames, follow steps 1-5 above and run the script without the `--use_jit` flag:
+``` bash
+python bodo/run_bodo.py
+```
+or:
+``` bash
+python bodo/run_bodo.py --num_workers 1
+```
+To run on a single node.
 
 ### Daft
 
@@ -179,33 +191,35 @@ In order to run the Spark benchmark:
 You can start to see the benefits of using Bodo from your laptop by running the notebooks found in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
 
 ``` shell
-pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 getdaft==0.4.7 polars==1.25.2 boto3
+pip install bodo==2025.8.2 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 getdaft==0.4.7 polars==1.25.2 boto3
 ```
 
-We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over Pandas by just adding a single decorator. Polars shows a similar improvement over Pandas but requires rewriting the entire workload.
+We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo JIT shows a roughly 3x improvement over Pandas by just adding a single decorator. Polars shows a similar improvement over Pandas but requires rewriting the entire workload.
 
-The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system. Daft and Polars results were added in March 2025.
+The results below were collected December 18th, 2024. Note that these numbers might differ based on your specific hardware and operating system. Daft and Polars results were added in March 2025 and Bodo DataFrames results were collected September 2025.
 
 
 | System      | Total Execution Time (s)     |
 |----------------|----------------|
-| Bodo   | 1.007   |
+| Bodo (JIT)  | 1.007   |
 | Polars | 1.244   |
 | Daft (getdaft) | 2.328 |
 | Dask   | 3.091  |
 | Pandas | 3.58 |
+| Bodo DataFrames | 5.63 |
 | Modin/Ray | 13.65 |
 | PySpark   | 27.27   |
 
-To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory while Pandas and Dask become 4-5x slower than Bodo or Polars.
+To see an even bigger difference, try increasing the number of rows read by specifying a different parquet file such as `s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/fhvhv_tripdata_2019-02.parquet`. On this size (~20 million rows), Spark runs out of memory while Pandas and Dask become 4-5x slower than Bodo JIT or Polars.
 
 The code to run the larger dataset is also included in the notebooks section. Results are summarized in the table below.
 
 | System      | Total Execution Time (s)     |
 |----------------|----------------|
-| Bodo   | 4.228   |
+| Bodo (JIT)  | 4.228   |
 | Polars | 4.744   |
 | Daft (getdaft) | 7.436 |
+| Bodo DataFrames | 10.221 |
 | Pandas | 17.990 |
 | Dask   | 21.41  |
 | Modin/Ray | 118.52 |
