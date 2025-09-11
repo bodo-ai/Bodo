@@ -549,8 +549,7 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
     )
 
     max_revenue = revenue["TOTAL_REVENUE"].max()
-    filter_expr = jn2["TOTAL_REVENUE"] == max_revenue
-    jn2 = jn2[filter_expr]
+    jn2 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
 
     result_df = jn2[
         ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
@@ -559,6 +558,7 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
     return result_df
 
 
+# TODO [BSE-5105] Support not isin inside of selection"
 def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
@@ -571,7 +571,7 @@ def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
 
     complaint_suppkeys = supplier[supplier["IS_COMPLAINT"]]["S_SUPPKEY"]
 
-    jn1 = partsupp[~partsupp["PS_SUPPKEY"].isin(complaint_suppkeys)]
+    jn1 = partsupp[not partsupp["PS_SUPPKEY"].isin(complaint_suppkeys)]
     jn2 = jn1.merge(part, left_on="PS_PARTKEY", right_on="P_PARTKEY")
     jn2 = jn2[
         (jn2["P_BRAND"] != var1)

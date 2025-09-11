@@ -140,5 +140,4 @@ def test_tpch_q21():
 def test_tpch_q22():
     run_tpch_query_test(
         tpch.tpch_q22,
-        plan_executions=0,
     )
