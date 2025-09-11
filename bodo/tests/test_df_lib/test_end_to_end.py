@@ -2032,6 +2032,43 @@ def test_filter_series_isin():
     )
 
 
+def test_filter_series_not_isin(index_val):
+    """Test dataframe filter with not isin case"""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "A": [1.4, 2.1, 3.3],
+                "B": ["A", "B", "C"],
+                "C": [1, 2, 3],
+                "D": [True, False, True],
+            },
+            index=index_val[:3],
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D"],
+                "B": [11, 2, 2, 4],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bodo_out = bdf1[~bdf1.C.isin(bdf2.B)]
+        py_out = df1[~df1.C.isin(df2.B)]
+
+        # Reverse the order so the planner flips sides to put smaller table in build
+        # side creating right-anti join.
+        bodo_out2 = bdf2[~bdf2.B.isin(bdf1.C)]
+        py_out2 = df2[~df2.B.isin(df1.C)]
+
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+    _test_equal(
+        bodo_out2, py_out2, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
@@ -3438,3 +3475,57 @@ def test_print_no_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         print(S)
+
+
+def test_bodo_pandas_inside_jit():
+    """Make sure using bodo.pandas functions inside a bodo.jit function works as
+    expected and is same as pandas.
+    """
+    df = bd.DataFrame({"A": np.arange(100)})
+
+    def test1(df):
+        df2 = bd.DataFrame({"B": np.arange(len(df))})
+        return df2.B.sum()
+
+    assert test1(df) == bodo.jit(spawn=False, distributed=False)(test1)(df)
+
+    def test2(df):
+        return bd.Timestamp(df.A.iloc[0])
+
+    assert test2(df) == bodo.jit(spawn=False, distributed=False)(test2)(df)
+
+
+def test_join_non_equi_key_not_in_output():
+    """Test for joins with non-equi keys that are not in the output and require special
+    handling in column reordering of physical join.
+    """
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([0, 1], "Float64"),
+            "B": pd.array([2, 3], "Float64"),
+            "C": pd.array([5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "D": pd.array([0, 1, 5, 6], "Int32"),
+            "E": pd.array([2, 3, 4, 5], "Float64"),
+        }
+    )
+
+    df3 = df1.merge(df2, left_on="C", right_on="D", how="inner")
+    df3 = df3[df3.A < df3.E]
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    bdf3 = bdf1.merge(bdf2, left_on="C", right_on="D", how="inner")
+    bdf3 = bdf3[bdf3.A < bdf3.E]
+
+    _test_equal(
+        bdf3["B"],
+        df3["B"],
+        check_pandas_types=False,
+        reset_index=True,
+        sort_output=True,
+    )

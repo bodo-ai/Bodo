@@ -575,6 +575,7 @@ class JoinPartition {
      * @tparam build_table_outer
      * @tparam probe_table_outer
      * @tparam non_equi_condition
+     * @tparam is_anti_join
      * @param cond_func Condition function for the non-equi condition case,
      * nullptr otherwise.
      * @param build_kept_cols Which columns to generate in the output on the
@@ -589,7 +590,7 @@ class JoinPartition {
      *
      */
     template <bool build_table_outer, bool probe_table_outer,
-              bool non_equi_condition>
+              bool non_equi_condition, bool is_anti_join>
     void FinalizeProbeForInactivePartition(
         cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols,
@@ -1155,13 +1156,14 @@ class HashJoinState : public JoinState {
      * @tparam build_table_outer
      * @tparam probe_table_outer
      * @tparam non_equi_condition
+     * @tparam is_anti_join
      * @param build_kept_cols Which columns to generate in the output on the
      * build side.
      * @param probe_kept_cols Which columns to generate in the output on the
      * probe side.
      */
     template <bool build_table_outer, bool probe_table_outer,
-              bool non_equi_condition>
+              bool non_equi_condition, bool is_anti_join>
     void FinalizeProbeForInactivePartitions(
         const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols);
@@ -1472,7 +1474,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
  * due to iterations between syncs
  */
 template <bool build_table_outer, bool probe_table_outer,
-          bool non_equi_condition, bool use_bloom_filter>
+          bool non_equi_condition, bool use_bloom_filter, bool is_anti_join>
 bool join_probe_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               const std::vector<uint64_t> build_kept_cols,

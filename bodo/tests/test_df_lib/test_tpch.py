@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 import benchmarks.tpch.dataframe_lib as tpch
 import bodo.pandas as bd
@@ -74,7 +73,7 @@ def test_tpch_q05():
 
 
 def test_tpch_q06():
-    run_tpch_query_test(tpch.tpch_q06)
+    run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
 
 
 def test_tpch_q07():
@@ -114,7 +113,6 @@ def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15, plan_executions=1)
 
 
-@pytest.mark.skip("TODO [BSE-5105]: Support not isin inside of selection")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
@@ -128,7 +126,7 @@ def test_tpch_q18():
 
 
 def test_tpch_q19():
-    run_tpch_query_test(tpch.tpch_q19)
+    run_tpch_query_test(tpch.tpch_q19, plan_executions=1)
 
 
 def test_tpch_q20():
