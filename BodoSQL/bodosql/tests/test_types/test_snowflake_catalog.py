@@ -27,7 +27,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     assert_tables_equal,
     check_func,
     create_snowflake_table,
@@ -40,6 +39,7 @@ from bodo.tests.utils import (
     pytest_snowflake,
     temp_config_override,
 )
+from bodo.tests.utils_jit import SeriesOptTestPipeline
 from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign

@@ -19,8 +19,8 @@ from bodo.tests.utils import (
     create_snowflake_table_from_select_query,
     get_snowflake_connection_string,
     pytest_snowflake,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (
     test_db_snowflake_catalog,  # noqa

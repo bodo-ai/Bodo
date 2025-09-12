@@ -10,13 +10,11 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
     generate_comparison_ops_func,
 )
-from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -372,6 +370,7 @@ def test_pat_split(memory_leak_check):
 # exceptions
 def test_re_findall():
     """make sure re.findall returns proper output (list of strings)"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(pat, in_str):
         return re.findall(pat, in_str)
@@ -395,6 +394,7 @@ def test_re_findall():
 
 def test_pat_findall():
     """make sure Pattern.findall returns proper output (list of strings)"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(pat, in_str):
         return pat.findall(in_str)
@@ -634,6 +634,7 @@ def test_match_groups(memory_leak_check):
 
 def test_match_groupdict(memory_leak_check):
     """test Match.groupdict(), which returns a dictionary of named groups"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(m):
         return m.groupdict()
@@ -1049,6 +1050,9 @@ class TestString(unittest.TestCase):
 
     # string array tests
     def test_string_array_constructor(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         # create StringArray and return as list of strings
         def test_impl():
             return str_arr_from_sequence(["ABC", "BB", "CDEF"])
@@ -1057,6 +1061,9 @@ class TestString(unittest.TestCase):
         self.assertTrue(np.array_equal(bodo_func(), ["ABC", "BB", "CDEF"]))
 
     def test_string_array_shape(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             return str_arr_from_sequence(["ABC", "BB", "CDEF"]).shape
 
@@ -1064,6 +1071,9 @@ class TestString(unittest.TestCase):
         self.assertEqual(bodo_func(), (3,))
 
     def test_string_array_comp(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "CDEF"])
             B = A == "ABC"
@@ -1087,6 +1097,9 @@ class TestString(unittest.TestCase):
         )
 
     def test_string_array_bool_getitem(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "CDEF"])
             B = A == "ABC"

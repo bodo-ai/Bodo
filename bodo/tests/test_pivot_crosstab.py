@@ -10,14 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    _get_dist_arg,
-    _test_equal_guard,
-    check_func,
-    pytest_pandas,
-    reduce_sum,
-)
-from bodo.utils.typing import BodoError
+from bodo.tests.utils import _get_dist_arg, _test_equal_guard, check_func, pytest_pandas
 
 pytestmark = pytest_pandas
 
@@ -426,6 +419,7 @@ def test_crosstab_invalid_types(memory_leak_check):
     Tests that pd.crosstab produces a reasonable error message
     when index/column use unsupported types.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(index, columns):
@@ -451,6 +445,7 @@ def test_pivot_invalid_types(memory_leak_check):
     Tests that pd.pivot and pd.pivot_table produces a reasonable error message
     when data is an unsupported types.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl1(S):
@@ -1611,6 +1606,8 @@ def test_pivot_to_parquet(df):
     without requiring an intermediate move to Python.
     """
     import pyarrow.parquet as pq
+
+    from bodo.tests.utils_jit import reduce_sum
 
     output_filename = "bodo_temp.pq"
 

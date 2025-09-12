@@ -8,9 +8,9 @@ from bodo.tests.utils import (
     check_func,
     gen_unique_table_id,
     pytest_s3_tables,
-    run_rank0,
     temp_env_override,
 )
+from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.s3_tables_catalog import S3TablesConnectionType
 
 pytestmark = pytest_s3_tables

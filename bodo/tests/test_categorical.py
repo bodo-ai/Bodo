@@ -13,7 +13,6 @@ from bodo.tests.utils import (
     get_num_test_workers,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -159,6 +158,7 @@ def test_setitem_cat_array_compile_time_err(cat_arr_value):
     Tests setitem err for Categorical Arrays with Categorical
     Array known at compile time.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(A, i, val):
         A[i] = val

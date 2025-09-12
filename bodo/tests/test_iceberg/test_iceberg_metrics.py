@@ -27,13 +27,6 @@ from bodo.tests.utils import pytest_mark_one_rank
 pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
 
 
-# Note: We mark df as distributed but for testing we are only
-# using 1 rank.
-@bodo.jit(distributed=["df"])
-def create_table_jit(df, table_name, conn, db_schema):
-    df.to_sql(table_name, conn, db_schema, if_exists="replace")
-
-
 def update_field_mapping(
     field_id_map: dict[str, int], field: dict[str, pt.Any], prefix: str = ""
 ) -> None:
@@ -193,6 +186,8 @@ def test_numeric_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "numeric_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -270,6 +265,8 @@ def test_datetime_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "datetime_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -345,6 +342,8 @@ def test_string_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "string_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -393,6 +392,8 @@ def test_boolean_binary_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "boolean_binary_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -432,6 +433,8 @@ def test_struct_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "struct_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -478,6 +481,8 @@ def test_list_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "list_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -524,6 +529,8 @@ def test_map_metrics(
     iceberg_table_conn,
     memory_leak_check,
 ):
+    from bodo.tests.test_iceberg.utils_jit import create_table_jit
+
     table_name = "map_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)

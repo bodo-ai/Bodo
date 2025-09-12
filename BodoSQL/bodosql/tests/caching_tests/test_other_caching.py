@@ -3,12 +3,6 @@ import pyarrow as pa
 
 import bodosql
 from bodo.tests.caching_tests.caching_tests_common import fn_distribution  # noqa
-from bodo.tests.test_metadata import (  # noqa
-    bytes_gen_dist_df,
-    int_gen_dist_df,
-    str_gen_dist_df,
-    struct_gen_dist_df,
-)
 from bodo.tests.utils import InputDist, check_caching
 
 

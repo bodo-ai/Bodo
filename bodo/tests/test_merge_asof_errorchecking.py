@@ -2,7 +2,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 # ------------------------------ merge_asof() ------------------------------ #
 
@@ -14,6 +13,8 @@ df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc
 # tests left is of type dataframe
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_left_dataframe(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1):
         return pd.merge_asof("abc", df1)
 
@@ -24,6 +25,8 @@ def test_merge_asof_left_dataframe(memory_leak_check):
 # tests right is of type dataframe
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_right_dataframe(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1):
         return pd.merge_asof(df1, "abc")
 
@@ -34,6 +37,8 @@ def test_merge_asof_right_dataframe(memory_leak_check):
 # tests invalid on key in left dataframe
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_invalid_index_left(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "B"])
 
@@ -44,6 +49,8 @@ def test_merge_asof_on_invalid_index_left(memory_leak_check):
 # tests invalid on key in right dataframe
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_invalid_index_right(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "E"])
 
@@ -54,6 +61,8 @@ def test_merge_asof_on_invalid_index_right(memory_leak_check):
 # tests invalid on key in both dataframes
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_invalid_index_both(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "break"])
 
@@ -64,6 +73,8 @@ def test_merge_asof_on_invalid_index_both(memory_leak_check):
 # tests on without common cols
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_no_comm_cols(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     df3 = pd.DataFrame(
         {"AA": [1, 2, 3], "CC": ["aa", "b", "c"], "EE": ["aa", "bb", "cc"]}
     )
@@ -78,6 +89,8 @@ def test_merge_asof_on_no_comm_cols(memory_leak_check):
 # tests lefton type
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=(1, "A"))
 
@@ -88,6 +101,8 @@ def test_merge_asof_on_str_strlist2(memory_leak_check):
 # tests both on and left_on specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_lefton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A"], left_on=["C"])
 
@@ -102,6 +117,8 @@ def test_merge_asof_on_lefton(memory_leak_check):
 # tests both on and lefton specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_righton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A"], right_on=["C"])
 
@@ -116,6 +133,8 @@ def test_merge_asof_on_righton(memory_leak_check):
 # tests merging on columns with incompatible types
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_on_incompatible_dtype(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on="C", right_on="A")
 
@@ -129,6 +148,8 @@ def test_merge_asof_on_incompatible_dtype(memory_leak_check):
 # tests only left_on specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_lefton_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["C"])
 
@@ -139,6 +160,8 @@ def test_merge_asof_lefton_only(memory_leak_check):
 # tests only right_on specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_righton_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=["C"])
 
@@ -149,6 +172,8 @@ def test_merge_asof_righton_only(memory_leak_check):
 # tests invalid left_on key
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_lefton_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A", "B"], right_on=["A", "B"])
 
@@ -159,6 +184,8 @@ def test_merge_asof_lefton_invalid(memory_leak_check):
 # tests invalid right_on key
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_righton_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A", "E"], right_on=["A", "E"])
 
@@ -169,6 +196,8 @@ def test_merge_asof_righton_invalid(memory_leak_check):
 # tests lefton type
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_lefton_str_strlist1(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=3, right_on=["A", "B"])
 
@@ -179,6 +208,8 @@ def test_merge_asof_lefton_str_strlist1(memory_leak_check):
 # tests lefton type
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_lefton_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=(1, "A"), right_on=["A", "B"])
 
@@ -189,6 +220,8 @@ def test_merge_asof_lefton_str_strlist2(memory_leak_check):
 # tests righton type
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_righton_str_strlist1(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=3, left_on=["A", "C"])
 
@@ -199,6 +232,8 @@ def test_merge_asof_righton_str_strlist1(memory_leak_check):
 # tests righton type
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_righton_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=(1, "A"), left_on=["A", "C"])
 
@@ -209,6 +244,8 @@ def test_merge_asof_righton_str_strlist2(memory_leak_check):
 # tests unequal lengths of left_on and right_on
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_lefton_righton_len_unequal(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A"], right_on=["A", "B"])
 
@@ -219,6 +256,8 @@ def test_merge_asof_lefton_righton_len_unequal(memory_leak_check):
 # tests left_index is of type bool
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_leftindex_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index="A", right_index=True)
 
@@ -231,6 +270,8 @@ def test_merge_asof_leftindex_bool(memory_leak_check):
 # tests right_index is of type bool
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_rightindex_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True, right_index="B")
 
@@ -243,6 +284,8 @@ def test_merge_asof_rightindex_bool(memory_leak_check):
 # tests only left_on specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_leftindex_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True)
 
@@ -253,6 +296,8 @@ def test_merge_asof_leftindex_only(memory_leak_check):
 # tests only right_on specified
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_rightindex_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_index=True)
 
@@ -263,6 +308,8 @@ def test_merge_asof_rightindex_only(memory_leak_check):
 # tests right_index=True and len(left_on)!=1
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_rightindex_lefton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_index=True, left_on=["A"])
 
@@ -276,6 +323,8 @@ def test_merge_asof_rightindex_lefton(memory_leak_check):
 # tests left_index=True and len(right_on)!=1
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_leftindex_righton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True, right_on=["A"])
 
@@ -288,6 +337,8 @@ def test_merge_asof_leftindex_righton(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_suffixes_number(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, suffixes=["_x", "_y", "_z"])
 
@@ -297,6 +348,8 @@ def test_merge_asof_suffixes_number(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_direction(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, direction="break")
 
@@ -308,6 +361,8 @@ def test_merge_asof_direction(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_by(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, by="break")
 
@@ -319,6 +374,8 @@ def test_merge_asof_by(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_left_by(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_by="break")
 
@@ -330,6 +387,8 @@ def test_merge_asof_left_by(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_right_by(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_by="break")
 
@@ -341,6 +400,8 @@ def test_merge_asof_right_by(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_tolerance(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, tolerance="break")
 
@@ -352,6 +413,8 @@ def test_merge_asof_tolerance(memory_leak_check):
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_allow_exact_matches(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, allow_exact_matches=False)
 

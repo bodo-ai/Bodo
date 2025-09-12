@@ -4,10 +4,8 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.tests.timezone_common import sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
-from bodo.utils.typing import BodoError
 
 _timestamp_strs = [
     "2019-01-01",
@@ -68,6 +66,10 @@ def test_pd_datetime_arr_boxing(arr, memory_leak_check):
 
 
 def test_pd_datetime_arr_invalid_tz():
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match="Timezone must be either a valid pytz type with a zone, a fixed offset, or None",
@@ -369,6 +371,8 @@ def test_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators work between
     the tz-aware array and a tz-aware scalar with the same timezone.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
     # Check different timezones aren't supported
@@ -503,6 +507,8 @@ def test_array_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators throw exceptions between
     the 2 arrays with different timezones.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
     arr2 = pd.date_range(

@@ -6,7 +6,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func, get_num_test_workers, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -47,6 +46,8 @@ def test_from_product_tuple_names():
 
 @pytest.mark.slow
 def test_from_product_tuple_names_different_lengths():
+    from bodo.utils.typing import BodoError
+
     def impl():
         numbers = [0, 1, 2]
         colors = ["green", "purple"]
@@ -60,6 +61,8 @@ def test_from_product_tuple_names_different_lengths():
 
 @pytest.mark.slow
 def test_from_product_sortorder_defined():
+    from bodo.utils.typing import BodoError
+
     def impl():
         numbers = [0, 1, 2]
         colors = ["green", "purple"]

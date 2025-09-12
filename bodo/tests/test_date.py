@@ -10,7 +10,6 @@ import pytz
 
 import bodo
 from bodo.tests.utils import check_func, generate_comparison_ops_func, no_default
-from bodo.utils.typing import BodoError
 
 
 # ------------------------- Test datetime OPs ------------------------- #
@@ -964,6 +963,8 @@ def test_datetime_date_replace(memory_leak_check):
 
 
 def test_datetime_date_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     message = "year must be an integer"
     date = datetime.date(314, 1, 5)
     with pytest.raises(BodoError, match=message):
@@ -1510,27 +1511,31 @@ def series_value(request):
     return request.param
 
 
-@pytest.mark.parametrize("date_fields", bodo.hiframes.pd_timestamp_ext.date_fields)
-def test_dt_extract(series_value, date_fields, memory_leak_check):
+def test_dt_extract(series_value, memory_leak_check):
     """Test Series.dt extraction"""
-    func_text = "def impl(S, date_fields):\n"
-    func_text += f"  return S.dt.{date_fields}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
-    check_func(impl, (series_value, date_fields), check_dtype=False)
+    import bodo.decorators  # isort:skip # noqa
+
+    for date_field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        func_text = "def impl(S, date_fields):\n"
+        func_text += f"  return S.dt.{date_field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+        check_func(impl, (series_value, date_field), check_dtype=False)
 
 
-@pytest.mark.parametrize("date_methods", bodo.hiframes.pd_timestamp_ext.date_methods)
-def test_dt_date_methods(series_value, date_methods, memory_leak_check):
+def test_dt_date_methods(series_value, memory_leak_check):
     """Test Series.dt datetime methods"""
-    func_text = "def impl(S, date_methods):\n"
-    func_text += f"  return S.dt.{date_methods}()\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    import bodo.decorators  # isort:skip # noqa
 
-    check_func(impl, (series_value, date_methods))
+    for date_method in bodo.hiframes.pd_timestamp_ext.date_methods:
+        func_text = "def impl(S, date_methods):\n"
+        func_text += f"  return S.dt.{date_method}()\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+
+        check_func(impl, (series_value, date_method))
 
 
 def test_dt_extract_date(series_value, memory_leak_check):
@@ -1669,34 +1674,34 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
         check_func(impl, (series_value_no_bad_dates, freq))
 
 
-@pytest.mark.parametrize(
-    "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
-)
-def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
+def test_dt_timedelta_fields(memory_leak_check):
     """Test Series.dt for timedelta64 fields"""
-    func_text = "def impl(S, date_fields):\n"
-    func_text += f"  return S.dt.{timedelta_fields}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    import bodo.decorators  # isort:skip # noqa
 
-    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
-    check_func(impl, (S, timedelta_fields), check_dtype=False)
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        func_text = "def impl(S, date_fields):\n"
+        func_text += f"  return S.dt.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+
+        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        check_func(impl, (S, field), check_dtype=False)
 
 
-@pytest.mark.parametrize(
-    "timedelta_methods", bodo.hiframes.pd_timestamp_ext.timedelta_methods
-)
-def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
+def test_dt_timedelta_methods(memory_leak_check):
     """Test Series.dt for timedelta64 methods"""
-    func_text = "def impl(S, timedelta_methods):\n"
-    func_text += f"  return S.dt.{timedelta_methods}()\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    import bodo.decorators  # isort:skip # noqa
 
-    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
-    check_func(impl, (S, timedelta_methods))
+    for method in bodo.hiframes.pd_timestamp_ext.timedelta_methods:
+        func_text = "def impl(S, timedelta_methods):\n"
+        func_text += f"  return S.dt.{method}()\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
+
+        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        check_func(impl, (S, method))
 
 
 def test_series_dt64_timestamp_cmp(memory_leak_check):
@@ -1754,6 +1759,7 @@ def test_series_dt_type(memory_leak_check):
     """
     Test dt is called on series of type dt64
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S):
         return S.dt.year
@@ -1812,6 +1818,8 @@ def test_timestamp_number(time_num, memory_leak_check):
 
 @pytest.mark.slow
 def test_timestamp_unit_constructor_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(time_int, unit):
         return pd.Timestamp(time_int, unit=unit)
 
@@ -2426,6 +2434,8 @@ def test_timestamp_datetime_conversion(timestamp, memory_leak_check):
 
 
 def test_timestamp_datetime_conversion_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     timestamp = pd.Timestamp(42, unit="s")
 
     def test_impl(ts):

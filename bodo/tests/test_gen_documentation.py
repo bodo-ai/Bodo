@@ -4,7 +4,6 @@ import subprocess
 import pytest
 
 from bodo.tests.utils import pytest_mark_one_rank
-from bodo.utils.generate_docs import generate_pandas_docs
 
 
 @pytest.mark.documentation
@@ -19,6 +18,8 @@ def test_gen_documentation(capfd):
     python -m bodo.utils.generate_docs, commit, and then rerun this test
     to make sure changes are applied.
     """
+    from bodo.utils.generate_docs import generate_pandas_docs
+
     working_dir = os.getcwd()
     try:
         modules = ["Series"]

@@ -12,14 +12,32 @@ across all arrays.
 """
 
 
+@pytest.fixture
+def arr_type(request):
+    """Lazy fixture to avoid importing JIT in certain tests."""
+    # import the compiler
+    import bodo.decorators  # noqa
+
+    name = request.param
+    mapping = {
+        "i32": bodo.types.IntegerArrayType(bodo.types.int32),
+        "f64": bodo.types.FloatingArrayType(bodo.types.float64),
+        "string": bodo.types.string_array_type,
+        "dict_str": bodo.types.dict_str_arr_type,
+    }
+
+    return mapping[name]
+
+
 @pytest.mark.parametrize(
     "lst, arr_type",
     [
-        ([1, 2, 3, 5] * 3, bodo.types.IntegerArrayType(bodo.types.int32)),
-        ([1.1, 1.2, 3.1, 4.5] * 3, bodo.types.FloatingArrayType(bodo.types.float64)),
-        (["a", "b", "a", "b", "c"] * 3, bodo.types.string_array_type),
-        (["a", "b", "a", "b", "c"] * 3, bodo.types.dict_str_arr_type),
+        ([1, 2, 3, 5] * 3, "i32"),
+        ([1.1, 1.2, 3.1, 4.5] * 3, "f64"),
+        (["a", "b", "a", "b", "c"] * 3, "string"),
+        (["a", "b", "a", "b", "c"] * 3, "dict_str"),
     ],
+    indirect=["arr_type"],
 )
 def test_list_to_array(lst, arr_type, memory_leak_check):
     def impl(lst):
@@ -46,9 +64,10 @@ def test_int_list_with_null_to_array(memory_leak_check):
 @pytest.mark.parametrize(
     "arr_type",
     [
-        bodo.types.string_array_type,
-        bodo.types.dict_str_arr_type,
+        "string",
+        "dict_str",
     ],
+    indirect=True,
 )
 def test_str_list_with_null_to_array(arr_type, memory_leak_check):
     """

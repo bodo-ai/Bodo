@@ -1,19 +1,16 @@
+from numba.core import types  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import types
 
 import bodo
-from bodo.hiframes.table import TableType
-from bodo.libs.streaming.union import UnionStateType
 from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
     pytest_mark_pandas,
     temp_env_override,
 )
-from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 @pytest_mark_pandas
@@ -137,6 +134,9 @@ def test_stream_union_integer_promotion(memory_leak_check):
     Logic is based on investigation from:
     https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
 
     nn_int8_arr = types.Array(types.int8, 1, "C")
     null_int8_arr = bodo.types.IntegerArrayType(types.int8)
@@ -174,6 +174,9 @@ def test_stream_union_float_promotion(memory_leak_check):
     but assuming float == Snowflake Float != Snowflake Number
     so can never cast float => decimal
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
 
     # Float and Integer + Float Tests
     nn_int8_arr = types.Array(types.int8, 1, "C")
@@ -216,6 +219,9 @@ def test_stream_union_decimal_promotion(memory_leak_check):
     - Truncation of integer + decimal => float allowed
         Decimal has at most 38 sig-figs, float has up to 15, integer 18
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
 
     state = UnionStateType(
         in_table_types=(
@@ -284,6 +290,9 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
     - Dictionary Encoded and Null Array
     - Dictionary Encoded, String, and Null Arrays
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
 
     state = UnionStateType(
         in_table_types=(
@@ -329,6 +338,9 @@ def test_stream_union_null(memory_leak_check):
     - Non-nullable and nullable array (of same type)
     - 2 Null Arrays
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
 
     non_null_bool_arr = types.Array(types.bool_, 1, "C")
 
@@ -369,6 +381,8 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
     Basic test for Streaming Union, especially for testing coverage
     The BodoSQL UNION tests cover edge cases
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
     orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
@@ -444,6 +458,8 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
     multiple pipelines where the number of input batches on different ranks
     might be different.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
     orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
@@ -706,6 +722,8 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
 )
 @pytest.mark.parametrize("all", [True, False])
 def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     if not all:
         pytest.skip("Nested Arrays don't support equality yet")
     global_1 = ColNamesMetaType(("a", "b"))

@@ -8,11 +8,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
 def test_timestamp_classmethod_err(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.Timestamp.max
 
@@ -28,6 +29,8 @@ def test_timestamp_classmethod_err(memory_leak_check):
 def test_timestamp_classmethod_local_import_err(memory_leak_check):
     from pandas import Timestamp
 
+    from bodo.utils.typing import BodoError
+
     def impl():
         return Timestamp.max
 
@@ -41,6 +44,8 @@ def test_timestamp_classmethod_local_import_err(memory_leak_check):
 
 @pytest.mark.slow
 def test_timestamp_attr_err(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.Timestamp("2021-12-08").tz
 
@@ -54,6 +59,8 @@ def test_timestamp_attr_err(memory_leak_check):
 
 @pytest.mark.slow
 def test_timestamp_method_err(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.Timestamp("2021-12-08").time()
 
@@ -69,6 +76,7 @@ def test_timestamp_day_name_unsupported(memory_leak_check):
     """
     Test unsupported arguments for Timestamp.day_name
     """
+    from bodo.utils.typing import BodoError
 
     def impl():
         return pd.Timestamp("2020-03-14T15:32:52.192548651").day_name(
@@ -87,6 +95,7 @@ def test_timestamp_compare_timezones_unsupported(memory_leak_check):
     """
     Test timezone-aware timestamps don't work on common operations (like min)
     """
+    from bodo.utils.typing import BodoError
 
     def impl():
         return min(

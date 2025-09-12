@@ -7,7 +7,8 @@ from pyiceberg.catalog import Catalog
 import bodo
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.mpi4py import MPI
-from bodo.tests.utils import _test_equal_guard, gen_unique_table_id, reduce_sum
+from bodo.tests.utils import _test_equal_guard, gen_unique_table_id
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.utils import run_rank0
 
 

@@ -5,10 +5,11 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 
 def test_undefined_variable():
+    from bodo.utils.typing import BodoError
+
     message = "name 'undefined_variable' is not defined"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: pd.read_csv(undefined_variable))()  # noqa: F821
@@ -16,6 +17,8 @@ def test_undefined_variable():
 
 @pytest.mark.slow
 def test_fn_return_type_error():
+    from bodo.utils.typing import BodoError
+
     def test_impl(n):
         if n > 10:
             return "hello world"
@@ -29,6 +32,8 @@ def test_fn_return_type_error():
 
 @pytest.mark.slow
 def test_bcast_scalar_type_error():
+    from bodo.utils.typing import BodoError
+
     def test_impl():
         return bodo.libs.distributed_api.bcast_scalar(b"I'm a bytes val")
 
@@ -41,6 +46,7 @@ def test_date_range_unsupported(memory_leak_check):
     """
     Tests an unsupported arguement for pd.date_range()
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
@@ -61,6 +67,7 @@ def test_np_sort_unsupported(memory_leak_check):
     """
     Tests an unsupported arguement for np.sort()
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(arr):
         return np.sort(arr, kind="heapsort")
@@ -75,6 +82,7 @@ def test_pd_datetime_unsupported(memory_leak_check):
     """
     Tests an unsupported argument for pd.to_datetime()
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.to_datetime("2022-09-02", errors="ignore")

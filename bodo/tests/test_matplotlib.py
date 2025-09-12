@@ -21,7 +21,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.skip if matplotlib_import_failed else pytest_pandas
 
@@ -690,6 +689,7 @@ def test_mpl_xcorr_errors(memory_leak_check):
     """
     Tests that xcorr requires a constant boolean input.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1():
         x = np.arange(100)
@@ -726,6 +726,7 @@ def test_mpl_subplots_const_error(memory_leak_check):
     """
     Tests that subplots requires constants for nrows and ncols.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1():
         return matplotlib.pyplot.subplots(0, 1)
@@ -756,6 +757,7 @@ def test_fig_subplots_const_error(memory_leak_check):
     """
     Tests that subplots requires constants for nrows and ncols.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(fig):
         return fig.subplots(0, 1)

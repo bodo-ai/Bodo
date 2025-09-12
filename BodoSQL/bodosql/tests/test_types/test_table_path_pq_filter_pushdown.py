@@ -17,11 +17,10 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
-    SeriesOptTestPipeline,
     _check_for_io_reader_filters,
     check_func,
 )
+from bodo.tests.utils_jit import DistTestPipeline, SeriesOptTestPipeline
 from bodosql.tests.utils import check_num_parquet_readers
 
 pytestmark = pytest.mark.parquet

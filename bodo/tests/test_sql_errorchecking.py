@@ -13,7 +13,6 @@ from bodo.tests.utils import (
     oracle_user_pass_and_hostname,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.sql, pytest.mark.slow]
 
@@ -44,6 +43,7 @@ def test_read_sql_error_sqlalchemy():
 @pytest.mark.slow
 def test_unsupported_query():
     """Test error checking for unsupported queries"""
+    from bodo.utils.typing import BodoError
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
 

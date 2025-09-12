@@ -8,7 +8,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func, no_default
-from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -1013,6 +1012,7 @@ def test_bad_setitem(mutable_bodo_arr):
 
     These tests check that non-integer values (i.e. floats) aren't accepted.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl_scalar(A):
         A[2] = 9.8

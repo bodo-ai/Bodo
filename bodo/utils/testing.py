@@ -7,16 +7,6 @@ import pandas as pd
 import bodo
 
 
-@bodo.jit
-def get_rank():  # pragma: no cover
-    return bodo.libs.distributed_api.get_rank()
-
-
-@bodo.jit
-def barrier():  # pragma: no cover
-    return bodo.libs.distributed_api.barrier()
-
-
 @contextmanager
 def ensure_clean(filename):
     """deletes filename if exists after test is done."""
@@ -25,10 +15,10 @@ def ensure_clean(filename):
     finally:
         try:
             # wait for all ranks to complete
-            barrier()
+            bodo.barrier()
             # delete on rank 0
             if (
-                get_rank() == 0
+                bodo.get_rank() == 0
                 and os.path.exists(filename)
                 and os.path.isfile(filename)
             ):
@@ -45,9 +35,13 @@ def ensure_clean_dir(dirname):
     finally:
         try:
             # wait for all ranks to complete
-            barrier()
+            bodo.barrier()
             # delete on rank 0
-            if get_rank() == 0 and os.path.exists(dirname) and os.path.isdir(dirname):
+            if (
+                bodo.get_rank() == 0
+                and os.path.exists(dirname)
+                and os.path.isdir(dirname)
+            ):
                 shutil.rmtree(dirname)
         except Exception as e:
             print(f"Exception on removing directory: {e}")
@@ -59,8 +53,8 @@ def ensure_clean2(pathname):  # pragma: no cover
     try:
         yield
     finally:
-        barrier()
-        if get_rank() == 0:
+        bodo.barrier()
+        if bodo.get_rank() == 0:
             try:
                 if os.path.exists(pathname) and os.path.isfile(pathname):
                     os.remove(pathname)

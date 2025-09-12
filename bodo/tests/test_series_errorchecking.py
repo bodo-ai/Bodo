@@ -7,7 +7,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -16,6 +15,7 @@ def test_isin(memory_leak_check):
     """
     tests error for 'values' argument of Series.isin()
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S, values):
         return S.isin(values)
@@ -30,6 +30,7 @@ def test_series_dt_not_supported(memory_leak_check):
     """
     tests error for unsupported Series.dt methods
     """
+    from bodo.utils.typing import BodoError
 
     def impl():
         rng = pd.date_range("20/02/2020", periods=5, freq="M")
@@ -43,6 +44,8 @@ def test_series_dt_not_supported(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_head_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         S = pd.Series(np.random.randn(10))
         return S.head(5.0)
@@ -53,6 +56,8 @@ def test_series_head_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_tail_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         S = pd.Series(np.random.randn(10))
         return S.tail(5.0)
@@ -63,6 +68,8 @@ def test_series_tail_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_rename_none(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     S = pd.Series(np.random.randn(10))
 
     def impl(S):
@@ -74,6 +81,8 @@ def test_series_rename_none(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_take_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     S = pd.Series(np.random.randn(10))
 
     def impl1(S):
@@ -97,6 +106,7 @@ def test_series_map_runtime_categorical(memory_leak_check):
     Tests that a UDF with categories that aren't known at
     compile time throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
     # TODO: Modify test once input -> output categories are supported.
 
     S = pd.Series(["A", "bbr", "wf", "cewf", "Eqcq", "qw"])
@@ -115,6 +125,8 @@ def test_series_map_runtime_categorical(memory_leak_check):
 @pytest.mark.slow
 def test_dropna_axis_error(memory_leak_check):
     """test axis argument error checking in Series.dropna()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([0, np.nan, 1])
     match = "axis parameter only supports default value 0"
     with pytest.raises(BodoError, match=match):
@@ -124,6 +136,8 @@ def test_dropna_axis_error(memory_leak_check):
 @pytest.mark.slow
 def test_dropna_inplace_error(memory_leak_check):
     """test inplace argument error checking in Series.dropna()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([0, np.nan, 1])
     match = "inplace parameter only supports default value False"
     with pytest.raises(BodoError, match=match):
@@ -133,6 +147,8 @@ def test_dropna_inplace_error(memory_leak_check):
 @pytest.mark.slow
 def test_replace_inplace_error(memory_leak_check):
     """test inplace argument error checking in Series.replace()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([1, 2, 3])
     message = "inplace parameter only supports default value False"
     with pytest.raises(BodoError, match=message):
@@ -142,6 +158,8 @@ def test_replace_inplace_error(memory_leak_check):
 @pytest.mark.slow
 def test_replace_limit_error(memory_leak_check):
     """test limit argument error checking in Series.replace()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([1, 2, 3])
     message = "limit parameter only supports default value None"
     with pytest.raises(BodoError, match=message):
@@ -151,6 +169,8 @@ def test_replace_limit_error(memory_leak_check):
 @pytest.mark.slow
 def test_replace_regex_error(memory_leak_check):
     """test regex argument error checking in Series.replace()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([1, 2, 3])
     message = "regex parameter only supports default value False"
     with pytest.raises(BodoError, match=message):
@@ -160,6 +180,8 @@ def test_replace_regex_error(memory_leak_check):
 @pytest.mark.slow
 def test_replace_method_error(memory_leak_check):
     """test method argument error checking in Series.replace()"""
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([1, 2, 3])
     message = "method parameter only supports default value pad"
     with pytest.raises(BodoError, match=message):
@@ -170,6 +192,7 @@ def test_replace_method_error(memory_leak_check):
 def test_replace_dict_error():
     """test 'value' is None when 'to_replace' is a dictionary in
     Series.replace()"""
+    from bodo.utils.typing import BodoError
 
     def impl(series, to_replace, value):
         return series.replace(to_replace, value)
@@ -201,6 +224,7 @@ def test_replace_unequal_list_lengths():
 @pytest.mark.slow
 def test_series_groupby_args(memory_leak_check):
     """Test Series.groupby with all unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_impl_by_level(S):
         return S.groupby(by=["a", "b", "a", "b"], level=0).mean()
@@ -249,6 +273,7 @@ def test_series_groupby_args(memory_leak_check):
 @pytest.mark.slow
 def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
     """Test Series.groupby by argument with Bodo Types that it doesn't currently support"""
+    from bodo.utils.typing import BodoError
 
     def test_by_type(S, byS):
         return S.groupby(byS).max()
@@ -273,6 +298,8 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_idxmax_unordered_cat(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(S):
         return S.idxmax()
 
@@ -285,6 +312,8 @@ def test_series_idxmax_unordered_cat(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_idxmin_unordered_cat(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(S):
         return S.idxmin()
 
@@ -296,6 +325,8 @@ def test_series_idxmin_unordered_cat(memory_leak_check):
 
 
 def test_series_groupby_max_min_cat_unordered(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl1(S):
         return S.groupby(level=0).max()
 
@@ -316,6 +347,8 @@ def test_series_groupby_max_min_cat_unordered(memory_leak_check):
 
 
 def test_series_first_last_invalid_offset():
+    from bodo.utils.typing import BodoError
+
     def test_impl1(S, off):
         return S.first(off)
 
@@ -339,6 +372,8 @@ def test_series_first_last_invalid_offset():
 
 @pytest.mark.slow
 def test_cmp_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl1(S, val):
         return S > val
 
@@ -370,6 +405,7 @@ def test_cmp_errors(memory_leak_check):
 @pytest.mark.slow
 def test_and_or_typing_errors(memory_leak_check):
     """Currently, bodo doesn't allow and/or between int/boolean types. Checks that we raise a reasonable error"""
+    from bodo.utils.typing import BodoError
 
     def test_and(S1, S2):
         return S1 & S2
@@ -404,6 +440,7 @@ def test_astype_non_constant_string(memory_leak_check):
     Checks that calling Series.astype(str_value) with a string that
     is not a compile time constant will produce a reasonable BodoError.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def g(s):
@@ -430,6 +467,7 @@ def test_series_init_series_idx():
     Checks that proper error is given when initializing a series with another Series value, and
     specifiying the index values (previously, this caused segfault)
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl():
@@ -447,6 +485,8 @@ def test_series_init_series_idx():
 @pytest.mark.slow
 def test_np_select_series_cond(memory_leak_check):
     """tests np select returns the correct error when passed a bool series for cond"""
+    from bodo.utils.typing import BodoError
+
     np.random.seed(42)
 
     # For now, can only handle cond == bool ndarry.
@@ -469,6 +509,7 @@ def test_series_init_dict_non_const_keys():
     Tests the error message when initializing series with non constant keyed dicts
     that cannot be unrolled.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl():
@@ -491,6 +532,7 @@ def test_series_init_dict_constant_unrolling():
     can be constant by unrolling the loop. This requires further optimizations.
     See BSE-4021.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl():
@@ -513,6 +555,7 @@ def test_series_init_build_map_constant_unrolling():
     can be constant by unrolling the loop. This requires further optimizations.
     See BSE-4021.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl():
@@ -534,6 +577,7 @@ def test_series_init_dict_idx_kw():
     Checks that proper error is given when initializing a series with dict and also supplying
     an index value.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl_err1():
@@ -573,6 +617,7 @@ def test_heterogenous_series_unsupported_attr(memory_leak_check):
     is a generated when iterating across the rows of a DataFrame
     with different column types.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl(df):
@@ -591,6 +636,7 @@ def test_heterogenous_series_unsupported_method(memory_leak_check):
     is a generated when iterating across the rows of a DataFrame
     with different column types.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl(df):

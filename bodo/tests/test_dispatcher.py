@@ -1,5 +1,5 @@
 import cloudpickle
-from numba.core.dispatcher import Dispatcher
+from numba.core.dispatcher import Dispatcher  # noqa TID253
 
 import bodo
 

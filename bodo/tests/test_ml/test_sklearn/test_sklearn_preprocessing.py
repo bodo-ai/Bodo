@@ -19,7 +19,6 @@ from sklearn.utils._testing import assert_array_equal
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
-from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -355,6 +354,7 @@ def test_one_hot_encoder_unsupported():
     """
     Test OneHotEncoder's unsupported arguments.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1():
         m = OneHotEncoder()

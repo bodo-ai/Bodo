@@ -6,19 +6,17 @@ import datetime
 import decimal
 import operator
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
-    AnalysisTestPipeline,
     check_func,
     get_num_test_workers,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -1251,9 +1249,8 @@ def test_index_argminmax(index, memory_leak_check):
     check_func(impl2, (index,), only_1D=True)
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
+@pytest.fixture(
+    params=[
         pytest.param(
             pd.Index([1, 5, 2, 1, 0, None], dtype=pd.Int32Dtype()), id="integer"
         ),
@@ -1292,7 +1289,8 @@ def test_index_argminmax(index, memory_leak_check):
             id="decimal",
         ),
         pytest.param(
-            pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]), id="time"
+            lambda: pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]),
+            id="time",
         ),
         pytest.param(
             pd.Index([datetime.date.fromordinal(738886 + i**2) for i in range(12)]),
@@ -1343,7 +1341,7 @@ def test_index_argminmax(index, memory_leak_check):
             id="ord_cat_decimal",
         ),
         pytest.param(
-            pd.CategoricalIndex(
+            lambda: pd.CategoricalIndex(
                 [bodo.types.Time(nanosecond=10**i) for i in range(12)], ordered=True
             ),
             id="ord_cat_time",
@@ -1380,7 +1378,19 @@ def test_index_argminmax(index, memory_leak_check):
         ),
     ],
 )
-def test_index_min_max(index):
+def min_max_index(request):
+    """Fixture to lazily evaluate index parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    index = request.param
+
+    return index() if callable(index) else index
+
+
+def test_index_min_max(min_max_index):
+    index = min_max_index
+
     def impl1(I):
         return I.min()
 
@@ -1583,6 +1593,8 @@ def test_index_contains(args, memory_leak_check):
     ],
 )
 def test_range_index_malformed(args):
+    from bodo.utils.typing import BodoError
+
     # Compile time check: step passed in is zero
     def impl1(start, stop, step):
         return pd.RangeIndex(start, stop, step)
@@ -1681,17 +1693,18 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
 
 
-@pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.date_fields)
-def test_datetime_field(dti_val, field, memory_leak_check):
+def test_datetime_field(dti_val, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
+    import bodo.decorators  # isort:skip # noqa
 
-    func_text = "def impl(A):\n"
-    func_text += f"  return A.{field}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        func_text = "def impl(A):\n"
+        func_text += f"  return A.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
 
-    check_func(impl, (dti_val,))
+        check_func(impl, (dti_val,))
 
 
 def test_datetime_date(dti_val, memory_leak_check):
@@ -1944,6 +1957,8 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_datetime_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(d):
         I = pd.DatetimeIndex(d)
         return I
@@ -2072,6 +2087,8 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_timedelta_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(d):
         I = pd.TimedeltaIndex(d)
         return I
@@ -2085,17 +2102,18 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
-@pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
-def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
+def test_timedelta_field(timedelta_index_val, memory_leak_check):
     """tests timedelta index.field. This should be inlined in series pass"""
+    import bodo.decorators  # isort:skip # noqa
 
-    func_text = "def impl(A):\n"
-    func_text += f"  return A.{field}\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["impl"]
+    for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
+        func_text = "def impl(A):\n"
+        func_text += f"  return A.{field}\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["impl"]
 
-    check_func(impl, (timedelta_index_val,))
+        check_func(impl, (timedelta_index_val,))
 
 
 @pytest.mark.parametrize(
@@ -2217,6 +2235,8 @@ def test_init_string_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_binary_str_index() is applied correctly for string indexes"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(d):
         I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
         return I
@@ -2233,6 +2253,8 @@ def test_init_string_index_array_analysis(memory_leak_check):
 def test_init_binary_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_binary_str_index() is applied for binary indexes"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(d):
         I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
@@ -2474,6 +2496,8 @@ def test_index_getitem(index, memory_leak_check):
 def test_init_range_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_range_index() is applied correctly"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(n):
         I = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)
@@ -3240,6 +3264,7 @@ def test_index_unsupported(data):
     """Test that a Bodo error is raised for unsupported
     Index methods
     """
+    from bodo.utils.typing import BodoError
 
     def test_append(idx):
         return idx.append()
@@ -4013,6 +4038,7 @@ def test_index_rename(idx, new_name):
 
 def test_index_rename_dist_bug(memory_leak_check):
     """tests index.rename() for distribution match between input and output [BE-2285]"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["I"], returns_maybe_distributed=False)
     def f(I):

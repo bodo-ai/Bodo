@@ -4,15 +4,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import bodo
-import bodo.libs.table_builder
 from bodo.tests.utils import check_func
-from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def test_table_builder_empty(memory_leak_check):
     """Test that table_builder outputs an empty Table when the input Table has
     no rows"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     col_names = ColNamesMetaType(("A", "B"))
 
@@ -42,6 +43,10 @@ def test_table_builder_empty(memory_leak_check):
 @pytest.mark.parametrize("df2_len", [3, 5, 10])
 def test_table_builder(df1_len, df2_len, memory_leak_check):
     """Test that table_builder will correctly concatenate it's inputs"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     col_names = ColNamesMetaType(("A", "B"))
 
@@ -87,6 +92,10 @@ def test_table_builder(df1_len, df2_len, memory_leak_check):
 def test_table_builder_with_strings(memory_leak_check):
     """Test that table_builder will correctly concatenate it's string inputs
     (dictionary encoded)"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0,))
     col_names = ColNamesMetaType(("A",))
 
@@ -119,6 +128,10 @@ def test_table_builder_with_strings(memory_leak_check):
 def test_table_builder_types_across_scopes(memory_leak_check):
     """Test that table_builder will infer it's input types even if the append is
     in a different block from the init call"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0,))
     col_names = ColNamesMetaType(("A",))
 
@@ -145,6 +158,9 @@ def test_table_builder_types_across_scopes(memory_leak_check):
 
 def test_table_builder(memory_leak_check):
     """Simple test for table builder"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType
 
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
     col_names_meta = ColNamesMetaType(tuple(df.columns))
@@ -169,6 +185,9 @@ def test_table_builder(memory_leak_check):
 
 def test_chunked_table_builder_simple(memory_leak_check):
     """Simple test for the chunked table builder"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType
 
     df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": ["A", "B", "C"] * 10})
     col_names_meta = ColNamesMetaType(tuple(df.columns))
@@ -193,6 +212,10 @@ def test_chunked_table_builder_simple(memory_leak_check):
 
 def test_chunked_table_builder_multiple_chunks(memory_leak_check):
     """test for the chunked table builder with multiple appends/pops of chunks"""
+    import bodo.decorators  # noqa
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType
+
     chunk_size = bodo.bodosql_streaming_batch_size
     num_iters = 5
 

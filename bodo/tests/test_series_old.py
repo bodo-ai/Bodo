@@ -14,10 +14,8 @@ from bodo.tests.utils import (
     check_func,
     count_array_REPs,
     count_parfor_REPs,
-    get_start_end,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -580,11 +578,13 @@ class TestSeries(unittest.TestCase):
             bodo_func(df.A), test_impl(df.A), check_names=False, check_dtype=False
         )
 
-    @pytest.mark.skipif(
-        bodo.hiframes.boxing._use_dict_str_type,
-        reason="not supported for dict string type",
-    )
     def test_series_fillna_str_inplace1(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.hiframes.boxing import _use_dict_str_type
+
+        if _use_dict_str_type:
+            pytest.skip("not supported for dict string type")
+
         def test_impl(A):
             A.fillna("dd", inplace=True)
             return A
@@ -598,11 +598,13 @@ class TestSeries(unittest.TestCase):
         # test_impl(S2)
         # np.testing.assert_array_equal(S1, S2)
 
-    @pytest.mark.skipif(
-        bodo.hiframes.boxing._use_dict_str_type,
-        reason="not supported for dict string type",
-    )
     def test_series_fillna_str_inplace_empty1(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.hiframes.boxing import _use_dict_str_type
+
+        if _use_dict_str_type:
+            pytest.skip("not supported for dict string type")
+
         def test_impl(A):
             A.fillna("", inplace=True)
             return A
@@ -631,6 +633,8 @@ class TestSeries(unittest.TestCase):
         np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
 
     def test_series_dropna_str_parallel1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(A):
             B = A.dropna()
             return (B == "gg").sum()
@@ -722,6 +726,8 @@ class TestSeries(unittest.TestCase):
         )
 
     def test_series_dist_input1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(S):
             return S.max()
 
@@ -746,6 +752,8 @@ class TestSeries(unittest.TestCase):
 
     @unittest.skip("pending handling of build_tuple in dist pass")
     def test_series_tuple_input_dist1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(s_tup):
             return s_tup[0].max()
 
@@ -1131,6 +1139,8 @@ class TestSeries(unittest.TestCase):
         check_func(test_impl, (), only_seq=True, sort_output=True)
 
     def test_series_shift_default1(self):
+        from bodo.utils.typing import BodoError
+
         def test_impl(S):
             return S.shift()
 

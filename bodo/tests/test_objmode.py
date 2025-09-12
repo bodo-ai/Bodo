@@ -2,20 +2,21 @@
 Unittests for objmode blocks
 """
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import check_func, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
 
 def test_type_register():
     """test bodo.types.register_type() including error checking"""
+    from bodo.utils.typing import BodoError
+
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
     bodo.types.register_type("my_type1", df_type1)
@@ -43,6 +44,7 @@ def test_type_register():
 
 def test_type_check():
     """test type checking for objmode output values"""
+    from bodo.utils.typing import BodoError
 
     # A is specified as int but return value has strings
     df1 = pd.DataFrame({"A": [1, 2, 3]})
@@ -92,6 +94,7 @@ def test_df_index_fix():
 
 def test_df_type_class():
     """test dropping numeric index from objmode output dataframe if necessary"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         with numba.objmode(df=bodo.types.DataFrameType):

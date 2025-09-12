@@ -22,8 +22,8 @@ from bodo.tests.utils import (
     check_func_seq,
     pytest_mark_one_rank,
     pytest_polaris,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par, gen_unique_id

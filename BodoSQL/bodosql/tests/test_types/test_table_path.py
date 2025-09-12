@@ -20,11 +20,11 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    TypeInferenceTestPipeline,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
 )
+from bodo.tests.utils_jit import TypeInferenceTestPipeline
 from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 

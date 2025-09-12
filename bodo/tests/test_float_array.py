@@ -1,11 +1,11 @@
 import operator
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
 from bodo.tests.utils import check_func, get_num_test_workers

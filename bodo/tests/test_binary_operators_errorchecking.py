@@ -4,13 +4,13 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 
 def test_add_timestamp_unsupported(memory_leak_check):
     """
     Test adding timestamp to datetime_date_type and verify bodo error raised.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(a, b):
         return a + b
@@ -34,6 +34,7 @@ def test_sub_timedelta_unsupported(memory_leak_check):
     """
     Test subtracting timedelta and datetime.date and verify bodo error raised.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(a, b):
         return a - b
