@@ -14,7 +14,7 @@ We compared Bodo's performance on this workload to other systems including [Dask
 
 | Package      | Version      |
 |----------------|----------------|
-| bodo   | 2024.10   |
+| bodo   | 2025.8.2   |
 | bodosdk | 2.2.0 |
 | getdaft   | 0.4.7 |
 | dask   | 2024.9.1  |
