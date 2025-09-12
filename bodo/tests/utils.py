@@ -68,6 +68,7 @@ class InputDist(Enum):
 
 
 def count_array_REPs():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -75,6 +76,7 @@ def count_array_REPs():
 
 
 def count_parfor_REPs():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -82,6 +84,7 @@ def count_parfor_REPs():
 
 
 def count_parfor_OneDs():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -89,6 +92,7 @@ def count_parfor_OneDs():
 
 
 def count_array_OneDs():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -96,6 +100,7 @@ def count_array_OneDs():
 
 
 def count_parfor_OneD_Vars():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -103,6 +108,7 @@ def count_parfor_OneD_Vars():
 
 
 def count_array_OneD_Vars():
+    import bodo.decorators  # isort:skip noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()

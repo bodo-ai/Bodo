@@ -7,6 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip noqa
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.streaming.groupby import (

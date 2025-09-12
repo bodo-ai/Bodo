@@ -6,6 +6,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip noqa
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     groupby_build_consume_batch,

@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip noqa
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     get_op_pool_bytes_allocated,

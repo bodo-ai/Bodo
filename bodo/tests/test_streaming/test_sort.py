@@ -1,4 +1,6 @@
 import bodo
+
+import bodo.decorators  # isort:skip noqa
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.str_arr_ext import StringArrayType
 from bodo.transforms.distributed_analysis import Distribution
