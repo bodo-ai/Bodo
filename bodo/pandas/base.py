@@ -100,6 +100,10 @@ def from_pandas(df):
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
 
+def from_arrow(table):
+    return from_pandas(table.to_pandas())
+
+
 @check_args_fallback("all")
 def read_parquet(
     path,
