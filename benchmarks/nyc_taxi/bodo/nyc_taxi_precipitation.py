@@ -15,7 +15,7 @@ import bodo.pandas
 
 
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
-    t0 = time.time()
+    start = time.time()
     central_park_weather_observations = pd.read_csv(
         weather_dataset,
         parse_dates=["DATE"],
@@ -24,7 +24,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
     fhvhv_tripdata = pd.read_parquet(hvfhv_dataset)
-    print("Total read time: ", time.time() - t0)
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -88,7 +87,7 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     )
 
     monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
-    print("Total time spent in get_monthly_travels_weather time:", (time.time() - t0))
+    print("Total E2E time:", (time.time() - start))
     return monthly_trips_weather
 
 
@@ -101,12 +100,9 @@ def main():
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
 
     if args.use_jit:
-        start = time.time()
         bodo.jit(cache=True)(get_monthly_travels_weather)(
             weather_dataset, hvfhv_dataset
         )
-        end = time.time()
-        print("Total E2E time:", (end - start))
     else:
         get_monthly_travels_weather.__globals__.update({"pd": bodo.pandas})
         get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
