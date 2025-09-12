@@ -106,7 +106,7 @@ class BodoDataFrameLocIndexer(_LocIndexer):
             )
         )
         # Delegate to original behavior
-        return super(self.df).loc.__getitem__(key)
+        return pd.DataFrame.loc.__get__(self.df, BodoDataFrame).__getitem__(key)
 
 
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
