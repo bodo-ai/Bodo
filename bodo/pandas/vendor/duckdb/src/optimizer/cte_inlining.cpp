@@ -130,6 +130,7 @@ void CTEInlining::TryInlining(unique_ptr<LogicalOperator> &op) {
 				return;
 			}
 
+            return;
 			// CTEs require full materialization before the CTE scans begin,
 			// LIMIT and TOP_N operators cannot abort the materialization,
 			// even if only a part of the CTE result is needed.

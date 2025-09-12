@@ -86,6 +86,9 @@ class PhysicalCTERef : public PhysicalSource {
             next_batch = *chunk_iter;
             ++chunk_iter;
         }
+        std::cout << "cteref " << this << " ";
+        DEBUG_PrintTable(std::cout, next_batch);
+        std::cout << std::endl;
         bool at_end =
             (chunk_iter == cte->collected_rows->builder->chunks.end());
         return {next_batch, at_end ? OperatorResult::FINISHED
@@ -98,7 +101,9 @@ class PhysicalCTERef : public PhysicalSource {
      * @return std::shared_ptr<bodo::Schema>
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        return cte->output_schema;
+        return bodo::Schema::FromArrowSchema(
+            cte->output_schema->ToArrowSchema());
+        // return cte->output_schema;
     }
 
     std::string ToString() override { return PhysicalSource::ToString(); }
