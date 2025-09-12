@@ -668,6 +668,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
             return super().__repr__()
 
+    def to_list(self):
+        if self._exec_state == ExecState.PLAN:
+            self.execute_plan()
+        return super().to_list()
+
+    def tolist(self):
+        return self.to_list()
+
     @property
     def index(self):
         self.execute_plan()
