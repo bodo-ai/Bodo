@@ -68,7 +68,7 @@ class InputDist(Enum):
 
 
 def count_array_REPs():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -76,7 +76,7 @@ def count_array_REPs():
 
 
 def count_parfor_REPs():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -84,7 +84,7 @@ def count_parfor_REPs():
 
 
 def count_parfor_OneDs():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -92,7 +92,7 @@ def count_parfor_OneDs():
 
 
 def count_array_OneDs():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -100,7 +100,7 @@ def count_array_OneDs():
 
 
 def count_parfor_OneD_Vars():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -108,7 +108,7 @@ def count_parfor_OneD_Vars():
 
 
 def count_array_OneD_Vars():
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -209,7 +209,6 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
 
     # If dataframe_library_enabled then run compiler tests as df library tests
@@ -1235,7 +1234,7 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.utils.utils import is_distributable_typ
 
     try:

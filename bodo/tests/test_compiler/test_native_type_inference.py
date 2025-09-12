@@ -97,6 +97,7 @@ def test_conversion_rules(memory_leak_check):
     """
     Make sure conversion rules are initialized correctly in native typer
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.type_inference.native_typer import check_compatible_types
 
     conv = check_compatible_types(types.boolean, types.int8)

@@ -73,7 +73,7 @@ def _val_to_string(val):
 )
 def test_literal_argument_checkers(args, kwargs, expected_err_msg):
     """Test argument checkers check method"""
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         ConstantArgumentChecker,
@@ -178,7 +178,7 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
 )
 def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_constant):
     """Test argument checkers check method"""
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         BooleanScalarArgumentChecker,
@@ -323,7 +323,7 @@ def test_numeric_series_argument_checkers(
     other, fill_value, expected_err_msg, use_constant
 ):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         NumericScalarArgumentChecker,
@@ -428,7 +428,7 @@ def test_numeric_series_argument_checkers(
 )
 def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         DatetimeLikeSeriesArgumentChecker,
@@ -512,7 +512,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     and if S is a Series of ints then arg1 must be 'int' and if it is a Series of floats
     then arg1 must be 'float'
     """
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         GenericArgumentChecker,
@@ -596,7 +596,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     ],
 )
 def test_overload_attr(S, expected_err_msg):
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         OverloadAttributeChecker,

@@ -1783,6 +1783,7 @@ def test_user_distributed_rep(memory_leak_check):
 
 def test_replicated_flag(memory_leak_check):
     """test replicated flag in jit decorator"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_analysis import Distribution, is_REP
 
     # mix of dist/rep inputs
@@ -2032,6 +2033,7 @@ def check_dist_meta(df, dist):
 @pytest.mark.parquet
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_analysis import Distribution
 
     fname = datapath("example.parquet")

@@ -78,6 +78,7 @@ def test_join_row_count_collection(memory_leak_check):
     Check that Join submits its row counts to the QueryProfileCollector
     as expected.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -210,6 +211,7 @@ def test_groupby_row_count_collection(memory_leak_check):
     Check that Groupby submits its row counts to the QueryProfileCollector
     as expected.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -477,6 +479,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by hash join.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -661,6 +664,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by nested loop join.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -813,6 +817,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the incremental aggregation case.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -947,6 +952,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the accumulate input case.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -1077,6 +1083,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by MRNF.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,

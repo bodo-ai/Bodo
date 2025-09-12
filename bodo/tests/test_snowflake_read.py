@@ -157,6 +157,7 @@ def snowflake_conn():
     """
     Temporary Snowflake Connection for Basic Testing
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import snowflake_connect
 
     db = "TEST_DB"
@@ -3264,6 +3265,7 @@ def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
     """
     Test that bodo.read_sql works with the _bodo_orig_table_name argument.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.dict_arr_ext import is_dict_encoded
 
     # Two tables KEATON_TESTING_TABLE_STRING_ALL_UNIQUE, which contains one string

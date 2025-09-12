@@ -204,7 +204,6 @@ def test_filter_pushdown(
     even when the tables have gone through one or more levels
     of schema evolution.
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -260,7 +259,6 @@ def test_filter_pushdown_adversarial_renamed_and_swapped_cols(
     over time and have been re-ordered such that columns originally
     at position 2 & 3 in a table have both swapped names and locations.
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     table_name = "filter_pushdown_adversarial"
@@ -573,7 +571,6 @@ def test_filter_pushdown_on_newly_added_column(
     filters to verify that the null handling and equality semantics
     are correct.
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     (
@@ -1097,7 +1094,6 @@ def test_partition_schema_evolved_table_filter_pushdown(
     partition evolution, including schema evolution on the partition
     columns and vice-versa.
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)

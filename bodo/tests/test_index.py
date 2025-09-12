@@ -1695,6 +1695,7 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
 
 def test_datetime_field(dti_val, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
+    import bodo.decorators  # isort:skip # noqa
 
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
         func_text = "def impl(A):\n"
@@ -2103,6 +2104,7 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
 
 def test_timedelta_field(timedelta_index_val, memory_leak_check):
     """tests timedelta index.field. This should be inlined in series pass"""
+    import bodo.decorators  # isort:skip # noqa
 
     for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
         func_text = "def impl(A):\n"

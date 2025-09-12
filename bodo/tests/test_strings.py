@@ -1050,6 +1050,7 @@ class TestString(unittest.TestCase):
 
     # string array tests
     def test_string_array_constructor(self):
+        import bodo.decorators  # isort:skip # noqa
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         # create StringArray and return as list of strings
@@ -1060,6 +1061,7 @@ class TestString(unittest.TestCase):
         self.assertTrue(np.array_equal(bodo_func(), ["ABC", "BB", "CDEF"]))
 
     def test_string_array_shape(self):
+        import bodo.decorators  # isort:skip # noqa
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():
@@ -1069,6 +1071,7 @@ class TestString(unittest.TestCase):
         self.assertEqual(bodo_func(), (3,))
 
     def test_string_array_comp(self):
+        import bodo.decorators  # isort:skip # noqa
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():
@@ -1094,6 +1097,7 @@ class TestString(unittest.TestCase):
         )
 
     def test_string_array_bool_getitem(self):
+        import bodo.decorators  # isort:skip # noqa
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():

@@ -1021,7 +1021,7 @@ def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode
     """
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import _use_dict_str_type
 
     if _use_dict_str_type:

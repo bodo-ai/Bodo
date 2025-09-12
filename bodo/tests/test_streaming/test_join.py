@@ -12,7 +12,7 @@ import pytest
 
 import bodo
 
-import bodo.decorators  # isort:skip noqa
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next

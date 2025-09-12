@@ -567,6 +567,7 @@ def _check_str_item_length(impl):
 
 def test_str_length_inplace(memory_leak_check):
     """Test optimizing len(A[i]) with inplace item length in series pass"""
+    import bodo.decorators  # noqa
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")

@@ -52,6 +52,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     """
     Tests creating an internal stage within Snowflake
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import create_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
 
@@ -111,6 +112,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     """
     Tests dropping an internal stage within Snowflake
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import drop_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
 
@@ -175,6 +177,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     """
     Tests uploading files to Snowflake internal stage using PUT command
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import do_upload_and_cleanup, snowflake_connect
     from bodo.tests.utils_jit import get_start_end, reduce_sum
 
@@ -303,7 +306,7 @@ def test_snowflake_write_create_table_handle_exists():
     """
     Test Snowflake write table creation, both with and without a pre-existing table
     """
-    import bodo.io.snowflake
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import create_table_handle_exists, snowflake_connect
     from bodo.tests.utils_jit import get_start_end, reduce_sum
 
@@ -525,6 +528,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     """
     Tests executing COPY_INTO into a Snowflake table from internal stage
     """
+    import bodo.decorators  # isort:skip # noqa
     import bodo.io.snowflake
     from bodo.io.snowflake import execute_copy_into, snowflake_connect
     from bodo.tests.utils_jit import get_start_end, reduce_sum
@@ -1601,7 +1605,7 @@ def test_batched_write_agg(
     Test a simple use of batched Snowflake writes by reading a table, writing
     the results, then reading again
     """
-    import bodo.io.snowflake
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.arrow_reader import (
         arrow_reader_del,
         read_arrow_next,
@@ -1898,7 +1902,6 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.utils.utils import run_rank0
 
     if is_variant and write_type == "replace":
@@ -1999,6 +2002,7 @@ def test_write_with_string_precision(memory_leak_check):
     Tests streaming write using string column precisions to specify the maximum
     number of bytes for each column.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake_write import (
         snowflake_writer_append_table,
         snowflake_writer_init,
@@ -2070,6 +2074,7 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     Tests streaming write using timestamp/time column precisions to specify the
     precision for each column.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake_write import (
         snowflake_writer_append_table,
         snowflake_writer_init,
@@ -2175,6 +2180,7 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
     Tests that reading and writing a number column that requires > int64 but
     is smaller than Number(38, 0) is read and written correctly by Bodo.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake_write import snowflake_writer_init
 
     snowflake_user = 1
@@ -2295,6 +2301,7 @@ def test_create_table_with_comments(memory_leak_check):
     Tests using streaming Snowflake write functions to create a new table
     with table comments and column comments.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake_write import snowflake_writer_init
 
     if bodo.get_size() != 1:

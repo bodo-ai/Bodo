@@ -1,6 +1,8 @@
 import numba
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 from bodo.io.iceberg.theta import read_puffin_file_ndvs
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,

@@ -53,6 +53,7 @@ def test_bc_stream_to_bytecode():
     """
     Tests that _bc_stream_bytecode correctly reverses disassembled bytecode.
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.typing_pass import _bc_stream_to_bytecode
 
     test_code = _bc_stream_to_bytecode.__code__
@@ -66,7 +67,7 @@ def test_bc_stream_to_bytecode_all_typing_pass():
     """
     Tests that _bc_stream_bytecode correctly reverses disassembled bytecode for all typing pass functions.
     """
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     import bodo.transforms.typing_pass
     from bodo.transforms.typing_pass import _bc_stream_to_bytecode
 

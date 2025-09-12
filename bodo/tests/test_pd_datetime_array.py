@@ -66,6 +66,7 @@ def test_pd_datetime_arr_boxing(arr, memory_leak_check):
 
 
 def test_pd_datetime_arr_invalid_tz():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
     from bodo.utils.typing import BodoError
 

@@ -559,7 +559,6 @@ def test_dict_encoded_string_arrays_streaming_read(
     The error-checking code paths are common between streaming and non-streaming,
     so we skip them here.
     """
-    import bodo.decorators  # isort:skip noqa
     from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
     from bodo.utils.utils import run_rank0
 

@@ -1299,7 +1299,7 @@ def test_df_unsupported_methods():
 @pytest.mark.slow
 def test_df_unsupported_atrs():
     """tests that unsupported dataframe attributes throw the expected error"""
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported_attrs
     from bodo.utils.typing import BodoError
 

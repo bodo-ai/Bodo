@@ -118,6 +118,7 @@ def test_streaming_write(
     Benchmark a simple use of streaming Snowflake writes by reading a table, writing
     the results, then reading again
     """
+    import bodo.decorators  # isort:skip # noqa
     import bodo.io.snowflake
     from bodo.io.arrow_reader import read_arrow_next
     from bodo.io.snowflake_write import (

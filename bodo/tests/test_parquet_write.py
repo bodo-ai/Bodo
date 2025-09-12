@@ -40,7 +40,7 @@ def check_write_func(
     check_index: list[str] | None = None,
     pandas_fn=None,
 ):
-    import bodo.decorators  # isort:skip noqa
+    import bodo.decorators  # isort:skip # noqa
     from bodo.utils.utils import run_rank0
 
     DISTRIBUTIONS = {

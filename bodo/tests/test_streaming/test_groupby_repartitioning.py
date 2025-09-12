@@ -7,7 +7,7 @@ import pytest
 
 import bodo
 
-import bodo.decorators  # isort:skip noqa
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,

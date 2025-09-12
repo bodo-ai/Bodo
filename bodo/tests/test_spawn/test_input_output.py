@@ -181,7 +181,7 @@ def test_spawn_distributed():
 
 
 def table_arg():
-    import bodo.hiframes
+    import bodo.decorators  # isort:skip # noqa
     import bodo.hiframes.table
 
     return bodo.hiframes.table.Table((np.arange(6),))

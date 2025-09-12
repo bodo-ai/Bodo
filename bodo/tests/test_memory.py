@@ -5463,6 +5463,7 @@ def test_array_unpinned():
     """
     from numba.core import types
 
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.array import array_info_type
     from bodo.utils.typing import BodoWarning
 
