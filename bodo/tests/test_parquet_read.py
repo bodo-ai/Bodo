@@ -1057,7 +1057,7 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
 def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
     a format string."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
+    from bodo.tests.utils_jit import SeriesOptTestPipeline, reduce_sum
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1112,7 +1112,7 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
             except AssertionError:
                 passed = 1
             n_pes = bodo.get_size()
-            n_passed = bodo.tests.utils.reduce_sum(passed)
+            n_passed = reduce_sum(passed)
             assert n_passed == n_pes, "Filter pushdown detected on at least 1 rank"
 
 

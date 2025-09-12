@@ -2689,7 +2689,7 @@ def test_dataframe_binary_add(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_dataframe_binary_op(op, memory_leak_check):
+def test_dataframe_binary_op(memory_leak_check):
     import bodo.decorators  # isort:skip # noqa
 
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:

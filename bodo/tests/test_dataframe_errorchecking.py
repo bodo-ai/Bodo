@@ -1280,10 +1280,8 @@ def test_df_unsupported_methods():
 
     for df_unsupported_method in dataframe_unsupported:
         df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-        func_text = f"""
-    def impl(df):
-        return df.{df_unsupported_method}()
-    """
+        func_text = "def impl(df):\n"
+        func_text += f"  return df.{df_unsupported_method}()"
 
         loc_vars = {}
         exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -1299,7 +1297,7 @@ def test_df_unsupported_methods():
 
 
 @pytest.mark.slow
-def test_df_unsupported_atrs(df_unsupported_attr):
+def test_df_unsupported_atrs():
     """tests that unsupported dataframe attributes throw the expected error"""
     import bodo.decorators  # isort:skip noqa
     from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported_attrs
@@ -1307,10 +1305,8 @@ def test_df_unsupported_atrs(df_unsupported_attr):
 
     for df_unsupported_attr in dataframe_unsupported_attrs:
         df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-        func_text = f"""
-    def impl(df):
-        return df.{df_unsupported_attr}
-    """
+        func_text = "def impl(df):\n"
+        func_text += f"  return df.{df_unsupported_attr}"
 
         loc_vars = {}
         exec(func_text, {"bodo": bodo, "np": np}, loc_vars)

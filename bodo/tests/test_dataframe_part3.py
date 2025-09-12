@@ -98,7 +98,7 @@ def test_dataframe_apply_no_func(memory_leak_check):
     doesn't match a method or Numpy function raises an
     Exception.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         # This function doesn't exist in Numpy or as a
@@ -122,7 +122,7 @@ def test_dataframe_apply_pandas_unsupported_method(memory_leak_check):
     matches an unsupported DataFrame method raises an appropriate
     exception.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.apply("argmin", axis=1)
@@ -144,7 +144,7 @@ def test_dataframe_apply_numpy_unsupported_ufunc(memory_leak_check):
     matches an unsupported ufunc raises an appropriate
     exception.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.apply("cbrt", axis=1)
@@ -166,7 +166,7 @@ def test_dataframe_apply_pandas_unsupported_type(memory_leak_check):
     matches a method but has an unsupported type
     raises an appropriate exception.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         # Mean is unsupported for string types
@@ -188,7 +188,7 @@ def test_dataframe_apply_pandas_unsupported_axis(memory_leak_check):
     Test running dataframe.apply with a method using
     axis=1 when Bodo doesn't support axis=1 yet.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         # nunique is unsupported for axis=1
@@ -211,7 +211,7 @@ def test_dataframe_apply_numpy_unsupported_type(memory_leak_check):
     matches a Numpy ufunc but has an unsupported type
     raises an appropriate exception.
     """
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         # radians is unsupported for string types
@@ -729,7 +729,7 @@ def test_df_itertuples(memory_leak_check):
 )
 # TODO: [BE-1738]: Add memory_leak_check
 def test_df_merge_error_handling(func, err_regex):
-    from bodo.errors import BodoError
+    from bodo.utils.typing import BodoError
 
     df1 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [5, 6, 7, 8]})

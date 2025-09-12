@@ -136,11 +136,9 @@ jobs:
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
 
-      if [[ "${{ parameters.test_type }}" == "SPAWN" || "${{ parameters.test_type }}" == "DF_LIB" ]]; then
-        # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
-        PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
-      fi
 
+      # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
+      PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
       if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
         pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
