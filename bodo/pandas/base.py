@@ -81,7 +81,7 @@ def from_pandas(df):
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
     for col in df.select_dtypes(include=["object"]).columns:
-        if len(df[col]) > 0 and isinstance(df[col].iloc[0], BodoScalar):
+        if len(df[col]) > 0 and type(df[col].iloc[0]) is BodoScalar:
             df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
     pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
     empty_df = arrow_to_empty_df(pa_schema)
@@ -146,8 +146,11 @@ def _empty_like(val):
     """
     import pyarrow as pa
 
-    if not isinstance(val, (BodoDataFrame, BodoSeries)):
+    if type(val) not in {BodoDataFrame, BodoSeries, BodoScalar}:
         raise TypeError(f"val must be a BodoDataFrame or BodoSeries, got {type(val)}")
+
+    if type(val) is BodoScalar:
+        return val.wrapped_series.head(0).dtype.type()
 
     is_series = isinstance(val, BodoSeries)
     # Avoid triggering data collection

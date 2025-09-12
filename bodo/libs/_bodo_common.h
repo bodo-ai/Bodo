@@ -807,7 +807,7 @@ struct Schema {
      *
      * @return std::string
      */
-    std::string ToString();
+    std::string ToString(bool use_col_names = false);
 
     /**
      * @brief Return a new schema with only the first 'first_n' columns.

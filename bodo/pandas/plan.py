@@ -110,7 +110,15 @@ class LazyPlan:
         # be reused across right and left sides (e.g. self-join) leading to unique_ptr
         # errors.
         use_cache = True
-        if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
+        if isinstance(
+            self,
+            (
+                LogicalComparisonJoin,
+                LogicalSetOperation,
+                LogicalInsertScalarSubquery,
+                LogicalCrossProduct,
+            ),
+        ):
             use_cache = False
 
         # Convert any LazyPlan in the args.
@@ -218,6 +226,26 @@ class LogicalComparisonJoin(LogicalOperator):
     @property
     def join_type(self):
         return self.args[2]
+
+
+class LogicalCrossProduct(LogicalOperator):
+    """Logical operator for cross product joins."""
+
+    @property
+    def left_plan(self):
+        return self.args[0]
+
+    @property
+    def right_plan(self):
+        return self.args[1]
+
+
+class LogicalInsertScalarSubquery(LogicalCrossProduct):
+    """Logical operator for inserting scalar subquery results into a DataFrame.
+    This is just a cross product with a single row DataFrame. This isn't enforced automatically.
+    """
+
+    pass
 
 
 class LogicalSetOperation(LogicalOperator):
