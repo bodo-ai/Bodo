@@ -1432,8 +1432,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = CaseExpression(empty_data, cond, lhs, other)
 
-        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         plan_keys = get_single_proj_source_if_present(self._plan)
+        ncols = len(plan_keys.empty_data.columns)
+        key_indices = [ncols + i for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LogicalProjection(
