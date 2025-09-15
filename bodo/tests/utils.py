@@ -131,6 +131,20 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
+def _is_distributable_typ(t):
+    import bodo.decorators  # noqa
+    from bodo.utils.utils import is_distributable_typ
+
+    return is_distributable_typ(t)
+
+
+def _is_distributable_tuple_typ(t):
+    import bodo.decorators  # noqa
+    from bodo.utils.utils import is_distributable_tuple_typ
+
+    return is_distributable_tuple_typ(t)
+
+
 def check_func(
     func,
     args,
@@ -209,9 +223,6 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
-    import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
-
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
@@ -308,6 +319,33 @@ def check_func(
     # List of Output Bodo Functions
     bodo_funcs: dict[str, Callable] = {}
 
+    if run_df_lib:
+        # TODO [BSE-4787] Fix schema issues and reenable use_dict_encoded_strings case.
+        assert not use_dict_encoded_strings, (
+            "use_dict_encoded_strings flag not supported when testing Bodo DataFrames"
+        )
+        bodo_func = check_func_df_lib(
+            func,
+            args,
+            py_output,
+            copy_input,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            convert_columns_to_pandas,
+            set_columns_name_to_none,
+            reorder_columns,
+            n_pes,
+            check_categorical,
+            atol,
+            rtol,
+            check_pandas_types,
+        )
+        bodo_funcs["df_lib"] = bodo_func
+        # Return early to avoid importing compiler.
+        return
+
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
@@ -374,28 +412,6 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
-        # TODO [BSE-4787] Fix schema issues and reenable use_dict_encoded_strings case.
-        if run_df_lib and not use_dict_encoded_strings:
-            bodo_func = check_func_df_lib(
-                func,
-                args,
-                py_output,
-                copy_input,
-                sort_output,
-                check_names,
-                check_dtype,
-                reset_index,
-                convert_columns_to_pandas,
-                set_columns_name_to_none,
-                reorder_columns,
-                n_pes,
-                check_categorical,
-                atol,
-                rtol,
-                check_pandas_types,
-            )
-            bodo_funcs["df_lib"] = bodo_func
-
         # distributed test is not needed
         if not dist_test:
             return bodo_funcs
@@ -403,9 +419,9 @@ def check_func(
         if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
             py_out_typ = _typeof(py_output)
-            is_out_distributed = is_distributable_typ(
+            is_out_distributed = _is_distributable_typ(
                 py_out_typ
-            ) or is_distributable_tuple_typ(py_out_typ)
+            ) or _is_distributable_tuple_typ(py_out_typ)
 
         # skip 1D distributed and 1D distributed variable length tests
         # if no parallelism is found
@@ -415,8 +431,8 @@ def check_func(
             and not is_out_distributed  # if output is not distributable
             and not distributed  # If some inputs are required to be distributable
             and not any(
-                is_distributable_typ(_typeof(a))
-                or is_distributable_tuple_typ(_typeof(a))
+                _is_distributable_typ(_typeof(a))
+                or _is_distributable_tuple_typ(_typeof(a))
                 for a in args
             )  # if none of the inputs is distributable
         ):
@@ -1201,26 +1217,20 @@ def sort_dataframe_values_index(df):
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
-def _to_pa_array(py_out, bodo_arr_type):
-    """Convert object array to Arrow array with specified Bodo type"""
+def _to_pa_array(py_out, pa_type):
+    """Convert Python array to Arrow array with specified Arrow type"""
+
     if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
         py_out = py_out.astype(object)
     if (
-        isinstance(bodo_arr_type, bodo.types.IntegerArrayType)
+        pa.types.is_integer(pa_type)
         and isinstance(py_out, np.ndarray)
         and np.issubdtype(py_out.dtype, np.floating)
     ):
         # When trying to convert a numpy float array to an integer array we need to convert to a pandas nullable integer array first
         # to avoid issues with NaN/None values
-        py_out = pd.array(py_out, str(bodo_arr_type.dtype).capitalize())
-    arrow_type = bodo.io.helpers._numba_to_pyarrow_type(
-        bodo_arr_type, use_dict_arr=True
-    )[0]
-    arrow_type_no_dict = bodo.io.helpers._numba_to_pyarrow_type(bodo_arr_type)[0]
-    py_out = pa.array(py_out, arrow_type_no_dict)
-    if arrow_type != arrow_type_no_dict:
-        py_out = bodo.libs.array.convert_arrow_arr_to_dict(py_out, arrow_type)
-    return py_out
+        py_out = pd.array(py_out, str(pa_type).capitalize())
+    return pa.array(py_out, pa_type)
 
 
 def _test_equal(
@@ -1235,9 +1245,6 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
-    import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.utils import is_distributable_typ
-
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
@@ -1270,7 +1277,7 @@ def _test_equal(
                             if isinstance(a, float) and np.isnan(a)
                             else a
                         ).values,
-                        bodo.typeof(bodo_out.values),
+                        bodo_out.dtype.pyarrow_dtype,
                     ),
                     py_out.index,
                     bodo_out.dtype,
@@ -1362,7 +1369,7 @@ def _test_equal(
         and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
-        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out)).to_pandas()
+        py_out = _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype).to_pandas()
         bodo_out = pd.Series(bodo_out)
         if sort_output:
             py_out = py_out.sort_values().reset_index(drop=True)
@@ -1484,7 +1491,7 @@ def _test_equal(
     elif isinstance(py_out, tuple) or (
         isinstance(py_out, list)
         and len(py_out) > 0
-        and is_distributable_typ(bodo.typeof(py_out))
+        and _is_distributable_typ(bodo.typeof(py_out))
     ):
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
@@ -1607,6 +1614,8 @@ def _gather_output(bodo_output):
 
 
 def _typeof(val):
+    import bodo.decorators  # noqa
+
     from bodo.utils.typing import dtype_to_array_type
 
     # Pandas returns an object array for .values or to_numpy() call on Series of

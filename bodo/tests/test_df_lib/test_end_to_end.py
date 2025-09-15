@@ -2070,7 +2070,6 @@ def test_filter_series_not_isin(index_val):
 
 
 def test_rename(datapath, index_val):
-    """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {
