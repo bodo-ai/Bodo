@@ -52,6 +52,7 @@ from bodo.pandas.plan import (
     LogicalOperator,
     LogicalOrder,
     LogicalProjection,
+    NullExpression,
     PythonScalarFuncExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
@@ -1355,7 +1356,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def where(
         self,
         cond,
-        other=numpy.nan,
+        other=pd.NA,
         *,
         inplace: bool = False,
         axis: Axis | None = None,
@@ -1407,6 +1408,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # If other is a BodoSeries we need to extract the expression.
         elif isinstance(other, BodoSeries):
             other = get_proj_expr_single(other._plan)
+        elif other is pd.NA:
+            other = NullExpression(zero_size_self, lhs_plan, 0)
         # If other is a scalar we can use it directly.
         else:
             pass
