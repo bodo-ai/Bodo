@@ -148,6 +148,11 @@ def _is_distributable_tuple_typ(t):
     return is_distributable_tuple_typ(t)
 
 
+def import_compiler():
+    """Import bodo.decorators to ensure compiler is loaded."""
+    import bodo.decorators  # noqa
+
+
 def check_func(
     func,
     args,
@@ -226,8 +231,6 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
-    import bodo.decorators  # isort:skip # noqa
-
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
@@ -349,8 +352,9 @@ def check_func(
         )
         bodo_funcs["df_lib"] = bodo_func
         # Return early to avoid importing compiler.
-        return
+        return bodo_funcs
 
+    import_compiler()
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
@@ -1298,8 +1302,6 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
-    import bodo.decorators  # isort:skip # noqa
-
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
