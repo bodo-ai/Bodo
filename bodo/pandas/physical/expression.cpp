@@ -1,5 +1,4 @@
 #include "expression.h"
-#include <iostream>
 #include "_util.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
@@ -277,6 +276,75 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
     return cmp_res.ValueOrDie();
 }
 
+std::shared_ptr<array_info> do_arrow_compute_case(
+    std::shared_ptr<ExprResult> when_res, std::shared_ptr<ExprResult> then_res,
+    std::shared_ptr<ExprResult> else_res) {
+    // Try to convert the results of our children into array
+    // or scalar results to see which one they are.
+    std::shared_ptr<ArrayExprResult> when_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(when_res);
+    std::shared_ptr<ScalarExprResult> when_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(when_res);
+    std::shared_ptr<ArrayExprResult> then_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(then_res);
+    std::shared_ptr<ScalarExprResult> then_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(then_res);
+    std::shared_ptr<ArrayExprResult> else_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(else_res);
+    std::shared_ptr<ScalarExprResult> else_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(else_res);
+
+    arrow::Datum src1;
+    if (when_as_array) {
+        std::shared_ptr<arrow::Array> arr =
+            prepare_arrow_compute(when_as_array->result);
+
+        src1 = arrow::Datum(arr);
+    } else if (when_as_scalar) {
+        src1 = arrow::MakeScalar(prepare_arrow_compute(when_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute when is neither array nor scalar.");
+    }
+
+    arrow::Datum src2;
+    if (then_as_array) {
+        src2 = arrow::Datum(prepare_arrow_compute(then_as_array->result));
+    } else if (then_as_scalar) {
+        src2 = arrow::MakeScalar(prepare_arrow_compute(then_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute then is neither array nor scalar.");
+    }
+
+    arrow::Datum src3;
+    if (else_as_array) {
+        src3 = arrow::Datum(prepare_arrow_compute(else_as_array->result));
+    } else if (else_as_scalar) {
+        src3 = arrow::MakeScalar(prepare_arrow_compute(else_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute else is neither array nor scalar.");
+    }
+
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction("if_else", {src1, src2, src3});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_case: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                               bodo::BufferPool::DefaultPtr());
+}
+
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
@@ -489,6 +557,24 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
                     left, right, duckdb::ExpressionType::CONJUNCTION_AND));
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CASE: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr->Cast<duckdb::BoundCaseExpression>();
+            if (bce.case_checks.size() != 1) {
+                throw std::runtime_error(
+                    "Only single WHEN case expressions are supported.");
+            }
+            auto& caseCheck = bce.case_checks[0];
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalCaseExpression>(
+                    buildPhysicalExprTree(caseCheck.when_expr, col_ref_map,
+                                          no_scalars),
+                    buildPhysicalExprTree(caseCheck.then_expr, col_ref_map,
+                                          no_scalars),
+                    buildPhysicalExprTree(bce.else_expr, col_ref_map,
+                                          no_scalars)));
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
