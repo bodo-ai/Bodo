@@ -180,13 +180,6 @@ def test_spawn_distributed():
     assert test(A) == 1000
 
 
-def table_arg():
-    import bodo.decorators  # isort:skip # noqa
-    import bodo.hiframes.table
-
-    return bodo.hiframes.table.Table((np.arange(6),))
-
-
 @pytest.fixture(
     params=[
         pd.RangeIndex(100, -100, -5, name="ABC"),
