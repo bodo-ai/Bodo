@@ -1221,14 +1221,15 @@ def sort_dataframe_values_index(df):
 
 
 def _get_arrow_type_no_dict(pa_type: pa.DataType) -> pa.DataType:
-    """Converts dictionary-encoded String arrays large_string in nested types."""
+    """Converts dictionary-encoded String arrays to the non-dictionary encoded
+    equivalent in nested types."""
 
     if pa.types.is_large_list(pa_type):
         return pa.large_list(_get_arrow_type_no_dict(pa_type.value_type))
     elif pa.types.is_list(pa_type):
         return pa.list_(_get_arrow_type_no_dict(pa_type.value_type))
     elif pa.types.is_fixed_size_list(pa_type):
-        return pa.fixed_size_list(
+        return pa.pa.list_(
             _get_arrow_type_no_dict(pa_type.value_type), pa_type.list_size
         )
     elif pa.types.is_struct(pa_type):
@@ -1249,32 +1250,38 @@ def _get_arrow_type_no_dict(pa_type: pa.DataType) -> pa.DataType:
         or pa.types.is_large_string(pa_type.value_type)
     ):
         return pa_type.value_type
+    elif pa.types.is_dictionary(pa_type):
+        return pa.dictionary(
+            pa_type.index_type,
+            _get_arrow_type_no_dict(pa_type.value_type),
+            pa_type.ordered,
+        )
     else:
         return pa_type
 
 
-def _to_pa_array(in_arr, pa_type: pa.DataType) -> pa.Array:
-    """Converts in_arr to an Arrow array with specified Arrow type"""
+def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
+    """Converts object Array to Arrow array with specified Arrow type."""
 
-    if isinstance(in_arr, np.ndarray) and isinstance(in_arr.dtype, np.dtypes.StrDType):
-        in_arr = in_arr.astype(object)
+    if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
+        py_out = py_out.astype(object)
     if (
         pa.types.is_integer(pa_type)
-        and isinstance(in_arr, np.ndarray)
-        and np.issubdtype(in_arr.dtype, np.floating)
+        and isinstance(py_out, np.ndarray)
+        and np.issubdtype(py_out.dtype, np.floating)
     ):
         # When trying to convert a numpy float array to an integer array we need to
         # convert to a pandas nullable integer array first to avoid issues with
         # NaN/None values.
-        in_arr = pd.array(in_arr, str(pa_type).capitalize())
+        py_out = pd.array(py_out, str(pa_type).capitalize())
 
     pa_type_no_dict = _get_arrow_type_no_dict(pa_type)
-    result = pa.array(in_arr, pa_type_no_dict)
+    py_out = pa.array(py_out, pa_type_no_dict)
 
     if pa_type != pa_type_no_dict:
-        result = convert_arrow_arr_to_dict(result, pa_type)
+        py_out = convert_arrow_arr_to_dict(py_out, pa_type)
 
-    return result
+    return py_out
 
 
 def _test_equal(
