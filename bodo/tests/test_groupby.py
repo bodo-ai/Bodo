@@ -3,7 +3,7 @@ import random
 import string
 from decimal import Decimal
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -11,8 +11,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
-    DistTestPipeline,
     check_func,
     check_parallel_coherency,
     convert_non_pandas_columns,
@@ -20,11 +18,9 @@ from bodo.tests.utils import (
     gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
-    get_start_end,
     has_udf_call,
     pytest_mark_pandas,
 )
-from bodo.utils.typing import BodoError
 
 # Note: this file tests a large mix of features that are critical
 # for BodoSQL, but also a large number that are only relevent
@@ -499,6 +495,7 @@ def test_agg_set_error(memory_leak_check):
     Test Groupby.agg() with constant set input but no single
     output column.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.groupby("A").agg({"max"})
@@ -2630,6 +2627,7 @@ def test_groupby_agg_func_list(memory_leak_check):
     """
     Test groupy.agg with list of functions in const dict input
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(df):
         return df.groupby("A").agg(
@@ -2662,6 +2660,7 @@ def test_groupby_agg_nullable_or(memory_leak_check):
     """
     Test groupy.agg with & and | can take the optimized path
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(df):
         return df.groupby("A").agg(
@@ -2824,6 +2823,7 @@ def test_agg_global_func(memory_leak_check):
     """
     Test Groupby.agg() with a global function as UDF
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl_str(df):
         A = df.groupby("A")["B"].agg(g)
@@ -3488,16 +3488,15 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
-df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
-
-
-@bodo.wrap_python(df_type)
-def g_wrapped(df):
-    return pd.DataFrame({"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]})
-
-
 def test_groupby_apply_wrap_python(memory_leak_check):
     """Test groupby apply with a wrap_python UDF"""
+    df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
+
+    @bodo.wrap_python(df_type)
+    def g_wrapped(df):
+        return pd.DataFrame(
+            {"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]}
+        )
 
     def impl1(df):
         df2 = df.groupby("A").apply(g_wrapped)
@@ -3620,6 +3619,7 @@ def test_groupby_apply_objmode():
     """
     Test Groupby.apply() with objmode inside UDF
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     bodo.numba.types.test_df_type = bodo.types.DataFrameType(
         (bodo.types.string_array_type, bodo.types.float64[::1]),
@@ -4397,6 +4397,7 @@ def test_groupby_as_index_mean(memory_leak_check):
 @pytest.mark.slow
 def test_mean_median_other_supported_types(memory_leak_check):
     """Test Groupby.mean()/median() with cases not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").mean()
@@ -4513,6 +4514,7 @@ def test_min(test_df, memory_leak_check):
 @pytest.mark.slow
 def test_min_max_other_supported_types(memory_leak_check):
     """Test Groupby.min()/max() with other types not in df_test"""
+    from bodo.utils.typing import BodoError
 
     # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
     def impl1(df):
@@ -4833,6 +4835,7 @@ def test_groupby_as_index_prod(memory_leak_check):
 @pytest.mark.slow
 def test_sum_prod_empty_mix(memory_leak_check):
     """Test Groupby.sum()/prod() with cases not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").sum()
@@ -4943,6 +4946,7 @@ def test_first_last(test_df):
 @pytest.mark.slow
 def test_first_last_supported_types(memory_leak_check):
     """Test Groupby.first()/last() with other types not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").first()
@@ -5451,6 +5455,7 @@ def test_agg_multikey_parallel(memory_leak_check):
     """
     Test groupby multikey with distributed df
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df):
         A = df.groupby(["A", "C"])["B"].sum()
@@ -5498,6 +5503,7 @@ def test_var_std_supported_types(memory_leak_check):
     """
     Test Groupby.var()
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").var()
@@ -5752,6 +5758,7 @@ def test_const_list_inference(memory_leak_check):
     """
     Test passing non-const list that can be inferred as constant to groupby()
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.groupby(["A"] + ["B"]).sum()
@@ -6349,6 +6356,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
     """
     Test Groupby.cummin, cummax, cumsum, cumprod
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").cummin()
@@ -6587,6 +6595,7 @@ def test_count_supported_cases(memory_leak_check):
     """
     Test Groupby.count
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").count()
@@ -6616,6 +6625,7 @@ def test_count_supported_cases(memory_leak_check):
 @pytest_mark_pandas
 def test_value_counts(memory_leak_check):
     """Test groupby.value_counts"""
+    from bodo.utils.typing import BodoError
 
     # SeriesGroupBy
     def impl1(df):
@@ -7698,9 +7708,8 @@ def test_bit_agg(data, dtype, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "data_col",
-    [
+@pytest.fixture(
+    params=[
         # Note string/binary is not supported inside Snowflake
         # https://docs.snowflake.com/en/sql-reference/functions/boolor_agg.html#usage-notes
         pd.Series(["afde", "Rewr"] * 6),
@@ -7710,7 +7719,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
         # date (try in snowflake: select date_from_parts(2000, 1, 1)::boolean)
         pd.Series([datetime.date(2022, 10, 10), datetime.date(2022, 11, 10)] * 6),
         # time (try in snowflake: select time_from_parts(12, 55, 55)::boolean)
-        pd.Series(
+        lambda: pd.Series(
             [
                 bodo.types.Time(12, 34, 56, precision=0),
                 bodo.types.Time(12, 46, 56, precision=0),
@@ -7725,9 +7734,20 @@ def test_bit_agg(data, dtype, memory_leak_check):
         pd.Series(pd.Categorical(["afde", "Rewr"] * 6)),
     ],
 )
+def data_col(request):
+    """Fixture to lazily evaluate data_col parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    data_col = request.param
+
+    return data_col() if callable(data_col) else data_col
+
+
 def test_boolagg_or_invalid(data_col, memory_leak_check):
     """Tests calling a groupby with boolagg_or, a function used by
     BodoSQL and not part or regular pandas, on unsupported datatypes."""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(df):
@@ -8056,83 +8076,106 @@ def test_timestamptz_gb_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
-@pytest.mark.parametrize(
-    "fstr, expected",
-    [
+@pytest.fixture(
+    params=[
         pytest.param(
-            "count",
-            pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            (
+                "count",
+                pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            ),
             id="count",
         ),
         pytest.param(
-            "size",
-            pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            (
+                "size",
+                pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            ),
             id="size",
         ),
         pytest.param(
-            "first",
-            pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
-                        None,
-                    ],
-                }
+            (
+                "first",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="first",
         ),
         pytest.param(
-            "last",
-            pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-                        None,
-                    ],
-                }
+            (
+                "last",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="last",
         ),
         pytest.param(
-            "min",
-            pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-                        None,
-                    ],
-                }
+            (
+                "min",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="min",
         ),
         pytest.param(
-            "max",
-            pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
-                        None,
-                    ],
-                }
+            (
+                "max",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="max",
         ),
     ],
 )
-def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
+def fstr_expected(request):
+    """Fixture to lazily evaluate expected parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    fstr, lazy_expected = request.param
+    expected = lazy_expected() if callable(lazy_expected) else lazy_expected
+
+    return fstr, expected
+
+
+def test_timestamptz_gb_agg(fstr_expected, memory_leak_check):
     """Tests groupby with timestamptz column and aggregation"""
+    fstr, expected = fstr_expected
 
     def impl(df):
         return df.groupby("A", as_index=False, dropna=False).agg(fstr)
@@ -8157,7 +8200,13 @@ def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
             "B": tz_arr,
         }
     )
-    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+    check_func(
+        impl,
+        (df,),
+        py_output=expected,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 def test_timestamptz_gb_mode(memory_leak_check):

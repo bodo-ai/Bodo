@@ -7,6 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.streaming.groupby import (
@@ -21,7 +23,6 @@ from bodo.tests.utils import (
     get_query_profile_location,
     temp_env_override,
 )
-from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 
 @pytest.mark.parametrize(
@@ -869,6 +870,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     """
     Tests support for streaming groupby with nested array data.
     """
+    from bodo.utils.typing import BodoError
 
     keys_inds = bodo.utils.typing.MetaType((0,))
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
@@ -1225,8 +1227,8 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     """
     Test that the window-output-redistribution works as expected.
     """
-
     from bodo.mpi4py import MPI
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

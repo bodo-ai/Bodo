@@ -22,9 +22,9 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_snowflake,
-    run_rank0,
     temp_config_override,
 )
+from bodo.utils.utils import run_rank0
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
 
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake

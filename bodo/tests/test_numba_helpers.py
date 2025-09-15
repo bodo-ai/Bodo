@@ -8,9 +8,9 @@ test the desired helper function.
 
 import os
 
-import numba
+import numba  # noqa TID253
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 
 # Used for testing topological sort ordering. Copied from

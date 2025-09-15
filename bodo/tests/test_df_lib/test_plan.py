@@ -11,6 +11,7 @@ from bodo.ext import plan_optimizer
 
 def test_join_node(datapath):
     """Make sure Cython wrapper around the join node works. Just tests node creation."""
+
     P1 = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
@@ -33,6 +34,7 @@ def test_join_node(datapath):
 
 def test_projection_node(datapath):
     """Make sure Cython wrapper around the projection node works. Just tests node creation."""
+
     P1 = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
@@ -52,6 +54,7 @@ def test_projection_node(datapath):
 
 def test_filter_node(datapath):
     """Make sure Cython wrapper around the filter node works. Just tests node creation."""
+
     P1 = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
@@ -67,6 +70,7 @@ def test_filter_node(datapath):
 
 def test_parquet_node(datapath):
     """Make sure Cython wrapper around the Parquet node works. Just tests node creation."""
+
     A = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
@@ -80,6 +84,7 @@ def test_parquet_node(datapath):
 
 def test_optimize_call(datapath):
     """Make sure Cython wrapper around optimize call works."""
+
     A = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
@@ -91,6 +96,7 @@ def test_optimize_call(datapath):
 
 def test_parquet_projection_pushdown(datapath):
     """Make sure Projection pushdown works for Parquet read."""
+
     A = plan_optimizer.LogicalGetParquetRead(
         pa.schema(
             [

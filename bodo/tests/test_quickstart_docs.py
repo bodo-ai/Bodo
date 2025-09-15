@@ -7,12 +7,11 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.errors import TypingError
+from numba.core.errors import TypingError  # noqa TID253
 
 import bodo
 from bodo.tests.utils import check_func, pytest_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_spawn_mode + [pytest.mark.test_docs] + [pytest.mark.df_lib]
 
@@ -221,6 +220,8 @@ def test_devguide_parallel2(devguide_df_path):
 
 
 def test_devguide_unsupported():
+    from bodo.utils.typing import BodoError
+
     @bodo.jit(spawn=True)
     def df_unsupported():
         df = pd.DataFrame({"A": [1, 2, 3]})
@@ -232,6 +233,8 @@ def test_devguide_unsupported():
 
 
 def test_devguide_type_error(devguide_df_path):
+    from bodo.utils.typing import BodoError
+
     @bodo.jit(spawn=True)
     def groupby_keys(devguide_df_path, extra_keys):
         df = pd.read_parquet(devguide_df_path)

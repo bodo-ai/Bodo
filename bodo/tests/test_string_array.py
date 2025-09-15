@@ -1,19 +1,17 @@
 """Test Bodo's string array data type"""
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
-    SeqTestPipeline,
     check_func,
     dist_IR_contains,
     gen_nonascii_list,
     get_num_test_workers,
 )
-from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -447,6 +445,7 @@ def test_dtype(memory_leak_check):
 @pytest.mark.slow
 def test_nbytes(memory_leak_check):
     """Test nbytes for string arrays"""
+    import bodo.decorators  # noqa
 
     def impl(arr):
         return arr.nbytes
@@ -500,11 +499,12 @@ def test_astype_str(memory_leak_check):
     check_func(test_impl, (pd.array((["AA", "B"] + gen_nonascii_list(2)) * 4),))
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_str_copy_inplace(memory_leak_check):
     """Test inplace string copy optimization across arrays in series pass"""
+    from bodo.tests.utils_jit import SeqTestPipeline
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     # scalar case
     def impl1(A):
@@ -556,6 +556,8 @@ def test_str_copy_inplace(memory_leak_check):
 
 def _check_str_item_length(impl):
     """make sure 'impl' is optimized to use str_item_length"""
+    from bodo.tests.utils_jit import SeqTestPipeline
+
     A = np.array(["AA", "B"] * 4, object)
     j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl)
     assert j_func(A) == impl(A)
@@ -563,11 +565,12 @@ def _check_str_item_length(impl):
     assert dist_IR_contains(fir, "get_str_arr_str_length")
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_str_length_inplace(memory_leak_check):
     """Test optimizing len(A[i]) with inplace item length in series pass"""
+    import bodo.decorators  # noqa
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl1(A):
         return len(A[0])
@@ -594,6 +597,7 @@ def test_str_array_setitem_unsupported(memory_leak_check):
     after initialization, but since these tests should error at compile
     time, this shouldn't be an issue.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(arr, idx, val):
         arr[idx] = val

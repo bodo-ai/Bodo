@@ -2,7 +2,7 @@ import re
 import string
 from decimal import Decimal
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -10,19 +10,8 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
-
-
-@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported)
-def df_unsupported_method(request):
-    return request.param
-
-
-@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported_attrs)
-def df_unsupported_attr(request):
-    return request.param
 
 
 @pytest.mark.slow
@@ -30,6 +19,7 @@ def test_df_filter_err_check(memory_leak_check):
     """
     Tests df.filter with the 'items' and 'like' args both passed.
     """
+    from bodo.utils.typing import BodoError
 
     df = pd.DataFrame(
         np.array(([1, 2, 3], [4, 5, 6])),
@@ -125,6 +115,7 @@ def test_df_iat_getitem_nonconstant(memory_leak_check):
     """
     Tests DataFrame.iat getitem when the column index isn't a constant.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(idx):
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -142,6 +133,7 @@ def test_df_iat_getitem_str(memory_leak_check):
     """
     Tests DataFrame.iat getitem when the row index isn't an integer.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -159,6 +151,7 @@ def test_df_iat_setitem_nonconstant(memory_leak_check):
     """
     Tests DataFrame.iat setitem when the column index isn't a constant.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(idx):
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -177,6 +170,7 @@ def test_df_iat_setitem_str(memory_leak_check):
     """
     Tests DataFrame.iat setitem when the row index isn't an integer.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -195,6 +189,7 @@ def test_df_iat_setitem_immutable_array(memory_leak_check):
     """
     Tests DataFrame.iat setitem with an immutable array.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(df):
         df.iat[0, 0] = [1, 2, 2]
@@ -210,6 +205,8 @@ def test_df_iat_setitem_immutable_array(memory_leak_check):
 
 
 def test_df_sample_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(df):
         return df.sample(n=10, frac=0.5)
 
@@ -223,6 +220,8 @@ def test_df_sample_error(memory_leak_check):
 
 
 def test_df_info_unsupported(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(df):
         return df.info(verbose=True)
 
@@ -242,6 +241,8 @@ def df_fillna():
 
 @pytest.mark.slow
 def test_df_fillna_limit_error(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     match = "limit parameter only supports default value None"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: df_fillna.fillna(0, limit=2))()
@@ -249,6 +250,8 @@ def test_df_fillna_limit_error(df_fillna, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_fillna_downcast_error(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     df_fillna["A"] = df_fillna["A"].astype(np.float64)
     match = "downcast parameter only supports default value None"
     with pytest.raises(BodoError, match=match):
@@ -256,6 +259,8 @@ def test_df_fillna_downcast_error(df_fillna, memory_leak_check):
 
 
 def test_df_fillna_axis_error(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     match = "'axis' argument not supported"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: df_fillna.fillna(0, axis=1))()
@@ -263,18 +268,24 @@ def test_df_fillna_axis_error(df_fillna, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_fillna_dict_value_error(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     message = "Cannot use value type DictType"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_fillna.fillna({"A": 3}))()
 
 
 def test_df_fillna_both_value_method_args(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     message = re.escape("DataFrame.fillna(): Cannot specify both 'value' and 'method'.")
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_fillna.fillna(value=1, method="ffill"))()
 
 
 def test_df_fillna_neither_value_method_args(df_fillna, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     message = re.escape("DataFrame.fillna(): Must specify one of 'value' and 'method'.")
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_fillna.fillna())()
@@ -287,6 +298,8 @@ def df_replace():
 
 @pytest.mark.slow
 def test_df_replace_inplace_error(df_replace):
+    from bodo.utils.typing import BodoError
+
     message = "inplace parameter only supports default value False"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_replace.replace(1, 100, inplace=True))()
@@ -294,6 +307,8 @@ def test_df_replace_inplace_error(df_replace):
 
 @pytest.mark.slow
 def test_df_replace_limit_error(df_replace):
+    from bodo.utils.typing import BodoError
+
     message = "limit parameter only supports default value None"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_replace.replace(1, 100, limit=1))()
@@ -301,6 +316,8 @@ def test_df_replace_limit_error(df_replace):
 
 @pytest.mark.slow
 def test_df_replace_regex_error(df_replace):
+    from bodo.utils.typing import BodoError
+
     message = "regex parameter only supports default value False"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_replace.replace(1, 100, regex=True))()
@@ -308,6 +325,8 @@ def test_df_replace_regex_error(df_replace):
 
 @pytest.mark.slow
 def test_df_replace_pad_error(df_replace):
+    from bodo.utils.typing import BodoError
+
     message = "method parameter only supports default value pad"
     with pytest.raises(BodoError, match=message):
         bodo.jit(lambda: df_replace.replace(1, 100, method=None))()
@@ -318,6 +337,7 @@ def test_df_rename_errors(memory_leak_check):
     """
     Tests BodoErrors from DataFrame.rename.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl1():
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -410,6 +430,7 @@ def test_df_set_index_errors(memory_leak_check):
     """
     Tests BodoErrors from DataFrame.set_index.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl1():
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -458,6 +479,7 @@ def test_df_reset_index_errors(memory_leak_check):
     """
     Tests BodoErrors from DataFrame.rename_index.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl1():
         df = pd.DataFrame({"A": np.random.randn(10)})
@@ -512,6 +534,8 @@ def test_df_reset_index_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_head_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.head(5.0)
@@ -522,6 +546,8 @@ def test_df_head_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_tail_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.tail(5.0)
@@ -532,6 +558,8 @@ def test_df_tail_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_drop_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.drop(index=[0, 1])
@@ -596,6 +624,8 @@ def test_df_drop_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_drop_duplicates_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         df.drop_duplicates(inplace=True)
@@ -609,6 +639,8 @@ def test_df_drop_duplicates_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_duplicated_errors(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.duplicated(keep="last")
@@ -629,6 +661,7 @@ def test_df_duplicated_errors(memory_leak_check):
 @pytest.mark.slow
 def test_df_apply_all_args(memory_leak_check):
     """Test DataFrame.apply with unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_axis(df):
         return df.apply(lambda r: r.A)
@@ -662,6 +695,7 @@ def test_df_apply_all_args(memory_leak_check):
 def test_dataframe_idxmax_unordered_cat(memory_leak_check):
     """Test that DataFrame.idxmax throws an appropriate error with an unordered
     Categorical Column"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.idxmax()
@@ -677,6 +711,7 @@ def test_dataframe_idxmax_unordered_cat(memory_leak_check):
 def test_dataframe_idxmin_unordered_cat(memory_leak_check):
     """Test that DataFrame.idxmin throws an appropriate error with an unordered
     Categorical Column"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.idxmin()
@@ -692,6 +727,7 @@ def test_dataframe_idxmin_unordered_cat(memory_leak_check):
 @pytest.mark.slow
 def test_describe_args(memory_leak_check):
     """Test df.describe with unsupported arguments"""
+    from bodo.utils.typing import BodoError
 
     def impl_percentiles(df):
         return df.describe(percentiles=[0.25, 0.5, 0.75])
@@ -751,6 +787,7 @@ def test_describe_args(memory_leak_check):
 )
 def test_describe_unsupported_types(df, memory_leak_check):
     """Test df.describe with its unsupported Bodo types"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.describe()
@@ -766,6 +803,7 @@ def test_dataframe_iloc_getrow_invalid_col(memory_leak_check):
     """Test that DataFrame.iloc throws an appropriate error when a col index
     is out of bounds.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.iloc[1, -1]
@@ -812,6 +850,8 @@ def test_dataframe_iloc_getrow_invalid_col(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_iloc_bad_index(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1(df):
         return df.iloc["a", 0]
 
@@ -851,6 +891,7 @@ def test_df_head_too_many_args(memory_leak_check):
     Test that a function split into typing and lowering still checks
     the correct number of arguments.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.head(3, 5)
@@ -869,6 +910,7 @@ def test_df_corr_repeat_kws(memory_leak_check):
     Test that a function split into typing and lowering still checks
     that there are no kws that repeat an args.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.corr("pearson", method="kendall")
@@ -887,6 +929,7 @@ def test_df_corr_unknown_kws(memory_leak_check):
     Test that a function split into typing and lowering still checks
     that there are no kws that are unknown.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.corr("pearson", unknown_arg=5)
@@ -905,6 +948,7 @@ def test_astype_non_constant_string(memory_leak_check):
     Checks that calling DataFrame.astype(str_value) with a string that
     is not a compile time constant will produce a reasonable BodoError.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def g(flag, type_str):
@@ -932,6 +976,7 @@ def test_concat_const_args(memory_leak_check):
     make sure proper error is raised when axis/ignore_index arguments to pd.concat
     are not constant
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S1, S2, flag):
         axis = 0
@@ -962,6 +1007,8 @@ def test_concat_const_args(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     @bodo.jit
     def g(flag, a, cols):
         if flag:
@@ -988,6 +1035,8 @@ def test_df_getitem_non_const_columname_error(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_list_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     @bodo.jit
     def g(flag, a, cols):
         if flag:
@@ -1015,6 +1064,8 @@ def test_df_getitem_non_const_columname_list_error(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1038,6 +1089,8 @@ def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
 
 
 def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1074,6 +1127,8 @@ def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1095,6 +1150,8 @@ def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
 
 
 def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1117,6 +1174,8 @@ def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_iat_getitem_non_const_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1134,6 +1193,8 @@ def test_df_iat_getitem_non_const_error(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_iat_setitem_non_const_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
@@ -1170,6 +1231,7 @@ def test_dd_map_array_drop_subset(memory_leak_check):
     Test drop_duplicates throws an appropriate error
     when a MapArray column is part of the subset.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(df1):
         df1["B"] = df1["A"].apply(lambda val: {str(j): val for j in range(val)})
@@ -1192,6 +1254,7 @@ def test_dd_map_array_drop_all(memory_leak_check):
     when a MapArray column is part of the columns dropped
     without a subset.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(df1):
         df1["B"] = df1["A"].apply(lambda val: {str(j): val for j in range(val)})
@@ -1209,54 +1272,60 @@ def test_dd_map_array_drop_all(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_unsupported_methods(df_unsupported_method):
+def test_df_unsupported_methods():
     """tests that unsupported dataframe methods throw the expected error"""
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported
+    from bodo.utils.typing import BodoError
 
-    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-    func_text = f"""
-def impl(df):
-    return df.{df_unsupported_method}()
-"""
+    for df_unsupported_method in dataframe_unsupported:
+        df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+        func_text = "def impl(df):\n"
+        func_text += f"  return df.{df_unsupported_method}()"
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+        impl = loc_vars["impl"]
 
-    err_msg = re.escape(f"DataFrame.{df_unsupported_method}() not supported yet")
+        err_msg = re.escape(f"DataFrame.{df_unsupported_method}() not supported yet")
 
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)(df_val)
+        with pytest.raises(
+            BodoError,
+            match=err_msg,
+        ):
+            bodo.jit(impl)(df_val)
 
 
 @pytest.mark.slow
-def test_df_unsupported_atrs(df_unsupported_attr):
+def test_df_unsupported_atrs():
     """tests that unsupported dataframe attributes throw the expected error"""
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported_attrs
+    from bodo.utils.typing import BodoError
 
-    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-    func_text = f"""
-def impl(df):
-    return df.{df_unsupported_attr}
-"""
+    for df_unsupported_attr in dataframe_unsupported_attrs:
+        df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+        func_text = "def impl(df):\n"
+        func_text += f"  return df.{df_unsupported_attr}"
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+        impl = loc_vars["impl"]
 
-    err_msg = f"DataFrame.{df_unsupported_attr} not supported yet"
+        err_msg = f"DataFrame.{df_unsupported_attr} not supported yet"
 
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)(df_val)
+        with pytest.raises(
+            BodoError,
+            match=err_msg,
+        ):
+            bodo.jit(impl)(df_val)
 
 
 @pytest.mark.skip("TODO: throw the propper error messages for df.plot.x")
 def test_df_plot_submethods():
     """tests that df.plot.x throws a propper error message"""
+    from bodo.utils.typing import BodoError
+
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
 
     def impl_1(df):
@@ -1273,6 +1342,7 @@ def test_df_plot_submethods():
 @pytest.mark.slow
 def test_df_values_to_numpy_err():
     """Tests that df.values and df.to_numpy() throw a reasonable error message"""
+    from bodo.utils.typing import BodoError
 
     def impl_1():
         return pd.DataFrame({"A": ["hi"]}).to_numpy()
@@ -1302,6 +1372,7 @@ def test_df_values_to_numpy_err():
 @pytest.mark.slow
 def test_df_abs_err():
     """Tests that df.abs() throws a reasonable error on non numeric/timedelta dfs"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         pd.DataFrame({"A": ["hi"]}).abs()
@@ -1318,6 +1389,7 @@ def test_df_abs_err():
 @pytest.mark.slow
 def test_df_corr_err():
     """Tests that df.corr() throws a reasonable error for empty dataframe"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         pd.DataFrame().corr()
@@ -1332,6 +1404,7 @@ def test_df_corr_err():
 @pytest.mark.slow
 def test_df_cov_err():
     """Tests that df.cov() throws a reasonable error for empty dataframe"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         pd.DataFrame().cov()
@@ -1345,6 +1418,8 @@ def test_df_cov_err():
 
 @pytest.mark.slow
 def test_df_rolling_unsupported():
+    from bodo.utils.typing import BodoError
+
     def impl():
         pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
 
@@ -1361,6 +1436,7 @@ def test_df_error_message_truncates():
     """
     Checks that DataFrames with large number of columns have string representation truncated in error messages
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(df):
@@ -1390,6 +1466,8 @@ def test_df_error_message_truncates():
 
 
 def test_df_first_last_invalid_index():
+    from bodo.utils.typing import BodoError
+
     def test_impl1(df):
         return df.first("15D")
 
@@ -1412,6 +1490,8 @@ def test_df_first_last_invalid_index():
 
 
 def test_df_first_last_invalid_offset():
+    from bodo.utils.typing import BodoError
+
     def test_impl1(df, off):
         return df.first(off)
 
@@ -1434,6 +1514,8 @@ def test_df_first_last_invalid_offset():
 
 
 def test_df_explode_invalid_cols():
+    from bodo.utils.typing import BodoError
+
     @bodo.jit
     def test_impl(df):
         return df.explode(["A", "B"])
@@ -1487,6 +1569,7 @@ def test_to_parquet_int_colnames(memory_leak_check):
     Test that non-string columns raises an error
     as expected.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl(df):
@@ -1512,6 +1595,7 @@ def test_to_parquet_int_colnames(memory_leak_check):
     Test that non-string columns output from
     pivot raises an error as expected.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl(df):
@@ -1539,6 +1623,7 @@ def test_df_melt_not_common_value_columns():
     """
     Tests that df.melt with 'value_vars' columns of different types raises error as expected.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(id_vars, value_vars):
         return df.melt(id_vars, value_vars)
@@ -1564,6 +1649,7 @@ def test_df_melt_not_common_value_labels():
     """
     Tests that df.melt with 'value_vars' labels of different types raises error as expected.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(id_vars, value_vars):
         return df.melt(id_vars, value_vars)
@@ -1586,6 +1672,8 @@ def test_df_melt_not_common_value_labels():
 
 
 def test_df_melt_invalid_cols(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(df, id_vars, value_vars):
         return df.melt(id_vars, value_vars)
 
@@ -1620,6 +1708,7 @@ def test_series_df_comparison(memory_leak_check):
     Test that comapring dataframe and series
     raises an error as expected.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def test_impl(df, other):

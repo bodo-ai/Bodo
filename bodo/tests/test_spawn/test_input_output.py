@@ -5,8 +5,6 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodo.hiframes
-import bodo.hiframes.table
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.tests.dataframe_common import df_value_params
@@ -182,9 +180,8 @@ def test_spawn_distributed():
     assert test(A) == 1000
 
 
-@pytest.mark.parametrize(
-    "arg",
-    [
+@pytest.fixture(
+    params=[
         pd.RangeIndex(100, -100, -5, name="ABC"),
         pd.Index([3, 4, 1, 7, 0]),
         pd.MultiIndex.from_arrays(
@@ -194,7 +191,7 @@ def test_spawn_distributed():
             ],
             names=["AA", None],
         ),
-        bodo.hiframes.table.Table((np.arange(6),)),
+        lambda: bodo.hiframes.table.Table((np.arange(6),)),
         pd.Categorical([1, 4, 5, 1, 4]),
         pd.arrays.IntervalArray(
             [
@@ -206,14 +203,25 @@ def test_spawn_distributed():
             ]
         ),
     ],
+    ids=["range_index", "index", "multi_index", "table", "categorical", "interval"],
 )
-def test_distributed_others(arg):
+def other_dist_arg(request):
+    """Lazily evaluate some arguments to avoid importing the compiler at test
+    collection time"""
+    import bodo.decorators  # noqa
+
+    val = request.param
+
+    return val() if callable(val) else val
+
+
+def test_distributed_others(other_dist_arg):
     """Test less common distributable arguments and return values (Index, ...)"""
 
-    def test(arg):
-        return arg
+    def test(other_dist_arg):
+        return other_dist_arg
 
-    check_func(test, (arg,), only_spawn=True, check_pandas_types=False)
+    check_func(test, (other_dist_arg,), only_spawn=True, check_pandas_types=False)
 
 
 def test_distributed_small_output():

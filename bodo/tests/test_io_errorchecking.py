@@ -4,7 +4,7 @@
 import os
 import re
 
-import numba
+import numba  # noqa
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,11 +12,11 @@ import pytest
 import bodo
 from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 from bodo.utils.testing import ensure_clean
-from bodo.utils.typing import BodoError, BodoWarning
 
 
 def test_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported call"""
+    from bodo.utils.typing import BodoError
 
     # test an example I/O call
     def test_impl():
@@ -41,6 +41,7 @@ def test_csv_invalid_path():
 
 def test_csv_invalid_path_const(memory_leak_check):
     """test error raise when CSV file path provided as constant but is invalid."""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.read_csv("in_csv.csv")
@@ -54,6 +55,7 @@ def test_csv_repeat_args(memory_leak_check):
     test error raise when an untyped pass function provides an argument
     as both an arg and a kwarg
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.read_csv("csv_data1.csv", filepath_or_buffer="csv_data1.csv")
@@ -68,6 +70,7 @@ def test_csv_repeat_args(memory_leak_check):
 def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for csv
     file path passed by another bodo.jit function"""
+    from bodo.utils.typing import BodoError
 
     filename = "s3://test-pq-2/item.pq"
     # Save default developer mode value
@@ -103,6 +106,8 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
 def test_io_error_nested_calls(memory_leak_check):
     """Test with passing incorrect filename from bodo to bodo call
     with local file"""
+    from bodo.utils.typing import BodoError
+
     # Save default developer mode value
     default_mode = numba.core.config.DEVELOPER_MODE
     # Test as a user
@@ -139,6 +144,8 @@ def test_io_error_nested_calls(memory_leak_check):
 # TODO(Nick): Add a test for Parallel version with both offset and count.
 @pytest.mark.slow
 def test_np_io_sep_unsupported(datapath, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     fname = datapath("np_file1.dat")
 
     def test_impl():
@@ -203,6 +210,8 @@ def test_csv_chunksize_type(memory_leak_check):
     """
     Test read_csv(): 'chunksize' with a wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1(fname):
@@ -230,6 +239,8 @@ def test_csv_nrows_type():
 
     TODO: re-add memory_leak_check, see BE-1545
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -249,6 +260,8 @@ def test_csv_skiprows_type(memory_leak_check):
     """
     Test read_csv(): 'skiprows' wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -275,6 +288,7 @@ def test_csv_skiprows_type(memory_leak_check):
 def test_to_csv_compression_kwd_arg():
     """checks that the appropriate errors are raised when compression argument to to_csv"""
     from bodo.tests.test_io import check_CSV_write
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(df, f_name):
@@ -315,6 +329,8 @@ def test_to_csv_compression_kwd_arg():
 
 def test_to_csv_unsupported_kwds_error():
     """checks that the unsupported keywords to to_csv raise an error"""
+    from bodo.utils.typing import BodoError
+
     msg1 = (
         r".*DataFrame.to_csv\(\): mode parameter only supports default value w[\s | .]*"
     )
@@ -367,6 +383,7 @@ def test_to_csv_unsupported_kwds_error():
 
 def test_to_csv_filepath_warning():
     """We raise a best effort warning when the user tries to write to a constant filepath that would normally be compressed"""
+    from bodo.utils.typing import BodoWarning
 
     @bodo.jit
     def impl(df):
@@ -384,6 +401,8 @@ def test_csv_skiprows_type_nonconstant(memory_leak_check):
     Test read_csv(): 'skiprows' with the wrong type when its not a constant
     throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     @bodo.jit
@@ -447,6 +466,8 @@ def test_csv_skiprows_list_type(memory_leak_check):
     """
     Test read_csv(): 'skiprows' with list has wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -467,6 +488,8 @@ def test_csv_skiprows_list_type_nonconstant(memory_leak_check):
     Test read_csv(): 'skiprows' list with the wrong type when its not a constant
     throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     @bodo.jit
@@ -489,6 +512,8 @@ def test_csv_nrows_type_nonconstant(memory_leak_check):
     Test read_csv(): 'nrows' with the wrong type when its not a constant
     throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl(nrows_list):
@@ -508,6 +533,8 @@ def test_csv_sep_and_delimiter(memory_leak_check):
     Test read_csv(): Providing both 'sep' and 'delimiter'
     throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -526,6 +553,7 @@ def test_csv_filename_type(memory_leak_check):
     Test read_csv(): Test that passing a constant
     filename with the wrong type throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
 
     def impl():
         return pd.read_csv(1)
@@ -543,6 +571,7 @@ def test_csv_variable_filename_type(memory_leak_check):
     Test read_csv(): Test that passing a non-constant
     filename with the wrong type throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(fname_list):
         return pd.read_csv(fname_list[0], dtype={"A": str}, names=["A"])
@@ -560,6 +589,8 @@ def test_csv_multichar_sep(memory_leak_check):
     Test read_csv(): Test that passing a multicharacter
     'sep' throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -578,6 +609,8 @@ def test_csv_multichar_delimiter(memory_leak_check):
     Test read_csv(): Test that passing a multicharacter
     'delimiter' throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -596,6 +629,8 @@ def test_csv_unsupported_arg_kwarg(memory_leak_check):
     Test read_csv(): Test that passing a repeated arg and
     kwarg for an unsupported arg throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -626,6 +661,8 @@ def test_csv_unknown_argument(memory_leak_check):
     Test read_csv(): Test that passing an unknown
     argument throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -645,6 +682,8 @@ def test_csv_unsupported_arg_mismatch(memory_leak_check):
     Test read_csv(): Test that passing an unsupported arg that doesn't
     match the default throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -675,6 +714,8 @@ def test_csv_unsupported_kwarg_mismatch(memory_leak_check):
     Test read_csv(): Test that passing an unsupported kwarg that doesn't
     match the default throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -695,6 +736,8 @@ def test_csv_header_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     header throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -713,6 +756,8 @@ def test_csv_names_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     names throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -731,6 +776,8 @@ def test_csv_index_col_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     index_col throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -749,6 +796,8 @@ def test_csv_usecols_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     usecols throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -767,6 +816,8 @@ def test_csv_dtype_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     dtype throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -785,6 +836,8 @@ def test_csv_parse_dates_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     parse_dates throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -803,6 +856,8 @@ def test_csv_compression_unsupported(memory_leak_check):
     Test read_csv(): Test that passing an unsupported value for
     compression throws a reasonable error.
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
@@ -820,6 +875,8 @@ def test_csv_escapechar_value():
     """
     Test read_csv(): 'escapechar' wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     # wrong datatype
@@ -853,6 +910,8 @@ def test_csv_names_usecols_err():
     """
     Test read_csv(): names < usecols
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -869,6 +928,8 @@ def test_csv_usecols_not_found():
     """
     Test read_csv(): usecols column not found
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -883,6 +944,8 @@ def test_csv_sample_nrows_size(memory_leak_check):
     """
     Test read_csv(): 'sample_nrows' with a wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     # negative values
@@ -930,6 +993,8 @@ def test_json_sample_nrows_size(memory_leak_check):
     """
     Test read_json(): 'sample_nrows' with a wrong value or type
     """
+    from bodo.utils.typing import BodoError
+
     fname = os.path.join("bodo", "tests", "data", "example.json")
 
     # negative values

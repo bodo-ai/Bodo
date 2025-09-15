@@ -8,7 +8,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
-from bodo.types import Time
 
 
 @pytest.fixture(
@@ -61,7 +60,7 @@ from bodo.types import Time
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
+            lambda: (
                 nullable_float_arr_maker(
                     [i / 10 for i in range(25)],
                     [3, 9, 15, 18],
@@ -106,9 +105,12 @@ from bodo.types import Time
             id="date",
         ),
         pytest.param(
-            (
+            lambda: (
                 pd.Series(
-                    [None if i % 7 < 2 else Time(nanosecond=3**i) for i in range(45)]
+                    [
+                        None if i % 7 < 2 else bodo.types.Time(nanosecond=3**i)
+                        for i in range(45)
+                    ]
                 ),
                 pa.large_list(pa.time64("ns")),
             ),
@@ -367,7 +369,14 @@ def array_agg_data(request):
     The distribution of data between various keys, as well as the values of the ordering column,
     are set up so that they will vary with different lengths of input data.
     """
-    data, array_dtype = request.param
+    # Import compiler for bodo.types
+    import bodo.decorators  # noqa
+
+    val = request.param
+    if callable(val):
+        val = val()
+
+    data, array_dtype = val
     keys = [
         "AABAABCBAABCDCBA"[int(10 * np.tan(i + len(data))) % 16]
         for i in range(len(data))
@@ -422,14 +431,6 @@ def test_array_agg_regular(array_agg_data, memory_leak_check):
         sort_output=True,
         convert_columns_to_pandas=True,
     )
-
-
-@bodo.jit(distributed=False)
-def bodo_get_distinct_group(raw_data, raw_order):
-    order = raw_order.sort_values(ascending=True, na_position="last")
-    col = raw_data.iloc[order.index]
-    col = col.dropna().drop_duplicates()
-    return col.values
 
 
 def array_agg_distinct_func(group):

@@ -8,11 +8,9 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     _test_equal_guard,
     check_func,
     dist_IR_contains,
-    reduce_sum,
 )
 
 
@@ -246,6 +244,7 @@ def test_repeat(dict_arr_value, memory_leak_check):
 
 def test_cmp_opt(dict_arr_value, memory_leak_check):
     """test optimizaton of comparison operators (eq, ne) for dict array"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A, val):
         return A == val
@@ -290,6 +289,7 @@ def test_cmp_opt(dict_arr_value, memory_leak_check):
 @pytest.mark.slow
 def test_int_convert_opt(memory_leak_check):
     """test optimization of integer conversion for dict array"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl(A):
         return pd.Series(A).astype("Int32")
@@ -346,6 +346,7 @@ def test_gatherv_rm(dict_arr_value, memory_leak_check):
 def test_scalar_to_arr(memory_leak_check):
     """tests that appending a scalar to a DataFrame creates
     a dictionary encoded array."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl(arr):
         return pd.DataFrame({"A": arr, "b": "my string to copy"})
@@ -360,6 +361,7 @@ def test_scalar_to_arr(memory_leak_check):
 
 def test_str_cat_opt(memory_leak_check):
     """test optimizaton of Series.str.cat() for dict array"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(S, A, B):
         S = pd.Series(S)
@@ -386,6 +388,7 @@ def test_str_cat_opt(memory_leak_check):
 
 def test_to_numeric(memory_leak_check):
     """test optimized pd.to_numeric() for dict-encoded string arrays"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl(A):
         return pd.to_numeric(pd.Series(A), errors="coerce", downcast="float")
@@ -403,6 +406,7 @@ def test_to_numeric(memory_leak_check):
 
 def test_str_replace(memory_leak_check):
     """test optimizaton of Series.str.replace() for dict array"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.replace("AB*", "EE", regex=True)
@@ -449,6 +453,7 @@ def test_str_startswith(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.startswith() for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.startswith("AB")
@@ -478,6 +483,7 @@ def test_str_endswith(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.endswith() for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.endswith("AB")
@@ -507,6 +513,7 @@ def test_str_simple_str2str_methods(test_unicode_dict_str_arr, memory_leak_check
     """
     test optimization of Series.str.capitalize/upper/lower/swapcase/title for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.capitalize()
@@ -563,6 +570,7 @@ def test_str_pad(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.center/ljust/rjust/zfill for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.center(5, "*")
@@ -651,6 +659,7 @@ def test_str_slice(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.slice for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.slice(step=2)
@@ -736,6 +745,8 @@ def test_str_slice(test_unicode_dict_str_arr, memory_leak_check):
 @pytest.mark.parametrize("method", ["index", "rindex"])
 def test_str_index_rindex(S, sub, start, end, method, memory_leak_check):
     """Test optimization of pd.Series.str.index/rindex"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     func_dict = {
         "index": pd.Series(S).str.index,
         "rindex": pd.Series(S).str.rindex,
@@ -818,6 +829,8 @@ def test_str_find(test_unicode_dict_str_arr, memory_leak_check, method):
     """
     test optimization of Series.str.find/rfind
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     func_dict = {
         "find": pd.Series(test_unicode_dict_str_arr).str.find,
         "rfind": pd.Series(test_unicode_dict_str_arr).str.rfind,
@@ -886,6 +899,8 @@ def test_str_strip(test_strip_dict_arr_value, memory_leak_check, method):
     """
     test optimization of Series.str.strip/lstrip/rstip for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     func_dict = {
         "lstrip": pd.Series(test_strip_dict_arr_value).str.lstrip,
         "rstrip": pd.Series(test_strip_dict_arr_value).str.rstrip,
@@ -933,6 +948,7 @@ def test_str_get(test_unicode_dict_str_arr):
     """
     test optimization of Series.str.get for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.get(1)
@@ -953,6 +969,7 @@ def test_str_repeat(test_unicode_dict_str_arr):
     """
     test optimization of Series.str.repeat for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.repeat(3)
@@ -975,6 +992,7 @@ def test_str_contains_regex(memory_leak_check, test_unicode_dict_str_arr, case):
     """
     test optimization of Series.str.contains(regex=True) for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.contains("AB*", regex=True, case=case)
@@ -1035,6 +1053,7 @@ def test_str_contains_noregex(memory_leak_check, test_unicode_dict_str_arr, case
     """
     test optimization of Series.str.contains(regex=False) for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.contains("AB", regex=False, case=case)
@@ -1079,6 +1098,7 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     """
     test optimization of Series.str.contains(regex=False) for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.match("AB", case=case)
@@ -1204,6 +1224,7 @@ def test_str_len(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.len for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.len()
@@ -1225,6 +1246,8 @@ def test_str_count(test_unicode_dict_str_arr, memory_leak_check):
     """
     test optimization of Series.str.capitalize/upper/lower/swapcase/title for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     flag = re.IGNORECASE.value
 
     def impl1(A):
@@ -1270,12 +1293,27 @@ def test_str_count(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_count")
 
 
-@pytest.mark.parametrize("method", bodo.hiframes.pd_series_ext.str2bool_methods)
+@pytest.mark.parametrize(
+    "method",
+    [
+        "isalnum",
+        "isalpha",
+        "isdigit",
+        "isspace",
+        "islower",
+        "isupper",
+        "istitle",
+        "isnumeric",
+        "isdecimal",
+    ],
+)
 def test_str_str2bool_methods(test_unicode_dict_str_arr, memory_leak_check, method):
     """
     test optimization of Series.str.isalnum/isalpha/isdigit/isspae/islower/
     isupper/istitle/isnumeric/isdecimal for dict array
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     func_text = (
         "def impl1(A):\n"
         f"    return pd.Series(A).str.{method}()\n"
@@ -1305,6 +1343,7 @@ def test_str_extract(memory_leak_check, test_unicode_dict_str_arr):
     """
     tests optimization for Series.str.extract for dictionary arrays
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(A):
         return pd.Series(A).str.extract(r"(?P<BBB>[abd])(?P<C>\d+)")
@@ -1374,6 +1413,7 @@ def test_str_extract(memory_leak_check, test_unicode_dict_str_arr):
 
 def test_str_extractall(memory_leak_check):
     """test optimizaton of Series.str.extractall() for dict array"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     # non-string index, single group
     def impl1(A):
@@ -1564,6 +1604,7 @@ def test_gatherv_dict_enc_and_normal_str_array_table(
     in gatherv. Currently, this is an operation which will decode the dict encoded string arrays,
     but this may be changed in the future: https://bodo.atlassian.net/browse/BE-3681
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     func_text = "def make_df_impl(A, B, C, D):\n"
     if not A_enc:

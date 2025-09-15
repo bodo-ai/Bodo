@@ -7,14 +7,12 @@ import pytest
 from pyiceberg.catalog import Catalog
 
 import bodo
-from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     get_rest_catalog_connection_string,
     pytest_polaris,
 )
-from bodo.utils.utils import run_rank0
 
 pytestmark = pytest_polaris
 
@@ -25,6 +23,9 @@ def test_iceberg_polaris_read(polaris_connection, memory_leak_check):
     Checksum is used to verify the data is read correctly.
     Column names are used to verify the schema is read correctly.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.utils.utils import run_rank0
+
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(
         rest_uri, polaris_warehouse, polaris_credential
@@ -82,6 +83,9 @@ def test_iceberg_polaris_write_basic(
     Test writing to an Iceberg table in a Polaris REST catalog.
     Checksum is used to verify the data is written correctly.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.utils.utils import run_rank0
+
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
@@ -136,6 +140,9 @@ def test_get_table_len(polaris_connection, memory_leak_check):
     """
     Test getting the length of an Iceberg table in a Polaris REST catalog.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.utils.utils import run_rank0
+
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(
         rest_uri, polaris_warehouse, polaris_credential

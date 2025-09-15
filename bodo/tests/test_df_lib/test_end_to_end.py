@@ -4,7 +4,7 @@ import os
 import tempfile
 import warnings
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
