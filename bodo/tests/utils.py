@@ -226,6 +226,8 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
+    import bodo.decorators  # isort:skip # noqa
+
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
@@ -1296,6 +1298,8 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
+    import bodo.decorators  # isort:skip # noqa
+
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
