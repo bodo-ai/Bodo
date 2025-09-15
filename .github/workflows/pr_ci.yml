@@ -118,7 +118,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
-      pytest-marker: "not slow and not weekly and not iceberg or smoke"
+      pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
@@ -131,7 +131,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "spawn_mode and not iceberg"
+      pytest-marker: "spawn_mode"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: SPAWN
@@ -149,7 +149,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 2
-      pytest-marker: "df_lib and not weekly and not iceberg"
+      pytest-marker: "df_lib and not weekly"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
