@@ -38,6 +38,7 @@ import bodo.pandas as bodo_pd
 from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
+from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
 
@@ -1217,6 +1218,39 @@ def sort_dataframe_values_index(df):
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
+def _get_arrow_type_no_dict(pa_type):
+    """Converts dictionary-encoded String arrays large_string in nested types."""
+
+    if pa.types.is_large_list(pa_type):
+        return pa.large_list(_get_arrow_type_no_dict(pa_type.value_type))
+    elif pa.types.is_list(pa_type):
+        return pa.list_(_get_arrow_type_no_dict(pa_type.value_type))
+    elif pa.types.is_fixed_size_list(pa_type):
+        return pa.fixed_size_list(
+            _get_arrow_type_no_dict(pa_type.value_type), pa_type.list_size
+        )
+    elif pa.types.is_struct(pa_type):
+        return pa.struct(
+            [
+                pa.field(f.name, _get_arrow_type_no_dict(f.type), f.nullable)
+                for f in pa_type
+            ]
+        )
+    elif pa.types.is_map(pa_type):
+        return pa.map_(
+            _get_arrow_type_no_dict(pa_type.key_type),
+            _get_arrow_type_no_dict(pa_type.item_type),
+            pa_type.keys_sorted,
+        )
+    elif pa.types.is_dictionary(pa_type) and (
+        pa.types.is_string(pa_type.value_type)
+        or pa.types.is_large_string(pa_type.value_type)
+    ):
+        return pa_type.value_type
+    else:
+        return pa_type
+
+
 def _to_pa_array(py_out, pa_type):
     """Convert Python array to Arrow array with specified Arrow type"""
 
@@ -1227,10 +1261,18 @@ def _to_pa_array(py_out, pa_type):
         and isinstance(py_out, np.ndarray)
         and np.issubdtype(py_out.dtype, np.floating)
     ):
-        # When trying to convert a numpy float array to an integer array we need to convert to a pandas nullable integer array first
-        # to avoid issues with NaN/None values
+        # When trying to convert a numpy float array to an integer array we need to
+        # convert to a pandas nullable integer array first to avoid issues with
+        # NaN/None values.
         py_out = pd.array(py_out, str(pa_type).capitalize())
-    return pa.array(py_out, pa_type)
+
+    pa_type_no_dict = _get_arrow_type_no_dict(pa_type)
+    result = pa.array(py_out, pa_type_no_dict)
+
+    if pa_type != pa_type_no_dict:
+        result = convert_arrow_arr_to_dict(result, pa_type)
+
+    return result
 
 
 def _test_equal(
