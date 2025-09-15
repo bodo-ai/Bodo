@@ -133,6 +133,7 @@ def dist_IR_count(f_ir, func_name):
 
 
 def _is_distributable_typ(t):
+    """Wrapper for is_distributable_typ that imports the compiler."""
     import bodo.decorators  # noqa
     from bodo.utils.utils import is_distributable_typ
 
@@ -140,6 +141,7 @@ def _is_distributable_typ(t):
 
 
 def _is_distributable_tuple_typ(t):
+    """Wrapper for is_distributable_tuple_typ that imports the compiler."""
     import bodo.decorators  # noqa
     from bodo.utils.utils import is_distributable_tuple_typ
 
@@ -1218,7 +1220,7 @@ def sort_dataframe_values_index(df):
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
-def _get_arrow_type_no_dict(pa_type):
+def _get_arrow_type_no_dict(pa_type: pa.DataType) -> pa.DataType:
     """Converts dictionary-encoded String arrays large_string in nested types."""
 
     if pa.types.is_large_list(pa_type):
@@ -1251,23 +1253,23 @@ def _get_arrow_type_no_dict(pa_type):
         return pa_type
 
 
-def _to_pa_array(py_out, pa_type):
-    """Convert Python array to Arrow array with specified Arrow type"""
+def _to_pa_array(in_arr, pa_type: pa.DataType) -> pa.Array:
+    """Converts in_arr to an Arrow array with specified Arrow type"""
 
-    if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
-        py_out = py_out.astype(object)
+    if isinstance(in_arr, np.ndarray) and isinstance(in_arr.dtype, np.dtypes.StrDType):
+        in_arr = in_arr.astype(object)
     if (
         pa.types.is_integer(pa_type)
-        and isinstance(py_out, np.ndarray)
-        and np.issubdtype(py_out.dtype, np.floating)
+        and isinstance(in_arr, np.ndarray)
+        and np.issubdtype(in_arr.dtype, np.floating)
     ):
         # When trying to convert a numpy float array to an integer array we need to
         # convert to a pandas nullable integer array first to avoid issues with
         # NaN/None values.
-        py_out = pd.array(py_out, str(pa_type).capitalize())
+        in_arr = pd.array(in_arr, str(pa_type).capitalize())
 
     pa_type_no_dict = _get_arrow_type_no_dict(pa_type)
-    result = pa.array(py_out, pa_type_no_dict)
+    result = pa.array(in_arr, pa_type_no_dict)
 
     if pa_type != pa_type_no_dict:
         result = convert_arrow_arr_to_dict(result, pa_type)
