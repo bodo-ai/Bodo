@@ -16,6 +16,7 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas._typing import (
     Axis,
+    Level,
     SortKind,
     ValueKeyFunc,
 )
@@ -35,6 +36,7 @@ from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
     ArrowScalarFuncExpression,
+    CaseExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -1348,6 +1350,99 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoSeries(
             res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
         )
+
+    @check_args_fallback(supported=["cond", "other"])
+    def where(
+        self,
+        cond,
+        other=numpy.nan,
+        *,
+        inplace: bool = False,
+        axis: Axis | None = None,
+        level: Level | None = None,
+    ) -> BodoSeries | None:
+        """Replace values where the condition is False. Creates a case/when expression
+        in the plan.
+        """
+        from bodo.pandas.base import _empty_like
+        from bodo.pandas.scalar import BodoScalar
+
+        # Check for BodoSeries condition and BodoSeries/scalar other.
+        if not isinstance(cond, BodoSeries):
+            raise BodoLibNotImplementedException(
+                "Series.where: cond must be a BodoSeries"
+            )
+
+        if not (
+            pd.api.types.is_scalar(other) or type(other) in (BodoSeries, BodoScalar)
+        ):
+            raise BodoLibNotImplementedException(
+                "Series.where: other must be a scalar or a BodoSeries or BodoScalar"
+            )
+
+        # Get empty Pandas objects for self and cond/other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_cond = _empty_like(cond)
+        zero_size_other = (
+            _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
+        )
+
+        # Compute schema of new series.
+        empty_data = zero_size_self.where(zero_size_cond, zero_size_other)
+        assert isinstance(empty_data, pd.Series), (
+            "Series.where: empty_data is not a Series"
+        )
+
+        # The plan of the parent table without the Series projection node.
+        lhs_plan = self._plan.source
+
+        # Extract argument expressions
+        lhs = get_proj_expr_single(self._plan)
+
+        # If other is a lazy BodoScalar we need to insert it into the plan.
+        if type(other) is BodoScalar and other.is_lazy_plan():
+            lhs_plan, other = insert_bodo_scalar(lhs_plan, other)
+            # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+            lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
+        # If other is a BodoSeries we need to extract the expression.
+        elif isinstance(other, BodoSeries):
+            other = get_proj_expr_single(other._plan)
+        # If other is a scalar we can use it directly.
+        else:
+            pass
+
+        cond = get_proj_expr_single(cond._plan)
+
+        # Match source plans of arguments
+        lhs, other = match_binop_expr_source_plans(lhs, other)
+        if lhs is None and other is None:
+            raise BodoLibNotImplementedException(
+                "Series.where operation arguments should have the same dataframe source."
+            )
+        lhs, cond = match_binop_expr_source_plans(lhs, cond)
+        if lhs is None and cond is None:
+            raise BodoLibNotImplementedException(
+                "Series.where operation arguments should have the same dataframe source."
+            )
+        lhs, other = match_binop_expr_source_plans(lhs, other)
+        if lhs is None and other is None:
+            raise BodoLibNotImplementedException(
+                "Series.where operation arguments should have the same dataframe source."
+            )
+
+        expr = CaseExpression(empty_data, cond, lhs, other)
+
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
+
+        plan = LogicalProjection(
+            empty_data,
+            # Use the original table without the Series projection node.
+            lhs_plan,
+            (expr,) + key_exprs,
+        )
+        return wrap_plan(plan=plan)
 
 
 class BodoStringMethods:
