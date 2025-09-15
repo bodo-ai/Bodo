@@ -105,8 +105,8 @@ def test_tpch_q13():
 
 
 def test_tpch_q14():
-    # TODO [BSE-5099]: Series.where
-    run_tpch_query_test(tpch.tpch_q14, plan_executions=5)
+    # TODO[BSE-5113]: support division of BodoScalars in plans
+    run_tpch_query_test(tpch.tpch_q14, plan_executions=2)
 
 
 def test_tpch_q15():
