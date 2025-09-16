@@ -137,6 +137,19 @@ jobs:
       test-type: SPAWN
     secrets: inherit
 
+  df-lib-non-jit-ci:
+    needs: [compile-bodo]
+    name: Test DF Library Non-JIT
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "df_lib and not jit_dependency and not weekly and not iceberg"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "DF_LIB"
+    secrets: inherit
+
   df-lib-ci:
     needs: [compile-bodo]
     name: Test DF Library
@@ -149,7 +162,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 2
-      pytest-marker: "df_lib and not weekly and not iceberg"
+      pytest-marker: "df_lib and jit_dependency and not weekly and not iceberg"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
@@ -241,6 +254,7 @@ jobs:
     needs:
       - collect-results
       - df-lib-ci
+      - df-lib-non-jit-ci
       - validate
     runs-on: ubuntu-latest
     steps:

@@ -269,15 +269,13 @@ def pytest_collection_modifyitems(items):
         for marker in markers:
             item.add_marker(marker)
 
-    # If running tests in DataFrames mode, run all tests with JIT
-    # Dependencies last to ensure tests before them that do not depend on JIT
-    # are not affected by JIT being imported.
+    # If running tests in DataFrames mode, add a check that JIT is not imported to all tests
+    # that don't explicitly depend on JIT via the jit_dependency marker.
     if bodo.test_dataframe_library_enabled:
         assert "bodo.decorators" not in sys.modules, (
             "JIT was imported before pytest_collection_modifyitems finished."
         )
 
-        jit_dep = [item for item in items if item.get_closest_marker("jit_dependency")]
         no_jit_dep = [
             item for item in items if not item.get_closest_marker("jit_dependency")
         ]
@@ -288,8 +286,6 @@ def pytest_collection_modifyitems(items):
                 and "jit_import_check" not in item.fixturenames
             ):
                 item.fixturenames = ["jit_import_check"] + item.fixturenames
-
-        items[:] = no_jit_dep + jit_dep
 
 
 def group_from_hash(testname, num_groups):

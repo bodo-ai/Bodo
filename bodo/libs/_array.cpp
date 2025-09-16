@@ -4,7 +4,6 @@
 
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
-#include <longobject.h>
 
 #include "_array_hash.h"
 #include "_array_operations.h"
