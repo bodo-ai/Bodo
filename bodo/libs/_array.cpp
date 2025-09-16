@@ -1070,10 +1070,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_bodo_array_py_entry);
     SetAttrStringFromVoidPtr(m, string_array_from_sequence);
     SetAttrStringFromVoidPtr(m, is_na_value);
-    SetAttrStringFromVoidPtr(m, get_stats_alloc);
-    SetAttrStringFromVoidPtr(m, get_stats_free);
-    SetAttrStringFromVoidPtr(m, get_stats_mi_alloc);
-    SetAttrStringFromVoidPtr(m, get_stats_mi_free);
     SetAttrStringFromVoidPtr(m, array_info_getitem);
     SetAttrStringFromVoidPtr(m, array_info_getdata1);
     SetAttrStringFromVoidPtr(m, array_info_unpin);
