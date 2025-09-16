@@ -425,7 +425,7 @@ def register_table_write_seq(
                 file_format=FileFormat.PARQUET,
                 file_path=transaction.table_metadata.location + "/data/" + file_name,
                 # Partition and Sort Order
-                partition=Record(partition_info[0]),
+                partition=Record(partition_info[0] if len(partition_info) else []),
                 sort_order_id=sort_order_id,
                 spec_id=partition_spec.spec_id,
                 equality_ids=None,
