@@ -40,6 +40,35 @@ def test_series_isin(index_val, use_index1, use_index2):
     )
 
 
+def test_series_where(index_val):
+    """Tests Series.where() with condition and other arguments."""
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 7] * 2,
+            "B": [4, 5, 6, 8] * 2,
+            "C": ["a", "b", None, "abc"] * 2,
+        },
+    )
+    df.index = index_val[: len(df)]
+
+    py_out = df["B"].where(df["A"] > 1, 0)
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1, 0)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+    # "other" not provided, defaults to NA
+    py_out = df["B"].where(df["A"] > 1)
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+
 def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():

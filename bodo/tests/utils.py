@@ -1334,7 +1334,7 @@ def _test_equal(
                             if isinstance(a, float) and np.isnan(a)
                             else a
                         ).values,
-                        bodo_out.dtype.pyarrow_dtype,
+                        pa_type,
                     ),
                     py_out.index,
                     bodo_out.dtype,
