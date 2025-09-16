@@ -4,6 +4,7 @@
 
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
+#include <longobject.h>
 
 #include "_array_hash.h"
 #include "_array_operations.h"
@@ -955,9 +956,38 @@ table_info* retrieve_table_py_entry(table_info* in_table,
     }
 }
 
+// Macro to define a Python wrapper for a memory stats functions
+// (Avoids numba JIT dependency in testing)
+#define DEFINE_NOARG_STATS_WRAPPER(py_name, func_name)                \
+    static PyObject* py_name(PyObject* self, PyObject* args) {        \
+        if (PyTuple_Size(args) != 0) {                                \
+            PyErr_SetString(PyExc_TypeError,                          \
+                            #func_name "() does not take arguments"); \
+            return nullptr;                                           \
+        }                                                             \
+        return PyLong_FromSize_t(func_name());                        \
+    }
+
+DEFINE_NOARG_STATS_WRAPPER(get_stats_alloc_py_wrapper, get_stats_alloc)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_free_py_wrapper, get_stats_free)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_mi_alloc_py_wrapper, get_stats_mi_alloc)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_mi_free_py_wrapper, get_stats_mi_free)
+
+#undef DEFINE_NOARG_STATS_WRAPPER
+
+static PyMethodDef array_ext_methods[] = {
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
+    declmethod(get_stats_alloc_py_wrapper),
+    declmethod(get_stats_free_py_wrapper),
+    declmethod(get_stats_mi_alloc_py_wrapper),
+    declmethod(get_stats_mi_free_py_wrapper),
+    {nullptr},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "array_ext", "No docs", nullptr);
+    MOD_DEF(m, "array_ext", "No docs", array_ext_methods);
     if (m == nullptr) {
         return nullptr;
     }

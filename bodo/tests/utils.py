@@ -1334,7 +1334,6 @@ def _test_equal(
                 or pa.types.is_struct(pa_type)
                 or pa.types.is_large_list(pa_type)
             ):
-                print("_test_equal got here...")
                 py_out = pd.Series(
                     _to_pa_array(
                         py_out.map(

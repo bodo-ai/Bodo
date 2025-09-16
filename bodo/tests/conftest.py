@@ -95,7 +95,6 @@ def memory_leak_check():
     Equivalent to Numba's MemoryLeakMixin:
     https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
     """
-    import bodo.decorators  # isort:skip # noqa
     import bodo.tests.utils
     import bodo.utils.allocation_tracking
 
