@@ -59,7 +59,12 @@ class BodoScalar(BodoLazyWrapper):
                 # Avoid getitem warning
                 out = self.wrapped_series[0]
             return out
-        return self.wrapped_series[0]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            out = self.wrapped_series[0]
+
+        return out
 
     @property
     def __pandas_priority__(self):
