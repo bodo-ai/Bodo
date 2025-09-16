@@ -55,7 +55,7 @@ class BodoScalar(BodoLazyWrapper):
             # that we have exactly one unique value
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-            assert self.wrapped_series.nunique() in {0, 1}
+                assert self.wrapped_series.nunique() in {0, 1}
         return self.wrapped_series[0]
 
     @property
