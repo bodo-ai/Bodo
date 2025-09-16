@@ -1290,13 +1290,6 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
     return py_out
 
 
-def _is_distributable_typ(t):
-    """Lazily import bodo.utils.utils to avoid adding extra JIT dependency during tests"""
-    from bodo.utils.utils import is_distributable_typ
-
-    return is_distributable_typ(t)
-
-
 def _test_equal(
     bodo_out,
     py_out,
