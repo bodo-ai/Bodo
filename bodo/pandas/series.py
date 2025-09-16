@@ -405,7 +405,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         # The plan of the parent table without the Series projection node.
-        lhs_plan = self._plan.args[0]
+        lhs_plan = self._plan.source
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
@@ -433,8 +433,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = ArithOpExpression(empty_data, lhs, rhs, op)
 
-        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         plan_keys = get_single_proj_source_if_present(self._plan)
+        ncols = plan_keys.empty_data.shape[1]
+        key_indices = [ncols + i for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LogicalProjection(
@@ -1436,7 +1437,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = CaseExpression(empty_data, cond, lhs, other)
 
         plan_keys = get_single_proj_source_if_present(self._plan)
-        ncols = len(plan_keys.empty_data.columns)
+        ncols = plan_keys.empty_data.shape[1]
         key_indices = [ncols + i for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 

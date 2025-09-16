@@ -1766,6 +1766,24 @@ def test_series_compound_expression(datapath):
     )
 
 
+def test_series_binops(datapath, index_val):
+    """Test various cases of Series binary operations."""
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1
+        bodo_S = bdf["A"] + 1
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
