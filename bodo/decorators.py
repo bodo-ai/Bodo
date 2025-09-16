@@ -732,3 +732,30 @@ def _load_wrap_python_function(pyapi, py_func):
 
     callee = builder.load(gv)
     return callee
+
+
+_already_checked_rts = False
+
+
+def _check_numba_rtsys():
+    """Check if Numba RTS is already initialized, which indicates that Numba JIT
+    compilation has already happened before Bodo JIT is imported.
+    This can cause issues in memory management, leading to crashes (see BSE-5112).
+    """
+    global _already_checked_rts
+    if _already_checked_rts:
+        return
+    _already_checked_rts = True
+
+    from numba.core.runtime import rtsys
+
+    if rtsys._init:
+        # Avoid spawner errors in finalization
+        bodo.spawn.spawner.spawner = None
+        raise RuntimeError(
+            "Bodo JIT must be imported before any Numba JIT compilation if Bodo is used later in the program. "
+            "Please add 'import bodo.decorators' before Numba JIT uses."
+        )
+
+
+_check_numba_rtsys()
