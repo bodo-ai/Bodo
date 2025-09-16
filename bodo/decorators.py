@@ -749,7 +749,7 @@ def _check_numba_rtsys():
 
     from numba.core.runtime import rtsys
 
-    if rtsys._init:
+    if rtsys._init:  # pragma: no cover
         # Avoid spawner errors in finalization
         bodo.spawn.spawner.spawner = None
         raise RuntimeError(
