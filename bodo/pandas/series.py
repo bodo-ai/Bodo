@@ -1369,14 +1369,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         # Check for BodoSeries condition and BodoSeries/scalar other.
-        if not isinstance(cond, BodoSeries):
+        if not isinstance(cond, BodoSeries):  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where: cond must be a BodoSeries"
             )
 
         if not (
             pd.api.types.is_scalar(other) or type(other) in (BodoSeries, BodoScalar)
-        ):
+        ):  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where: other must be a scalar or a BodoSeries or BodoScalar"
             )
@@ -1418,17 +1418,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Match source plans of arguments
         lhs, other = match_binop_expr_source_plans(lhs, other)
-        if lhs is None and other is None:
+        if lhs is None and other is None:  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where operation arguments should have the same dataframe source."
             )
         lhs, cond = match_binop_expr_source_plans(lhs, cond)
-        if lhs is None and cond is None:
+        if lhs is None and cond is None:  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where operation arguments should have the same dataframe source."
             )
         lhs, other = match_binop_expr_source_plans(lhs, other)
-        if lhs is None and other is None:
+        if lhs is None and other is None:  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where operation arguments should have the same dataframe source."
             )
