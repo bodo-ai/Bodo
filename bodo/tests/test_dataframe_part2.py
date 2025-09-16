@@ -25,7 +25,7 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-pytestmark = pytest_pandas
+pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
 
 
 def test_pd_isna_getitem(memory_leak_check):

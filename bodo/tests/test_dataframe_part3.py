@@ -31,7 +31,7 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-pytestmark = pytest_pandas
+pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
 
 
 def test_dataframe_apply_method_str(memory_leak_check):

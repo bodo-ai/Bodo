@@ -22,6 +22,8 @@ from bodo.tests.utils import (
     pytest_mark_pandas,
 )
 
+pytestmark = pytest.mark.jit_dependency
+
 # Note: this file tests a large mix of features that are critical
 # for BodoSQL, but also a large number that are only relevent
 # for Python. The former needs to be tested, but the latter can

@@ -1,7 +1,10 @@
 import pandas as pd
+import pytest
 from test_series_generator import _generate_series_accessor_test, _generate_series_test
 
 from bodo.pandas.series import dt_accessors, dt_methods
+
+pytestmark = pytest.mark.jit_dependency
 
 timedelta_methods = (
     "total_seconds",

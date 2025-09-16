@@ -1290,6 +1290,13 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
     return py_out
 
 
+def _is_distributable_typ(t):
+    """Lazily import bodo.utils.utils to avoid adding extra JIT dependency during tests"""
+    from bodo.utils.utils import is_distributable_typ
+
+    return is_distributable_typ(t)
+
+
 def _test_equal(
     bodo_out,
     py_out,
@@ -1327,6 +1334,7 @@ def _test_equal(
                 or pa.types.is_struct(pa_type)
                 or pa.types.is_large_list(pa_type)
             ):
+                print("_test_equal got here...")
                 py_out = pd.Series(
                     _to_pa_array(
                         py_out.map(

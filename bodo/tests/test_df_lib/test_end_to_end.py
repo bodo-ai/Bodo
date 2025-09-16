@@ -24,6 +24,8 @@ from bodo.pandas.utils import (
 )
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
+pytestmark = pytest.mark.jit_dependency
+
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
 

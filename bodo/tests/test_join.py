@@ -37,6 +37,8 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
+pytestmark = pytest.mark.jit_dependency
+
 
 # pytest fixture for df3 = df1.merge(df2, on="A") tests with nested arrays.
 # These pairs of arrays are used to generate column "B" of df1 and df2 respectively

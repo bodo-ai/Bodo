@@ -38,7 +38,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
 
-pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
+pytestmark = [pytest.mark.parquet, pytest.mark.df_lib, pytest.mark.jit_dependency]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #

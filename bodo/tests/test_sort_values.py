@@ -41,7 +41,7 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-pytestmark = pytest_pandas
+pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
 
 
 @pytest.fixture(

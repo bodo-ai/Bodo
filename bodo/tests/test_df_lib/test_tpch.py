@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 import benchmarks.tpch.dataframe_lib as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
+
+pytestmark = pytest.mark.jit_dependency
 
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 

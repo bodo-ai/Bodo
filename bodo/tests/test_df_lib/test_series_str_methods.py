@@ -1,7 +1,10 @@
 import re
 
 import pandas as pd
+import pytest
 from test_series_generator import _generate_series_test
+
+pytestmark = pytest.mark.jit_dependency
 
 
 def _install_series_str_tests():

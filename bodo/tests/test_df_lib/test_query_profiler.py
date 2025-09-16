@@ -5,6 +5,8 @@ import pytest
 import bodo.pandas as pd
 from bodo.tests.utils import temp_env_override
 
+pytestmark = pytest.mark.jit_dependency
+
 
 @pytest.mark.skip(
     reason="Doesn't seem to deactivate and causes problems for subsequent tests."
