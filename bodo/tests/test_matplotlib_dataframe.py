@@ -22,7 +22,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.skip if matplotlib_import_failed else pytest_pandas
 
@@ -411,6 +410,7 @@ def test_df_plot_args(memory_leak_check):
     """
     Error checking for types/values of df.plot supported arguments
     """
+    from bodo.utils.typing import BodoError
 
     def impl1():
         x = np.arange(100)

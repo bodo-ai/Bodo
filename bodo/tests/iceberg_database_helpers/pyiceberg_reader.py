@@ -2,13 +2,12 @@ import pandas as pd
 import pyarrow as pa
 from pyiceberg.catalog import WAREHOUSE_LOCATION
 
-from bodo.io.iceberg.catalog.dir import DirCatalog
-
 
 def read_iceberg_table(table_name: str, database_name: str) -> pd.DataFrame:
     """Read an iceberg table from a given database path and return a Pandas DataFrame.
     Converts datetime us unit to ns to match Bodo output.
     """
+    from bodo.io.iceberg.catalog.dir import DirCatalog
 
     # TODO: support other catalog types and properties
     properties = {

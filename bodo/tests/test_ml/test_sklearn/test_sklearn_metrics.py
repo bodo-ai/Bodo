@@ -20,7 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError  # noqa TID253
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -375,6 +375,7 @@ def test_cosine_similarity_unsupported(memory_leak_check):
     """
     Tests for unsupported features in sklearn.metrics.pairwise.cosine_similarity.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(X):
         out = cosine_similarity(X, dense_output=False)
@@ -759,6 +760,7 @@ def test_r2_score(data, multioutput, memory_leak_check):
     """
     Tests for the sklearn.metrics.r2_score implementation in Bodo.
     """
+    from bodo.utils.typing import BodoError
 
     if multioutput == "array":
         if len(data[0].shape) > 1:

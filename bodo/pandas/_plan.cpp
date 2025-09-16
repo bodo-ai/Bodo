@@ -26,6 +26,7 @@
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_case_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -365,6 +366,19 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
             throw std::runtime_error("make_unary_expr unsupported etype " +
                                      std::to_string(static_cast<int>(etype)));
     }
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_case_expr(
+    std::unique_ptr<duckdb::Expression> &when,
+    std::unique_ptr<duckdb::Expression> &then,
+    std::unique_ptr<duckdb::Expression> &else_) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto when_duck = to_duckdb(when);
+    auto then_duck = to_duckdb(then);
+    auto else_duck = to_duckdb(else_);
+
+    return duckdb::make_uniq<duckdb::BoundCaseExpression>(
+        std::move(when_duck), std::move(then_duck), std::move(else_duck));
 }
 
 duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(

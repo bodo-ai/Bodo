@@ -15,7 +15,6 @@ assert_raises = _dummy.assertRaises
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
-from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -346,6 +345,7 @@ def test_train_test_split_unsupported(memory_leak_check):
     """
     Test an unsupported argument to train_test_split
     """
+    from bodo.utils.typing import BodoError
 
     def impl(X, y, train_size, test_size):
         X_train, X_test, y_train, y_test = train_test_split(

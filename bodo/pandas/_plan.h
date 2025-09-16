@@ -321,6 +321,19 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
+ * @brief Create a case expression from a source.
+ *
+ * @param when - the condition to evaluate
+ * @param then - the expression to return if the condition is true
+ * @param else_ - the expression to return if the condition is false
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_case_expr(
+    std::unique_ptr<duckdb::Expression> &when,
+    std::unique_ptr<duckdb::Expression> &then,
+    std::unique_ptr<duckdb::Expression> &else_);
+
+/**
  * @brief Create a cross product node.
  *
  * @param lhs - the left-hand side of the cross product

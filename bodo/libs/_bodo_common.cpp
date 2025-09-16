@@ -827,13 +827,16 @@ std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() const {
     return std::pair(arr_array_types, arr_c_types);
 }
 
-std::string Schema::ToString() {
+std::string Schema::ToString(bool use_col_names) {
     std::string out;
     for (size_t i = 0; i < this->column_types.size(); i++) {
         if (i > 0) {
             out += "\n";
         }
         out += fmt::format("{}: {}", i, this->column_types[i]->ToString());
+        if (use_col_names && i < this->column_names.size()) {
+            out += " " + this->column_names[i];
+        }
     }
     return out;
 }

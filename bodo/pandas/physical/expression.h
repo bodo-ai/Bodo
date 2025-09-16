@@ -4,7 +4,6 @@
 #include <arrow/compute/api.h>
 #include <arrow/type_traits.h>
 #include <future>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -155,6 +154,14 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
     const duckdb::LogicalType &return_type);
+
+/**
+ * @brief Convert ExprResult to arrow and run case compute on them.
+ *
+ */
+std::shared_ptr<array_info> do_arrow_compute_case(
+    std::shared_ptr<ExprResult> when_res, std::shared_ptr<ExprResult> then_res,
+    std::shared_ptr<ExprResult> else_res);
 
 /**
  * @brief Run arrow compute operation on unary Datum.
@@ -781,6 +788,49 @@ class PhysicalBinaryExpression : public PhysicalExpression {
 
    protected:
     std::string comparator;
+};
+
+/**
+ * @brief Physical expression tree node type for case expressions.
+ *
+ */
+class PhysicalCaseExpression : public PhysicalExpression {
+   public:
+    PhysicalCaseExpression(std::shared_ptr<PhysicalExpression> when_expr,
+                           std::shared_ptr<PhysicalExpression> then_expr,
+                           std::shared_ptr<PhysicalExpression> else_expr) {
+        children.push_back(when_expr);
+        children.push_back(then_expr);
+        children.push_back(else_expr);
+    }
+
+    virtual ~PhysicalCaseExpression() = default;
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // Process children first.
+        std::shared_ptr<ExprResult> when_res =
+            children[0]->ProcessBatch(input_batch);
+        std::shared_ptr<ExprResult> then_res =
+            children[1]->ProcessBatch(input_batch);
+        std::shared_ptr<ExprResult> else_res =
+            children[2]->ProcessBatch(input_batch);
+
+        auto result = do_arrow_compute_case(when_res, then_res, else_res);
+        return std::make_shared<ArrayExprResult>(result, "Case");
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error(
+            "PhysicalCastExpression::join_expr_internal unimplemented ");
+    }
 };
 
 /**

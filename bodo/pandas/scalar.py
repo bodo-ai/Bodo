@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable
 
@@ -53,7 +55,10 @@ class BodoScalar(BodoLazyWrapper):
             # that we have exactly one unique value
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-            assert self.wrapped_series.nunique() in {0, 1}
+                assert self.wrapped_series.nunique() in {0, 1}
+                # Avoid getitem warning
+                out = self.wrapped_series[0]
+            return out
         return self.wrapped_series[0]
 
     @property

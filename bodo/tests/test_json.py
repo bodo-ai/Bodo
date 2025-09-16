@@ -13,7 +13,6 @@ import pytest
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, compress_dir, uncompress_dir
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
-from bodo.utils.typing import BodoError
 
 
 def compress_file(fname):
@@ -183,6 +182,7 @@ def test_json_read_multiline_object(datapath, memory_leak_check):
 
 def test_json_invalid_path_const(memory_leak_check):
     """test error raise when file path provided as constant but is invalid."""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.read_json("in_data_invalid.json")

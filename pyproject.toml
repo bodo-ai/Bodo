@@ -171,21 +171,33 @@ banned-module-level-imports = [
   "numba",
   "bodo.decorators",
   "bodo.compiler",
-  "bodo.ext",
   "bodo.types",
   "bodo.libs",
   "bodo.hiframes",
   "bodo.ir",
   "bodo.pandas.utils_jit",
+  "bodo.tests.utils_jit",
   "bodo.transforms",
   "bodo.ml_support",
 
-  # All bodo.utils submodules except tracing
+  # All bodo.io submodules except fs_io and parquet_pio
+  "bodo.io.iceberg",
+  "bodo.io.arrow_reader",
+  "bodo.io.csv_iterator_ext",
+  "bodo.io.h5",
+  "bodo.io.h5_api",
+  "bodo.io.helpers",
+  "bodo.io.np_io",
+  "bodo.io.parquet_write",
+  "bodo.io.snowflake",
+  "bodo.io.snowflake_write",
+  "bodo.io.stream_parquet_write",
+
+  # All bodo.utils submodules except tracing, testing, aggregate_query_profiles
   "bodo.utils.conversion",
   "bodo.utils.python_310_bytecode_pass",
   "bodo.utils.del_column_utils",
   "bodo.utils.search_templates",
-  "bodo.utils.aggregate_query_profiles",
   "bodo.utils.generate_docs",
   "bodo.utils.table_utils",
   "bodo.utils.transform",
@@ -193,7 +205,6 @@ banned-module-level-imports = [
   "bodo.utils.allocation_tracking",
   "bodo.utils.indexing",
   "bodo.utils.pandas_coverage_tracking",
-  "bodo.utils.testing",
   "bodo.utils.user_logging_ext",
   "bodo.utils.cg_helpers",
   "bodo.utils.py_objs",
@@ -205,6 +216,8 @@ banned-module-level-imports = [
 [tool.ruff.lint.per-file-ignores]
 # Only allow compiler-related imports (ignore TID253) in these files/dirs.
 "bodo/pandas/utils_jit.py" = ["TID253"]
+"bodo/tests/utils_jit.py" = ["TID253"]
+"bodo/tests/test_iceberg/utils_jit.py" = ["TID253"]
 "bodo/compiler.py" = ["TID253"]
 "bodo/decorators.py" = ["TID253"]
 "bodo/sql_plan_cache.py" = ["TID253"]
@@ -232,8 +245,9 @@ banned-module-level-imports = [
 "**/utils/*" = ["TID253"]
 "**/transforms/*" = ["TID253"]
 "**/ml_support/*" = ["TID253"]
-# TODO [BSE-5085]: avoid JIT imports in pytest utils files where not needed
-"**/tests/*" = ["TID253"]
+# Tests only relevant for JIT/BodoSQL internals
+"**/test_streaming/*" = ["TID253"]
+"**/caching_tests/*" = ["TID253"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"

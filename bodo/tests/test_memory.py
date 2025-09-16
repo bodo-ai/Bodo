@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import boto3
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -31,7 +31,6 @@ from bodo.tests.memory_tester import (
     get_arrow_memory_pool_wrapper_for_buffer_pool,
 )
 from bodo.tests.utils import temp_env_override
-from bodo.utils.typing import BodoWarning
 
 # Python doesn't always raise exceptions, particularly
 # when raised inside of `del` statements and sometimes
@@ -5464,7 +5463,9 @@ def test_array_unpinned():
     """
     from numba.core import types
 
+    import bodo.decorators  # isort:skip # noqa
     from bodo.libs.array import array_info_type
+    from bodo.utils.typing import BodoWarning
 
     _array_info_unpin = types.ExternalFunction(
         "array_info_unpin", types.void(array_info_type)

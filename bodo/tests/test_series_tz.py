@@ -6,7 +6,6 @@ import pytest
 import bodo
 from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa: F401
 from bodo.tests.utils import check_func, generate_comparison_ops_func
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.tz_aware
 
@@ -60,6 +59,8 @@ def test_series_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators throw exceptions between
     the 2 Series with different timezones.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S = (
         pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
@@ -92,6 +93,8 @@ def test_series_array_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators throw exceptions between
     the 2 Series with different timezones.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S = (
         pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
@@ -128,6 +131,8 @@ def test_series_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators throw exceptions between
     the 2 Series with different timezones.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S1 = (
         pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
@@ -237,6 +242,7 @@ def test_pd_concat_series_error(memory_leak_check):
     """Tests trying to concatenate rows of a Series
     with different Timezones throw reasonable errors.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(S1, S2):

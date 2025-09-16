@@ -1335,12 +1335,13 @@ def test_split_non_ascii(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_setitem_unichar_arr(memory_leak_check):
     """test Series setitem when the string array comes from Numpy
     UnicodeSeq Arrays"""
+    import bodo.decorators  # noqa
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def test_impl(S, idx, val):
         S[idx] = val

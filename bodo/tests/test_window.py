@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
-from bodo.types import Time
 
 
 @pytest.fixture
@@ -41,6 +41,8 @@ def test_window_df():
     Q: Nullable float array which when grouped by D will have a partition containing NaNs.
     R: Nullable float array with all NA values to test all NA corner cases.
     """
+    import bodo.decorators  # noqa
+
     return pd.DataFrame(
         {
             "A": pd.Series(["A", "B", "C"] * 5),
@@ -86,7 +88,10 @@ def test_window_df():
                 + datetime.timedelta(days=5 ** (5 - i % 6))
                 for i in range(15)
             ],
-            "O": [None if i % 8 == 4 else Time(nanosecond=10**i) for i in range(15)],
+            "O": [
+                None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
+                for i in range(15)
+            ],
             "P": pd.Series(
                 [None if i > 10 else (i + 3) ** 2 for i in range(15)],
                 dtype=pd.UInt8Dtype(),
@@ -124,7 +129,23 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [5, 4, 3, 4, 3, 5, 3, 2, 2, 2, 5, 1, 1, 1, 4],
+                        "AGG_OUTPUT_0": [
+                            5,
+                            4,
+                            3,
+                            4,
+                            3,
+                            5,
+                            3,
+                            2,
+                            2,
+                            2,
+                            5,
+                            1,
+                            1,
+                            1,
+                            4,
+                        ],
                     }
                 ),
             ),
@@ -139,7 +160,23 @@ def permute_df_and_answer(df, answer):
                 ("last", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [4, 2, 3, 3, 5, 1, 2, 4, 2, 5, 3, 4, 1, 1, 5],
+                        "AGG_OUTPUT_0": [
+                            4,
+                            2,
+                            3,
+                            3,
+                            5,
+                            1,
+                            2,
+                            4,
+                            2,
+                            5,
+                            3,
+                            4,
+                            1,
+                            1,
+                            5,
+                        ],
                     }
                 ),
             ),
@@ -201,8 +238,40 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [1, 4, 3, 3, 1, 4, 3, 2, 4, 1, 3, 1, 5, 5, 1],
-                        "AGG_OUTPUT_1": [1, 4, 2, 2, 1, 3, 2, 2, 3, 1, 3, 1, 3, 5, 1],
+                        "AGG_OUTPUT_0": [
+                            1,
+                            4,
+                            3,
+                            3,
+                            1,
+                            4,
+                            3,
+                            2,
+                            4,
+                            1,
+                            3,
+                            1,
+                            5,
+                            5,
+                            1,
+                        ],
+                        "AGG_OUTPUT_1": [
+                            1,
+                            4,
+                            2,
+                            2,
+                            1,
+                            3,
+                            2,
+                            2,
+                            3,
+                            1,
+                            3,
+                            1,
+                            3,
+                            5,
+                            1,
+                        ],
                         "AGG_OUTPUT_2": [
                             0.0,
                             0.75,
@@ -254,8 +323,40 @@ def permute_df_and_answer(df, answer):
                 ("first",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 4, 1, 2, 4],
-                        "AGG_OUTPUT_1": [1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 3, 1, 2, 3],
+                        "AGG_OUTPUT_0": [
+                            1,
+                            1,
+                            1,
+                            1,
+                            3,
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            4,
+                            1,
+                            2,
+                            4,
+                        ],
+                        "AGG_OUTPUT_1": [
+                            1,
+                            1,
+                            1,
+                            1,
+                            2,
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            3,
+                            1,
+                            2,
+                            3,
+                        ],
                         "AGG_OUTPUT_2": [
                             0.0,
                             0.0,
@@ -336,9 +437,57 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_0": [1] * 6 + [2] * 6 + [1, 1, 2],
                         "AGG_OUTPUT_1": [1] * 4 + [2] * 4 + [3] * 4 + [1, 2, 3],
                         "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
-                        "AGG_OUTPUT_3": [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 1, 2, 3],
-                        "AGG_OUTPUT_4": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 1, 2, 3],
-                        "AGG_OUTPUT_5": [1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3],
+                        "AGG_OUTPUT_3": [
+                            1,
+                            1,
+                            1,
+                            2,
+                            2,
+                            2,
+                            3,
+                            3,
+                            4,
+                            4,
+                            5,
+                            5,
+                            1,
+                            2,
+                            3,
+                        ],
+                        "AGG_OUTPUT_4": [
+                            1,
+                            1,
+                            2,
+                            2,
+                            3,
+                            3,
+                            4,
+                            4,
+                            5,
+                            5,
+                            6,
+                            6,
+                            1,
+                            2,
+                            3,
+                        ],
+                        "AGG_OUTPUT_5": [
+                            1,
+                            1,
+                            2,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            1,
+                            2,
+                            3,
+                        ],
                     }
                 ),
             ),
@@ -362,7 +511,23 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [1, 5, 4, 5, 5, 2, 4, 5, 4, 4, 3, 3, 0, 1, 1],
+                        "AGG_OUTPUT_0": [
+                            1,
+                            5,
+                            4,
+                            5,
+                            5,
+                            2,
+                            4,
+                            5,
+                            4,
+                            4,
+                            3,
+                            3,
+                            0,
+                            1,
+                            1,
+                        ],
                         "AGG_OUTPUT_1": [
                             1,
                             12,
@@ -380,10 +545,74 @@ def permute_df_and_answer(df, answer):
                             2,
                             3,
                         ],
-                        "AGG_OUTPUT_2": [0, 5, 2, 4, 5, 0, 3, 4, 2, 3, 0, 1, 0, 0, 1],
-                        "AGG_OUTPUT_3": [0, 5, 4, 4, 4, 1, 4, 4, 3, 4, 1, 2, 0, 0, 1],
-                        "AGG_OUTPUT_4": [1, 6, 3, 5, 6, 1, 4, 5, 3, 4, 2, 2, 1, 2, 3],
-                        "AGG_OUTPUT_5": [0, 6, 2, 4, 5, 0, 3, 5, 1, 3, 1, 1, 0, 0, 0],
+                        "AGG_OUTPUT_2": [
+                            0,
+                            5,
+                            2,
+                            4,
+                            5,
+                            0,
+                            3,
+                            4,
+                            2,
+                            3,
+                            0,
+                            1,
+                            0,
+                            0,
+                            1,
+                        ],
+                        "AGG_OUTPUT_3": [
+                            0,
+                            5,
+                            4,
+                            4,
+                            4,
+                            1,
+                            4,
+                            4,
+                            3,
+                            4,
+                            1,
+                            2,
+                            0,
+                            0,
+                            1,
+                        ],
+                        "AGG_OUTPUT_4": [
+                            1,
+                            6,
+                            3,
+                            5,
+                            6,
+                            1,
+                            4,
+                            5,
+                            3,
+                            4,
+                            2,
+                            2,
+                            1,
+                            2,
+                            3,
+                        ],
+                        "AGG_OUTPUT_5": [
+                            0,
+                            6,
+                            2,
+                            4,
+                            5,
+                            0,
+                            3,
+                            5,
+                            1,
+                            3,
+                            1,
+                            1,
+                            0,
+                            0,
+                            0,
+                        ],
                     }
                 ),
             ),
@@ -432,9 +661,57 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [4, 4, 7, 7, 5, 5, 7, 6, 7, 7, 6, 7, 3, 3, 3],
-                        "AGG_OUTPUT_1": [0, 3, 1, 3, 3, 0, 3, 3, 0, 2, 0, 0, 0, 0, 1],
-                        "AGG_OUTPUT_2": [3, 0, 1, 0, 0, 2, 1, 0, 1, 1, 2, 2, 1, 0, 0],
+                        "AGG_OUTPUT_0": [
+                            4,
+                            4,
+                            7,
+                            7,
+                            5,
+                            5,
+                            7,
+                            6,
+                            7,
+                            7,
+                            6,
+                            7,
+                            3,
+                            3,
+                            3,
+                        ],
+                        "AGG_OUTPUT_1": [
+                            0,
+                            3,
+                            1,
+                            3,
+                            3,
+                            0,
+                            3,
+                            3,
+                            0,
+                            2,
+                            0,
+                            0,
+                            0,
+                            0,
+                            1,
+                        ],
+                        "AGG_OUTPUT_2": [
+                            3,
+                            0,
+                            1,
+                            0,
+                            0,
+                            2,
+                            1,
+                            0,
+                            1,
+                            1,
+                            2,
+                            2,
+                            1,
+                            0,
+                            0,
+                        ],
                     }
                 ),
             ),
@@ -456,9 +733,57 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [0, 11, 5, 8, 10, 1, 7, 9, 4, 6, 2, 3, 0, 1, 2],
-                        "AGG_OUTPUT_1": [0, 9, 3, 6, 8, 0, 5, 7, 2, 4, 0, 1, 1, 2, 3],
-                        "AGG_OUTPUT_2": [3, 5, 4, 5, 5, 3, 5, 5, 4, 5, 4, 4, 1, 1, 1],
+                        "AGG_OUTPUT_0": [
+                            0,
+                            11,
+                            5,
+                            8,
+                            10,
+                            1,
+                            7,
+                            9,
+                            4,
+                            6,
+                            2,
+                            3,
+                            0,
+                            1,
+                            2,
+                        ],
+                        "AGG_OUTPUT_1": [
+                            0,
+                            9,
+                            3,
+                            6,
+                            8,
+                            0,
+                            5,
+                            7,
+                            2,
+                            4,
+                            0,
+                            1,
+                            1,
+                            2,
+                            3,
+                        ],
+                        "AGG_OUTPUT_2": [
+                            3,
+                            5,
+                            4,
+                            5,
+                            5,
+                            3,
+                            5,
+                            5,
+                            4,
+                            5,
+                            4,
+                            4,
+                            1,
+                            1,
+                            1,
+                        ],
                     }
                 ),
             ),
@@ -497,8 +822,40 @@ def permute_df_and_answer(df, answer):
                             2,
                             1,
                         ],
-                        "AGG_OUTPUT_1": [9, 0, 6, 3, 1, 9, 4, 2, 7, 5, 9, 8, 2, 1, 0],
-                        "AGG_OUTPUT_2": [5, 0, 2, 1, 1, 5, 1, 1, 3, 2, 5, 4, 1, 1, 1],
+                        "AGG_OUTPUT_1": [
+                            9,
+                            0,
+                            6,
+                            3,
+                            1,
+                            9,
+                            4,
+                            2,
+                            7,
+                            5,
+                            9,
+                            8,
+                            2,
+                            1,
+                            0,
+                        ],
+                        "AGG_OUTPUT_2": [
+                            5,
+                            0,
+                            2,
+                            1,
+                            1,
+                            5,
+                            1,
+                            1,
+                            3,
+                            2,
+                            5,
+                            4,
+                            1,
+                            1,
+                            1,
+                        ],
                     }
                 ),
             ),
@@ -538,7 +895,7 @@ def permute_df_and_answer(df, answer):
             id="count_fns-other_arrays",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # Sample variance on a nullable integer array, no frame
@@ -589,7 +946,7 @@ def permute_df_and_answer(df, answer):
             id="var_std-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # Sample variance on a nullable integer array, prefix frame
@@ -633,7 +990,9 @@ def permute_df_and_answer(df, answer):
                             list(range(8)),
                         ),
                         "AGG_OUTPUT_2": nullable_float_arr_maker(
-                            [0.70710677] * 15, [0, 1, 3, 5, 7, 9, 11, 12, 13, 14], [-1]
+                            [0.70710677] * 15,
+                            [0, 1, 3, 5, 7, 9, 11, 12, 13, 14],
+                            [-1],
                         ),
                         "AGG_OUTPUT_3": nullable_float_arr_maker(
                             [
@@ -662,7 +1021,7 @@ def permute_df_and_answer(df, answer):
             id="var_std-with_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # AVG on a nullable integer array, no frame
@@ -694,7 +1053,7 @@ def permute_df_and_answer(df, answer):
             id="avg-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # AVG on a nullable float array, prefix frame
@@ -836,7 +1195,7 @@ def permute_df_and_answer(df, answer):
             id="moment_family-all_null",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # ANY_VALUE on a nullable integer array
@@ -866,7 +1225,8 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
                         "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
                         "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [Time(nanosecond=1)] * 12 + [None] * 3,
+                        "AGG_OUTPUT_5": [bodo.types.Time(nanosecond=1)] * 12
+                        + [None] * 3,
                         "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
                     }
                 ),
@@ -921,7 +1281,8 @@ def permute_df_and_answer(df, answer):
                 pd.DataFrame(
                     {
                         "AGG_OUTPUT_0": pd.Series(
-                            [None] + [0] * 11 + [None] + [12, 12], dtype=pd.Int32Dtype()
+                            [None] + [0] * 11 + [None] + [12, 12],
+                            dtype=pd.Int32Dtype(),
                         ),
                         "AGG_OUTPUT_1": pd.Series(
                             [
@@ -988,7 +1349,7 @@ def permute_df_and_answer(df, answer):
             id="last_value-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # LAST_VALUE on a nullable boolean array with a prefix frame
@@ -1016,7 +1377,7 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
                         # This answer is identical to the input column
                         "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else Time(nanosecond=10**i)
+                            None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
                             for i in range(15)
                         ],
                         "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
@@ -1131,15 +1492,20 @@ def window_args(request):
     Returns the arguments for a test of groupby.window as a tuple of the following:
     - keys: the tuple of column names from test_window_df to group by.
     - funcs: a tuple of tuples where each inner tuple contains a window funciton name
-             followed by any scalar/column arguments.
+            followed by any scalar/column arguments.
     - orderby: a tuple of column names from test_window_df to order by within each group.
     - ascending: a tuple of booleans indicating which columns from orderby to sort in ascending
-                 vs descending order.
+                vs descending order.
     - napos: a tuple of strings indicating which columns from orderby to place in nulls at the
-             begining vs the end when sorting.
+            begining vs the end when sorting.
     - answer: the expected result of the call to groupby.window.
     """
-    return request.param
+    import bodo.decorators  # noqa
+
+    # evaluates arguments potentially lazily to avoid importing the compiler at test collection time.
+    val = request.param
+
+    return val() if callable(val) else val
 
 
 def test_window(test_window_df, window_args, memory_leak_check):
