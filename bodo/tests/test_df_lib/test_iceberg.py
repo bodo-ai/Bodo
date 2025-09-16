@@ -79,7 +79,7 @@ def test_table_read_limit(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -120,7 +120,7 @@ def test_table_read_head(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -158,7 +158,7 @@ def test_table_read_selected_fields(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -193,7 +193,7 @@ def test_table_read_select_columns(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -237,7 +237,7 @@ def test_table_read_row_filter(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -298,7 +298,7 @@ def test_table_read_time_travel(
     bodo_out_orig = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -318,7 +318,7 @@ def test_table_read_time_travel(
     bodo_out_new = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -352,7 +352,7 @@ def test_table_read_filter_pushdown(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -394,7 +394,7 @@ def test_table_read_filter_pushdown_multiple(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -432,7 +432,7 @@ def test_table_read_filter_pushdown_and_row_filter(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -472,7 +472,7 @@ def test_table_read_schema_evolved_filter_pushdown(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -511,7 +511,7 @@ def test_table_read_partitioned_file_pruning(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },

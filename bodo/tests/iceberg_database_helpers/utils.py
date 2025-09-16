@@ -42,7 +42,7 @@ class SparkIcebergCatalog:
 
 @dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
-    catalog_name: str = "iceberg_fs"
+    catalog_name: str = "hadoop_prod"
     path: str = None
 
 
