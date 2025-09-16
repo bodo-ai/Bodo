@@ -151,9 +151,9 @@ jobs:
       elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
         export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
         export BODO_NUM_WORKERS="$NP"
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and not jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}-non-jit"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and not jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-df-library-non-jit.xml --test-run-title="${{ parameters.name }}-non-jit"
         # Run tests with JIT dependency separately to avoid JIT imports impacting other tests.
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
       else
         # Some tests assume a batch size of 4096 for testing specific behavior.
         export BODO_STREAMING_BATCH_SIZE=4096 
