@@ -56,6 +56,9 @@ class BodoScalar(BodoLazyWrapper):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 assert self.wrapped_series.nunique() in {0, 1}
+                # Avoid getitem warning
+                out = self.wrapped_series[0]
+            return out
         return self.wrapped_series[0]
 
     @property
