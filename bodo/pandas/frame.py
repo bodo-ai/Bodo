@@ -1396,7 +1396,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
                 warnings.warn(BodoCompilationFailedWarning(msg))
             else:
-                bodo.spawn.utils.import_compiler_on_workers()
+                if bodo.dataframe_library_run_parallel:
+                    bodo.spawn.utils.import_compiler_on_workers()
                 return apply_result
 
         # engine == "python" or jit fallthrough
