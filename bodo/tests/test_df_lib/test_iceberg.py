@@ -21,7 +21,7 @@ import bodo.pandas as bpd
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.jit_dependency]
 
 
 @pytest.mark.parametrize(

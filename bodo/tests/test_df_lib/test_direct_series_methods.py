@@ -7,6 +7,8 @@ import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
 
+pytestmark = pytest.mark.jit_dependency
+
 
 @pytest.mark.parametrize("use_index1", [True, False])
 @pytest.mark.parametrize("use_index2", [True, False])

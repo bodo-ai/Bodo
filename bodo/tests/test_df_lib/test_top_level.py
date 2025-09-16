@@ -5,6 +5,8 @@ import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
 
+pytestmark = pytest.mark.jit_dependency
+
 
 @pytest.fixture
 def nulls_df():
