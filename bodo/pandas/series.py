@@ -1297,7 +1297,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if not (
-            pd.api.types.is_scalar(other) or type(other) in (BodoSeries, BodoScalar)
+            type(other) in (BodoSeries, BodoScalar) or pd.api.types.is_scalar(other)
         ):  # pragma: no cover
             raise BodoLibNotImplementedException(
                 "Series.where: other must be a scalar or a BodoSeries or BodoScalar"
@@ -1316,11 +1316,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Series.where: empty_data is not a Series"
         )
 
+        orig_other = other
         lhs_plan, lhs, other = _handle_series_binop_args(self._plan, other)
         if other is pd.NA:
             other = NullExpression(zero_size_self, lhs_plan, 0)
 
         cond = get_proj_expr_single(cond._plan)
+
+        # If BodoScalar changes the source plan, update cond source plan too.
+        if (
+            type(orig_other) is BodoScalar
+            and orig_other.is_lazy_plan()
+            and self._plan.source == cond.source
+        ):
+            cond = cond.with_new_source(lhs_plan)
 
         # Match source plans of arguments
         lhs, other = match_binop_expr_source_plans(lhs, other)

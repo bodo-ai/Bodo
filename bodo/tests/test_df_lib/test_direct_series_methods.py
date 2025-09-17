@@ -66,6 +66,15 @@ def test_series_where(index_val):
 
     _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
 
+    # "other" is BodoScalar
+    py_out = df["B"].where(df["A"] > 1, df["A"].sum())
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1, bdf["A"].sum())
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
 
 def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
