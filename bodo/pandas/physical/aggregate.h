@@ -271,6 +271,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             groupby_produce_output_batch_wrapper(this->groupby_state.get(),
                                                  &out_is_last, true);
         this->metrics.produce_time += end_timer(start_produce);
+        next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED
                                         : OperatorResult::HAVE_MORE_OUTPUT};
     }
