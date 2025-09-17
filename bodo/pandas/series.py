@@ -230,15 +230,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
-        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_single_proj_source_if_present(self._plan)
-        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
-
-        plan = LogicalProjection(
-            empty_data,
-            lhs_plan,
-            (expr,) + key_exprs,
-        )
+        plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
     def _conjunction_binop(self, other, op):
@@ -287,16 +279,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
-        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_single_proj_source_if_present(self._plan)
-        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
-
-        plan = LogicalProjection(
-            empty_data,
-            # Use the original table without the Series projection node.
-            lhs_plan,
-            (expr,) + key_exprs,
-        )
+        plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
     @check_args_fallback("all")
@@ -382,19 +365,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             lhs, rhs = rhs, lhs
 
         expr = ArithOpExpression(empty_data, lhs, rhs, op)
-
-        ncols = lhs_plan.empty_data.shape[1]
-        key_indices = [
-            ncols + i for i in range(get_n_index_arrays(lhs_plan.empty_data.index))
-        ]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, lhs_plan))
-
-        plan = LogicalProjection(
-            empty_data,
-            # Use the original table without the Series projection node.
-            lhs_plan,
-            (expr,) + key_exprs,
-        )
+        plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
     def _non_numeric_binop(self, other, op, reverse):
@@ -1371,17 +1342,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = CaseExpression(empty_data, cond, lhs, other)
 
-        plan_keys = get_single_proj_source_if_present(self._plan)
-        ncols = plan_keys.empty_data.shape[1]
-        key_indices = [ncols + i for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
-
-        plan = LogicalProjection(
-            empty_data,
-            # Use the original table without the Series projection node.
-            lhs_plan,
-            (expr,) + key_exprs,
-        )
+        plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
 
@@ -2223,6 +2184,24 @@ def _handle_series_binop_args(series_plan: LazyPlan, other):
         rhs = other
 
     return lhs_plan, lhs, rhs
+
+
+def _create_series_binop_plan(lhs_plan, empty_data, expr):
+    """Create a projection plan for output of binary operations on Series.
+    Handles Index columns properly.
+    """
+    ncols = lhs_plan.empty_data.shape[1]
+    key_indices = [
+        ncols + i for i in range(get_n_index_arrays(lhs_plan.empty_data.index))
+    ]
+    key_exprs = tuple(make_col_ref_exprs(key_indices, lhs_plan))
+
+    plan = LogicalProjection(
+        empty_data,
+        lhs_plan,
+        (expr,) + key_exprs,
+    )
+    return plan
 
 
 def func_name_to_str(func_name):
