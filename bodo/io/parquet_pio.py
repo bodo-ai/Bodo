@@ -1341,12 +1341,11 @@ def parquet_file_schema(
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
-    pq_dataset = get_parquet_dataset(
+    pq_dataset = get_dataset_unify_nulls(
         file_name,
-        get_row_counts=False,
         storage_options=storage_options,
-        read_categories=True,
         partitioning="hive" if use_hive else None,
+        read_categories=True,
     )
 
     partition_names = pq_dataset.partition_names
@@ -1512,7 +1511,10 @@ def _get_partition_cat_dtype(dictionary):
 
 
 def get_dataset_unify_nulls(
-    fpath, storage_options: dict, partitioning: str | None
+    fpath,
+    storage_options: dict,
+    partitioning: str | None,
+    read_categories: bool = False,
 ) -> ParquetDataset:
     """
     Gets the ParquetDataset from fpath, unifying types of null columns if present.
@@ -1554,6 +1556,8 @@ def get_dataset_unify_nulls(
         filesystem=dataset.filesystem,
         partitioning=dataset.partitioning,
     )
+    if read_categories:
+        _add_categories_to_pq_dataset(dataset)
 
     # If there are nulls in the schema, inspect the fragments
     # until the null columns can be resolved to a non-null type.
