@@ -415,6 +415,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             if other.is_lazy_plan():
                 lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
                 # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+                # TODO: handle non-colref
                 lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
             else:
                 rhs = other.get_value()
@@ -436,10 +437,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = ArithOpExpression(empty_data, lhs, rhs, op)
 
-        plan_keys = get_single_proj_source_if_present(self._plan)
-        ncols = plan_keys.empty_data.shape[1]
-        key_indices = [ncols + i for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
+        ncols = lhs_plan.empty_data.shape[1]
+        key_indices = [
+            ncols + i for i in range(get_n_index_arrays(lhs_plan.empty_data.index))
+        ]
+        key_exprs = tuple(make_col_ref_exprs(key_indices, lhs_plan))
 
         plan = LogicalProjection(
             empty_data,
