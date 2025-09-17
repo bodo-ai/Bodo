@@ -27,8 +27,8 @@ from bodo.tests.utils import (
     drop_snowflake_table,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 
 
 @pytest_mark_snowflake

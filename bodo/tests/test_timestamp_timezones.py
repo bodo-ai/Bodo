@@ -8,7 +8,6 @@ import pytest
 import bodo
 from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.tz_aware
 
@@ -67,6 +66,8 @@ def test_timestamp_timezone_constructor(timestamp_str, timezone, memory_leak_che
 
 
 def test_timestamp_tz_convert(representative_tz):
+    from bodo.utils.typing import BodoError
+
     def test_impl(ts, tz):
         return ts.tz_convert(tz=tz)
 
@@ -153,6 +154,8 @@ def test_tz_timestamp_max_min():
 
 
 def test_tz_datetime_arr_unsupported():
+    from bodo.utils.typing import BodoError
+
     def impl(arr):
         return np.hstack([arr, arr])
 
@@ -241,6 +244,8 @@ def test_different_tz_unsupported(cmp_op):
     """Check that scalar comparison operators work between
     Timestamps with different timezone.
     """
+    from bodo.utils.typing import BodoError
+
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     ts1 = pd.Timestamp("4/4/2022", tz="Poland")
     ts2 = pd.Timestamp("4/4/2022", tz="US/Pacific")
@@ -259,6 +264,8 @@ def test_different_tz_minmax_unsupported(minmax_op):
     """Check that scalar comparison operators work between
     Timestamps with different timezone-awareness
     """
+    from bodo.utils.typing import BodoError
+
     func_text = f"""@bodo.jit
 def func(x, y):
     return {minmax_op}(x, y)"""

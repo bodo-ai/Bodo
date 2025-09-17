@@ -6,7 +6,7 @@ import os
 import random
 import tempfile
 
-import numba.core.utils
+import numba.core.utils  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -18,16 +18,10 @@ from pyiceberg.table.sorting import SortField, SortOrder
 from pyiceberg.transforms import IdentityTransform
 
 import bodo.pandas as bpd
-from bodo.io.iceberg.catalog.dir import DirCatalog
-from bodo.io.iceberg.catalog.s3_tables import (
-    S3TABLES_REGION,
-    S3TABLES_TABLE_BUCKET_ARN,
-    S3TablesCatalog,
-)
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.jit_dependency]
 
 
 @pytest.mark.parametrize(
@@ -220,6 +214,8 @@ def test_table_read_row_filter(
     table_name,
     memory_leak_check,
 ):
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+
     db_schema, warehouse_loc = iceberg_database(table_name)
     catalog = DirCatalog(
         None,
@@ -265,6 +261,8 @@ def test_table_read_time_travel(
     table_name,
     memory_leak_check,
 ):
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+
     db_schema, warehouse_loc = iceberg_database(table_name)
     catalog = DirCatalog(
         None,
@@ -594,6 +592,12 @@ def test_write():
 
 
 def test_read_s3_tables_location():
+    from bodo.io.iceberg.catalog.s3_tables import (
+        S3TABLES_REGION,
+        S3TABLES_TABLE_BUCKET_ARN,
+        S3TablesCatalog,
+    )
+
     location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
     region = "us-east-2"
     catalog_properties = {
@@ -613,6 +617,12 @@ def test_read_s3_tables_location():
 
 
 def test_read_s3_tables_read_iceberg_table():
+    from bodo.io.iceberg.catalog.s3_tables import (
+        S3TABLES_REGION,
+        S3TABLES_TABLE_BUCKET_ARN,
+        S3TablesCatalog,
+    )
+
     location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
     region = "us-east-2"
     catalog_properties = {
@@ -635,6 +645,12 @@ def test_read_s3_tables_read_iceberg_table():
 
 
 def test_write_s3_tables_location():
+    from bodo.io.iceberg.catalog.s3_tables import (
+        S3TABLES_REGION,
+        S3TABLES_TABLE_BUCKET_ARN,
+        S3TablesCatalog,
+    )
+
     location = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
     region = "us-east-2"
     catalog_properties = {
@@ -671,6 +687,12 @@ def test_write_s3_tables_location():
 
 
 def test_read_iceberg_rename():
+    from bodo.io.iceberg.catalog.s3_tables import (
+        S3TABLES_REGION,
+        S3TABLES_TABLE_BUCKET_ARN,
+        S3TablesCatalog,
+    )
+
     location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
     region = "us-east-2"
     catalog_properties = {

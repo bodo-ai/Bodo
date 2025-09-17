@@ -1,7 +1,7 @@
 from difflib import unified_diff
 
 import pytest
-from numba.core import ir
+from numba.core import ir  # noqa TID253
 
 import bodo
 

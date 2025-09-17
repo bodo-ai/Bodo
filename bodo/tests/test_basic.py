@@ -2,23 +2,19 @@ import fractions
 import random
 
 import cloudpickle
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
-    DistTestPipeline,
     check_func,
     count_array_OneDs,
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_assign, is_expr
 
 
 @pytest.mark.slow
@@ -116,6 +112,7 @@ l2 = [1, "A", "B"]
 
 def test_list_constant_lowering_error_checking(memory_leak_check):
     """make sure value types are checked to be the same in list constant lowering"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return l2[-1]
@@ -142,6 +139,7 @@ s2 = {1, "A", "B"}
 
 def test_set_constant_lowering_error_checking(memory_leak_check):
     """make sure value types are checked to be the same in set constant lowering"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return s2
@@ -326,6 +324,7 @@ def test_reduce_init_val(memory_leak_check):
     """make sure _root_rank_select is not generated for common reductions with neutral
     init value.
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(n):
         return np.ones(n).sum()
@@ -386,6 +385,9 @@ def test_array_reduce(memory_leak_check):
 
 def _check_IR_no_getitem(test_impl, args):
     """makes sure there is no getitem/static_getitem left in the IR after optimization"""
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+    from bodo.utils.utils import is_assign, is_expr
+
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -419,6 +421,8 @@ def test_trivial_slice_getitem_opt(memory_leak_check):
 
 def _check_IR_single_label(test_impl, args):
     """makes sure the IR has a single label"""
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -708,6 +712,7 @@ def test_permuted_array_indexing(memory_leak_check):
 
 def test_func_non_jit_error(memory_leak_check):
     """make sure proper error is thrown when calling a non-JIT function"""
+    from bodo.utils.typing import BodoError
 
     def f():
         return 1
@@ -723,6 +728,7 @@ def test_func_non_jit_error(memory_leak_check):
 
 def test_func_nested_jit_error(memory_leak_check):
     """make sure proper error is thrown when calling a JIT function with errors"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def f(df):
@@ -769,6 +775,7 @@ def test_udf_nest_jit_convert():
 
 def test_updated_container_binop(memory_leak_check):
     """make sure binop of updated containers is detected and raises proper error"""
+    from bodo.utils.typing import BodoError
 
     def impl(p):
         a = []
@@ -861,6 +868,7 @@ def test_updated_container_binop(memory_leak_check):
 
 def test_updated_container_df_rename():
     """Test updated container in df.rename() input for [BE-287]"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         cols = ["1", "24", "124"]
@@ -880,6 +888,7 @@ def test_updated_container_df_rename():
 
 def test_unroll_label_offset_bug():
     """Test for a bug in loop unrolling where block labels would clash"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         df.columns = [
@@ -1008,13 +1017,15 @@ def test_pure_func(datapath):
 
 
 # default string type changes with _use_dict_str_type making type annotation invalid
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="cannot test with dict string type"
-)
 def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import _use_dict_str_type
+
+    if _use_dict_str_type:
+        pytest.skip("cannot test with dict string type")
 
     def impl(A):
         with numba.objmode(B=bodo.types.int64[::1]):
@@ -1122,6 +1133,7 @@ def test_reversed():
 @pytest.mark.smoke
 def test_jitclass(memory_leak_check):
     """test @bodo.jitclass decorator with various attribute/method cases"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jitclass(
         {
@@ -1386,6 +1398,7 @@ def test_wrap_python(memory_leak_check):
 
 def test_wrap_python_error_handling(memory_leak_check):
     """Test error handling in wrap_python"""
+    from bodo.utils.typing import BodoError
 
     with pytest.raises(BodoError, match="wrap_python requires full data types"):
 
@@ -1402,6 +1415,7 @@ def test_wrap_python_error_handling(memory_leak_check):
 
 def test_wrap_python_type_check():
     """test type checking for JIT wrapper output values"""
+    from bodo.utils.typing import BodoError
 
     # A is specified as int but return value has strings
     df1 = pd.DataFrame({"A": [1, 2, 3]})

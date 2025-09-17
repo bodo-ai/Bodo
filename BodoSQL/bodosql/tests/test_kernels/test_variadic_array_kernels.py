@@ -13,12 +13,12 @@ from numba.core import types
 import bodo
 import bodosql
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     check_func,
     dist_IR_count,
     find_nested_dispatcher_and_args,
     pytest_slow_unless_codegen,
 )
+from bodo.tests.utils_jit import SeriesOptTestPipeline
 from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 from bodosql.kernels.array_kernel_utils import vectorized_sol
 

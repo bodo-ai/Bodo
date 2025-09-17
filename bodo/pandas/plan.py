@@ -652,6 +652,58 @@ class UnaryOpExpression(Expression):
         return out
 
 
+class CaseExpression(Expression):
+    """Base class for case expressions in the query plan, which have a "when" expression
+    and "then"/"else" expressions.
+    """
+
+    def __init__(self, empty_data, when_expr, then_expr, else_expr):
+        self.empty_data = empty_data
+        self.when_expr = when_expr
+        self.then_expr = then_expr
+        self.else_expr = else_expr
+        super().__init__(empty_data, when_expr, then_expr, else_expr)
+
+    @property
+    def source(self):
+        """Return the source of the case expression."""
+        return (
+            self.when_expr.source
+            if isinstance(self.when_expr, Expression)
+            else self.then_expr.source
+        )
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_when = (
+            self.when_expr.replace_source(new_source)
+            if isinstance(self.when_expr, Expression)
+            else self.when_expr
+        )
+        new_then = (
+            self.then_expr.replace_source(new_source)
+            if isinstance(self.then_expr, Expression)
+            else self.then_expr
+        )
+
+        new_else = (
+            self.else_expr.replace_source(new_source)
+            if isinstance(self.else_expr, Expression)
+            else self.else_expr
+        )
+
+        if (
+            (new_when is None and self.when_expr is not None)
+            or (new_then is None and self.then_expr is not None)
+            or (new_else is None and self.else_expr is not None)
+        ):
+            return None
+
+        out = self.__class__(self.empty_data, new_when, new_then, new_else)
+        out.is_series = self.is_series
+        return out
+
+
 class ArithOpExpression(BinaryExpression):
     """Expression representing an arithmetic operation (e.g. addition, subtraction)
     in the query plan.

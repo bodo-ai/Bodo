@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 import benchmarks.tpch.dataframe_lib as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
+
+pytestmark = pytest.mark.jit_dependency
 
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 
@@ -105,8 +108,8 @@ def test_tpch_q13():
 
 
 def test_tpch_q14():
-    # TODO [BSE-5099]: Series.where
-    run_tpch_query_test(tpch.tpch_q14, plan_executions=5)
+    # TODO[BSE-5113]: support division of BodoScalars in plans
+    run_tpch_query_test(tpch.tpch_q14, plan_executions=2)
 
 
 def test_tpch_q15():

@@ -2,7 +2,7 @@
 
 import warnings
 
-import numba
+import numba  # noqa TID253
 import pandas as pd
 
 import bodo

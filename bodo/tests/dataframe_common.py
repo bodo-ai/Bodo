@@ -269,9 +269,3 @@ def select_dtypes_df(request):
 )
 def na_test_obj(request):
     return request.param
-
-
-# simple UDF dependency for test_udf_other_module
-@bodo.jit
-def udf_dep(n):
-    return np.arange(n).sum()

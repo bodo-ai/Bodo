@@ -8,6 +8,8 @@ import pytest
 import bodo.pandas as bd
 from bodo.pandas.utils import BodoLibFallbackWarning
 
+pytestmark = pytest.mark.jit_dependency
+
 
 def test_read_join_filter_proj(datapath):
     df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

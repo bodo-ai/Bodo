@@ -4,7 +4,7 @@ import os
 import tempfile
 import warnings
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -23,6 +23,8 @@ from bodo.pandas.utils import (
     JITFallback,
 )
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
+
+pytestmark = pytest.mark.jit_dependency
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -2070,7 +2072,6 @@ def test_filter_series_not_isin(index_val):
 
 
 def test_rename(datapath, index_val):
-    """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {
