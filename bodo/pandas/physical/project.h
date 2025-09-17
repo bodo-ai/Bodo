@@ -116,6 +116,21 @@ class PhysicalProjection : public PhysicalProcessBatch {
                 } else {
                     col_names.emplace_back("conjunction");
                 }
+            } else if (expr->type == duckdb::ExpressionType::CASE_EXPR) {
+                auto& case_expr = expr->Cast<duckdb::BoundCaseExpression>();
+
+                // TODO(ehsan): cast to common type of inputs if needed to match
+                // compute?
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        duckdbTypeToArrow(case_expr.return_type))
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("Case");
+                }
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +

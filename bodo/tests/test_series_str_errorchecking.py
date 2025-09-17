@@ -4,7 +4,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -24,6 +23,7 @@ def test_center_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for center with the argument 'fillchar' being non-char type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.center(width=13, fillchar=1)
@@ -41,6 +41,7 @@ def test_center_width_noint(test_sr, memory_leak_check):
     """
     tests error for center with the argument 'width' being non-integer type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.center(width="1", fillchar="*")
@@ -54,6 +55,7 @@ def test_ljust_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for ljust with the argument 'fillchar' being non-char type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.ljust(width=13, fillchar=1)
@@ -71,6 +73,7 @@ def test_ljust_width_noint(test_sr, memory_leak_check):
     """
     tests error for ljust with the argument 'width' being non-integer type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.ljust(width="1", fillchar="*")
@@ -84,6 +87,7 @@ def test_rjust_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for rjust with the argument 'fillchar' being non-char type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.rjust(width=13, fillchar=1)
@@ -101,6 +105,7 @@ def test_rjust_width_noint(test_sr, memory_leak_check):
     """
     tests error for rjust with the argument 'width' being non-integer type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.rjust(width="1", fillchar="*")
@@ -114,6 +119,7 @@ def test_zfill_width_noint(test_sr, memory_leak_check):
     """
     tests error for zfill with the argument 'width' being non-integer type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.zfill(width="1")
@@ -127,6 +133,7 @@ def test_pad_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'fillchar' being non-char type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.pad(width=13, fillchar=1)
@@ -146,6 +153,7 @@ def test_pad_width_noint(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'width' being non-integer type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.pad(width="1", fillchar="*")
@@ -158,6 +166,7 @@ def test_pad_side_invalid(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'side' being invalid
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.pad(width=13, side="123", fillchar="*")
@@ -178,6 +187,7 @@ def test_find_sub(test_sr, memory_leak_check):
     """
     tests error for find with the argument 'sub' being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.find(123)
@@ -196,6 +206,7 @@ def test_rfind_sub(test_sr, memory_leak_check):
     """
     tests error for rfind with the argument 'sub' being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.rfind(123)
@@ -213,6 +224,7 @@ def test_rfind_start_end(test_sr, memory_leak_check):
     """
     tests error for rfind with the argument start/end NOT being integer or None type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.rfind("123", "x", 5)
@@ -237,6 +249,8 @@ def test_index_rindex_sub(test_sr, method, memory_leak_check):
     """
     tests error for index/rindex with the argument 'sub' being non-str type
     """
+    from bodo.utils.typing import BodoError
+
     func_text = (
         "def impl1(test_sr):\n"
         f"  return test_sr.str.{method}(123)\n"
@@ -258,6 +272,8 @@ def test_index_rindex_start_end(test_sr, method, memory_leak_check):
     """
     tests error for index/rindex with the argument start/end NOT being integer or None type
     """
+    from bodo.utils.typing import BodoError
+
     func_text = (
         "def impl(test_sr):\n"
         f"    return test_sr.str.{method}('123', 'x', 5)\n"
@@ -323,6 +339,7 @@ def test_get_input(input, memory_leak_check):
     tests error for get with the input series not being ListStringArrayType or
     StringArrayType
     """
+    from bodo.utils.typing import BodoError
 
     def impl(input):
         return input.str.get(1)
@@ -338,6 +355,7 @@ def test_get_i(input, memory_leak_check):
     """
     tests error for get with the argument i not being int type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(input):
         return input.str.get("2")
@@ -354,6 +372,7 @@ def test_getitem_ind(ind, memory_leak_check):
     """
     tests error for getitem for index inputs other than slice and int
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S, ind):
         return S.str[ind]
@@ -382,6 +401,7 @@ def test_split_args(test_sr_split, memory_leak_check):
     """
     tests error for split arguments that are not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr_split):
         return test_sr_split.str.split(expand=True)
@@ -394,6 +414,7 @@ def test_split_pat(test_sr_split, memory_leak_check):
     """
     tests error for split argument pat being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr_split):
         return test_sr_split.str.split(pat=123)
@@ -407,6 +428,7 @@ def test_replace_args(test_sr, memory_leak_check):
     """
     tests error for replace arguments that are not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.replace("New", "hi", n=2)
@@ -424,6 +446,7 @@ def test_replace_pat(test_sr, memory_leak_check):
     """
     tests error for replace argument pat/repl/flags being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.replace(pat=123, repl="asdf", flags=1)
@@ -447,6 +470,7 @@ def test_contains_args(test_sr, memory_leak_check):
     """
     tests error for contains arguments that are not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.contains("New", na=-1)
@@ -461,6 +485,7 @@ def test_contains_flags(test_sr, memory_leak_check):
     """
     tests error for contains argument flags being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.contains("New", flags="x")
@@ -473,6 +498,7 @@ def test_contains_regex(test_sr, memory_leak_check):
     """
     tests error for contains argument regex being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.contains("New", regex="x")
@@ -485,6 +511,7 @@ def test_contains_case(test_sr, memory_leak_check):
     """
     tests error for contains argument case being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.contains("New", case="x")
@@ -498,6 +525,7 @@ def test_match_args(test_sr, memory_leak_check):
     """
     tests error for match arguments that are not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.match("New", na=np.nan)
@@ -510,6 +538,7 @@ def test_match_flags(test_sr, memory_leak_check):
     """
     tests error for match argument flags being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.match("New", flags="x")
@@ -522,6 +551,7 @@ def test_match_case(test_sr, memory_leak_check):
     """
     tests error for match argument case being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.match("New", case="x")
@@ -535,6 +565,7 @@ def test_count_args(test_sr, memory_leak_check):
     """
     tests error for count argument pat, flags being incorrect type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.count(pat=123)
@@ -553,6 +584,7 @@ def test_startswith_args(test_sr, memory_leak_check):
     """
     tests error for startswith argument that is not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.startswith("New", na=1)
@@ -565,6 +597,7 @@ def test_startswith_pat(test_sr, memory_leak_check):
     """
     tests error for startswith argument pat being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.startswith(123)
@@ -578,6 +611,7 @@ def test_endswith_args(test_sr, memory_leak_check):
     """
     tests error for endswith argument that is not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.endswith("New", na=1)
@@ -590,6 +624,7 @@ def test_endswith_pat(test_sr, memory_leak_check):
     """
     tests error for endswith argument pat being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.endswith(123)
@@ -603,6 +638,7 @@ def test_slice_args(test_sr, memory_leak_check):
     """
     tests error for slice arguments being non-int type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr):
         return test_sr.str.slice("x", 1, 2)
@@ -626,6 +662,7 @@ def test_extract_args(test_sr, memory_leak_check):
     """
     tests error for extract arguments being non-int type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(test_sr, pat, flags, expand):
         return test_sr.str.extract(pat, 1, True)
@@ -644,6 +681,7 @@ def test_join_input(input, memory_leak_check):
     tests error for join with the input series not being ListStringArrayType or
     StringArrayType
     """
+    from bodo.utils.typing import BodoError
 
     def impl(input):
         return input.str.join("-")
@@ -661,6 +699,7 @@ def test_join_sep(input, memory_leak_check):
     """
     tests error for join's argument 'sep' being non-str type
     """
+    from bodo.utils.typing import BodoError
 
     def impl(input):
         return input.str.join(1)
@@ -670,6 +709,8 @@ def test_join_sep(input, memory_leak_check):
 
 
 def test_center_errorcheck(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def f(S):
         return S.str.center(3)
 
@@ -681,6 +722,7 @@ def test_center_errorcheck(memory_leak_check):
 @pytest.mark.slow
 def test_unsupported_str_method(memory_leak_check):
     """Raise Bodo error for unsupported str methods"""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.Series([" 123", "abc  "]).str.cat(sep=" ")

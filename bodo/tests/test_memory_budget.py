@@ -1,10 +1,11 @@
 """Test Bodo's memory budget python interface"""
 
-import bodo
-import bodo.libs.table_builder
+import bodo  # noqa
 
 
 def test_memory_budget(memory_leak_check):
+    import bodo.libs.table_builder
+
     @bodo.jit
     def test():
         bodo.libs.memory_budget.init_operator_comptroller()

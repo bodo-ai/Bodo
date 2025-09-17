@@ -8,13 +8,13 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
 def test_timedelta_classmethod_err():
     """picking an arbitrary class method to test. If one of them works,
     all of them should"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return pd.Timedelta.resolution
@@ -33,6 +33,8 @@ def test_timedelta_classmethod_local_import_err():
     all of them should"""
     from pandas import Timedelta
 
+    from bodo.utils.typing import BodoError
+
     def impl():
         return Timedelta.resolution
 
@@ -47,6 +49,7 @@ def test_timedelta_classmethod_local_import_err():
 @pytest.mark.slow
 def test_timestamp_attr_err():
     """picking an atribute to test. If one of them works, all of them should"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return pd.Timedelta(1000000).is_populated
@@ -62,6 +65,7 @@ def test_timestamp_attr_err():
 @pytest.mark.slow
 def test_timestamp_method_err():
     """picking an method to test. If one of them works, all of them should"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return pd.Timedelta(100000).isoformat()

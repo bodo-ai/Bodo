@@ -8,11 +8,11 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     check_func,
     dist_IR_contains,
     pytest_slow_unless_codegen,
 )
+from bodo.tests.utils_jit import SeriesOptTestPipeline
 from bodosql.kernels.array_kernel_utils import vectorized_sol
 
 # Skip unless any library or BodoSQL codegen or files were changed

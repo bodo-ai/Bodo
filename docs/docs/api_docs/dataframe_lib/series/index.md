@@ -131,6 +131,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 - [`bodo.pandas.BodoSeries.reset_index`][bodoseriesresetindex]
+- [`bodo.pandas.BodoSeries.where`][bodoserieswhere]
 
 ---
 
@@ -286,6 +287,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 [bodoseriesdttime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.time.html
 
 [bodoseriesisin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isin.html
+[bodoserieswhere]: https://pandas.pydata.org/docs/reference/api/pandas.Series.where.html
 [bodoseriesnotnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notnull.html
 [bodoseriesisnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isnull.html
 [bodoseriesffill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.ffill.html

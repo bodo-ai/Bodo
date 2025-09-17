@@ -37,8 +37,8 @@ from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
     gen_unique_table_id,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession

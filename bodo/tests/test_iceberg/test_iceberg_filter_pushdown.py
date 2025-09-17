@@ -15,8 +15,6 @@ import pytest
 from pyiceberg.expressions.literals import TimeLiteral
 
 import bodo
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
@@ -27,12 +25,14 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 pytestmark = pytest.mark.iceberg
 
 
 def _write_iceberg_table(input_df: pd.DataFrame, warehouse: str, table_id: str):
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+
     catalog = DirCatalog("write_catalog", warehouse=warehouse)
     table = catalog.create_table(table_id, pa.Schema.from_pandas(input_df))
     table.append(pa.table(input_df))
@@ -44,6 +44,8 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
     Test that directly calls the filter pushdown functions to work around the time comparison
     issue (see test_filter_pushdown_time)
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     table_name = "filter_pushdown_time_table"
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -109,6 +111,8 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 def test_filter_pushdown_binary(iceberg_database, iceberg_table_conn):
     """Simple test that with a filter that selects all of the data, which is stored in
     a single file"""
+    from bodo.utils.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table"
     input_df = pd.DataFrame({"ID": np.arange(10), "bytes_col": [b"todo"] * 10})
 
@@ -151,6 +155,8 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
     More complex test with two filters that test row filtering, and file level
     filtering respectively.
     """
+    from bodo.utils.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table_2"
     input_df = pd.DataFrame(
         {
@@ -209,6 +215,7 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
 
 def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
     """Simple test to make sure that the logged messages for iceberg filter pushdown are correct"""
+    from bodo.utils.utils import run_rank0
 
     ten_partition_table_name = "ten_partition_table"
     many_partition_table_name = "many_partition_table"

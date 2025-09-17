@@ -21,7 +21,8 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, run_rank0
+from bodo.tests.utils import check_func
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
 

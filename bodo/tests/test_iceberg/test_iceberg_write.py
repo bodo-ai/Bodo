@@ -56,10 +56,8 @@ from bodo.tests.utils import (
     _test_equal_guard,
     cast_dt64_to_ns,
     convert_non_pandas_columns,
-    reduce_sum,
 )
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.utils import BodoError, run_rank0
 
 pytestmark = pytest.mark.iceberg
 
@@ -225,6 +223,7 @@ def test_basic_write_new_append(
     Test basic Iceberg table write + append on new table
     (append to table written by Bodo)
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
@@ -395,6 +394,7 @@ def test_basic_write_runtime_cols_fail(
     Test that Iceberg writes throw an error at compile-time when
     writing a DataFrame with runtime columns (created using a pivot)
     """
+    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -481,6 +481,8 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
     Helper function for test_iceberg_field_ids_in_pq_schema. This is
     used for testing both the streaming and non-streaming versions.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     passed = 1
     err = "Setup step failed. See error on rank 0"
     if bodo.get_rank() == 0:
@@ -541,6 +543,8 @@ def _verify_pq_schema_in_files(
     files written by Bodo have the expected schema,
     including the metadata fields.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     passed = 1
     err = "Parquet field schema metadata validation failed. See error on rank 0"
     if bodo.get_rank() == 0:
@@ -628,6 +632,8 @@ def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
     and the schema metadata should have an encoded JSON describing
     the Iceberg schema (with the correct schema id).
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     table_name = "schema_evolution_eg_table"
 
     # We want to use completely new table for each test
@@ -810,6 +816,7 @@ def test_basic_write_upcasting(
     arrays types are nullable by default
     TODO: [BE-41] Update when nullable floating point arrays are supported
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
@@ -952,6 +959,7 @@ def test_basic_write_downcasting_fail(
     Test that writing to an Iceberg table with incorrect types
     that would need to be downcasted fails.
     """
+    from bodo.utils.typing import BodoError
 
     id, sql_schema, df, df_write, _, _ = downcasting_table_info
     table_name = id + "_DOWNCASTING_FAIL_TEST"
@@ -989,6 +997,7 @@ def test_basic_write_downcasting(
     succeed and a situation that wont. The failing cases occur when
     there is a null in the array or an overflow would occur.
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
@@ -1066,6 +1075,7 @@ def test_basic_write_downcasting_copy(
     Test that downcasting during Iceberg write does not affect the
     original dataframe by using it after the write step
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     _, sql_schema, df, df_write, _, _ = DOWNCAST_INFO[1]
     table_name = "DOWNCASTING_COPY_TABLE"
@@ -1181,6 +1191,8 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     is missing an optional column.
     The entire column should be filled with nulls instead of failing.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     table_name = "SIMPLE_OPTIONAL_TABLE"
     write_table_name = f"{table_name}_WRITE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1241,6 +1253,8 @@ def test_iceberg_missing_optional_column_missing_error(
     Test that the correct error is thrown when a dataframe is missing a required
     column.
     """
+    from bodo.utils.typing import BodoError
+
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -1270,6 +1284,8 @@ def test_iceberg_missing_optional_column_extra_error(
     Test support for adding a dataframe to an iceberg table where the dataframe
     has an additional column that is not in the Iceberg table schema.
     """
+    from bodo.utils.typing import BodoError
+
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -1301,6 +1317,8 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     """
     Test that the correct error is thrown when a dataframe columns in incorrect order.
     """
+    from bodo.utils.typing import BodoError
+
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -1333,6 +1351,9 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     of a struct.
     The entire column should be filled with nulls instead of failing.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.utils.utils import run_rank0
+
     table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
     write_table_name = f"{table_name}_WRITE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1637,6 +1658,8 @@ def test_write_partitioned(
     We then also read the table back using Spark and Bodo and validate
     that the contents are as expected.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     table_name = part_table_name(base_name, part_spec)
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
@@ -1772,6 +1795,8 @@ def test_write_sorted(
     We then also read the table back using Spark and Bodo and validate
     that the contents are as expected.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     base_name, sort_order, table_name = sort_cases
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
@@ -1894,6 +1919,8 @@ def test_write_part_sort(
     Then read the table using Spark and Bodo and validate that the
     output is as expected.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}"
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
@@ -2071,6 +2098,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     We also explicitly test the table-format case since the codegen
     for it is slightly different.
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     S = pa.DictionaryArray.from_arrays(
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),
