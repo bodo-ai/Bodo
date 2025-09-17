@@ -147,6 +147,7 @@ jobs:
             BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
             AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
             AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
 
         # Upload
         - name: Prepare Outputs
