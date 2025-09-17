@@ -1779,7 +1779,7 @@ def test_series_binops(datapath, index_val):
         bodo_S = bdf["A"] + 1
 
     _test_equal(
-        bodo_S,
+        bodo_S.execute_plan(),
         S,
         check_pandas_types=False,
     )
@@ -1790,7 +1790,7 @@ def test_series_binops(datapath, index_val):
         bodo_S = bdf["A"] + bdf["C"].sum()
 
     _test_equal(
-        bodo_S,
+        bodo_S.execute_plan(),
         S,
         check_pandas_types=False,
     )
@@ -1801,7 +1801,7 @@ def test_series_binops(datapath, index_val):
         bodo_S = bdf["A"] + 1 + bdf["C"].sum()
 
     _test_equal(
-        bodo_S,
+        bodo_S.execute_plan(),
         S,
         check_pandas_types=False,
     )
