@@ -1773,9 +1773,32 @@ def test_series_binops(datapath, index_val):
 
     bdf = bd.from_pandas(df)
 
+    # Simple expression with constant
     with assert_executed_plan_count(0):
         S = df["A"] + 1
         bodo_S = bdf["A"] + 1
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + df["C"].sum()
+        bodo_S = bdf["A"] + bdf["C"].sum()
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression on top of another expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1 + df["C"].sum()
+        bodo_S = bdf["A"] + 1 + bdf["C"].sum()
 
     _test_equal(
         bodo_S,
