@@ -17,6 +17,8 @@ pytestmark = [pytest.mark.test_docs]
 
 
 @pytest.mark.df_lib
+# ensure_clean2 uses a barrier which requires jit_dependency
+@pytest.mark.jit_dependency
 def test_quickstart_local_python_df():
     """Runs example equivalent to Bodo DF Library code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
