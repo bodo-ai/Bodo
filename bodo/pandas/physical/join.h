@@ -56,8 +56,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
         time_pt start_init = start_timer();
+        // Probe side
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
+        // Build side
         duckdb::vector<duckdb::ColumnBinding> right_bindings =
             logical_join.children[1]->GetColumnBindings();
 
@@ -195,9 +197,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         initOutputColumnMapping(build_kept_cols, right_keys,
                                 right_non_equi_keys, n_build_cols,
-                                bound_right_inds);
+                                bound_right_inds, build_col_inds_rev);
         initOutputColumnMapping(probe_kept_cols, left_keys, left_non_equi_keys,
-                                n_probe_cols, bound_left_inds);
+                                n_probe_cols, bound_left_inds,
+                                probe_col_inds_rev);
 
         // ---------------------------------------------------
 
@@ -594,6 +597,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         this->metrics.output_row_count += out_table->nrows();
         this->metrics.process_batch_time += end_timer(start_produce);
 
+        out_table->column_names = this->output_schema->column_names;
         return {out_table,
                 is_last ? OperatorResult::FINISHED
                         : (request_input ? OperatorResult::NEED_MORE_INPUT
@@ -635,36 +639,22 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      * @param bound_inds set of column indices that need to be produced in the
      * output according to bindings
      */
-    static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
-                                        const std::vector<uint64_t>& keys,
-                                        const std::set<uint64_t>& non_equi_keys,
-                                        uint64_t ncols,
-                                        std::set<int64_t>& bound_inds) {
+    static void initOutputColumnMapping(
+        std::vector<uint64_t>& col_inds, const std::vector<uint64_t>& keys,
+        const std::set<uint64_t>& non_equi_keys, uint64_t ncols,
+        const std::set<int64_t>& bound_inds,
+        const std::vector<int64_t>& col_inds_rev) {
         // Map key column index to its position in keys vector
         std::unordered_map<uint64_t, size_t> key_positions;
         for (size_t i = 0; i < keys.size(); ++i) {
             key_positions[keys[i]] = i;
         }
-        uint64_t data_offset = keys.size();
 
         for (uint64_t i = 0; i < ncols; i++) {
-            // Handle keys to non-equi conditions that are not part of the
-            // output or equality keys. They just change the index of the other
-            // columns.
-            if ((non_equi_keys.find(i) != non_equi_keys.end()) &&
-                (bound_inds.find(i) == bound_inds.end()) &&
-                (key_positions.find(i) == key_positions.end())) {
-                data_offset++;
-                continue;
-            }
             if (bound_inds.find(i) == bound_inds.end()) {
                 continue;
             }
-            if (key_positions.find(i) != key_positions.end()) {
-                col_inds.push_back(key_positions[i]);
-            } else {
-                col_inds.push_back(data_offset++);
-            }
+            col_inds.push_back(col_inds_rev[i]);
         }
     }
 
