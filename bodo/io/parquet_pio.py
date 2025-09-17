@@ -1337,7 +1337,6 @@ def parquet_file_schema(
 
     col_names = []
     col_types = []
-
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
@@ -1543,6 +1542,8 @@ def get_dataset_unify_nulls(
         raise error
     dataset = pt.cast(ParquetDataset, dataset_or_err)
     dataset.set_fs(fs)
+    if read_categories:
+        _add_categories_to_pq_dataset(dataset)
     # If there are no null columns, skip unify step.
     if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
         return dataset
@@ -1556,8 +1557,6 @@ def get_dataset_unify_nulls(
         filesystem=dataset.filesystem,
         partitioning=dataset.partitioning,
     )
-    if read_categories:
-        _add_categories_to_pq_dataset(dataset)
 
     # If there are nulls in the schema, inspect the fragments
     # until the null columns can be resolved to a non-null type.
