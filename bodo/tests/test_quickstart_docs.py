@@ -83,6 +83,7 @@ def test_quickstart_local_python_jit():
 
 @pytest.mark.iceberg
 @pytest.mark.df_lib
+@pytest.mark.jit_dependency
 def test_quickstart_local_iceberg_df():
     """Test the Bodo DF Library example in docs/quick_start/quickstart_local_iceberg.md"""
     import bodo.pandas as pd
