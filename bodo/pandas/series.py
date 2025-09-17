@@ -2243,6 +2243,12 @@ class BodoDatetimeProperties:
 
 def is_numeric(other):
     """Returns whether other is a numeric BodoSeries/scalar."""
+    from bodo.pandas.scalar import BodoScalar
+
+    if type(other) is BodoScalar:
+        dtype = other.wrapped_series.dtype
+        return pd.api.types.is_numeric_dtype(dtype)
+
     is_numeric_bodoseries = (
         isinstance(other, BodoSeries)
         and isinstance(other.dtype, pd.ArrowDtype)
