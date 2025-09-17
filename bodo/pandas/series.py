@@ -414,9 +414,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if type(other) is BodoScalar:
             if other.is_lazy_plan():
                 lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
-                # Point lhs to the new plan, col_index is the same since we added rhs at the end.
-                # TODO: handle non-colref
-                lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
+                # Point lhs to the new plan, only the source of the expression changes.
+                lhs = lhs.with_new_source(lhs_plan)
             else:
                 rhs = other.get_value()
 
