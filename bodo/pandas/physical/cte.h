@@ -65,8 +65,6 @@ class PhysicalCTE : public PhysicalSink {
     duckdb::LogicalMaterializedCTE& node;
 };
 
-#include <iostream>
-
 class PhysicalCTERef : public PhysicalSource {
    public:
     explicit PhysicalCTERef(std::shared_ptr<PhysicalCTE> _cte) : cte(_cte) {}
@@ -86,9 +84,6 @@ class PhysicalCTERef : public PhysicalSource {
             next_batch = *chunk_iter;
             ++chunk_iter;
         }
-        std::cout << "cteref " << this << " ";
-        DEBUG_PrintTable(std::cout, next_batch);
-        std::cout << std::endl;
         bool at_end =
             (chunk_iter == cte->collected_rows->builder->chunks.end());
         return {next_batch, at_end ? OperatorResult::FINISHED
