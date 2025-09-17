@@ -3039,9 +3039,7 @@ def gen_arith(self, other, name):
 
 def is_bodo_string_series(self):
     """Returns True if self is a BodoSeries with dtype String."""
-    return (
-        isinstance(self, BodoSeries) and self.dtype in allowed_types_map["str_default"]
-    )
+    return type(self) is BodoSeries and self.dtype in allowed_types_map["str_default"]
 
 
 def validate_dtype(name, obj):
