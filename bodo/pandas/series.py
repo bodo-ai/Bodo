@@ -239,14 +239,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         if not (
-            (
+            (type(other) is BodoScalar and other.wrapped_series.dtype.type is bool)
+            or (
                 isinstance(other, BodoSeries)
                 and isinstance(other.dtype, pd.ArrowDtype)
                 and other.dtype.type is bool
             )
             or isinstance(other, bool)
-            or type(other) is BodoScalar
-            and other.wrapped_series.dtype.type is bool
         ):
             raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries, BodoScalar or a bool. "
