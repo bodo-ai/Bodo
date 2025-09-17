@@ -805,7 +805,6 @@ def test_alter_table_add_column(request, harness_name: str):
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
         harness.refresh_table(table_identifier)
-        harness.run_bodo_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         sqlnode_type_names = get_sqlnode_type_names()
         # # Convert to list to maintain order throughout testing
         typeNames = list(sqlnode_type_names.keys())
@@ -815,6 +814,8 @@ def test_alter_table_add_column(request, harness_name: str):
             bodo_output = harness.run_bodo_query(query)
             assert_equal_par(bodo_output, py_output)
 
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         # Check column names and types
         output = harness.describe_table(table_identifier)
         # Create dataframe with expected output
@@ -879,9 +880,7 @@ def test_alter_table_drop_column(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
 
         # Create test columns
         harness.run_spark_query(
@@ -896,6 +895,8 @@ def test_alter_table_drop_column(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL4 INT"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
@@ -985,9 +986,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -996,6 +995,8 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         harness.run_spark_query(f"REFRESH TABLE {table_identifier}")
         # Check
         output = harness.describe_table(table_identifier)
@@ -1060,9 +1061,7 @@ def test_alter_table_rename_column(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -1074,6 +1073,8 @@ def test_alter_table_rename_column(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL3 INT"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
@@ -1180,9 +1181,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -1191,6 +1190,8 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
