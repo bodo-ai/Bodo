@@ -567,7 +567,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_CASE: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundCaseExpression>();
+            auto& bce = expr.Cast<duckdb::BoundCaseExpression>();
             if (bce.case_checks.size() != 1) {
                 throw std::runtime_error(
                     "Only single WHEN case expressions are supported.");
