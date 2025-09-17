@@ -1518,23 +1518,15 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
     # TODO: other types like boolean
     typ_val = numba_to_c_type(val)
-    # TODO: fix np.full and refactor
-    func_text = (
-        f"def bcast_scalar_impl(val, root={DEFAULT_ROOT}, comm=0):\n"
-        "  send = np.empty(1, dtype)\n"
-        "  send[0] = val\n"
-        f"  c_bcast(send.ctypes, np.int32(1), np.int32({typ_val}), np.int32(root), comm)\n"
-        "  return send[0]\n"
-    )
-
     dtype = numba.np.numpy_support.as_dtype(val)
-    loc_vars = {}
-    exec(
-        func_text,
-        {"bodo": bodo, "np": np, "c_bcast": c_bcast, "dtype": dtype},
-        loc_vars,
-    )
-    bcast_scalar_impl = loc_vars["bcast_scalar_impl"]
+
+    # TODO: fix np.full and refactor
+    def bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
+        send = np.empty(1, dtype)
+        send[0] = val
+        c_bcast(send.ctypes, np.int32(1), np.int32(typ_val), np.int32(root), comm)
+        return send[0]
+
     return bcast_scalar_impl
 
 
