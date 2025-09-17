@@ -776,7 +776,8 @@ def get_sqlnode_type_names():
         # iceberg type: date
         "DATE": "DATE",
         # iceberg type: time
-        "TIME": "TIME(6)",
+        # Spark doesn't support TIME type
+        # "TIME": "TIME(6)",
         # iceberg type: timestamp
         "DATETIME": "TIMESTAMP(6)",
         "TIMESTAMP": "TIMESTAMP(6)",
