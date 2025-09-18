@@ -37,7 +37,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "numba>=0.60",
+    # TODO upgrade to numba 0.62.0
+    "numba>=0.60,<0.62",
     "pyarrow>=19.0,<19.1",
     "pandas>=2.2",
     "numpy>=1.24",
