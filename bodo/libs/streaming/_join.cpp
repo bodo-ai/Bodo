@@ -961,7 +961,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     }
 
     // Add unmatched rows from build table to output table
-    if constexpr (build_table_outer) {
+    if (build_table_outer) {
         time_pt start_build_outer = start_timer();
         // If an inactive partition exists, this means that the build side is
         // distributed and therefore no reduction is required.
