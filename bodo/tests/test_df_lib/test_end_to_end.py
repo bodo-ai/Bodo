@@ -1884,6 +1884,17 @@ def test_scalar_arith_binops(datapath, index_val):
         check_pandas_types=False,
     )
 
+    # BodoScalar non-scalar expressions
+    with assert_executed_plan_count(1):
+        S = df["A"].sum() + np.ones(4)
+        bodo_S = bdf["A"].sum() + np.ones(4)
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
 
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""

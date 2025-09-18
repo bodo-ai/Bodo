@@ -3,6 +3,8 @@ from __future__ import annotations
 import typing as pt
 from collections.abc import Callable
 
+import pandas as pd
+
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.series import BodoSeries
@@ -121,10 +123,16 @@ class BodoScalar(BodoLazyWrapper):
                 name = _get_reversed_dunder(name)
                 return getattr(other, name)(self)
 
-            series = self.wrapped_series
-            method = getattr(series, name)
-            out = method(other)
-            return BodoScalar(out)
+            if pd.api.types.is_scalar(other):
+                series = self.wrapped_series
+                method = getattr(series, name)
+                out = method(other)
+                return BodoScalar(out)
+
+            # Fallback if not supported (e.g. df.A.sum() + np.ones(3))
+            scalar = self.get_value()
+            method = getattr(scalar, name)
+            return method(other)
 
         return delegator
 
