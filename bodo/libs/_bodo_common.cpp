@@ -1594,11 +1594,29 @@ std::unique_ptr<array_info> alloc_array_like(
     bodo_array_type::arr_type_enum arr_type = in_dtype->array_type;
     Bodo_CTypes::CTypeEnum dtype = in_dtype->c_type;
     if (arr_type == bodo_array_type::ARRAY_ITEM) {
-        throw std::runtime_error("Unimplemented");
+        throw std::runtime_error(
+            "alloc_array_like from bodo::DataType for ARRAY_ITEM "
+            "unimplemented");
     } else if (arr_type == bodo_array_type::STRUCT) {
-        throw std::runtime_error("Unimplemented");
+        bodo::DataType* raw_dtype = in_dtype.get();
+        bodo::StructType* dtype_as_struct =
+            dynamic_cast<bodo::StructType*>(raw_dtype);
+        if (!dtype_as_struct) {
+            throw std::runtime_error(
+                "alloc_array_like STRUCT dtype but dtype doesn't point to "
+                "StructType");
+        }
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        child_arrays.reserve(dtype_as_struct->child_types.size());
+        for (auto& child_type : dtype_as_struct->child_types) {
+            child_arrays.push_back(alloc_array_like(child_type));
+        }
+        return alloc_struct(0, std::move(child_arrays));
+        // throw std::runtime_error("alloc_array_like from bodo::DataType for
+        // STRUCT unimplemented");
     } else if (arr_type == bodo_array_type::MAP) {
-        throw std::runtime_error("Unimplemented");
+        throw std::runtime_error(
+            "alloc_array_like from bodo::DataType for MAP unimplemented");
     } else {
         std::unique_ptr<array_info> out_arr = alloc_array_top_level(
             0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
