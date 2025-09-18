@@ -1863,22 +1863,23 @@ def test_scalar_arith_binops(datapath, index_val):
         S = df["A"].sum() + 1
         bodo_S = bdf["A"].sum() + 1
 
-    _test_equal(bodo_S, S)
+    _test_equal(bodo_S.get_value(), S)
 
     # Two BodoScalar expressions
     with assert_executed_plan_count(0):
         S = df["A"].sum() + df["C"].sum()
         bodo_S = bdf["A"].sum() + bdf["C"].sum()
 
-    _test_equal(bodo_S, S)
+    _test_equal(bodo_S.get_value(), S)
 
     # BodoScalar/Series expressions
     with assert_executed_plan_count(0):
         S = df["A"].sum() + df["C"]
         bodo_S = bdf["A"].sum() + bdf["C"]
 
+    # TODO[BSE-5121]: Fix crash when execute_plan/get_value is not used directly
     _test_equal(
-        bodo_S,
+        bodo_S.execute_plan(),
         S,
         check_pandas_types=False,
     )
