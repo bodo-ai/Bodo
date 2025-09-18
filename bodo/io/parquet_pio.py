@@ -1340,12 +1340,14 @@ def parquet_file_schema(
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
-    pq_dataset = get_dataset_unify_nulls(
+    pq_dataset = get_parquet_dataset(
         file_name,
+        get_row_counts=False,
         storage_options=storage_options,
-        partitioning="hive" if use_hive else None,
         read_categories=True,
+        partitioning="hive" if use_hive else None,
     )
+    pq_dataset = parquet_dataset_unify_nulls(pq_dataset)
 
     partition_names = pq_dataset.partition_names
     pa_schema = pq_dataset.schema
@@ -1509,41 +1511,16 @@ def _get_partition_cat_dtype(dictionary):
     return CategoricalArrayType(cat_dtype)
 
 
-def get_dataset_unify_nulls(
-    fpath,
-    storage_options: dict,
-    partitioning: str | None,
-    read_categories: bool = False,
+def parquet_dataset_unify_nulls(
+    dataset: ParquetDataset,
 ) -> ParquetDataset:
     """
     Gets the ParquetDataset from fpath, unifying types of null columns if present.
 
-    NOTE: This function must be called on the spawner and is intended to handle
+    NOTE: This function is intended to handle
     the common case where the first file opened contains some null columns which have
     non-null values in other files.
     """
-    # Get FileSystem and create ParquetDataset object similar to
-    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L916
-    fpath, parsed_url, protocol = parse_fpath(fpath)
-    fs = getfs(fpath, protocol, storage_options, parallel=False)
-
-    dataset_or_err = get_bodo_pq_dataset_from_fpath(
-        fpath,
-        protocol,
-        parsed_url,
-        fs,
-        partitioning=partitioning,
-        filters=None,
-        typing_pa_schema=None,
-    )
-
-    if isinstance(dataset_or_err, Exception):  # pragma: no cover
-        error = dataset_or_err
-        raise error
-    dataset = pt.cast(ParquetDataset, dataset_or_err)
-    dataset.set_fs(fs)
-    if read_categories:
-        _add_categories_to_pq_dataset(dataset)
     # If there are no null columns, skip unify step.
     if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
         return dataset
@@ -1560,9 +1537,13 @@ def get_dataset_unify_nulls(
 
     # If there are nulls in the schema, inspect the fragments
     # until the null columns can be resolved to a non-null type.
+    row_count = 0
     for piece, frag in zip(pieces, dataset_.get_fragments()):
         unify_fragment_schema(dataset, piece, frag)
+        row_count += piece._bodo_num_rows
         if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
             break
+
+    unify_schemas_across_ranks(dataset, row_count)
 
     return dataset
