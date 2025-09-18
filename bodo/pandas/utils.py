@@ -1356,7 +1356,11 @@ def insert_bodo_scalar(
             and the column reference expression for the new column.
     """
     from bodo.pandas.base import _empty_like
-    from bodo.pandas.plan import ColRefExpression, LogicalInsertScalarSubquery
+    from bodo.pandas.plan import (
+        ColRefExpression,
+        LogicalInsertScalarSubquery,
+        LogicalProjection,
+    )
 
     assert scalar.is_lazy_plan(), (
         "Expected scalar to have a lazy plan, use a constant expression if the scalar is not lazy."
@@ -1364,10 +1368,49 @@ def insert_bodo_scalar(
 
     empty_data = plan.empty_data.copy()
     col_name = "_scalar_col"
+    n_indices = get_n_index_arrays(empty_data.index)
+    n_orig_data_cols = len(empty_data.columns)
+
+    if n_indices > 0:
+        # Cross join adds left index after left columns, then the scalar column.
+        # Therefore, move Index columns to the end before adding new scalar column.
+        # E.g. [A, B, C, index, _scalar_col]
+        empty_data = empty_data.reset_index()
+        index_cols = empty_data.columns[:n_indices]
+        data_cols = empty_data.columns[n_indices:]
+        empty_data = empty_data[list(data_cols) + list(index_cols)]
+
     empty_data[col_name] = _empty_like(scalar.wrapped_series)
 
     new_plan = LogicalInsertScalarSubquery(empty_data, plan, scalar._plan)
+
+    if n_indices > 0:
+        # Move scalar column last right before index columns as expected in rest of
+        # the code.
+        # E.g. [A, B, C, _scalar_col, index]
+        exprs = [
+            ColRefExpression(empty_data.iloc[:, i].to_frame(), new_plan, i)
+            for i in range(n_orig_data_cols)
+        ]
+        scalar_col = empty_data.shape[1] - 1
+        exprs.append(
+            ColRefExpression(
+                empty_data.iloc[:, scalar_col].to_frame(), new_plan, scalar_col
+            )
+        )
+        exprs += [
+            ColRefExpression(empty_data.iloc[:, i].to_frame(), new_plan, i)
+            for i in range(n_orig_data_cols, n_orig_data_cols + n_indices)
+        ]
+
+        index_cols = [
+            empty_data.columns[i]
+            for i in range(n_orig_data_cols, n_orig_data_cols + n_indices)
+        ]
+        empty_data = empty_data.set_index(index_cols)
+        new_plan = LogicalProjection(empty_data, new_plan, exprs)
+
     col_expr = ColRefExpression(
-        empty_data[col_name], new_plan, empty_data.columns.get_loc(col_name)
+        empty_data[col_name].to_frame(), new_plan, empty_data.shape[1] - 1
     )
     return new_plan, col_expr
