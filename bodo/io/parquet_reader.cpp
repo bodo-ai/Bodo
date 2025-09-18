@@ -137,7 +137,7 @@ PyObject* ParquetReader::get_dataset() {
     }
 
     this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
-    this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));
+    // this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));
 
     // prefix = ds.prefix
     PyObjectPtr prefix_py = PyObject_GetAttrString(ds, "_prefix");
@@ -198,9 +198,6 @@ void ParquetReader::init_pq_scanner() {
     this->rows_to_skip =
         PyLong_AsLongLong(PyTuple_GetItem(scanner_batches_tup, 1));
     this->rows_left_cur_piece = this->pieces_nrows[0];
-
-    // This is from ArrowReader which doesn't use PyObjectPtrs yet
-    Py_DECREF(this->pyarrow_schema);
 }
 
 std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {

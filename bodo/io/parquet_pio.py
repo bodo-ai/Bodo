@@ -146,12 +146,20 @@ class ParquetDataset:
             self.partitioning_schema = partitioning.schema
         else:
             self.partitioning_dictionaries = {}
-        # Convert large_string Arrow types to string
+        # Convert large_string Arrow types to string and dictionary to int32 indices
         # (see comment in bodo.io.parquet_pio.unify_schemas)
         for i in range(len(self.schema)):
             f = self.schema.field(i)
             if f.type == pa.large_string():
                 self.schema = self.schema.set(i, f.with_type(pa.string()))
+            elif isinstance(f.type, pa.DictionaryType):
+                if f.type.index_type != pa.int32():
+                    self.schema = self.schema.set(
+                        i,
+                        f.with_type(
+                            pa.dictionary(pa.int32(), f.type.value_type, f.type.ordered)
+                        ),
+                    )
         # IMPORTANT: only include partition columns in filters passed to
         # pq.ParquetDataset(), otherwise `get_fragments` could look inside the
         # parquet files
@@ -1445,6 +1453,13 @@ def parquet_file_schema(
             # If the index column is not selected when reading parquet, the index
             # should still be included.
             selected_columns.append(index_col)
+
+    # Convert dictionary columns to use int32 indices
+    # since our c++ dict string array uses int32 indices
+    for i in range(len(arrow_types)):
+        if isinstance(arrow_types[i], pa.DictionaryType):
+            arrow_types[i] = pa.dictionary(pa.int32(), arrow_types[i].value_type)
+            pa_schema = pa_schema.set(i, pa_schema.field(i).with_type(arrow_types[i]))
 
     col_names = selected_columns
     col_indices = []

@@ -125,6 +125,22 @@ def read_parquet(
         "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
+    # Convert dictionary columns to use int32 indices since our c++ dict implementation
+    # only supports int32 indices.
+    for i in range(len(arrow_schema)):
+        field = arrow_schema.field(i)
+        if pa.types.is_dictionary(field.type):
+            arrow_schema = arrow_schema.set(
+                i,
+                pa.field(
+                    field.name,
+                    pa.dictionary(
+                        pa.int32(), field.type.value_type, field.type.ordered
+                    ),
+                    field.nullable,
+                    field.metadata,
+                ),
+            )
 
     empty_df = arrow_to_empty_df(arrow_schema)
 

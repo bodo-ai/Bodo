@@ -75,7 +75,7 @@ pip = "*"
 numba = ">=0.60,<0.62.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==19.0.1", channel = "conda-forge" }
+pyarrow = { version = "==21.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -96,7 +96,7 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.9"
+pyiceberg = ">=0.10"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
@@ -114,8 +114,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==19.0.1", channel = "bodo.ai" }
-libarrow = { version = "==19.0.1", channel = "bodo.ai" }
+pyarrow = { version = "==21.0.0", channel = "bodo.ai" }
+libarrow = { version = "==21.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
