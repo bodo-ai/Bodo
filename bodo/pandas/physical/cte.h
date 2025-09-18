@@ -96,9 +96,9 @@ class PhysicalCTERef : public PhysicalSource {
      * @return std::shared_ptr<bodo::Schema>
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        return bodo::Schema::FromArrowSchema(
-            cte->output_schema->ToArrowSchema());
-        // return cte->output_schema;
+        // return bodo::Schema::FromArrowSchema(
+        //     cte->output_schema->ToArrowSchema());
+        return cte->output_schema;
     }
 
     std::string ToString() override { return PhysicalSource::ToString(); }

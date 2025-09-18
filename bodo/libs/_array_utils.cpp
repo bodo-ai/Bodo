@@ -2383,7 +2383,7 @@ void DEBUG_PrintVectorArrayInfo(
 
 void DEBUG_PrintSetOfColumn(
     std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr,
-    const std::vector<std::string>& col_names) {
+    const std::vector<std::string>& col_names, bool print_vals) {
     int nCol = ListArr.size();
     if (nCol == 0) {
         os << "number of columns nCol=" << nCol << " Nothing to print\n";
@@ -2401,6 +2401,9 @@ void DEBUG_PrintSetOfColumn(
         }
     }
 
+    if (!print_vals)
+        return;
+
     std::vector<int> ListLen(nCol);
     int nRowMax = 0;
     os << "nCol=" << nCol << " List of number of rows:";
@@ -2416,13 +2419,14 @@ void DEBUG_PrintSetOfColumn(
     DEBUG_PrintVectorArrayInfo(os, ListArr);
 }
 
-void DEBUG_PrintTable(std::ostream& os, table_info* table) {
-    DEBUG_PrintSetOfColumn(os, table->columns, table->column_names);
+void DEBUG_PrintTable(std::ostream& os, table_info* table, bool print_vals) {
+    DEBUG_PrintSetOfColumn(os, table->columns, table->column_names, print_vals);
 }
 
 void DEBUG_PrintTable(std::ostream& os,
-                      const std::shared_ptr<const table_info>& table) {
-    DEBUG_PrintSetOfColumn(os, table->columns, table->column_names);
+                      const std::shared_ptr<const table_info>& table,
+                      bool print_vals) {
+    DEBUG_PrintSetOfColumn(os, table->columns, table->column_names, print_vals);
 }
 
 void DEBUG_PrintUnorderedMap(std::ostream& os,
