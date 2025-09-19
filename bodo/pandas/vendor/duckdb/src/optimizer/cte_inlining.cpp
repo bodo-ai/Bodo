@@ -130,7 +130,12 @@ void CTEInlining::TryInlining(unique_ptr<LogicalOperator> &op) {
 				return;
 			}
 
+#if 1
             return;
+#else
+            // The code below to do inlining requires deep copy which we can't do on
+            // Bodo duckdb nodes yet.
+
 			// CTEs require full materialization before the CTE scans begin,
 			// LIMIT and TOP_N operators cannot abort the materialization,
 			// even if only a part of the CTE result is needed.
@@ -144,6 +149,7 @@ void CTEInlining::TryInlining(unique_ptr<LogicalOperator> &op) {
 				}
 				return;
 			}
+#endif
 		}
 	}
 }

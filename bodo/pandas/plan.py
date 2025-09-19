@@ -82,7 +82,6 @@ class LazyPlan:
     __repr__ = __str__
 
     def bfs_duplicate(self):
-        return None
         visited = set()
         queue = deque([self])
 

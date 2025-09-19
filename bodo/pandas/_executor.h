@@ -9,6 +9,7 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "physical/cte.h"
 
+// Holds table_index to PhysicalCTE mapping during physical plan construction.
 extern std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> g_ctes;
 
 /**
@@ -92,6 +93,7 @@ class Executor {
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
         QueryProfileCollector::Default().Finalize(0);
+        // Clear table to CTE mapping in preparation for next plan execution.
         g_ctes.clear();
         return pipelines.back()->GetResult();
     }
