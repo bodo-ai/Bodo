@@ -1029,6 +1029,8 @@ class LazyPlanDistributedArg:
 
 
 def count_plan(self):
+    from bodo.pandas.scalar import BodoScalar
+
     # See if we can get the cardinality statically.
     static_cardinality = get_plan_cardinality(self._plan)
     if static_cardinality is not None:
@@ -1060,8 +1062,7 @@ def count_plan(self):
         make_col_ref_exprs([0], aggregate_plan),
     )
 
-    data = execute_plan(projection_plan)
-    return data[0]
+    return BodoScalar(wrap_plan(projection_plan))
 
 
 def _get_df_python_func_plan(
