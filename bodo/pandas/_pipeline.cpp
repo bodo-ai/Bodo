@@ -11,7 +11,7 @@
  */
 bool Pipeline::midPipelineExecute(unsigned idx,
                                   std::shared_ptr<table_info> batch,
-                                  OperatorResult prev_op_result) {
+                                  OperatorResult prev_op_result, int rank) {
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
@@ -21,7 +21,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
 #ifdef DEBUG_PIPELINE
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
-            std::cout << "midPipelineExecute before ConsumeBatch "
+            std::cout << "Rank " << rank
+                      << " midPipelineExecute before ConsumeBatch "
                       << sink->ToString() << " "
                       << static_cast<int>(prev_op_result) << std::endl;
 #endif
@@ -30,7 +31,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
 #ifdef DEBUG_PIPELINE
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
-            std::cout << "midPipelineExecute after ConsumeBatch "
+            std::cout << "Rank " << rank
+                      << " midPipelineExecute after ConsumeBatch "
                       << sink->ToString() << " "
                       << static_cast<int>(consume_result) << std::endl;
 #endif
@@ -42,7 +44,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             }
             if (batch->nrows() != 0) {
 #ifdef DEBUG_PIPELINE
-                std::cout << "Looping in consume part of midPipelineExecute"
+                std::cout << "Rank " << rank
+                          << " Looping in consume part of midPipelineExecute"
                           << std::endl;
 #endif
                 batch = RetrieveTable(batch, std::vector<int64_t>());
@@ -55,7 +58,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
 #ifdef DEBUG_PIPELINE
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
-            std::cout << "midPipelineExecute before ProcessBatch "
+            std::cout << "Rank " << rank
+                      << " midPipelineExecute before ProcessBatch "
                       << op->ToString() << " "
                       << static_cast<int>(prev_op_result) << std::endl;
 #endif
@@ -67,14 +71,16 @@ bool Pipeline::midPipelineExecute(unsigned idx,
 #ifdef DEBUG_PIPELINE
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
-            std::cout << "midPipelineExecute after ProcessBatch "
+            std::cout << "Rank " << rank
+                      << " midPipelineExecute after ProcessBatch "
                       << op->ToString() << " "
                       << static_cast<int>(prev_op_result) << std::endl;
 #endif
             // Execute subsequent operators and if any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
-            if (midPipelineExecute(idx + 1, result.first, prev_op_result)) {
+            if (midPipelineExecute(idx + 1, result.first, prev_op_result,
+                                   rank)) {
                 return true;
             }
 
@@ -103,11 +109,14 @@ uint64_t Pipeline::Execute() {
     uint64_t batches_processed = 0;
     bool finished = false;
     std::shared_ptr<table_info> batch;
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     while (!finished) {
         batches_processed++;
 
 #ifdef DEBUG_PIPELINE
-        std::cout << "Pipeline::Execute before ProduceBatch "
+        std::cout << "Rank " << rank
+                  << " Pipeline::Execute before ProduceBatch "
                   << source->ToString() << std::endl;
 #endif
         // Execute the source to get the base batch
@@ -122,13 +131,13 @@ uint64_t Pipeline::Execute() {
                 ? OperatorResult::FINISHED
                 : OperatorResult::NEED_MORE_INPUT;
 #ifdef DEBUG_PIPELINE
-        std::cout << "Pipeline::Execute after ProduceBatch "
+        std::cout << "Rank " << rank << " Pipeline::Execute after ProduceBatch "
                   << source->ToString() << " "
                   << static_cast<int>(produce_result) << std::endl;
 #endif
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
-        finished = midPipelineExecute(0, batch, produce_result);
+        finished = midPipelineExecute(0, batch, produce_result, rank);
 
         // If the next operator in the pipeline isn't finished even though we
         // told it that the input has been exhausted then create an empty batch
@@ -144,7 +153,13 @@ uint64_t Pipeline::Execute() {
 
     // Iterate passing empty batch to the first op until it says it is done.
     while (!finished) {
-        finished = midPipelineExecute(0, batch, OperatorResult::FINISHED);
+#ifdef DEBUG_PIPELINE
+        std::cout
+            << "Rank " << rank
+            << " Pipeline::Execute calling with empty batch until finished"
+            << source->ToString() << std::endl;
+#endif
+        finished = midPipelineExecute(0, batch, OperatorResult::FINISHED, rank);
     }
 
     // Finalize

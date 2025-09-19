@@ -55,14 +55,18 @@ class Executor {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #ifdef DEBUG_PIPELINE
-        std::cout << "ExecutePipelines with " << pipelines.size()
-                  << " pipelines." << std::endl;
+        std::cout << "Rank " << rank << " ExecutePipelines with "
+                  << pipelines.size() << " pipelines." << std::endl;
 
         for (size_t i = 0; i < pipelines.size(); ++i) {
-            std::cout << "------ Pipeline " << i << " ------" << std::endl;
+            std::cout << "Rank " << rank << " ------ Pipeline " << i
+                      << " ------" << std::endl;
             pipelines[i]->printPipeline();
-            std::cout << "------ Pipeline " << i << " ------" << std::endl;
+            std::cout << "Rank " << rank << " ------ Pipeline " << i
+                      << " ------" << std::endl;
         }
 #endif
 
@@ -70,7 +74,8 @@ class Executor {
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
 #ifdef DEBUG_PIPELINE
-            std::cout << "Before execute pipeline " << i << std::endl;
+            std::cout << "Rank " << rank << " Before execute pipeline " << i
+                      << std::endl;
 #endif
             uint64_t batches_processed = pipelines[i]->Execute();
 
@@ -81,7 +86,8 @@ class Executor {
             }
 
 #ifdef DEBUG_PIPELINE
-            std::cout << "After execute pipeline " << i << std::endl;
+            std::cout << "Rank " << rank << " After execute pipeline " << i
+                      << std::endl;
 #endif
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }

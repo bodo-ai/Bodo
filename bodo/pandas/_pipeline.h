@@ -8,7 +8,7 @@
 #include "physical/operator.h"
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_PIPELINE
+#define DEBUG_PIPELINE
 #ifdef DEBUG_PIPELINE
 #include <iostream>
 #endif
@@ -32,7 +32,7 @@ class Pipeline {
      * indicated that no more output needs to be generated.
      */
     bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch,
-                            OperatorResult prev_op_result);
+                            OperatorResult prev_op_result, int rank);
 
     friend class PipelineBuilder;
 
@@ -50,11 +50,14 @@ class Pipeline {
 
 #ifdef DEBUG_PIPELINE
     void printPipeline(void) {
-        std::cout << source->ToString() << std::endl;
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        std::cout << "Rank " << rank << " " << source->ToString() << std::endl;
         for (auto &op : between_ops) {
-            std::cout << op->ToString() << std::endl;
+            std::cout << "Rank " << rank << " " << op->ToString() << std::endl;
         }
-        std::cout << sink->ToString() << std::endl;
+        std::cout << "Rank " << rank << " " << sink->ToString() << std::endl;
     }
 #endif
 };

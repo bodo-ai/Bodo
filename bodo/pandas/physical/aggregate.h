@@ -246,12 +246,20 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool global_is_last = true;
         bool request_input = true;
         std::shared_ptr<table_info> input_batch_reordered =
             ProjectTable(input_batch, this->input_col_inds);
+        std::cout << "Rank " << rank << " agg consume " << input_batch->nrows()
+                  << " " << num_consume++ << std::endl;
+        // DEBUG_PrintTable(std::cout, input_batch);
+        // std::cout << std::endl;
+        // DEBUG_PrintTable(std::cout, input_batch_reordered);
+        // std::cout << std::endl;
         global_is_last = groupby_build_consume_batch(
             this->groupby_state.get(), input_batch_reordered, local_is_last,
             true, &request_input);
@@ -360,6 +368,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     PhysicalAggregateMetrics metrics;
     // Mapping of input table column indices to move keys to the front.
     std::vector<int64_t> input_col_inds;
+    int num_consume = 0;
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
