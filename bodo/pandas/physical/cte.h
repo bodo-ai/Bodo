@@ -62,6 +62,8 @@ class PhysicalCTE : public PhysicalSink {
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
     friend class PhysicalCTERef;
+
+   protected:
     duckdb::LogicalMaterializedCTE& node;
 };
 
