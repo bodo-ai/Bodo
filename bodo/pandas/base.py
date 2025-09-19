@@ -35,6 +35,7 @@ from pandas.core.tools.datetimes import _unit_map
 from pandas.io.parsers.readers import _c_parser_defaults
 
 import bodo.spawn.spawner  # noqa: F401
+from bodo.io.parquet_pio import get_parquet_dataset, parquet_dataset_unify_nulls
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.plan import (
     LazyPlanDistributedArg,
@@ -112,8 +113,6 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    from bodo.io.parquet_pio import get_parquet_dataset, parquet_dataset_unify_nulls
-
     if storage_options is None:
         storage_options = {}
 
