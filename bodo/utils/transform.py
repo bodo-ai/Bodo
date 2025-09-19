@@ -35,6 +35,7 @@ from numba.core.typing.templates import fold_arguments
 import bodo
 import bodo.ir.object_mode
 import bodo.libs.distributed_api
+import bodo.pandas as bd
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -137,6 +138,10 @@ no_side_effect_call_tuples = {
     ("Int64Dtype", pd),
     ("Timestamp", pd),
     ("Week", "offsets", "tseries", pd),
+    ("Int32Dtype", bd),
+    ("Int64Dtype", bd),
+    ("Timestamp", bd),
+    ("Week", "offsets", "tseries", bd),
     # Series
     ("init_series", "pd_series_ext", "hiframes", bodo),
     ("get_series_data", "pd_series_ext", "hiframes", bodo),
@@ -238,6 +243,7 @@ no_side_effect_call_tuples = {
     ("groupby",),
     ("rolling",),
     (pd.CategoricalDtype,),
+    (bd.CategoricalDtype,),
     (bodo.hiframes.pd_categorical_ext.get_code_for_value,),
     # Numpy
     ("asarray", np),
@@ -1002,7 +1008,10 @@ def get_const_value_inner(
         )
 
     # pd.CategoricalDtype() calls
-    if call_name == ("CategoricalDtype", "pandas"):
+    if call_name in (
+        ("CategoricalDtype", "pandas"),
+        ("CategoricalDtype", "bodo.pandas"),
+    ):
         kws = dict(var_def.kws)
         cats = get_call_expr_arg(
             "CategoricalDtype", var_def.args, kws, 0, "categories", ""
@@ -1046,7 +1055,7 @@ def get_const_value_inner(
     if (
         call_name is not None
         and len(call_name) == 2
-        and call_name[1] == "pandas"
+        and call_name[1] in ("pandas", "bodo.pandas")
         and call_name[0]
         in (
             "Int8Dtype",
@@ -1177,7 +1186,9 @@ def _func_is_pure(py_func, arg_types, kw_types):
                         return False
                     func_name, func_mod = fdef
                     # check I/O functions
-                    if func_mod == "pandas" and func_name.startswith("read_"):
+                    if func_mod in ("pandas", "bodo.pandas") and func_name.startswith(
+                        "read_"
+                    ):
                         return False
                     if fdef in (
                         ("fromfile", "numpy"),

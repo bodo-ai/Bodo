@@ -515,7 +515,6 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     # Promo revenue by line; CASE clause
     jn1["PROMO_REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
     mask = jn1["P_TYPE"].str.match("PROMO*")
-    # TODO [BSE-5099]: Series.where
     jn1["PROMO_REVENUE"] = jn1["PROMO_REVENUE"].where(mask, 0.00)
 
     total_promo_revenue = jn1["PROMO_REVENUE"].sum()
@@ -558,7 +557,6 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
     return result_df
 
 
-# TODO [BSE-5105] Support not isin inside of selection"
 def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
@@ -571,7 +569,7 @@ def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
 
     complaint_suppkeys = supplier[supplier["IS_COMPLAINT"]]["S_SUPPKEY"]
 
-    jn1 = partsupp[not partsupp["PS_SUPPKEY"].isin(complaint_suppkeys)]
+    jn1 = partsupp[~partsupp["PS_SUPPKEY"].isin(complaint_suppkeys)]
     jn2 = jn1.merge(part, left_on="PS_PARTKEY", right_on="P_PARTKEY")
     jn2 = jn2[
         (jn2["P_BRAND"] != var1)

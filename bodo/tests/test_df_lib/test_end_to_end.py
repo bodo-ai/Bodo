@@ -4,7 +4,7 @@ import os
 import tempfile
 import warnings
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -23,6 +23,8 @@ from bodo.pandas.utils import (
     JITFallback,
 )
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
+
+pytestmark = pytest.mark.jit_dependency
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -1766,6 +1768,134 @@ def test_series_compound_expression(datapath):
     )
 
 
+def test_series_arith_binops(datapath, index_val):
+    """Test various cases of Series binary operations."""
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1
+        bodo_S = bdf["A"] + 1
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + df["C"].sum()
+        bodo_S = bdf["A"] + bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression on top of another expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1 + df["C"].sum()
+        bodo_S = bdf["A"] + 1 + bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+def test_series_cmp_binops(datapath, index_val):
+    """Test various cases of Series binary operations."""
+    df = pd.DataFrame({"A": [1, 20, 300], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"] > 1
+        bodo_S = bdf["A"] > 1
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression
+    with assert_executed_plan_count(0):
+        S = df["A"] > df["C"].sum()
+        bodo_S = bdf["A"] > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression on top of another expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1 > df["C"].sum()
+        bodo_S = bdf["A"] + 1 > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+def test_scalar_arith_binops(datapath, index_val):
+    """Test various cases of BodoScalar binary operations."""
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + 1
+        bodo_S = bdf["A"].sum() + 1
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # Two BodoScalar expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"].sum()
+        bodo_S = bdf["A"].sum() + bdf["C"].sum()
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # BodoScalar/Series expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"]
+        bodo_S = bdf["A"].sum() + bdf["C"]
+
+    # TODO[BSE-5121]: Fix crash when execute_plan/get_value is not used directly
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar non-scalar expressions
+    with assert_executed_plan_count(1):
+        S = df["A"].sum() + np.ones(4)
+        bodo_S = bdf["A"].sum() + np.ones(4)
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
@@ -2032,8 +2162,44 @@ def test_filter_series_isin():
     )
 
 
+def test_filter_series_not_isin(index_val):
+    """Test dataframe filter with not isin case"""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "A": [1.4, 2.1, 3.3],
+                "B": ["A", "B", "C"],
+                "C": [1, 2, 3],
+                "D": [True, False, True],
+            },
+            index=index_val[:3],
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D"],
+                "B": [11, 2, 2, 4],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bodo_out = bdf1[~bdf1.C.isin(bdf2.B)]
+        py_out = df1[~df1.C.isin(df2.B)]
+
+        # Reverse the order so the planner flips sides to put smaller table in build
+        # side creating right-anti join.
+        bodo_out2 = bdf2[~bdf2.B.isin(bdf1.C)]
+        py_out2 = df2[~df2.B.isin(df1.C)]
+
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+    _test_equal(
+        bodo_out2, py_out2, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
-    """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {
@@ -3438,3 +3604,57 @@ def test_print_no_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         print(S)
+
+
+def test_bodo_pandas_inside_jit():
+    """Make sure using bodo.pandas functions inside a bodo.jit function works as
+    expected and is same as pandas.
+    """
+    df = bd.DataFrame({"A": np.arange(100)})
+
+    def test1(df):
+        df2 = bd.DataFrame({"B": np.arange(len(df))})
+        return df2.B.sum()
+
+    assert test1(df) == bodo.jit(spawn=False, distributed=False)(test1)(df)
+
+    def test2(df):
+        return bd.Timestamp(df.A.iloc[0])
+
+    assert test2(df) == bodo.jit(spawn=False, distributed=False)(test2)(df)
+
+
+def test_join_non_equi_key_not_in_output():
+    """Test for joins with non-equi keys that are not in the output and require special
+    handling in column reordering of physical join.
+    """
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([0, 1], "Float64"),
+            "B": pd.array([2, 3], "Float64"),
+            "C": pd.array([5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "D": pd.array([0, 1, 5, 6], "Int32"),
+            "E": pd.array([2, 3, 4, 5], "Float64"),
+        }
+    )
+
+    df3 = df1.merge(df2, left_on="C", right_on="D", how="inner")
+    df3 = df3[df3.A < df3.E]
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    bdf3 = bdf1.merge(bdf2, left_on="C", right_on="D", how="inner")
+    bdf3 = bdf3[bdf3.A < bdf3.E]
+
+    _test_equal(
+        bdf3["B"],
+        df3["B"],
+        check_pandas_types=False,
+        reset_index=True,
+        sort_output=True,
+    )

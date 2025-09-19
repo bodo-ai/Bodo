@@ -2,25 +2,23 @@ from __future__ import annotations
 
 from inspect import Signature
 
-import numba
+import numba  # noqa TID253
 import pandas as pd  # noqa
 import pytest
-from numba.core import utils
-from numba.core.target_extension import dispatcher_registry
+from numba.core import utils  # noqa TID253
+from numba.core.target_extension import dispatcher_registry  # noqa TID253
 
 import bodo  # noqa
-from bodo.ir.declarative_templates import _OverloadDeclarativeMethodTemplate
-from bodo.tests.utils import run_rank0
-from bodo.utils.pandas_coverage_tracking import PANDAS_URLS, get_pandas_apis_from_url
-from bodo.utils.search_templates import (
-    _OverloadMissingOrIncorrect,
-    bodo_pd_types_dict,
-    get_overload_template,
-)
+from bodo.tests.utils import pytest_mark_one_rank
 
 
 def _get_series_apis() -> list[str]:
     """Get paths of all Series and attributes"""
+    from bodo.utils.pandas_coverage_tracking import (
+        PANDAS_URLS,
+        get_pandas_apis_from_url,
+    )
+
     url = PANDAS_URLS["SERIES"]
     return get_pandas_apis_from_url(url)
 
@@ -98,13 +96,20 @@ def _skip_pysig_check(path: str) -> bool:
 @pytest.mark.parametrize(
     "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]
 )
-@run_rank0
+@pytest_mark_one_rank
 def test_pandas_pysigs(get_apis, keys):
     """
     Check that the pysignature of overloaded series methods matches the pysig from
     pandas. Additionally checks all Series methods are either have supported or
     unsupported (but not both).
     """
+    from bodo.ir.declarative_templates import _OverloadDeclarativeMethodTemplate
+    from bodo.utils.search_templates import (
+        _OverloadMissingOrIncorrect,
+        bodo_pd_types_dict,
+        get_overload_template,
+    )
+
     apis = get_apis()
     disp = dispatcher_registry[numba.core.target_extension.CPU]
     typing_ctx = disp.targetdescr.typing_context

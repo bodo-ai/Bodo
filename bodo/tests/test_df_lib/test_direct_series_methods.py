@@ -7,6 +7,8 @@ import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
 
+pytestmark = pytest.mark.jit_dependency
+
 
 @pytest.mark.parametrize("use_index1", [True, False])
 @pytest.mark.parametrize("use_index2", [True, False])
@@ -36,6 +38,44 @@ def test_series_isin(index_val, use_index1, use_index2):
         # We don't track RangeIndex in output
         reset_index=isinstance(S2.index, pd.RangeIndex),
     )
+
+
+def test_series_where(index_val):
+    """Tests Series.where() with condition and other arguments."""
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 7] * 2,
+            "B": [4, 5, 6, 8] * 2,
+            "C": ["a", "b", None, "abc"] * 2,
+        },
+    )
+    df.index = index_val[: len(df)]
+
+    py_out = df["B"].where(df["A"] > 1, 0)
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1, 0)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+    # "other" not provided, defaults to NA
+    py_out = df["B"].where(df["A"] > 1)
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+    # "other" is BodoScalar
+    py_out = df["B"].where(df["A"] > 1, df["A"].sum())
+
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bd_out = bdf["B"].where(bdf["A"] > 1, bdf["A"].sum())
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
 
 
 def _install_series_direct_tests():

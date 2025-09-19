@@ -9,7 +9,7 @@ from numba import prange
 import bodo
 import bodosql
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import ParforTestPipeline
+from bodo.tests.utils_jit import ParforTestPipeline
 
 
 def test_parfor_fusion_scalar_optional_getitem(memory_leak_check):

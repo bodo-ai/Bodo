@@ -17,10 +17,11 @@ import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
 
+pytestmark = pytest.mark.jit_dependency
+
 
 def test_write_s3_vectors(datapath):
     """Test writing to S3 Vectors using Bodo DataFrame API."""
-
     texts = [
         "Star Wars: A farm boy joins rebels to fight an evil empire in space",
         "Jurassic Park: Scientists create dinosaurs in a theme park that goes wrong",
@@ -319,7 +320,7 @@ def test_llm_generate_bedrock_custom_formatters():
     "modelId",
     [
         "us.amazon.nova-lite-v1:0",
-        "anthropic.claude-v2:1",
+        "anthropic.claude-3-haiku-20240307-v1:0",
         "amazon.titan-text-lite-v1",
     ],
 )

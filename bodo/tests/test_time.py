@@ -9,122 +9,135 @@ from bodo.tests.utils import check_func
 from bodo.utils.testing import ensure_clean
 
 
+@pytest.fixture
+def lazy_time_fixture(request):
+    """Lazyily import Time to avoid importing the compiler at test collection time."""
+    import bodo.decorators  # noqa
+
+    val = request.param
+
+    return val()
+
+
 @pytest.mark.parametrize(
-    "time_str, answer",
+    "time_str, lazy_time_fixture",
     [
         pytest.param(
             "0",
-            bodo.types.Time(0, 0, 0, precision=9),
+            lambda: bodo.types.Time(0, 0, 0, precision=9),
             id="numeric_string-zero",
         ),
         pytest.param(
             "30",
-            bodo.types.Time(0, 0, 30, precision=9),
+            lambda: bodo.types.Time(0, 0, 30, precision=9),
             id="numeric_string-thirty",
         ),
         pytest.param(
             "10000",
-            bodo.types.Time(2, 46, 40, precision=9),
+            lambda: bodo.types.Time(2, 46, 40, precision=9),
             id="numeric_string-ten_thousand",
         ),
         pytest.param(
             "12:30",
-            bodo.types.Time(12, 30, 0, precision=9),
+            lambda: bodo.types.Time(12, 30, 0, precision=9),
             id="hour_minute-no_leading",
         ),
         pytest.param(
             "10:5",
-            bodo.types.Time(10, 5, 0, precision=9),
+            lambda: bodo.types.Time(10, 5, 0, precision=9),
             id="hour_minute-short_minute",
         ),
         pytest.param(
             "7:45",
-            bodo.types.Time(7, 45, 0, precision=9),
+            lambda: bodo.types.Time(7, 45, 0, precision=9),
             id="hour_minute-short_hour",
         ),
         pytest.param(
             "1:6",
-            bodo.types.Time(1, 6, 0, precision=9),
+            lambda: bodo.types.Time(1, 6, 0, precision=9),
             id="hour_minute-short_both",
         ),
         pytest.param(
             "10:20:30",
-            bodo.types.Time(10, 20, 30, precision=9),
+            lambda: bodo.types.Time(10, 20, 30, precision=9),
             id="hour_minute_second-no_leading",
         ),
         pytest.param(
             "23:01:59",
-            bodo.types.Time(23, 1, 59, precision=9),
+            lambda: bodo.types.Time(23, 1, 59, precision=9),
             id="hour_minute_second-short_minute",
         ),
         pytest.param(
             "20:50:03",
-            bodo.types.Time(20, 50, 3, precision=9),
+            lambda: bodo.types.Time(20, 50, 3, precision=9),
             id="hour_minute_second-short_second",
         ),
         pytest.param(
             "1:2:3",
-            bodo.types.Time(1, 2, 3, precision=9),
+            lambda: bodo.types.Time(1, 2, 3, precision=9),
             id="hour_minute_second-short_all",
         ),
         pytest.param(
             "16:17:18.",
-            bodo.types.Time(16, 17, 18, precision=9),
+            lambda: bodo.types.Time(16, 17, 18, precision=9),
             id="hour_minute_second_dot-no_leading",
         ),
         pytest.param(
             "6:30:9.",
-            bodo.types.Time(6, 30, 9, precision=9),
+            lambda: bodo.types.Time(6, 30, 9, precision=9),
             id="hour_minute_second_dot-short_hour_sec",
         ),
         pytest.param(
             "00:4:0.",
-            bodo.types.Time(0, 4, 0, precision=9),
+            lambda: bodo.types.Time(0, 4, 0, precision=9),
             id="hour_minute_second_dot-short_minute_sec",
         ),
         pytest.param(
             "12:30:15.5",
-            bodo.types.Time(12, 30, 15, nanosecond=500_000_000, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=500_000_000, precision=9),
             id="hour_minute_second_nanoseconds-one_digit",
         ),
         pytest.param(
             "12:30:15.99",
-            bodo.types.Time(12, 30, 15, nanosecond=990_000_000, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=990_000_000, precision=9),
             id="hour_minute_second_nanoseconds-two_digits",
         ),
         pytest.param(
             "12:30:15.607",
-            bodo.types.Time(12, 30, 15, nanosecond=607_000_000, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=607_000_000, precision=9),
             id="hour_minute_second_nanoseconds-three_digits",
         ),
         pytest.param(
             "12:30:15.0034",
-            bodo.types.Time(12, 30, 15, nanosecond=3_400_000, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=3_400_000, precision=9),
             id="hour_minute_second_nanoseconds-four_digits",
         ),
         pytest.param(
             "12:30:15.000250",
-            bodo.types.Time(12, 30, 15, nanosecond=250_000, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=250_000, precision=9),
             id="hour_minute_second_nanoseconds-six_digits",
         ),
         pytest.param(
             "12:30:15.67108864",
-            bodo.types.Time(12, 30, 15, nanosecond=671_088_640, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=671_088_640, precision=9),
             id="hour_minute_second_nanoseconds-eight_digits",
         ),
         pytest.param(
             "12:30:15.123456789",
-            bodo.types.Time(12, 30, 15, nanosecond=123_456_789, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=123_456_789, precision=9),
             id="hour_minute_second_nanoseconds-nine_digits",
         ),
         pytest.param(
             "12:30:15.989796859493",
-            bodo.types.Time(12, 30, 15, nanosecond=989_796_859, precision=9),
+            lambda: bodo.types.Time(12, 30, 15, nanosecond=989_796_859, precision=9),
             id="hour_minute_second_nanoseconds-twelve_digits",
         ),
     ],
+    indirect=["lazy_time_fixture"],
 )
-def test_time_parsing(time_str, answer):
+def test_time_parsing(time_str, lazy_time_fixture):
+    answer = lazy_time_fixture
+
     def impl(time_str):
         hr, mi, sc, ns, succeeded = bodo.hiframes.time_ext.parse_time_string(time_str)
         if succeeded:
@@ -290,6 +303,26 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
         assert df.equals(df_orig)
 
 
+@pytest.fixture
+def a(request):
+    """Lazily construct arguments for comparison tests to avoid importing at
+    collection time."""
+    import bodo.decorators  # noqa
+
+    h, m, s, us, prec = request.param
+    return bodo.types.Time(h, m, s, us, precision=prec)
+
+
+@pytest.fixture
+def b(request):
+    """Lazily construct arguments for comparison tests to avoid importing at
+    collection time."""
+    import bodo.decorators  # noqa
+
+    h, m, s, us, prec = request.param
+    return bodo.types.Time(h, m, s, us, precision=prec)
+
+
 @pytest.mark.parametrize(
     "cmp_fn",
     [
@@ -328,23 +361,14 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
     "a,b",
     [
         pytest.param(
-            bodo.types.Time(1, 15, 12, 0, precision=3),
-            bodo.types.Time(1, 15, 12, 0, precision=3),
-            id="data_eq",
-            marks=pytest.mark.slow,
+            (1, 15, 12, 0, 3), (1, 15, 12, 0, 3), id="data_eq", marks=pytest.mark.slow
         ),
         pytest.param(
-            bodo.types.Time(1, 15, 12, 0, precision=3),
-            bodo.types.Time(1, 15, 12, 1, precision=3),
-            id="data_lt",
-            marks=pytest.mark.slow,
+            (1, 15, 12, 0, 3), (1, 15, 12, 1, 3), id="data_lt", marks=pytest.mark.slow
         ),
-        pytest.param(
-            bodo.types.Time(1, 15, 12, 1, precision=3),
-            bodo.types.Time(1, 15, 12, 0, precision=3),
-            id="data_gt",
-        ),
+        pytest.param((1, 15, 12, 1, 3), (1, 15, 12, 0, 3), id="data_gt"),
     ],
+    indirect=["a", "b"],
 )
 def test_time_cmp(cmp_fn, a, b, memory_leak_check):
     check_func(cmp_fn, (a, b))
@@ -592,48 +616,50 @@ def test_time_head(memory_leak_check):
     ],
 )
 @pytest.mark.parametrize(
-    "dt",
+    "lazy_time_fixture",
     [
         pytest.param(
-            bodo.types.Time(precision=9),
+            lambda: bodo.types.Time(precision=9),
             id="none",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, precision=9),
+            lambda: bodo.types.Time(12, precision=9),
             id="hour",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, 30, precision=9),
+            lambda: bodo.types.Time(12, 30, precision=9),
             id="minute",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, 30, 42, precision=9),
+            lambda: bodo.types.Time(12, 30, 42, precision=9),
             id="second",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, 30, 42, 64, precision=9),
+            lambda: bodo.types.Time(12, 30, 42, 64, precision=9),
             id="millisecond",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, 30, 42, 64, 43, precision=9),
+            lambda: bodo.types.Time(12, 30, 42, 64, 43, precision=9),
             id="microsecond",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            bodo.types.Time(12, 30, 42, 64, 43, 58, precision=9),
+            lambda: bodo.types.Time(12, 30, 42, 64, 43, 58, precision=9),
             id="nanosecond",
         ),
     ],
+    indirect=["lazy_time_fixture"],
 )
-def test_time_construction_from_parts(impl, dt, memory_leak_check):
+def test_time_construction_from_parts(impl, lazy_time_fixture, memory_leak_check):
     """Test that time can be constructed from parts of a time.
     Needed for SQL `TRUNC` and `TIME_SLICE` functionality.
     """
+    dt = lazy_time_fixture
 
     check_func(impl, (dt,))
 

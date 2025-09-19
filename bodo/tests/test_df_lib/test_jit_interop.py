@@ -6,6 +6,8 @@ import bodo.pandas as bd
 from bodo.tests.conftest import datapath_util
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode
 
+pytestmark = pytest.mark.jit_dependency
+
 
 def df_from_pandas():
     df = pd.DataFrame(

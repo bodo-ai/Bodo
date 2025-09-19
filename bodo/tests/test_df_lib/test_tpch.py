@@ -7,6 +7,8 @@ import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
 
+pytestmark = pytest.mark.jit_dependency
+
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 
 
@@ -74,7 +76,7 @@ def test_tpch_q05():
 
 
 def test_tpch_q06():
-    run_tpch_query_test(tpch.tpch_q06)
+    run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
 
 
 def test_tpch_q07():
@@ -94,7 +96,7 @@ def test_tpch_q10():
 
 
 def test_tpch_q11():
-    run_tpch_query_test(tpch.tpch_q11, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q11)
 
 
 def test_tpch_q12():
@@ -106,15 +108,13 @@ def test_tpch_q13():
 
 
 def test_tpch_q14():
-    # TODO [BSE-5099]: Series.where
-    run_tpch_query_test(tpch.tpch_q14, plan_executions=5)
+    run_tpch_query_test(tpch.tpch_q14, plan_executions=1)
 
 
 def test_tpch_q15():
-    run_tpch_query_test(tpch.tpch_q15, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q15)
 
 
-@pytest.mark.skip("TODO [BSE-5105]: Support not isin inside of selection")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
@@ -128,7 +128,7 @@ def test_tpch_q18():
 
 
 def test_tpch_q19():
-    run_tpch_query_test(tpch.tpch_q19)
+    run_tpch_query_test(tpch.tpch_q19, plan_executions=1)
 
 
 def test_tpch_q20():
@@ -140,4 +140,6 @@ def test_tpch_q21():
 
 
 def test_tpch_q22():
-    run_tpch_query_test(tpch.tpch_q22, plan_executions=1)
+    run_tpch_query_test(
+        tpch.tpch_q22,
+    )

@@ -2,8 +2,8 @@ import io
 
 import numpy as np
 import pytest
-from numba.core import types
-from numba.core.typeconv.castgraph import Conversion
+from numba.core import types  # noqa TID253
+from numba.core.typeconv.castgraph import Conversion  # noqa TID253
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -97,6 +97,7 @@ def test_conversion_rules(memory_leak_check):
     """
     Make sure conversion rules are initialized correctly in native typer
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.type_inference.native_typer import check_compatible_types
 
     conv = check_compatible_types(types.boolean, types.int8)

@@ -26,6 +26,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -111,6 +112,7 @@ def init_interval_scalar(
 
 
 @overload(pd.Interval, inline="always")
+@overload(bd.Interval, inline="always")
 def overload_init_interval(left, right, closed="right"):
     """
     Support for the pd.Interval constructor. Note: currently only

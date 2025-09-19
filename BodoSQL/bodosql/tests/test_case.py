@@ -11,12 +11,14 @@ import bodo
 import bodosql
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import (
-    DistTestPipeline,
-    SeriesOptTestPipeline,
     dist_IR_contains,
     gen_nonascii_list,
     pytest_mark_one_rank,
     temp_config_override,
+)
+from bodo.tests.utils_jit import (
+    DistTestPipeline,
+    SeriesOptTestPipeline,
 )
 from bodosql.tests.utils import check_query
 

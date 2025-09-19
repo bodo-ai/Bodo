@@ -12,7 +12,6 @@ from pyspark.sql.types import Row
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.skipif(
     bodo.tests.utils.test_spawn_mode_enabled or sys.platform == "win32",
@@ -121,6 +120,7 @@ def test_row_get_field(memory_leak_check):
 @pytest.mark.slow
 def test_create_dataframe(memory_leak_check):
     """test spark.createDataFrame() calls"""
+    from bodo.utils.typing import BodoError
 
     # pandas input
     def impl(df):
@@ -451,6 +451,7 @@ def test_dataframe_take(memory_leak_check):
 @pytest.mark.slow
 def test_functions_col(memory_leak_check):
     """test creating Column object using F.col()"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         spark = SparkSession.builder.getOrCreate()
@@ -484,6 +485,7 @@ def test_functions_col(memory_leak_check):
 @pytest.mark.slow
 def test_functions_sum(memory_leak_check):
     """test F.sum()"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         spark = SparkSession.builder.getOrCreate()

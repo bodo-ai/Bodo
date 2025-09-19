@@ -8,7 +8,7 @@ import shutil
 import string
 import sys
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -16,15 +16,13 @@ import pyarrow.parquet as pq
 import pytest
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+from bodo import BodoWarning
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
-    SeriesOptTestPipeline,
     _check_for_io_reader_filters,
     _get_dist_arg,
     cast_dt64_to_ns,
@@ -39,9 +37,8 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
-from bodo.utils.typing import BodoError, BodoWarning
 
-pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
+pytestmark = [pytest.mark.parquet, pytest.mark.df_lib, pytest.mark.jit_dependency]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
@@ -119,6 +116,7 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
 )
 def test_read_partitions_datetime(memory_leak_check):
     """Test reading and filtering partitioned parquet data for datetime data"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -575,6 +573,7 @@ def test_pq_multi_idx(memory_leak_check):
 )
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     try:
         if bodo.get_rank() == 0:
@@ -662,6 +661,8 @@ def test_read_partitions(memory_leak_check):
 )
 def test_read_partitions2(memory_leak_check):
     """test reading and filtering partitioned parquet data in more complex cases"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             table = pa.table(
@@ -697,6 +698,8 @@ def test_read_partitions2(memory_leak_check):
 def test_read_partitions_implicit_and_detailed(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and a complex implicit and"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             table = pa.table(
@@ -734,6 +737,7 @@ def test_read_partitions_implicit_and_detailed(memory_leak_check):
 def test_read_partitions_implicit_and_simple(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and an implicit and"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -783,6 +787,8 @@ def test_read_partitions_string_int(memory_leak_check):
     """test reading from a file where the partition column could have
     a mix of strings and ints
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             table = pa.table(
@@ -817,6 +823,7 @@ def test_read_partitions_string_int(memory_leak_check):
 )
 def test_read_partitions_two_level(memory_leak_check):
     """test reading and filtering partitioned parquet data for two levels partitions"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -852,6 +859,7 @@ def test_read_partitions_two_level(memory_leak_check):
 def test_read_partitions_predicate_dead_column(memory_leak_check):
     """test reading and filtering predicate + partition columns
     doesn't load the columns if they are unused."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -896,6 +904,7 @@ def test_read_partitions_cat_ordering(memory_leak_check):
     directories, to make sure order of partition values in categorical dtype
     of partition columns is consistent (same at compile time and runtime)
     and matches pandas"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1048,6 +1057,7 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
 def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
     a format string."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline, reduce_sum
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1102,7 +1112,7 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
             except AssertionError:
                 passed = 1
             n_pes = bodo.get_size()
-            n_passed = bodo.tests.utils.reduce_sum(passed)
+            n_passed = reduce_sum(passed)
             assert n_passed == n_pes, "Filter pushdown detected on at least 1 rank"
 
 
@@ -1114,6 +1124,7 @@ def test_read_partitions_large(memory_leak_check):
     """
     test reading and filtering partitioned parquet data with large number of partitions
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1155,7 +1166,7 @@ def test_read_partitions_large(memory_leak_check):
 )
 def test_from_parquet_partition_bitsize(datapath):
     """Tests an issue with the bitsize of a partitioned dataframe"""
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_series_ext import get_series_data
 
     path = datapath("test_partition_bitwidth.pq/")
@@ -1178,6 +1189,7 @@ def test_from_parquet_partition_bitsize(datapath):
 @pytest.mark.slow
 def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
     """test that predicate pushdown executes when there is Pandas range metadata."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1216,6 +1228,7 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
 )
 def test_read_predicates_isnull(memory_leak_check):
     """test that predicate pushdown with isnull in the binops."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     try:
         if bodo.get_rank() == 0:
@@ -1253,6 +1266,8 @@ def test_read_predicates_isnull(memory_leak_check):
 def test_read_predicates_timestamp_date(memory_leak_check):
     """Test predicate pushdown where a date column is filtered
     by a timestamp."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+
     filepath = "pq_data"
     if bodo.get_rank() == 0:
         df = pd.DataFrame(
@@ -1294,6 +1309,7 @@ def test_read_predicates_timestamp_date(memory_leak_check):
 )
 def test_read_predicates_isnull_alone(memory_leak_check):
     """test that predicate pushdown with isnull as the sole filter."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1485,6 +1501,7 @@ def test_read_partitions_isin(memory_leak_check):
 )
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     if bodo.get_rank() == 0:
         df = pd.DataFrame(
@@ -1523,6 +1540,7 @@ def test_bodosql_pushdown_codegen(datapath):
     Make sure possible generated codes by BodoSQL work with filter pushdown.
     See [BE-3557]
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(filename):
         df = pd.read_parquet(filename)
@@ -1630,6 +1648,7 @@ def test_read_pq_head_only(datapath, memory_leak_check):
     test reading only shape and/or head from Parquet file if possible
     (limit pushdown)
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     # read both shape and head()
     def impl1(path):
@@ -1816,6 +1835,8 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
 @pytest.mark.slow
 @pytest_mark_not_df_lib
 def test_pq_non_constant_filepath_error(datapath):
+    from bodo.utils.typing import BodoError
+
     f1 = datapath("example.parquet")
 
     @bodo.jit
@@ -1857,6 +1878,7 @@ def test_pq_non_constant_filepath_error(datapath):
 @pytest_mark_not_df_lib
 def test_read_parquet_invalid_path():
     """test error raise when parquet file path is invalid in C++ code."""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         df = pd.read_parquet("I_dont_exist.pq")
@@ -1868,6 +1890,8 @@ def test_read_parquet_invalid_path():
 
 @pytest_mark_not_df_lib
 def test_read_parquet_invalid_path_glob():
+    from bodo.utils.typing import BodoError
+
     def test_impl():
         df = pd.read_parquet("I*dont*exist")
         return df
@@ -1878,6 +1902,8 @@ def test_read_parquet_invalid_path_glob():
 
 @pytest_mark_not_df_lib
 def test_read_parquet_invalid_list_of_files(datapath):
+    from bodo.utils.typing import BodoError
+
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
         return df
@@ -1909,6 +1935,7 @@ def test_read_parquet_invalid_list_of_files(datapath):
 @pytest_mark_not_df_lib
 def test_read_parquet_invalid_path_const(memory_leak_check):
     """test error raise when parquet file path provided as constant but is invalid."""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.read_parquet("I_dont_exist.pq")
@@ -2324,6 +2351,7 @@ def test_read_parquet_unsupported_arg(memory_leak_check):
     """
     test that an error is raised when unsupported arg is passed.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         df = pd.read_parquet("some_file.pq", invalid_arg="invalid")
@@ -2340,6 +2368,7 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
     """
     test that an error is raised when storage_options is passed for local FS
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl1():
         df = pd.read_parquet("some_file.pq", storage_options={"invalid_arg": "invalid"})
@@ -2436,6 +2465,8 @@ def test_read_parquet_hive_partitions_type_clash(datapath):
     inferred schema. In this case we use _bodo_use_hive=False to disable reading
     with the hive naming convention.
     """
+    from bodo.utils.typing import BodoError
+
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
     def test_impl():
@@ -2738,6 +2769,7 @@ def test_pq_cache_print(datapath, capsys, memory_leak_check):
 def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for parquet
     file path passed by another bodo.jit function"""
+    from bodo.utils.typing import BodoError
 
     filename = "s3://test-pq-2/item.pq"
     # Save default developer mode value
@@ -2780,6 +2812,7 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
 @pytest_mark_not_df_lib
 def test_pq_invalid_column_selection(datapath, memory_leak_check):
     """test error raise when selected column is not in file schema"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["C"])
@@ -3008,6 +3041,7 @@ def test_batched_read_agg(datapath, memory_leak_check):
     Test a simple use of batched Parquet reads by
     getting the max of a column
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     def impl(path):
         total_max = 0
@@ -3044,6 +3078,7 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     """
     Test shape pushdown with batched Snowflake reads
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     def impl(path):
         total_len = 0

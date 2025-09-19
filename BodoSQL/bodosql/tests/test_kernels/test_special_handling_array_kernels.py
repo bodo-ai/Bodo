@@ -13,8 +13,8 @@ from bodo.tests.utils import (
     check_func,
     find_nested_dispatcher_and_args,
     pytest_slow_unless_codegen,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 
 # Skip unless any library or BodoSQL codegen or files were changed

@@ -51,6 +51,7 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
     LogicalIcebergWrite,
+    LogicalInsertScalarSubquery,
     LogicalLimit,
     LogicalOrder,
     LogicalParquetWrite,
@@ -125,6 +126,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
         if not args and not kwargs:
             return super().__new__(cls, *args, **kwargs)
+
+        # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
 
         df = pd.DataFrame(*args, **kwargs)
         return bodo.pandas.base.from_pandas(df)
@@ -1096,8 +1099,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if (out_plan := get_isin_filter_plan(self._plan, key._plan)) is not None:
                 return wrap_plan(out_plan)
 
+            plan = self._plan
+            # If the key is a scalar subquery, then we use that plan since it's just
+            # this plan with the extra column containing the scalar value.
+            if isinstance(key._plan.source, LogicalInsertScalarSubquery):
+                plan = key._plan.source
+
             key_expr = get_proj_expr_single(key._plan)
-            key_expr = key_expr.replace_source(self._plan)
+            key_expr = key_expr.replace_source(plan)
             if key_expr is None:
                 raise BodoLibNotImplementedException(
                     "DataFrame filter expression must be on the same dataframe."
@@ -1105,7 +1114,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LogicalFilter(empty_data, self._plan, key_expr),
+                plan=LogicalFilter(empty_data, plan, key_expr),
             )
         # Select one or more columns
         elif isinstance(key, str) or (
@@ -1387,7 +1396,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
                 warnings.warn(BodoCompilationFailedWarning(msg))
             else:
-                bodo.spawn.utils.import_compiler_on_workers()
+                if bodo.dataframe_library_run_parallel:
+                    bodo.spawn.utils.import_compiler_on_workers()
                 return apply_result
 
         # engine == "python" or jit fallthrough
@@ -1718,6 +1728,28 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
     it. Returns None if the plan pattern does not match.
     """
     from bodo.ext import plan_optimizer
+    from bodo.pandas.plan import UnaryOpExpression
+
+    # Support not in case like df1[~df1.A.isin(df2.B)] using anti-join
+    is_anti = False
+    if (
+        is_single_projection(key_plan)
+        and isinstance(
+            (key_expr := get_proj_expr_single(key_plan)),
+            UnaryOpExpression,
+        )
+        and key_expr.op == "__invert__"
+        and isinstance(key_expr.source, LogicalComparisonJoin)
+        and key_expr.source.join_type == plan_optimizer.CJoinType.MARK
+    ):
+        # Match df1[~df1.A.isin(df2.B)] and convert to df1[df1.A.isin(df2.B)] for
+        # matching below but with anti-join flag set
+        is_anti = True
+        key_plan = LogicalProjection(
+            key_plan.empty_data,
+            key_expr.source,
+            (key_expr.source_expr,) + key_plan.exprs[1:],
+        )
 
     # Match df1.A.isin(df2.B) case which is a mark join generated in our Series.isin()
     if not (
@@ -1734,7 +1766,7 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
         source_plan.empty_data,
         source_plan,
         key_plan.source.right_plan,
-        plan_optimizer.CJoinType.INNER,
+        plan_optimizer.CJoinType.ANTI if is_anti else plan_optimizer.CJoinType.INNER,
         [(left_key_ind, 0)],
     )
 
