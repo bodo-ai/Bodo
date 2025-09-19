@@ -7,7 +7,7 @@ API Reference {#apireference}
 =============
 
 <div class="grid cards" markdown>
-- [Bodo DataFrame Library API][dataframe-lib]
+- [Bodo DataFrames API][dataframe-lib]
 - [Bodo JIT Compiler Python Support API Reference][pythonreference]
 - [Bodo Parallel API Reference][bodoparallelapis]
 - [SQL Reference][bodosql]

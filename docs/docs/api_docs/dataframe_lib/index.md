@@ -1,6 +1,6 @@
-# Bodo DataFrame Library API {#dataframe-lib}
+# Bodo DataFrames API {#dataframe-lib}
 
-The Bodo DataFrame Library is designed to accelerate and scale Pandas workflows with just a one-line change — simply replace:
+Bodo DataFrames is designed to accelerate and scale Pandas workflows with just a one-line change — simply replace:
 
 ``` py
 import pandas as pd
@@ -29,17 +29,17 @@ whether you're working on a laptop or running jobs across a large cloud cluster.
 making it possible to process datasets larger than memory reliably.
 
 !!! warning
-    Bodo DataFrame Library is under active development and is currently considered experimental.
+    Bodo DataFrames is under active development and is currently considered experimental.
     Some features and APIs may not yet be fully supported.
     We welcome your feedback — please join our community [Slack](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) or open an issue on [our GitHub](https://github.com/bodo-ai/Bodo)
     if you encounter any problems!
 
 ## Lazy Evaluation and Fallback to Pandas
 
-Bodo DataFrame Library operates with lazy evaluation to allow query optimization, meaning operations are recorded into a query plan rather than executed immediately.
+Bodo DataFrames operates with lazy evaluation to allow query optimization, meaning operations are recorded into a query plan rather than executed immediately.
 Execution is automatically triggered only when results are actually needed, such as when displaying a DataFrame `df` with `print(df)`.
 
-If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas.
+If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrames gracefully falls back to native Pandas.
 When this happens, the current query plan of the DataFrame is immediately executed, the resulting data is collected onto a single core and converted to a Pandas DataFrame, and further operations proceed using Pandas.
 
 !!! warning

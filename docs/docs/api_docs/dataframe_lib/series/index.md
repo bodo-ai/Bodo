@@ -1,10 +1,10 @@
 # Series API
-The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
+Bodo DataFrames supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
     If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo
-	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
-	 the Bodo DataFrame Library for more info.
+	 Bodo DataFrames gracefully falls back to native Pandas. See [overview][overview] of
+	 Bodo DataFrames for more info.
 
 ## AI Functions
 - [`bodo.pandas.BodoSeries.ai.tokenize`][bodoseriesaitokenize]
@@ -84,8 +84,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 ### Datetime methods
 !!! note
-    Locale format must be strict: The locale parameter in `month_name` and `day_name` must 
-	follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). 
+    Locale format must be strict: The locale parameter in `month_name` and `day_name` must
+	follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8").
 	Variants like "pt_BR.utf8" may not be recognized and trigger an error.
 
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
@@ -98,9 +98,9 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.isocalendar`][bodoseriesdtisocalendar]
 
 !!! note
-    Bodo currently only supports "NaT" for the ambiguous parameter in `tz_localize`. 
-	"raise", "infer", or boolean arrays are not supported and will trigger a fallback to 
-	Pandas. Similarly, for the nonexistent parameter, 
+    Bodo currently only supports "NaT" for the ambiguous parameter in `tz_localize`.
+	"raise", "infer", or boolean arrays are not supported and will trigger a fallback to
+	Pandas. Similarly, for the nonexistent parameter,
     "raise" is not supported and will trigger a fallback. Due to these limitations, the
 	default behavior in Bodo is `ambiguous="NaT"` and `nonexistent="NaT"`.
 
@@ -131,6 +131,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 - [`bodo.pandas.BodoSeries.reset_index`][bodoseriesresetindex]
+- [`bodo.pandas.BodoSeries.where`][bodoserieswhere]
 
 ---
 
@@ -286,6 +287,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesdttime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.time.html
 
 [bodoseriesisin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isin.html
+[bodoserieswhere]: https://pandas.pydata.org/docs/reference/api/pandas.Series.where.html
 [bodoseriesnotnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notnull.html
 [bodoseriesisnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isnull.html
 [bodoseriesffill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.ffill.html

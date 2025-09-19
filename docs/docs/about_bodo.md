@@ -7,7 +7,7 @@ hide:
 # Bodo: Simple Python Acceleration and Scaling for Data and AI
 
 
-Bodo Dataframe Library is a drop in replacement for pandas (`import bodo.pandas as pd`, a single line import change),
+Bodo Dataframes is a drop in replacement for pandas (`import bodo.pandas as pd`, a single line import change),
 which applies advanced High-Performance Computing (HPC) and database optimization
 techniques to significantly boost the performance of your existing Python code without code rewrites.
 Bodo also scales Python code from single laptops to large clusters and supercomputers automatically.
