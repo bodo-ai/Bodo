@@ -1839,7 +1839,6 @@ struct table_info {
           column_names(column_names),
           metadata(metadata),
           _nrows(nrows) {}
-
     uint64_t ncols() const { return columns.size(); }
     uint64_t nrows() const {
         // TODO: Replace with _nrows always.
