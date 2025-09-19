@@ -1544,6 +1544,9 @@ def parquet_dataset_unify_nulls(
         if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
             break
 
-    unify_schemas_across_ranks(dataset, row_count)
+    comm = MPI.COMM_WORLD
+
+    if comm.Get_size() > 1:
+        unify_schemas_across_ranks(dataset, row_count)
 
     return dataset
