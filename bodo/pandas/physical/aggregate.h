@@ -267,10 +267,17 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         override {
         time_pt start_produce = start_timer();
         bool out_is_last = false;
-        std::shared_ptr<table_info> next_batch =
-            groupby_produce_output_batch_wrapper(this->groupby_state.get(),
-                                                 &out_is_last, true);
+        std::shared_ptr<table_info> next_batch;
+        if (!this->groupby_state->output_state ||
+            this->groupby_state->output_state->buffer.total_remaining == 0) {
+            out_is_last = true;
+            next_batch = alloc_table_like(output_schema);
+        } else {
+            next_batch = groupby_produce_output_batch_wrapper(
+                this->groupby_state.get(), &out_is_last, true);
+        }
         this->metrics.produce_time += end_timer(start_produce);
+        next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED
                                         : OperatorResult::HAVE_MORE_OUTPUT};
     }
@@ -352,6 +359,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     PhysicalAggregateMetrics metrics;
     // Mapping of input table column indices to move keys to the front.
     std::vector<int64_t> input_col_inds;
+    int num_consume = 0;
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;

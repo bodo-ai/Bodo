@@ -92,6 +92,18 @@ std::shared_ptr<table_info> alloc_table_like(
                                         table->column_names, table->metadata);
 }
 
+std::shared_ptr<table_info> alloc_table_like(
+    const std::shared_ptr<bodo::Schema>& schema, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::vector<std::shared_ptr<array_info>> arrays;
+    arrays.reserve(schema->ncols());
+    for (auto& dtype : schema->column_types) {
+        arrays.emplace_back(alloc_array_like(dtype));
+    }
+    return std::make_shared<table_info>(arrays, 0, schema->column_names,
+                                        schema->metadata);
+}
+
 std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,

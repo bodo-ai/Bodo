@@ -7,6 +7,10 @@
 #include "_physical_conv.h"
 #include "_pipeline.h"
 #include "duckdb/planner/logical_operator.hpp"
+#include "physical/cte.h"
+
+// Holds table_index to PhysicalCTE mapping during physical plan construction.
+extern std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> g_ctes;
 
 /**
  * @brief Executor class for executing a DuckDB logical plan in streaming
@@ -23,7 +27,18 @@ class Executor {
         // Convert the logical plan to a physical plan
         PhysicalPlanBuilder builder;
         builder.Visit(*plan);
-        pipelines = std::move(builder.finished_pipelines);
+
+        // Move frozen/locked pipelines from builder to Executor pipelines.
+        pipelines.insert(
+            pipelines.end(),
+            std::make_move_iterator(builder.locked_pipelines.begin()),
+            std::make_move_iterator(builder.locked_pipelines.end()));
+
+        // Move normal pipelines from builder to Executor pipelines.
+        pipelines.insert(
+            pipelines.end(),
+            std::make_move_iterator(builder.finished_pipelines.begin()),
+            std::make_move_iterator(builder.finished_pipelines.end()));
 
         // Write finalizes the active pipeline but others need result collection
         if (builder.active_pipeline != nullptr) {
@@ -41,15 +56,27 @@ class Executor {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
-        QueryProfileCollector::Default().Init();
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #ifdef DEBUG_PIPELINE
-        std::cout << "ExecutePipelines with " << pipelines.size()
-                  << " pipelines." << std::endl;
+        std::cout << "Rank " << rank << " ExecutePipelines with "
+                  << pipelines.size() << " pipelines." << std::endl;
+
+        for (size_t i = 0; i < pipelines.size(); ++i) {
+            std::cout << "Rank " << rank << " ------ Pipeline " << i
+                      << " ------" << std::endl;
+            pipelines[i]->printPipeline();
+            std::cout << "Rank " << rank << " ------ Pipeline " << i
+                      << " ------" << std::endl;
+        }
 #endif
+
+        QueryProfileCollector::Default().Init();
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
 #ifdef DEBUG_PIPELINE
-            std::cout << "Before execute pipeline " << i << std::endl;
+            std::cout << "Rank " << rank << " Before execute pipeline " << i
+                      << std::endl;
 #endif
             uint64_t batches_processed = pipelines[i]->Execute();
 
@@ -60,11 +87,14 @@ class Executor {
             }
 
 #ifdef DEBUG_PIPELINE
-            std::cout << "After execute pipeline " << i << std::endl;
+            std::cout << "Rank " << rank << " After execute pipeline " << i
+                      << std::endl;
 #endif
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
         QueryProfileCollector::Default().Finalize(0);
+        // Clear table to CTE mapping in preparation for next plan execution.
+        g_ctes.clear();
         return pipelines.back()->GetResult();
     }
 };

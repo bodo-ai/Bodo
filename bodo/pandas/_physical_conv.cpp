@@ -7,6 +7,7 @@
 #include "_util.h"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "physical/aggregate.h"
+#include "physical/cte.h"
 #include "physical/filter.h"
 #include "physical/join.h"
 #include "physical/limit.h"
@@ -16,6 +17,8 @@
 #include "physical/sample.h"
 #include "physical/sort.h"
 #include "physical/union_all.h"
+
+std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> g_ctes;
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -251,6 +254,45 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
                                     build_pipelines.end());
 
     this->active_pipeline->AddOperator(physical_join);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
+    // Create pipelines for the duplicate side of the CTE.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+    auto physical_cte = std::make_shared<PhysicalCTE>(op, in_table_schema);
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_cte));
+
+    // Save the physical_cte node away so that cte ref's on the non-duplicate
+    // side can find it.
+    g_ctes.insert({op.table_index, physical_cte});
+    // The active pipeline finishes after the duplicate side.
+    this->active_pipeline = nullptr;
+    /*
+     * The build side of joins want to insert at the front of the finished
+     * pipelines but that causes a problem with CTEs because the use of a
+     * CTE can then preceed its calculation.  When we are done with a CTE,
+     * we now lock the current set of finished pipelines so the ordering
+     * cannot be changed.
+     */
+    this->lock_finished();
+
+    // Create pipelines for the side that uses the duplicate side.
+    this->Visit(*op.children[1]);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
+    // Match the cte_index with the CTE node table index in the global
+    // structure.
+    auto table_index_iter = g_ctes.find(op.cte_index);
+    if (table_index_iter == g_ctes.end()) {
+        throw std::runtime_error(
+            "LogicalCTERef couldn't find matching table_index.");
+    }
+    auto physical_cte_ref =
+        std::make_shared<PhysicalCTERef>(table_index_iter->second);
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
