@@ -186,7 +186,7 @@ def test_scatterv(memory_leak_check):
             bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
-    scattered_arr = bodo.libs.distributed_api.scatterv(arr)
+    scattered_arr = bodo.scatterv(arr)
     np.testing.assert_array_equal(
         scattered_arr, _get_dist_arg(arr, False, False, False)
     )
