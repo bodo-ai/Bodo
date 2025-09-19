@@ -35,6 +35,7 @@ from pandas.core.tools.datetimes import _unit_map
 from pandas.io.parsers.readers import _c_parser_defaults
 
 import bodo.spawn.spawner  # noqa: F401
+from bodo.io.parquet_pio import get_parquet_dataset, parquet_dataset_unify_nulls
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.plan import (
     LazyPlanDistributedArg,
@@ -112,19 +113,35 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    from bodo.io.parquet_pio import get_dataset_unify_nulls
-
     if storage_options is None:
         storage_options = {}
 
     # Read Parquet schema
     use_hive = True
-    pq_dataset = get_dataset_unify_nulls(
+    pq_dataset = get_parquet_dataset(
         path,
-        storage_options,
-        "hive" if use_hive else None,
+        get_row_counts=False,
+        storage_options=storage_options,
+        partitioning="hive" if use_hive else None,
     )
+    pq_dataset = parquet_dataset_unify_nulls(pq_dataset)
     arrow_schema = pq_dataset.schema
+    # Convert dictionary columns to use int32 indices since our c++ dict implementation
+    # only supports int32 indices.
+    for i in range(len(arrow_schema)):
+        field = arrow_schema.field(i)
+        if pa.types.is_dictionary(field.type):
+            arrow_schema = arrow_schema.set(
+                i,
+                pa.field(
+                    field.name,
+                    pa.dictionary(
+                        pa.int32(), field.type.value_type, field.type.ordered
+                    ),
+                    field.nullable,
+                    field.metadata,
+                ),
+            )
 
     empty_df = arrow_to_empty_df(arrow_schema)
 

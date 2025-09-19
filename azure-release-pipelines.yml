@@ -17,7 +17,7 @@ parameters:
   - name: PYTEST_MARKER
     displayName: PyTest Marker
     type: string
-    default: 'not weekly and not iceberg'
+    default: 'not weekly'
   - name: AGENT_POOL
     displayName: Agent Pool
     type: string
@@ -76,7 +76,7 @@ stages:
       matrix:
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "not iceberg"
+          PYTEST_MARKER: ""
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -86,10 +86,10 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "spawn_mode and not iceberg"
+          PYTEST_MARKER: "spawn_mode"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "spawn_mode and not iceberg"
+          PYTEST_MARKER: "spawn_mode"
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -100,11 +100,11 @@ stages:
         ${{ each slice in split(variables.bodo_df_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_df_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: "df_lib and not weekly and not iceberg and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
+            PYTEST_MARKER: "df_lib and not weekly and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
         ${{ each slice in split(variables.bodo_df_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_df_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: "df_lib and not weekly and not iceberg and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
+            PYTEST_MARKER: "df_lib and not weekly and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
 
 
 - stage: Test_BodoSQL
@@ -151,9 +151,9 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "spawn_mode and not iceberg"
+          PYTEST_MARKER: "spawn_mode"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "spawn_mode and not iceberg"
+          PYTEST_MARKER: "spawn_mode"
 
 

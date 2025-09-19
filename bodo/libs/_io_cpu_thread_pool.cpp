@@ -86,7 +86,8 @@ struct AtForkState {
         // to avoid multiple concurrent forks and atforks.
         mutex_.lock();
 
-        DCHECK(handlers_while_forking_.empty());  // AfterForkParent clears it
+        ARROW_DCHECK(
+            handlers_while_forking_.empty());  // AfterForkParent clears it
 
         for (const auto& weak_handler : handlers_) {
             if (auto handler = weak_handler.lock()) {

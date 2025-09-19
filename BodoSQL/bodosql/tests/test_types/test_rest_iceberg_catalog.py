@@ -651,7 +651,7 @@ def test_rest_catalog_token_caching(memory_leak_check):
             dispatcher = bodo.jit(cache=True)(f)
             assert (
                 dispatcher()
-                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token1"
+                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token1&sigv4=false"
             )
             sig = dispatcher.signatures[0]
             assert dispatcher._cache_hits[sig] == 0, (
@@ -665,7 +665,7 @@ def test_rest_catalog_token_caching(memory_leak_check):
             os.environ["__BODOSQL_REST_TOKEN"] = "test_token2"
             assert (
                 dispatcher_2()
-                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token2"
+                == "iceberg+test_uri?warehouse=test_warehouse&scope=PRINCIPAL_ROLE:ALL&token=test_token2&sigv4=false"
             )
             sig = dispatcher_2.signatures[0]
             assert dispatcher_2._cache_hits[sig] == 1, (

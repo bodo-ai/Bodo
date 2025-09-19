@@ -12,6 +12,7 @@
 #include <arrow/status.h>
 #include <arrow/type_fwd.h>
 #include <arrow/util/future.h>
+#include <arrow/util/thread_pool.h>
 #include <fmt/format.h>
 #include <listobject.h>
 #include <pyerrors.h>

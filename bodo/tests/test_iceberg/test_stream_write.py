@@ -220,6 +220,8 @@ def test_iceberg_write_basic(
     memory_leak_check,
 ):
     """Test basic streaming Iceberg write"""
+    import bodo.io.iceberg.stream_iceberg_write
+
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -278,6 +280,8 @@ def test_iceberg_write_with_comment_and_properties(
     memory_leak_check,
 ):
     """Test basic streaming Iceberg write"""
+    import bodo.io.iceberg.stream_iceberg_write
+
     table_name = "SIMPLE_STRING_TABLE"
     df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -341,6 +345,8 @@ def test_iceberg_write_basic_rep(
     memory_leak_check,
 ):
     """Test basic streaming Iceberg write with replicated input"""
+    import bodo.io.iceberg.stream_iceberg_write
+
     table_name = "SIMPLE_STRING_TABLE"
     df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -387,6 +393,7 @@ def test_iceberg_write_part_sort(
     and verify that the append was done correctly, i.e. validate
     that each file is correctly sorted and partitioned.
     """
+    import bodo.io.iceberg.stream_iceberg_write
     from bodo.tests.utils_jit import reduce_sum
 
     table_name = (
@@ -489,6 +496,7 @@ def test_iceberg_field_ids_in_pq_schema(
     the Iceberg Field ID and the schema metadata should have an
     encoded JSON describing the Iceberg schema.
     """
+    import bodo.io.iceberg.stream_iceberg_write
 
     table_name = f"SIMPLE_{base_name}_pq_schema_test_{mode}_streaming"
     db_schema, warehouse_loc = iceberg_database()

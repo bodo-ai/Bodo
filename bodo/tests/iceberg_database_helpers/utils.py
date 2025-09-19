@@ -27,10 +27,10 @@ class SortField(NamedTuple):
 # All spark instances must share the same set of jars - this is because
 # `spark.jars.packages` is not a run time option and cannot be modified.
 SPARK_JAR_PACKAGES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
+    "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0",
     "software.amazon.awssdk:bundle:2.29.19",
     "software.amazon.awssdk:url-connection-client:2.29.19",
-    "org.apache.iceberg:iceberg-azure-bundle:1.7.1",
+    "org.apache.iceberg:iceberg-azure-bundle:1.10.0",
 ]
 
 
@@ -42,6 +42,7 @@ class SparkIcebergCatalog:
 
 @dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
+    catalog_name: str = "hadoop_prod"
     path: str = None
 
 
@@ -107,10 +108,9 @@ def get_spark(
     builder.config("spark.sql.ansi.enabled", "false")
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
-    return spark
 
     def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
-        if catalog == SparkFilesystemIcebergCatalog():
+        if isinstance(catalog, SparkFilesystemIcebergCatalog):
             builder.config(
                 f"spark.sql.catalog.{catalog.catalog_name}",
                 "org.apache.iceberg.spark.SparkCatalog",
@@ -119,7 +119,7 @@ def get_spark(
             builder.config(
                 f"spark.sql.catalog.{catalog.catalog_name}.warehouse", catalog.path
             )
-        elif catalog == SparkRestIcebergCatalog():
+        elif isinstance(catalog, SparkRestIcebergCatalog):
             builder.config(
                 f"spark.sql.catalog.{catalog.catalog_name}",
                 "org.apache.iceberg.spark.SparkCatalog",

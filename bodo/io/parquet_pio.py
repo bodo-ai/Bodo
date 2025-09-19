@@ -146,12 +146,20 @@ class ParquetDataset:
             self.partitioning_schema = partitioning.schema
         else:
             self.partitioning_dictionaries = {}
-        # Convert large_string Arrow types to string
+        # Convert large_string Arrow types to string and dictionary to int32 indices
         # (see comment in bodo.io.parquet_pio.unify_schemas)
         for i in range(len(self.schema)):
             f = self.schema.field(i)
             if f.type == pa.large_string():
                 self.schema = self.schema.set(i, f.with_type(pa.string()))
+            elif isinstance(f.type, pa.DictionaryType):
+                if f.type.index_type != pa.int32():
+                    self.schema = self.schema.set(
+                        i,
+                        f.with_type(
+                            pa.dictionary(pa.int32(), f.type.value_type, f.type.ordered)
+                        ),
+                    )
         # IMPORTANT: only include partition columns in filters passed to
         # pq.ParquetDataset(), otherwise `get_fragments` could look inside the
         # parquet files
@@ -1329,7 +1337,6 @@ def parquet_file_schema(
 
     col_names = []
     col_types = []
-
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
@@ -1340,6 +1347,7 @@ def parquet_file_schema(
         read_categories=True,
         partitioning="hive" if use_hive else None,
     )
+    pq_dataset = parquet_dataset_unify_nulls(pq_dataset)
 
     partition_names = pq_dataset.partition_names
     pa_schema = pq_dataset.schema
@@ -1446,6 +1454,13 @@ def parquet_file_schema(
             # should still be included.
             selected_columns.append(index_col)
 
+    # Convert dictionary columns to use int32 indices
+    # since our c++ dict string array uses int32 indices
+    for i in range(len(arrow_types)):
+        if isinstance(arrow_types[i], pa.DictionaryType):
+            arrow_types[i] = pa.dictionary(pa.int32(), arrow_types[i].value_type)
+            pa_schema = pa_schema.set(i, pa_schema.field(i).with_type(arrow_types[i]))
+
     col_names = selected_columns
     col_indices = []
     col_types = []
@@ -1496,36 +1511,16 @@ def _get_partition_cat_dtype(dictionary):
     return CategoricalArrayType(cat_dtype)
 
 
-def get_dataset_unify_nulls(
-    fpath, storage_options: dict, partitioning: str | None
+def parquet_dataset_unify_nulls(
+    dataset: ParquetDataset,
 ) -> ParquetDataset:
     """
     Gets the ParquetDataset from fpath, unifying types of null columns if present.
 
-    NOTE: This function must be called on the spawner and is intended to handle
+    NOTE: This function is intended to handle
     the common case where the first file opened contains some null columns which have
     non-null values in other files.
     """
-    # Get FileSystem and create ParquetDataset object similar to
-    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L916
-    fpath, parsed_url, protocol = parse_fpath(fpath)
-    fs = getfs(fpath, protocol, storage_options, parallel=False)
-
-    dataset_or_err = get_bodo_pq_dataset_from_fpath(
-        fpath,
-        protocol,
-        parsed_url,
-        fs,
-        partitioning=partitioning,
-        filters=None,
-        typing_pa_schema=None,
-    )
-
-    if isinstance(dataset_or_err, Exception):  # pragma: no cover
-        error = dataset_or_err
-        raise error
-    dataset = pt.cast(ParquetDataset, dataset_or_err)
-    dataset.set_fs(fs)
     # If there are no null columns, skip unify step.
     if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
         return dataset
@@ -1542,9 +1537,16 @@ def get_dataset_unify_nulls(
 
     # If there are nulls in the schema, inspect the fragments
     # until the null columns can be resolved to a non-null type.
+    row_count = 0
     for piece, frag in zip(pieces, dataset_.get_fragments()):
         unify_fragment_schema(dataset, piece, frag)
+        row_count += piece._bodo_num_rows
         if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
             break
+
+    comm = MPI.COMM_WORLD
+
+    if comm.Get_size() > 1:
+        unify_schemas_across_ranks(dataset, row_count)
 
     return dataset
