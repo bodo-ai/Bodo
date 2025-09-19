@@ -5,9 +5,9 @@ hide:
 tags:
   - install
 ---
-# Installing Bodo Engine {#install}
+# Installing Bodo DataFrames {#install}
 
-Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
+Bodo DataFrames can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
@@ -15,7 +15,7 @@ pip install -U bodo
 ```
 
 For production environments, we recommend creating a `conda` environment and installing
-Bodo and its dependencies in it as shown below:
+Bodo DataFrames and its dependencies in it as shown below:
 
 ```console
 conda create -n Bodo python=3.13 -c conda-forge
@@ -23,7 +23,7 @@ conda activate Bodo
 conda install bodo -c conda-forge
 ```
 
-Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
+Bodo DataFrames uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
 `pip` and `conda` install commands above.
 
@@ -44,7 +44,7 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 
 The [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) lets developers install a Linux distribution
 on Windows, which provides a convenient environment for installing and using Bodo.
-Here are example commands to install Python and Bodo on WSL:
+Here are example commands to install Python and Bodo DataFrames on WSL:
 
 ```shell
 sudo apt update
@@ -57,7 +57,7 @@ pip install -U bodo
 
 ## Optional Dependencies {#optionaldep}
 
-Some Bodo functionality may require other dependencies, as summarized in
+Some Bodo DataFrames functionality may require other dependencies, as summarized in
 the table below.
 
 All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
@@ -89,7 +89,7 @@ conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjd
 
 ## Testing your Installation {#testinstall }
 
-Once you have installed Bodo with pip or activated your `conda` environment and installed Bodo in
+Once you have installed Bodo DataFrames with pip or activated your `conda` environment and installed Bodo in
 it, you can test it using the example program below. This program has
 two functions:
 
@@ -99,12 +99,10 @@ two functions:
     computations on it.
 
 ``` python3
-import bodo
-import pandas as pd
+import bodo.pandas as pd
 import numpy as np
 import time
 
-@bodo.jit
 def gen_data():
     NUM_GROUPS = 30
     NUM_ROWS = 20_000_000
@@ -114,14 +112,15 @@ def gen_data():
     })
     df.to_parquet("example1.pq")
 
-@bodo.jit
 def test():
     df = pd.read_parquet("example1.pq")
     t0 = time.time()
     df2 = df.groupby("A")["B"].agg(
-        (lambda a: (a==1).sum(), lambda a: (a==2).sum(), lambda a: (a==3).sum())
+        sum_b1=(lambda a: (a==1).sum()),
+        sum_b2=(lambda a: (a==2).sum()),
+        sum_b3=(lambda a: (a==3).sum())
     )
-    m = df2.mean()
+    m = df2.sum_b1.mean()
     print("Result:", m, "\nCompute time:", time.time() - t0, "secs")
 
 gen_data()
@@ -148,7 +147,7 @@ BODO_NUM_WORKERS=1 python example.py
 
 ## Enabling parallelism in clusters {#cluster_setup}
 
-Bodo relies on MPI for parallel compute. MPI can be configured on clusters
+Bodo DataFrames relies on MPI for parallel compute. MPI can be configured on clusters
 easily. The cluster nodes need to have passwordless SSH enabled between them,
 and there should be a host file listing their addresses (see an example tutorial
 [here](https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/){target="blank"}).

@@ -8,7 +8,7 @@ You can install Bodo engine locally, or use the Bodo Cloud Platform which is Bod
 
 For local and on-premise installations, please refer to the [Local Installation Guide][install].
 
----- 
+----
 
 
 ## Bodo Cloud Platform
