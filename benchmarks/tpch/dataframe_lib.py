@@ -521,7 +521,6 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     total_revenue = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
     # aggregate promo revenue calculation
-    # TODO[BSE-5113]: support division of BodoScalars in plans
     ratio = 100.00 * total_promo_revenue / total_revenue
     result_df = pd.DataFrame({"PROMO_REVENUE": [round(ratio, 2)]})
 

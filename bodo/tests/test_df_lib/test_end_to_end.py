@@ -1850,6 +1850,52 @@ def test_series_cmp_binops(datapath, index_val):
     )
 
 
+def test_scalar_arith_binops(datapath, index_val):
+    """Test various cases of BodoScalar binary operations."""
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + 1
+        bodo_S = bdf["A"].sum() + 1
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # Two BodoScalar expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"].sum()
+        bodo_S = bdf["A"].sum() + bdf["C"].sum()
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # BodoScalar/Series expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"]
+        bodo_S = bdf["A"].sum() + bdf["C"]
+
+    # TODO[BSE-5121]: Fix crash when execute_plan/get_value is not used directly
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar non-scalar expressions
+    with assert_executed_plan_count(1):
+        S = df["A"].sum() + np.ones(4)
+        bodo_S = bdf["A"].sum() + np.ones(4)
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
