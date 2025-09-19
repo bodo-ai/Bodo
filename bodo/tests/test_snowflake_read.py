@@ -10,16 +10,15 @@ import re
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
-import bodo.io.snowflake
-from bodo.libs.dict_arr_ext import is_dict_encoded
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -34,10 +33,8 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_mark_one_rank,
     pytest_snowflake,
-    run_rank0,
     temp_env_override,
 )
-from bodo.utils.typing import BodoError, BodoWarning
 
 if TYPE_CHECKING:  # pragma: no cover
     from pytest_mock import MockerFixture
@@ -160,6 +157,7 @@ def snowflake_conn():
     """
     Temporary Snowflake Connection for Basic Testing
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import snowflake_connect
 
     db = "TEST_DB"
@@ -186,6 +184,7 @@ def test_decimal_metadata_handling(cursor):
     Test that Bodo's Snowflake schema inference can
     determine the correct output size of various
     """
+    import bodo.io.snowflake
 
     # Test an int, double, maybe decimal, and decimal col for typing
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
@@ -215,6 +214,7 @@ def test_array_metadata_handling(cursor):
     """
     Test that Array Columns are Properly Typed
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -240,6 +240,8 @@ def test_array_metadata_handling_err(cursor):
     Test that an error is raised when an array item column
     has multiple value types that are incompatible
     """
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
 
     with pytest.raises(
         BodoError,
@@ -265,6 +267,7 @@ def test_map_metadata_handling(cursor):
     """
     Test that Object Columns are Properly Typed in Map
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -296,6 +299,7 @@ def test_struct_metadata_handling(cursor):
     - D: Different numeric types together (int, decimal, float)
     - E: Field not in all rows
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -335,6 +339,8 @@ def test_struct_metadata_handling_err_multiple_types(cursor):
     Test that an error is raised when a object column has a field
     with different types in different rows
     """
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
 
     with pytest.raises(
         BodoError, match=r"containing multiple types \['DATE', 'INTEGER'\]"
@@ -361,6 +367,8 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
     is assumed to be a struct, but there is a one-off or very uncommon field
     implying otherwise.
     """
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
 
     with pytest.raises(BodoError, match=r"has a field d in < 0.5% of non-null rows"):
         bodo.io.snowflake.get_schema_from_metadata(
@@ -396,6 +404,7 @@ def test_variant_metadata_handling(cursor):
     V6: bigint (field pushdown on struct column stored as variant in Snowflake)
     V7: array[struct[A:bigint,B:array[varchar]]] (parse json)
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -447,6 +456,7 @@ def test_float_array_metadata_handling(cursor):
     Test that Numeric Array Columns, that may contain Integers, Floats, and Decimals
     are properly typed to float64 arrays
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -479,6 +489,7 @@ def test_nested_in_array_metadata_handling(cursor):
     """
     Test that nested semi-structured data in Array Columns are properly typed
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -513,6 +524,9 @@ def test_nested_in_array_metadata_handling(cursor):
 
 @pytest_mark_one_rank
 def test_array_in_array_metadata_handling_err(cursor):
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match=r"type list\[list\[variant\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
@@ -532,6 +546,9 @@ def test_array_in_array_metadata_handling_err(cursor):
 
 @pytest_mark_one_rank
 def test_map_in_array_metadata_handling_err(cursor):
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match=r"type list\[map\[str, list\[variant\]\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
@@ -553,6 +570,9 @@ def test_map_in_array_metadata_handling_err(cursor):
 
 @pytest_mark_one_rank
 def test_struct_in_array_metadata_handling_err(cursor):
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match=r"type list\[struct\[... b: variant ...\]\]. We are unable to narrow the type further, because field b was found containing multiple types \['INTEGER', 'VARCHAR'\]",
@@ -581,6 +601,7 @@ def test_nested_in_map_metadata_handling(cursor):
     """
     Test that nested semi-structured data in Map Columns are properly typed
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -618,6 +639,9 @@ def test_nested_in_map_metadata_handling(cursor):
 
 @pytest_mark_one_rank
 def test_array_in_map_metadata_handling_err(cursor):
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match=r"type map\[str, list\[variant\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
@@ -640,6 +664,9 @@ def test_array_in_map_metadata_handling_err(cursor):
 
 @pytest_mark_one_rank
 def test_struct_in_map_metadata_handling_err(cursor):
+    import bodo.io.snowflake
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(
         BodoError,
         match=r"type map\[str, struct\[... name: variant ...\]\]. We are unable to narrow the type further, because field name was found containing multiple types \['ARRAY', 'VARCHAR'\]",
@@ -669,6 +696,7 @@ def test_nested_in_struct_metadata_handling(cursor):
     Test that nested semi-structured data in Struct Columns are properly typed.
     Also tests multiple levels of nesting
     """
+    import bodo.io.snowflake
 
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
@@ -710,20 +738,61 @@ def test_nested_in_struct_metadata_handling(cursor):
         ).equals(f)
 
 
-# TODO: Use numba_from_pyarrow to simplify parameterization
+@pytest.fixture
+def bodo_schema(request):
+    """Lazily create Bodo schemas to avoid importing JIT at collection time."""
+    import bodo.decorators  # noqa
+
+    val = request.param
+
+    # TODO: Use numba_from_pyarrow to simplify parameterization
+    if val == "bodo_int64":
+        return bodo.types.DataFrameType(
+            data=(
+                types.Array(types.int64, 1, "C"),
+                types.Array(types.int64, 1, "C"),
+                types.Array(types.int64, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_int32":
+        return bodo.types.DataFrameType(
+            data=(
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_decimal":
+        return bodo.types.DataFrameType(
+            data=(
+                bodo.types.DecimalArrayType(38, 0),
+                bodo.types.DecimalArrayType(38, 0),
+                bodo.types.DecimalArrayType(18, 0),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+    elif val == "bodo_decimal_int":
+        return bodo.types.DataFrameType(
+            data=(
+                bodo.types.DecimalArrayType(38, 0),
+                types.Array(types.int32, 1, "C"),
+                types.Array(types.int32, 1, "C"),
+            ),
+            columns=("l_orderkey", "l_partkey", "l_suppkey"),
+        )
+
+
 @pytest.mark.parametrize(
     "bodo_schema,pa_schema",
     [
         # All larger int
         (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_int64",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.int64(), nullable=False),
@@ -734,14 +803,7 @@ def test_nested_in_struct_metadata_handling(cursor):
         ),
         # Last column is larger int
         (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_int32",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.int32(), nullable=False),
@@ -751,6 +813,7 @@ def test_nested_in_struct_metadata_handling(cursor):
             ),
         ),
     ],
+    indirect=["bodo_schema"],
 )
 def test_snowflake_runtime_upcasting_int_to_int(
     mocker: "MockerFixture",
@@ -798,14 +861,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
     [
         # All are larger decimal
         (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(18, 0),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_decimal",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
@@ -816,14 +872,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
         ),
         # First column is larger decimal
         (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
+            "bodo_decimal_int",
             pa.schema(
                 [
                     pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
@@ -833,6 +882,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
             ),
         ),
     ],
+    indirect=["bodo_schema"],
 )
 def test_snowflake_runtime_upcasting_int_to_decimal(
     mocker: "MockerFixture",
@@ -845,6 +895,8 @@ def test_snowflake_runtime_upcasting_int_to_decimal(
     schema uses larger types than the runtime data for integers.
     The larger type is a decimal type
     """
+    from bodo.utils.utils import run_rank0
+
     # Mock the compile-time schema info
     # Original (and runtime data):
     #    L_ORDERKEY: int32 not null
@@ -1658,6 +1710,7 @@ def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
     """
     Test reading string columns as dictionary-encoded from Snowflake
     """
+    import bodo.io.snowflake
 
     @bodo.jit
     def test_impl0(query, conn):
@@ -1864,6 +1917,7 @@ def test_snowflake_dict_encoding_enabled(enable_dict_encoding, memory_leak_check
     """
     Test that SF_READ_AUTO_DICT_ENCODE_ENABLED works as expected.
     """
+    import bodo.io.snowflake
 
     # need to sort the output to make sure pandas and Bodo get the same rows
     # l_shipmode, l_shipinstruct should be dictionary encoded based on Snowflake
@@ -2715,6 +2769,7 @@ def test_snowflake_isin_pushdown(memory_leak_check):
     """
     Test that filter pushdown with isna/notna/isnull/notnull works in snowflake.
     """
+    import bodo.io.snowflake
 
     def impl_isin(query, conn, isin_list):
         df = pd.read_sql(query, conn)
@@ -3063,6 +3118,7 @@ def test_dict_encoded_small_table(memory_leak_check):
     """Tests that reading small table, even with unique values
     enables dictionary encoding.
     """
+    import bodo.io.snowflake
 
     def impl(query, conn_str):
         return pd.read_sql(query, conn_str)
@@ -3209,6 +3265,8 @@ def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
     """
     Test that bodo.read_sql works with the _bodo_orig_table_name argument.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.libs.dict_arr_ext import is_dict_encoded
 
     # Two tables KEATON_TESTING_TABLE_STRING_ALL_UNIQUE, which contains one string
     # column with entirely unique values, and KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE,
@@ -3272,6 +3330,7 @@ def test_disable_result_cache_session_param(memory_leak_check):
     Test that our snowflake connection sets USE_CACHED_RESULT = False
     when the BODO_DISABLE_SF_RESULT_CACHE env var is set to 1.
     """
+    import bodo.io.snowflake
 
     db = "TEST_DB"
     schema = "PUBLIC"

@@ -7,6 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 from bodo.libs.streaming.groupby import (
     get_partition_state,
 )

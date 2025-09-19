@@ -184,6 +184,12 @@ class Expression(LazyPlan):
         if self.source == new_source:
             return self
 
+    def with_new_source(self, new_source: LazyPlan):
+        """Return a copy of the expression with the source replaced by new_source."""
+        raise NotImplementedError(
+            f"with_new_source is not implemented for {self.__class__.__name__} expression."
+        )
+
 
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
@@ -384,6 +390,11 @@ class ColRefExpression(Expression):
         # Cannot replace source, return None to indicate failure
         return None
 
+    def with_new_source(self, new_source):
+        out = ColRefExpression(self.empty_data, new_source, self.col_index)
+        out.is_series = self.is_series
+        return out
+
 
 class NullExpression(Expression):
     """Expression representing a null value in the query plan."""
@@ -412,6 +423,11 @@ class NullExpression(Expression):
 
         # Cannot replace source, return None to indicate failure
         return None
+
+    def with_new_source(self, new_source):
+        out = NullExpression(self.empty_data, new_source, self.field_idx)
+        out.is_series = self.is_series
+        return out
 
 
 class ConstantExpression(Expression):
@@ -442,6 +458,11 @@ class ConstantExpression(Expression):
         # Cannot replace source, return None to indicate failure
         return None
 
+    def with_new_source(self, new_source):
+        out = ConstantExpression(self.empty_data, new_source, self.value)
+        out.is_series = self.is_series
+        return out
+
 
 class AggregateExpression(Expression):
     """Expression representing an aggregate function in the query plan."""
@@ -455,6 +476,11 @@ class AggregateExpression(Expression):
         # TODO: handle source replacement for aggregate expressions
         if self.source == new_source:
             return self
+
+    def with_new_source(self, new_source):
+        out = AggregateExpression(self.empty_data, new_source, *self.args[1:])
+        out.is_series = self.is_series
+        return out
 
 
 class PythonScalarFuncExpression(Expression):
@@ -521,6 +547,11 @@ class PythonScalarFuncExpression(Expression):
         if self.source == new_source:
             return self
 
+    def with_new_source(self, new_source):
+        out = PythonScalarFuncExpression(self.empty_data, new_source, *self.args[1:])
+        out.is_series = self.is_series
+        return out
+
 
 class ArrowScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
@@ -574,6 +605,11 @@ class ArrowScalarFuncExpression(Expression):
         if self.source == new_source:
             return self
 
+    def with_new_source(self, new_source):
+        out = ArrowScalarFuncExpression(self.empty_data, new_source, *self.args[1:])
+        out.is_series = self.is_series
+        return out
+
 
 class BinaryExpression(Expression):
     """Base class for binary expressions in the query plan, such as arithmetic and
@@ -614,6 +650,21 @@ class BinaryExpression(Expression):
         out.is_series = self.is_series
         return out
 
+    def with_new_source(self, new_source):
+        new_lhs = (
+            self.lhs.with_new_source(new_source)
+            if isinstance(self.lhs, Expression)
+            else self.lhs
+        )
+        new_rhs = (
+            self.rhs.with_new_source(new_source)
+            if isinstance(self.rhs, Expression)
+            else self.rhs
+        )
+        out = self.__class__(self.empty_data, new_lhs, new_rhs, self.op)
+        out.is_series = self.is_series
+        return out
+
 
 class ComparisonOpExpression(BinaryExpression):
     """Expression representing a comparison operation in the query plan."""
@@ -648,6 +699,75 @@ class UnaryOpExpression(Expression):
             return None
 
         out = UnaryOpExpression(self.empty_data, new_source_expr, self.op)
+        out.is_series = self.is_series
+        return out
+
+    def with_new_source(self, new_source):
+        out = UnaryOpExpression(
+            self.empty_data, self.source_expr.with_new_source(new_source), self.op
+        )
+        out.is_series = self.is_series
+        return out
+
+
+class CaseExpression(Expression):
+    """Base class for case expressions in the query plan, which have a "when" expression
+    and "then"/"else" expressions.
+    """
+
+    def __init__(self, empty_data, when_expr, then_expr, else_expr):
+        self.empty_data = empty_data
+        self.when_expr = when_expr
+        self.then_expr = then_expr
+        self.else_expr = else_expr
+        super().__init__(empty_data, when_expr, then_expr, else_expr)
+
+    @property
+    def source(self):
+        """Return the source of the case expression."""
+        return (
+            self.when_expr.source
+            if isinstance(self.when_expr, Expression)
+            else self.then_expr.source
+        )
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_when = (
+            self.when_expr.replace_source(new_source)
+            if isinstance(self.when_expr, Expression)
+            else self.when_expr
+        )
+        new_then = (
+            self.then_expr.replace_source(new_source)
+            if isinstance(self.then_expr, Expression)
+            else self.then_expr
+        )
+
+        new_else = (
+            self.else_expr.replace_source(new_source)
+            if isinstance(self.else_expr, Expression)
+            else self.else_expr
+        )
+
+        if (
+            (new_when is None and self.when_expr is not None)
+            or (new_then is None and self.then_expr is not None)
+            or (new_else is None and self.else_expr is not None)
+        ):
+            return None
+
+        out = self.__class__(self.empty_data, new_when, new_then, new_else)
+        out.is_series = self.is_series
+        return out
+
+    def with_new_source(self, new_source):
+        out = CaseExpression(
+            self.empty_data,
+            self.when_expr.with_new_source(new_source),
+            self.then_expr.with_new_source(new_source),
+            self.else_expr.with_new_source(new_source),
+        )
         out.is_series = self.is_series
         return out
 

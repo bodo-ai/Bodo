@@ -19,14 +19,6 @@ from bodo.tests.utils import (
 
 pytestmark = pytest_pandas
 
-
-@bodo.jit
-def inner_get_column(df):
-    # df2 = df[['A', 'C']]
-    # df2['D'] = np.ones(3)
-    return df.A
-
-
 COL_IND = 0
 
 
@@ -946,6 +938,12 @@ class TestDataFrame(unittest.TestCase):
         # tests df variable replacement in untyped_pass where inlining
         # can cause extra assignments and definition handling errors
         # TODO: inline freevar
+        @bodo.jit
+        def inner_get_column(df):
+            # df2 = df[['A', 'C']]
+            # df2['D'] = np.ones(3)
+            return df.A
+
         def test_impl():
             df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
             # TODO: df['C'] = [5,6,7]

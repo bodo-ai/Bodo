@@ -4,7 +4,7 @@ import os
 import tempfile
 import warnings
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -23,6 +23,8 @@ from bodo.pandas.utils import (
     JITFallback,
 )
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
+
+pytestmark = pytest.mark.jit_dependency
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -1766,6 +1768,134 @@ def test_series_compound_expression(datapath):
     )
 
 
+def test_series_arith_binops(datapath, index_val):
+    """Test various cases of Series binary operations."""
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1
+        bodo_S = bdf["A"] + 1
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + df["C"].sum()
+        bodo_S = bdf["A"] + bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression on top of another expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1 + df["C"].sum()
+        bodo_S = bdf["A"] + 1 + bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+def test_series_cmp_binops(datapath, index_val):
+    """Test various cases of Series binary operations."""
+    df = pd.DataFrame({"A": [1, 20, 300], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"] > 1
+        bodo_S = bdf["A"] > 1
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression
+    with assert_executed_plan_count(0):
+        S = df["A"] > df["C"].sum()
+        bodo_S = bdf["A"] > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar expression on top of another expression
+    with assert_executed_plan_count(0):
+        S = df["A"] + 1 > df["C"].sum()
+        bodo_S = bdf["A"] + 1 > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+def test_scalar_arith_binops(datapath, index_val):
+    """Test various cases of BodoScalar binary operations."""
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + 1
+        bodo_S = bdf["A"].sum() + 1
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # Two BodoScalar expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"].sum()
+        bodo_S = bdf["A"].sum() + bdf["C"].sum()
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # BodoScalar/Series expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"]
+        bodo_S = bdf["A"].sum() + bdf["C"]
+
+    # TODO[BSE-5121]: Fix crash when execute_plan/get_value is not used directly
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar non-scalar expressions
+    with assert_executed_plan_count(1):
+        S = df["A"].sum() + np.ones(4)
+        bodo_S = bdf["A"].sum() + np.ones(4)
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
@@ -2070,7 +2200,6 @@ def test_filter_series_not_isin(index_val):
 
 
 def test_rename(datapath, index_val):
-    """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {

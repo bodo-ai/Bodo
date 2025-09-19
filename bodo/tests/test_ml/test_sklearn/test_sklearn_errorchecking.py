@@ -19,7 +19,6 @@ from sklearn.svm import LinearSVC
 
 import bodo
 from bodo.tests.utils import _get_dist_arg
-from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -62,6 +61,7 @@ def generate_sample_weight(n_samples):
 def test_sgdr_sample_weight(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = SGDRegressor()
@@ -83,6 +83,7 @@ def test_sgdr_sample_weight(memory_leak_check):
 def test_sgdr_coef_init(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'coef_init' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, coef_init):
         clf = SGDRegressor()
@@ -104,6 +105,7 @@ def test_sgdr_coef_init(memory_leak_check):
 def test_sgdr_intercept_init(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'intercept_init' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, intercept_init):
         clf = SGDRegressor()
@@ -125,6 +127,7 @@ def test_sgdr_intercept_init(memory_leak_check):
 def test_sgdc_sample_weight(memory_leak_check):
     """Test BodoError is raised for SGDClassifier.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = SGDClassifier()
@@ -146,6 +149,7 @@ def test_sgdc_sample_weight(memory_leak_check):
 def test_lr_sample_weight(memory_leak_check):
     """Test BodoError is raised for LogisticRegression.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = LogisticRegression()
@@ -167,6 +171,7 @@ def test_lr_sample_weight(memory_leak_check):
 def test_linearReg_sample_weight(memory_leak_check):
     """Test BodoError is raised for LinearRegression.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = LinearRegression()
@@ -188,6 +193,7 @@ def test_linearReg_sample_weight(memory_leak_check):
 def test_lasso_sample_weight(memory_leak_check):
     """Test BodoError is raised for Lasso.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = Lasso()
@@ -209,6 +215,7 @@ def test_lasso_sample_weight(memory_leak_check):
 def test_ridge_sample_weight(memory_leak_check):
     """Test BodoError is raised for Ridge.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = Ridge()
@@ -230,6 +237,7 @@ def test_ridge_sample_weight(memory_leak_check):
 def test_lsvc_sample_weight(memory_leak_check):
     """Test BodoError is raised for LinearSVC.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = LinearSVC()
@@ -251,6 +259,7 @@ def test_lsvc_sample_weight(memory_leak_check):
 def test_standardscaler_sample_weight(memory_leak_check):
     """Test BodoError is raised for StandardScaler.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, sample_weight):
         clf = StandardScaler()
@@ -272,6 +281,7 @@ def test_standardscaler_sample_weight(memory_leak_check):
 def test_randomforestclassifier_sample_weight(memory_leak_check):
     """Test BodoError is raised for RandomForestClassifier.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = RandomForestClassifier()
@@ -293,6 +303,7 @@ def test_randomforestclassifier_sample_weight(memory_leak_check):
 def test_randomforestregressor_sample_weight(memory_leak_check):
     """Test BodoError is raised for RandomForestRegressor.fit():
     'sample_weight' unsupported argument for distributed case."""
+    from bodo.utils.typing import BodoError
 
     def impl(X_train, y_train, sample_weight):
         clf = RandomForestRegressor()
@@ -315,6 +326,7 @@ def test_randomforestregressor_sample_weight(memory_leak_check):
 def test_count_vectorizer_min_max_df(value, memory_leak_check):
     """Test BodoError is raised for CountVectorizer():
     'min_df', 'max_df' unsupported arguments."""
+    from bodo.utils.typing import BodoError
 
     cat_in_the_hat_docs = [
         "One Cent, Two Cents, Old Cent, New Cent: All About Money (Cat in the Hat's Learning Library",

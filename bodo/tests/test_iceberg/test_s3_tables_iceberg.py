@@ -15,7 +15,6 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     pytest_s3_tables,
-    run_rank0,
     temp_env_override,
 )
 
@@ -92,6 +91,7 @@ def test_basic_write(memory_leak_check):
     """
     Test writing a complete Iceberg table to S3 Tables
     """
+    from bodo.utils.utils import run_rank0
 
     @bodo.jit(distributed=["df"])
     def write(df, table_name, conn, db_schema):

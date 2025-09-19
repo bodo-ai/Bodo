@@ -515,7 +515,6 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     # Promo revenue by line; CASE clause
     jn1["PROMO_REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
     mask = jn1["P_TYPE"].str.match("PROMO*")
-    # TODO [BSE-5099]: Series.where
     jn1["PROMO_REVENUE"] = jn1["PROMO_REVENUE"].where(mask, 0.00)
 
     total_promo_revenue = jn1["PROMO_REVENUE"].sum()

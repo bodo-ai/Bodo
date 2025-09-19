@@ -8,6 +8,8 @@ import numba
 from numba.core.target_extension import dispatcher_registry
 
 import bodo  # noqa
+
+import bodo.decorators  # isort:skip # noqa
 from bodo.ir.declarative_templates import DeclarativeTemplate
 from bodo.utils.pandas_coverage_tracking import PANDAS_URLS, get_pandas_refs_from_url
 from bodo.utils.search_templates import bodo_pd_types_dict, get_overload_template

@@ -15,11 +15,11 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
     check_func,
     get_snowflake_connection_string,
     pytest_snowflake,
 )
+from bodo.tests.utils_jit import DistTestPipeline
 
 pytestmark = pytest_snowflake
 

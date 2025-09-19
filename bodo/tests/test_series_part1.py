@@ -3,12 +3,12 @@ import operator
 import sys
 from decimal import Decimal
 
-import numba
-import numba.np.ufunc_db
+import numba  # noqa TID253
+import numba.np.ufunc_db  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.ir_utils import find_callname, guard
+from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 from bodo.tests.series_common import (  # noqa
@@ -18,17 +18,14 @@ from bodo.tests.series_common import (  # noqa
     series_val,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     _test_equal,
     check_func,
     is_bool_object_series,
     no_default,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_call_assign
 
-pytestmark = pytest_pandas
+pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
 
 
 # TODO: integer Null and other Nulls
@@ -173,6 +170,8 @@ def test_series_cov_ddof(memory_leak_check):
 
 
 def test_series_fillna_series_val(series_val):
+    from bodo.utils.typing import BodoError
+
     def impl(S):
         val = S.iat[0]
         return S.fillna(val)
@@ -187,11 +186,12 @@ def test_series_fillna_series_val(series_val):
         check_func(impl, (series_val,), dist_test=False, check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_string_series_fillna_inplace():
     """tests fillna on string series with inplace = True"""
+    import bodo.decorators  # noqa
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     A = pd.Series(["sakdhjlf", "a", None, "sadljgksd", "", None] * 2)
     A2 = pd.Series(["hsldf", "avsjbdhjof", "bjknjoiuh", "abnsdgd", "", "sadf"] * 2)
@@ -250,11 +250,13 @@ def test_binary_series_fillna_inplace():
     check_func(impl3, (A2, A), check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_str_binary_series_fillna_inplace_mismatch():
     """test that fillna doesn't accept mismatched sizes"""
+    import bodo.decorators  # noqa
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
+
     A = pd.Series(["a", None, "B"] * 2)
     A2 = pd.Series(["b", None] * 12)
 
@@ -278,6 +280,8 @@ def test_replace_series_val(series_val):
     """Run series.replace on the types in the series_val fixture. Catch
     expected failures from lack of coverage.
     """
+    from bodo.utils.typing import BodoError
+
     series = series_val.dropna()
     to_replace = series.iat[0]
     value = series.iat[1]
@@ -448,6 +452,8 @@ def test_replace_types_supported(series_replace):
 )
 def test_replace_types_unsupported(series_replace):
     """Run series.replace on particular types that all fail."""
+    from bodo.utils.typing import BodoError
+
     series = series_replace.series
     to_replace = series_replace.to_replace
     value = series_replace.value
@@ -1157,6 +1163,8 @@ def test_series_iat_getitem_datetime(memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_iat_setitem(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -1307,12 +1315,14 @@ def test_series_loc_getitem_int_range(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 @pytest.mark.slow
 def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     """Tests that setitem with Series.loc works with a Boolean List index"""
+    import bodo.decorators  # noqa
+    from bodo.utils.typing import BodoError
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def test_impl(S, val):
         S.loc[[True, True, False, True, False]] = val
@@ -1442,6 +1452,7 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc with int idx.
     """
+    from bodo.utils.typing import BodoError
 
     val = series_val.iat[0]
 
@@ -1477,13 +1488,15 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     check_func(test_impl, (series_val, val), copy_input=True, dist_test=False)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series with bool arr/list idx.
     """
+    import bodo.decorators  # noqa
+    from bodo.utils.typing import BodoError
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1622,6 +1635,7 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
     Tests that series.iloc setitem with array/index/slice
     properly supports a Scalar RHS
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support setitem array idx, scalar value for Categorical arrays
@@ -1678,6 +1692,7 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series.values with slice idx.
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1796,6 +1811,7 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     Test setitem for Series.iloc and Series.values with list/array
     of ints idx.
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1920,6 +1936,8 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 # TODO: add memory_leak_check
 @pytest.mark.smoke
 def test_series_getitem_int(series_val):
+    from bodo.utils.typing import BodoError
+
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
@@ -1957,6 +1975,8 @@ def test_series_getitem_slice(series_val, memory_leak_check):
 
 @pytest.mark.parametrize("idx", [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
 def test_series_getitem_list_int(series_val, idx, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(S, idx):
         return S[idx]
 
@@ -2014,6 +2034,8 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_setitem_int(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2063,6 +2085,8 @@ def test_series_setitem_slice(series_val, memory_leak_check):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2107,11 +2131,12 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 ############################ Series.loc indexing ##########################
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_series_loc_setitem_bool(memory_leak_check):
     """test Series.loc[bool_arr] setitem"""
+    import bodo.decorators  # noqa
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl(S, idx, val):
         S.loc[idx] = val
@@ -2283,46 +2308,51 @@ def test_series_explicit_binary_op_nullable_int_bool(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
-def test_series_binary_op(op, memory_leak_check):
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(S, other):\n"
-    func_text += f"  return S {op_str} other\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    test_impl = loc_vars["test_impl"]
+def test_series_binary_op(memory_leak_check):
+    import bodo.decorators  # isort:skip # noqa
 
-    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-    check_func(test_impl, (S, S))
-    check_func(test_impl, (S, 2))
-    check_func(test_impl, (2, S))
+    for op in bodo.hiframes.pd_series_ext.series_binary_ops:
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        func_text = "def test_impl(S, other):\n"
+        func_text += f"  return S {op_str} other\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        test_impl = loc_vars["test_impl"]
+
+        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+        check_func(test_impl, (S, S))
+        check_func(test_impl, (S, 2))
+        check_func(test_impl, (2, S))
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
-def test_series_inplace_binary_op(op, memory_leak_check):
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(S, other):\n"
-    func_text += f"  S {op_str} other\n"
-    func_text += "  return S\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    test_impl = loc_vars["test_impl"]
+def test_series_inplace_binary_op(memory_leak_check):
+    import bodo.decorators  # isort:skip # noqa
 
-    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(S.copy(), S.copy()), test_impl(S.copy(), S.copy())
-    )
-    pd.testing.assert_series_equal(bodo_func(S.copy(), 2), test_impl(S.copy(), 2))
-    # XXX: A**=S doesn't work in Pandas for some reason
-    if op != operator.ipow:
-        np.testing.assert_array_equal(
-            bodo_func(S.values.copy(), S.copy()), test_impl(S.values.copy(), S.copy())
+    for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        func_text = "def test_impl(S, other):\n"
+        func_text += f"  S {op_str} other\n"
+        func_text += "  return S\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        test_impl = loc_vars["test_impl"]
+
+        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+        bodo_func = bodo.jit(test_impl)
+        pd.testing.assert_series_equal(
+            bodo_func(S.copy(), S.copy()), test_impl(S.copy(), S.copy())
         )
+        pd.testing.assert_series_equal(bodo_func(S.copy(), 2), test_impl(S.copy(), 2))
+        # XXX: A**=S doesn't work in Pandas for some reason
+        if op != operator.ipow:
+            np.testing.assert_array_equal(
+                bodo_func(S.values.copy(), S.copy()),
+                test_impl(S.values.copy(), S.copy()),
+            )
 
 
-@pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_unary_ops)
+@pytest.mark.parametrize("op", [operator.neg, operator.invert, operator.pos])
 def test_series_unary_op(op, memory_leak_check):
     # TODO: fix operator.pos
     if op == operator.pos:
@@ -2399,7 +2429,8 @@ def test_series_unary_ufunc_np_call(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
+    "ufunc",
+    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1],
 )
 def test_series_binary_ufunc(ufunc, memory_leak_check):
     def test_impl(S1, S2):
@@ -2708,6 +2739,9 @@ def test_series_apply_df_output(memory_leak_check):
 
 def _check_IR_no_const_arr(test_impl, args):
     """makes sure there is no const array call left in the IR after optimization"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+    from bodo.utils.utils import is_call_assign
+
     bodo_func = numba.njit(pipeline_class=SeriesOptTestPipeline, parallel=True)(
         test_impl
     )
@@ -2788,6 +2822,7 @@ def test_series_apply_supported_types(series_val, memory_leak_check):
 @pytest.mark.slow
 def test_series_apply_args(memory_leak_check):
     """Test Series.apply with unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_convert_dtype_false(S):
         return S.apply(lambda a: a, convert_dtype=False)
@@ -2841,6 +2876,7 @@ def test_series_map_supported_types(series_val):
 @pytest.mark.slow
 def test_series_map_args(memory_leak_check):
     """Test Series.map with unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_na_action_none(S):
         return S.map(lambda a: a, na_action=None)
