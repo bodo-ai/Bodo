@@ -81,7 +81,7 @@ class PhysicalCTERef : public PhysicalSource {
         }
         std::shared_ptr<table_info> next_batch;
         if (chunk_iter == cte->collected_rows->builder->chunks.end()) {
-            next_batch = alloc_table_like(cte->output_schema);
+            next_batch = alloc_table(cte->output_schema);
         } else {
             next_batch = *chunk_iter;
             ++chunk_iter;
