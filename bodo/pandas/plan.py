@@ -224,7 +224,7 @@ class LazyPlan:
             return ret
         else:
             # Sometimes the same LazyPlan object is encountered twice during the same
-            # query so  we use the cache dict to only convert it once.
+            # query so we use the cache dict to only convert it once.
             # If previously converted then use the last result.
             # Don't cache expression nodes.
             # TODO - Try to eliminate caching altogether since it seems to cause

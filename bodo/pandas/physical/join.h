@@ -195,12 +195,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             }
         }
 
-        initOutputColumnMapping(build_kept_cols, right_keys,
-                                right_non_equi_keys, n_build_cols,
+        initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
                                 bound_right_inds, build_col_inds_rev);
-        initOutputColumnMapping(probe_kept_cols, left_keys, left_non_equi_keys,
-                                n_probe_cols, bound_left_inds,
-                                probe_col_inds_rev);
+        initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols,
+                                bound_left_inds, probe_col_inds_rev);
 
         // ---------------------------------------------------
 
@@ -633,16 +631,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L746
      * @param col_inds output mapping to fill
      * @param keys key column indices
-     * @param non_equi_keys set of key columns that are part of non-equi join
-     * conditions
      * @param ncols number of columns in the table
      * @param bound_inds set of column indices that need to be produced in the
      * output according to bindings
      */
     static void initOutputColumnMapping(
         std::vector<uint64_t>& col_inds, const std::vector<uint64_t>& keys,
-        const std::set<uint64_t>& non_equi_keys, uint64_t ncols,
-        const std::set<int64_t>& bound_inds,
+        uint64_t ncols, const std::set<int64_t>& bound_inds,
         const std::vector<int64_t>& col_inds_rev) {
         // Map key column index to its position in keys vector
         std::unordered_map<uint64_t, size_t> key_positions;
