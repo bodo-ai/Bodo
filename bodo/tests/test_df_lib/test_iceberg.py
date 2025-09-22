@@ -73,7 +73,7 @@ def test_table_read_limit(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -82,9 +82,9 @@ def test_table_read_limit(
     assert bodo_out.is_lazy_plan()
 
     # Check that the plan has been optimized to a single read
-    pre, post = bpd.utils.getPlanStatistics(bodo_out._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out._plan)
+    assert pre == 3
+    assert post == 2
 
     _test_equal(
         bodo_out,
@@ -114,7 +114,7 @@ def test_table_read_head(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -122,9 +122,9 @@ def test_table_read_head(
     assert bodo_out.is_lazy_plan()
 
     # Check that the plan has been optimized to a single read
-    pre, post = bpd.utils.getPlanStatistics(bodo_out._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out._plan)
+    assert pre == 3
+    assert post == 2
 
     _test_equal(
         bodo_out,
@@ -152,7 +152,7 @@ def test_table_read_selected_fields(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -187,7 +187,7 @@ def test_table_read_select_columns(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -233,7 +233,7 @@ def test_table_read_row_filter(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -296,7 +296,7 @@ def test_table_read_time_travel(
     bodo_out_orig = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -316,7 +316,7 @@ def test_table_read_time_travel(
     bodo_out_new = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -350,7 +350,7 @@ def test_table_read_filter_pushdown(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -360,9 +360,9 @@ def test_table_read_filter_pushdown(
     bodo_out2 = bodo_out[eval(f"bodo_out.A {op_str} 3")]
     assert bodo_out2.is_lazy_plan()
 
-    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 3
+    assert post == 2
 
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out2 = py_out[eval(f"py_out.A {op_str} 3")]
@@ -392,16 +392,16 @@ def test_table_read_filter_pushdown_multiple(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
     bodo_out2 = bodo_out[(bodo_out.A < 5) & (bodo_out.C >= 3) & (bodo_out.A != 3)]
     assert bodo_out2.is_lazy_plan()
-    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 3
+    assert post == 2
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out2 = py_out[(py_out.A < 5) & (py_out.C >= 3) & (py_out.A != 3)]
 
@@ -430,7 +430,7 @@ def test_table_read_filter_pushdown_and_row_filter(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
@@ -439,9 +439,9 @@ def test_table_read_filter_pushdown_and_row_filter(
 
     bodo_out2 = bodo_out[bodo_out.C >= 3]
     assert bodo_out2.is_lazy_plan()
-    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 3
+    assert post == 2
 
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out2 = py_out[(py_out.C >= 3) & (py_out.A < 3)]
@@ -470,16 +470,16 @@ def test_table_read_schema_evolved_filter_pushdown(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
     bodo_out2 = bodo_out[bodo_out.B < 4]
     assert bodo_out2.is_lazy_plan()
-    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 3
+    assert post == 2
 
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out2 = py_out[py_out.B < 4]
@@ -509,16 +509,16 @@ def test_table_read_partitioned_file_pruning(
     bodo_out = bpd.read_iceberg(
         f"{db_schema}.{table_name}",
         None,
-        {
+        catalog_properties={
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
     bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12")]
     assert bodo_out2.is_lazy_plan()
-    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    assert pre == 2
-    assert post == 1
+    pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 3
+    assert post == 2
 
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     py_out2 = py_out[py_out.A <= datetime.date(2018, 12, 12)]

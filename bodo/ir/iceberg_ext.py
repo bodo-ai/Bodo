@@ -1082,8 +1082,18 @@ def get_rtjf_col_min_max_unique_map(
     return out_col_names, bounds
 
 
-@numba.njit
 def add_rtjf_iceberg_filter(
+    state_var,
+    file_filters,
+    filtered_cols: list[str],
+    filter_ops: list[str],
+    bounds: list[tuple[RtjfValueType, RtjfValueType, RtjfValueType]],
+) -> ParquetPredicateType:  # pragma: no cover
+    pass
+
+
+@overload(add_rtjf_iceberg_filter)
+def overload_add_rtjf_iceberg_filter(
     state_var,
     file_filters,
     filtered_cols: list[str],
@@ -1095,41 +1105,49 @@ def add_rtjf_iceberg_filter(
     """
     import pyiceberg.expressions as pie
 
-    is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
-    with bodo.ir.object_mode.no_warning_objmode(
-        combined_filters="parquet_predicate_type"
-    ):
-        if is_empty:
-            combined_filters = pie.AlwaysFalse()
-        else:
-            rtjf_filters = pie.AlwaysTrue()
-            for col, (min, max, unique_vals), op in zip(
-                filtered_cols, bounds, filter_ops
-            ):
-                if unique_vals is not None and len(unique_vals) > 0 and op == "==":
-                    rtjf_filters = pie.And(
-                        rtjf_filters, pie.In(col, literal(unique_vals))
-                    )
-                    print(rtjf_filters, unique_vals)
-                else:
-                    if min is not None and op in ("==", ">=", ">"):
+    def impl(
+        state_var,
+        file_filters,
+        filtered_cols: list[str],
+        filter_ops: list[str],
+        bounds: list[tuple[RtjfValueType, RtjfValueType, RtjfValueType]],
+    ) -> ParquetPredicateType:
+        is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
+        with bodo.ir.object_mode.no_warning_objmode(
+            combined_filters="parquet_predicate_type"
+        ):
+            if is_empty:
+                combined_filters = pie.AlwaysFalse()
+            else:
+                rtjf_filters = pie.AlwaysTrue()
+                for col, (min, max, unique_vals), op in zip(
+                    filtered_cols, bounds, filter_ops
+                ):
+                    if unique_vals is not None and len(unique_vals) > 0 and op == "==":
                         rtjf_filters = pie.And(
-                            rtjf_filters,
-                            pie.GreaterThan(col, literal(min))
-                            if op == ">"
-                            else pie.GreaterThanOrEqual(col, literal(min)),
+                            rtjf_filters, pie.In(col, literal(unique_vals))
                         )
-                    if max is not None and op in ("==", "<=", "<"):
-                        rtjf_filters = pie.And(
-                            rtjf_filters,
-                            pie.LessThan(col, literal(max))
-                            if op == "<"
-                            else pie.LessThanOrEqual(col, literal(max)),
-                        )
+                    else:
+                        if min is not None and op in ("==", ">=", ">"):
+                            rtjf_filters = pie.And(
+                                rtjf_filters,
+                                pie.GreaterThan(col, literal(min))
+                                if op == ">"
+                                else pie.GreaterThanOrEqual(col, literal(min)),
+                            )
+                        if max is not None and op in ("==", "<=", "<"):
+                            rtjf_filters = pie.And(
+                                rtjf_filters,
+                                pie.LessThan(col, literal(max))
+                                if op == "<"
+                                else pie.LessThanOrEqual(col, literal(max)),
+                            )
 
-            combined_filters = pie.And(file_filters, rtjf_filters)
+                combined_filters = pie.And(file_filters, rtjf_filters)
 
-    return combined_filters
+        return combined_filters
+
+    return impl
 
 
 def convert_pyobj_to_arrow_filter_str(pyobj, tz):
@@ -1280,6 +1298,7 @@ def _gen_iceberg_reader_chunked_py(
         This is used for "remapping" the build columns in rtjf_interval_cols to the
         correct indices.
     """
+
     from bodo.io.iceberg.catalog import conn_str_to_catalog
 
     source_pyarrow_schema = pyarrow_schema

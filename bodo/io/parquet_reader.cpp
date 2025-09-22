@@ -137,7 +137,6 @@ PyObject* ParquetReader::get_dataset() {
     }
 
     this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
-    // this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));
 
     // prefix = ds.prefix
     PyObjectPtr prefix_py = PyObject_GetAttrString(ds, "_prefix");
