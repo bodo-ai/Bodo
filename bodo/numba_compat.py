@@ -1489,7 +1489,10 @@ def Dispatcher_compile(self, sig):
                 # avoid calling get_nodes_first_ranks for the case where only one rank is
                 # calling the function, which will hang.
                 is_distributed_impl = cres.metadata.get("distributed_diagnostics", None) is not None
-                if not is_distributed_impl or (bodo.get_rank() in bodo.libs.distributed_api.get_nodes_first_ranks()):
+                if (
+                    not is_distributed_impl
+                    or (bodo.get_rank() in bodo.libs.distributed_api.get_nodes_first_ranks())
+                ):
                     self._cache.save_overload(sig, cres)
             return cres.entry_point
 
