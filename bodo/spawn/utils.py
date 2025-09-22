@@ -191,3 +191,38 @@ def import_compiler_on_workers():
         import bodo.decorators  # isort:skip # noqa
 
     bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
+
+
+def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
+    """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
+    compiler which can be slow.
+    Throws an error if called with unsupported arguments to allow fallback to JIT.
+    """
+
+    # Check for default arguments and spawn mode (comm is set)
+    if allgather is True or warn_if_rep is False or comm is None:
+        raise ValueError(
+            "gatherv_nojit only supports allgather=False, warn_if_rep=True, and a non-None comm"
+        )
+
+    # TODO: check data type (DF/Series)
+
+    import pyarrow as pa
+
+    from bodo.ext import hdist
+    from bodo.pandas.utils import arrow_to_empty_df, cpp_table_to_df, df_to_cpp_table
+
+    # Get data type on receiver since it doesn't have any local data
+    rank = bodo.get_rank()
+    # Receiver has to set root to MPI.ROOT in case of intercomm
+    is_receiver = root == MPI.ROOT
+    if is_receiver:
+        data = comm.recv(source=0, tag=11)
+    elif rank == 0:
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(data))
+        comm.send(empty_df, dest=0, tag=11)
+
+    comm_ptr = MPI._addressof(comm)
+    cpp_table_ptr = df_to_cpp_table(data)
+    out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
+    return cpp_table_to_df(out_ptr)
