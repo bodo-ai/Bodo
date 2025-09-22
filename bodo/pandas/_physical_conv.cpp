@@ -18,8 +18,6 @@
 #include "physical/sort.h"
 #include "physical/union_all.h"
 
-std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> g_ctes;
-
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
@@ -266,7 +264,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
 
     // Save the physical_cte node away so that cte ref's on the non-duplicate
     // side can find it.
-    g_ctes.insert({op.table_index, physical_cte});
+    ctes.insert({op.table_index, physical_cte});
     // The active pipeline finishes after the duplicate side.
     this->active_pipeline = nullptr;
     /*
@@ -285,8 +283,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     // Match the cte_index with the CTE node table index in the global
     // structure.
-    auto table_index_iter = g_ctes.find(op.cte_index);
-    if (table_index_iter == g_ctes.end()) {
+    auto table_index_iter = ctes.find(op.cte_index);
+    if (table_index_iter == ctes.end()) {
         throw std::runtime_error(
             "LogicalCTERef couldn't find matching table_index.");
     }

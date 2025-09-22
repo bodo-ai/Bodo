@@ -8,6 +8,7 @@
 #include "duckdb/planner/operator/list.hpp"
 
 #include "_pipeline.h"
+#include "physical/cte.h"
 
 class PhysicalPlanBuilder {
    public:
@@ -89,4 +90,7 @@ class PhysicalPlanBuilder {
                 std::to_string(static_cast<int>(op.type)));
         }
     }
+
+   private:
+    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> ctes;
 };
