@@ -510,7 +510,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                         is_parallel, mpi_root, n_pes, myrank,
                                         comm_ptr));
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, in_table->column_names,
+                                        in_table->metadata);
 }
 
 table_info *gather_table_py_entry(table_info *in_table, bool all_gather,

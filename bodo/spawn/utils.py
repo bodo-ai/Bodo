@@ -225,4 +225,5 @@ def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    return cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr)
+    return out
