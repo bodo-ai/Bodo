@@ -75,3 +75,21 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     uint64_t n_keys, bool only_transpose_existing_on_key_cols = false);
+
+/**
+ * @brief Allocate an empty array with provided column type
+ *
+ * @param datatype the datatype for the array
+ * @param pool IBufferPool to use for allocating the underlying data
+ * buffers.
+ * @param mm MemoryManager for the 'pool'.
+ * @param dict builder dictionary buiders to use for populating dictionary typed
+ * arrays
+ * @return std::shared_ptr<array_info> allocated array
+ */
+std::unique_ptr<array_info> alloc_empty_array(
+    const std::unique_ptr<bodo::DataType>& datatype,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager(),
+    std::shared_ptr<DictionaryBuilder> dict_builder = nullptr);

@@ -359,7 +359,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     PhysicalAggregateMetrics metrics;
     // Mapping of input table column indices to move keys to the front.
     std::vector<int64_t> input_col_inds;
-    int num_consume = 0;
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;

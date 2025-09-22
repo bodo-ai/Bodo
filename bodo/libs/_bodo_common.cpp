@@ -1588,42 +1588,6 @@ std::unique_ptr<array_info> alloc_array_like(
     }
 }
 
-std::unique_ptr<array_info> alloc_array_like(
-    std::unique_ptr<bodo::DataType>& in_dtype, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    bodo_array_type::arr_type_enum arr_type = in_dtype->array_type;
-    Bodo_CTypes::CTypeEnum dtype = in_dtype->c_type;
-    if (arr_type == bodo_array_type::ARRAY_ITEM) {
-        throw std::runtime_error(
-            "alloc_array_like from bodo::DataType for ARRAY_ITEM "
-            "unimplemented");
-    } else if (arr_type == bodo_array_type::STRUCT) {
-        bodo::DataType* raw_dtype = in_dtype.get();
-        bodo::StructType* dtype_as_struct =
-            dynamic_cast<bodo::StructType*>(raw_dtype);
-        if (!dtype_as_struct) {
-            throw std::runtime_error(
-                "alloc_array_like STRUCT dtype but dtype doesn't point to "
-                "StructType");
-        }
-        std::vector<std::shared_ptr<array_info>> child_arrays;
-        child_arrays.reserve(dtype_as_struct->child_types.size());
-        for (auto& child_type : dtype_as_struct->child_types) {
-            child_arrays.push_back(alloc_array_like(child_type));
-        }
-        return alloc_struct(0, std::move(child_arrays));
-    } else if (arr_type == bodo_array_type::MAP) {
-        throw std::runtime_error(
-            "alloc_array_like from bodo::DataType for MAP unimplemented");
-    } else {
-        std::unique_ptr<array_info> out_arr = alloc_array_top_level(
-            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
-        out_arr->precision = in_dtype->precision;
-        out_arr->scale = in_dtype->scale;
-        return out_arr;
-    }
-}
-
 int64_t array_memory_size(std::shared_ptr<array_info> earr,
                           bool include_dict_size, bool include_children,
                           bool approximate_string_size) {
