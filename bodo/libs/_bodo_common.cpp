@@ -1612,8 +1612,6 @@ std::unique_ptr<array_info> alloc_array_like(
             child_arrays.push_back(alloc_array_like(child_type));
         }
         return alloc_struct(0, std::move(child_arrays));
-        // throw std::runtime_error("alloc_array_like from bodo::DataType for
-        // STRUCT unimplemented");
     } else if (arr_type == bodo_array_type::MAP) {
         throw std::runtime_error(
             "alloc_array_like from bodo::DataType for MAP unimplemented");
