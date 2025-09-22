@@ -16,8 +16,11 @@ class PhysicalPlanBuilder {
     // TODO: Make private properties later
     std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
     std::shared_ptr<PipelineBuilder> active_pipeline;
+    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& ctes;
 
-    PhysicalPlanBuilder() : active_pipeline(nullptr) {}
+    PhysicalPlanBuilder(
+        std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& _ctes)
+        : active_pipeline(nullptr), ctes(_ctes) {}
 
     /**
      * @brief Move finshed_pipelines into locked category
@@ -90,7 +93,4 @@ class PhysicalPlanBuilder {
                 std::to_string(static_cast<int>(op.type)));
         }
     }
-
-   private:
-    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> ctes;
 };

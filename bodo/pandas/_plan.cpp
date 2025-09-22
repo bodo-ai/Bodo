@@ -591,11 +591,11 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
     // Flatten to ensure contiguous data
     vec.Flatten(count);
 
-    auto &type = vec.GetType();
-    auto type_id = type.id();
+    duckdb::LogicalType type = vec.GetType();
+    duckdb::LogicalTypeId type_id = type.id();
 
     // Handle null mask
-    auto &validity = duckdb::FlatVector::Validity(vec);
+    duckdb::ValidityMask &validity = duckdb::FlatVector::Validity(vec);
     arrow::Status status;
 
     switch (type_id) {
@@ -857,7 +857,7 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
 
     // Ensure vector is flat for writing
     vec.SetVectorType(VectorType::FLAT_VECTOR);
-    auto &validity = FlatVector::Validity(vec);
+    ValidityMask &validity = FlatVector::Validity(vec);
 
     switch (arrow_type) {
         case arrow::Type::BOOL: {
@@ -1019,10 +1019,10 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
 }
 
 /**
- * @brief Dummy function to pass to DuckDB for UDFs. DuckDB runs some functions
- * during optimization for constant folding, but we avoid it by throwing an
- * exception.
- *
+ * @brief DuckDB runs some functions during optimization for constant folding.
+ *        Here we allow DuckDB to run Bodo UDFs by converting DuckDB vectors
+ *        into Bodo arrays and reusing the expression processing part of our
+ *        backend.
  */
 static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
                         duckdb::Vector &result) {

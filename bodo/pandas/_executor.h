@@ -19,10 +19,13 @@ class Executor {
     std::vector<std::shared_ptr<Pipeline>> pipelines;
 
    public:
+    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> ctes;
+
+   public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
         // Convert the logical plan to a physical plan
-        PhysicalPlanBuilder builder;
+        PhysicalPlanBuilder builder(ctes);
         builder.Visit(*plan);
 
         // Move frozen/locked pipelines from builder to Executor pipelines.

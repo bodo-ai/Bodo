@@ -19,10 +19,8 @@ class PhysicalCTERef;
  */
 class PhysicalCTE : public PhysicalSink {
    public:
-    explicit PhysicalCTE(
-        duckdb::LogicalMaterializedCTE& logical_materialized_cte,
-        const std::shared_ptr<bodo::Schema> sink_schema)
-        : output_schema(sink_schema), node(logical_materialized_cte) {}
+    explicit PhysicalCTE(const std::shared_ptr<bodo::Schema> sink_schema)
+        : output_schema(sink_schema) {}
 
     virtual ~PhysicalCTE() = default;
 
@@ -62,9 +60,6 @@ class PhysicalCTE : public PhysicalSink {
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
     friend class PhysicalCTERef;
-
-   protected:
-    duckdb::LogicalMaterializedCTE& node;
 };
 
 class PhysicalCTERef : public PhysicalSource {
