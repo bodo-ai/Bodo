@@ -193,20 +193,14 @@ def import_compiler_on_workers():
     bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
 
 
-def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
+def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     Throws an error if called with unsupported arguments to allow fallback to JIT.
     """
     import pandas as pd
 
-    # Check for default arguments and spawn mode (comm is set)
-    if allgather is True or warn_if_rep is False or comm is None:
-        raise ValueError(
-            "gatherv_nojit only supports allgather=False, warn_if_rep=True, and a non-None comm"
-        )
-
-    if not isinstance(data, (pd.DataFrame, pd.Series)):
+    if data is not None and not isinstance(data, (pd.DataFrame, pd.Series)):
         raise ValueError("gatherv_nojit only supports DataFrame and Series input")
 
     import pyarrow as pa
@@ -241,7 +235,7 @@ def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr) if is_series else cpp_table_to_series(out_ptr)
+    out = cpp_table_to_df(out_ptr) if not is_series else cpp_table_to_series(out_ptr)
 
     if is_series and out.name == BODO_NONE_DUMMY:
         out.name = None
