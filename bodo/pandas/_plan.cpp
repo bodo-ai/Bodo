@@ -1089,7 +1089,6 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
         scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
         nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
         duckdb::FunctionStability::CONSISTENT,
-        // duckdb::FunctionStability::VOLATILE,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
