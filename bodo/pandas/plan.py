@@ -223,7 +223,7 @@ class LogicalOperator(LazyPlan):
 
 
 class LogicalOperatorLeaf(LogicalOperator):
-    """Base class for all logical operators in the Bodo query plan."""
+    """Base class for all logical operators in the Bodo query plan that are leaf of the plan tree (e.g. Parquet read)."""
 
     def __init__(self, empty_data, *args):
         super().__init__(empty_data, *args)
