@@ -198,6 +198,7 @@ def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
     compiler which can be slow.
     Throws an error if called with unsupported arguments to allow fallback to JIT.
     """
+    import pandas as pd
 
     # Check for default arguments and spawn mode (comm is set)
     if allgather is True or warn_if_rep is False or comm is None:
@@ -205,12 +206,19 @@ def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
             "gatherv_nojit only supports allgather=False, warn_if_rep=True, and a non-None comm"
         )
 
-    # TODO: check data type (DF/Series)
+    if not isinstance(data, (pd.DataFrame, pd.Series)):
+        raise ValueError("gatherv_nojit only supports DataFrame and Series input")
 
     import pyarrow as pa
 
     from bodo.ext import hdist
-    from bodo.pandas.utils import arrow_to_empty_df, cpp_table_to_df, df_to_cpp_table
+    from bodo.pandas.utils import (
+        BODO_NONE_DUMMY,
+        arrow_to_empty_df,
+        cpp_table_to_df,
+        cpp_table_to_series,
+        df_to_cpp_table,
+    )
 
     # Get data type on receiver since it doesn't have any local data
     rank = bodo.get_rank()
@@ -222,8 +230,20 @@ def gatherv_nojit(data, allgather=False, warn_if_rep=True, root=0, comm=None):
         empty_df = arrow_to_empty_df(pa.Schema.from_pandas(data))
         comm.send(empty_df, dest=0, tag=11)
 
+    is_series = isinstance(data, pd.Series)
+
+    if is_series:
+        # None name doesn't round-trip to dataframe correctly so we use a dummy name
+        # that is replaced with None in wrap_plan
+        name = BODO_NONE_DUMMY if data.name is None else data.name
+        data = data.to_frame(name=name)
+
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr) if is_series else cpp_table_to_series(out_ptr)
+
+    if is_series and out.name == BODO_NONE_DUMMY:
+        out.name = None
+
     return out
