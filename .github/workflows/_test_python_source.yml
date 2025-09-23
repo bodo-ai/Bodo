@@ -64,7 +64,7 @@ jobs:
             role-duration-seconds: 10800
         - name: Install Extra Test dependencies
           run: |
-            pip install transformers pyiceberg 
+            pip install transformers
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
         # Run Tests
