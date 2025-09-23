@@ -537,6 +537,126 @@ table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
     }
 }
 
+std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
+                                          int mpi_root, int n_pes, int myrank,
+                                          MPI_Comm *comm_ptr) {
+    MPI_Comm comm = MPI_COMM_WORLD;
+    bool is_sender = (myrank == mpi_root);
+    bool is_intercomm = false;
+    if (comm_ptr != nullptr) {
+        comm = *comm_ptr;
+        is_intercomm = true;
+        is_sender = (mpi_root == MPI_ROOT);
+        if (is_sender) {
+            CHECK_MPI(MPI_Comm_remote_size(*comm_ptr, &n_pes),
+                      "scatter_array: MPI error on MPI_Comm_remote_size:");
+        }
+    }
+
+    // Broadcast length
+    int64_t n_rows = in_arr->length;
+    CHECK_MPI(MPI_Bcast(&n_rows, 1, MPI_INT64_T, mpi_root, comm),
+              "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
+
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    int64_t num_categories = in_arr->num_categories;
+
+    std::vector<int64_t> send_counts(n_pes);
+    std::vector<long> rows_disps(n_pes);
+    for (int i = 0; i < n_pes; i++) {
+        send_counts[i] = dist_get_node_portion(n_rows, n_pes, i);
+    }
+    calc_disp(rows_disps, send_counts);
+    int64_t n_loc = 0 ? (is_intercomm && is_sender) : send_counts[myrank];
+
+    std::shared_ptr<array_info> out_arr;
+    if (arr_type == bodo_array_type::NUMPY ||
+        arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean. As
+            // a result we need a separate code path to handle
+            // fusing the bits
+            std::vector<int64_t> send_count_bytes(n_pes),
+                send_disp_bytes(n_pes);
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                send_count_bytes[i_p] = (send_counts[i_p] + 7) >> 3;
+            }
+            calc_disp(send_disp_bytes, send_count_bytes);
+            int64_t n_recv_bytes = (n_loc + 7) >> 3;
+            // Boolean arrays always store data as UINT8
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+
+            out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
+                                            0, num_categories);
+            char *data1_ptr = out_arr->data1();
+
+            CHECK_MPI(
+                MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
+                               rows_disps.data(), mpi_typ, data1_ptr,
+                               n_recv_bytes, mpi_typ, mpi_root, comm),
+                "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+
+        } else {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
+                                            0, num_categories);
+            char *data1_ptr = out_arr->data1();
+            CHECK_MPI(
+                MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
+                               rows_disps.data(), mpi_typ, data1_ptr, n_loc,
+                               mpi_typ, mpi_root, comm),
+                "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        }
+    }
+
+    return out_arr;
+}
+
+std::shared_ptr<table_info> scatter_table(std::shared_ptr<table_info> in_table,
+                                          int64_t n_cols, int mpi_root,
+                                          MPI_Comm *comm_ptr) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    if (n_cols == -1) {
+        n_cols = in_table->ncols();
+    }
+    out_arrs.reserve(n_cols);
+    for (int64_t i_col = 0; i_col < n_cols; i_col++) {
+        out_arrs.push_back(scatter_array(in_table->columns[i_col], mpi_root,
+                                         n_pes, myrank, comm_ptr));
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->column_names,
+                                        in_table->metadata);
+}
+
+table_info *scatter_table_py_entry(table_info *in_table, int mpi_root,
+                                   int64_t comm_ptr) {
+    try {
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        bool is_sender =
+            comm_ptr != 0 ? (mpi_root == MPI_ROOT) : (myrank == mpi_root);
+
+        std::shared_ptr<table_info> table(in_table);
+        std::shared_ptr<table_info> output =
+            scatter_table(table, in_table->ncols(), mpi_root,
+                          reinterpret_cast<MPI_Comm *>(comm_ptr));
+        if (is_sender) {
+            output = alloc_table_like(table);
+        }
+
+        return new table_info(*output);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
                                   int mpi_root, int64_t comm_ptr) {
     try {
@@ -885,6 +1005,50 @@ static PyObject *gatherv_py_wrapper(PyObject *self, PyObject *args) {
     return output_obj;
 }
 
+static PyObject *scatterv_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 3) {
+        PyErr_SetString(PyExc_TypeError,
+                        "scatterv_py_wrapper() takes exactly three arguments");
+        return nullptr;
+    }
+
+    // Ubox table pointer
+    PyObject *table_ptr_obj = PyTuple_GetItem(args, 0);
+    if (!PyLong_Check(table_ptr_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "scatterv_py_wrapper() first argument must be a integer");
+        return nullptr;
+    }
+    int64_t table_ptr = PyLong_AsLongLong(table_ptr_obj);
+
+    // Ubox root
+    PyObject *root_obj = PyTuple_GetItem(args, 1);
+    if (!PyLong_Check(root_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "scatterv_py_wrapper() second argument must be a integer");
+        return nullptr;
+    }
+    int64_t root = PyLong_AsLongLong(root_obj);
+
+    PyObject *comm_obj = PyTuple_GetItem(args, 2);
+    if (!PyLong_Check(comm_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "scatterv_py_wrapper() third argument must be a integer");
+        return nullptr;
+    }
+    int64_t comm = PyLong_AsLongLong(comm_obj);
+
+    table_info *out_table = scatter_table_py_entry(
+        reinterpret_cast<table_info *>(table_ptr), (int)root, comm);
+
+    PyObject *output_obj =
+        PyLong_FromLongLong(reinterpret_cast<int64_t>(out_table));
+    return output_obj;
+}
+
 /**
  * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
  overhead and makes compiler debugging easier by eliminating extra compilation)
@@ -901,9 +1065,13 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
-    declmethod(get_rank_py_wrapper),    declmethod(get_size_py_wrapper),
-    declmethod(bcast_int64_py_wrapper), declmethod(gatherv_py_wrapper),
-    declmethod(finalize_py_wrapper),    {nullptr},
+    declmethod(get_rank_py_wrapper),
+    declmethod(get_size_py_wrapper),
+    declmethod(bcast_int64_py_wrapper),
+    declmethod(gatherv_py_wrapper),
+    declmethod(scatterv_py_wrapper),
+    declmethod(finalize_py_wrapper),
+    {nullptr},
 #undef declmethod
 };
 

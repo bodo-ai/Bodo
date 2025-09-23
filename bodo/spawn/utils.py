@@ -196,7 +196,6 @@ def import_compiler_on_workers():
 def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
-    Throws an error if called with unsupported arguments to allow fallback to JIT.
     """
     import pandas as pd
     from pandas.core.arrays.arrow import ArrowExtensionArray
@@ -253,5 +252,29 @@ def gatherv_nojit(data, root, comm):
 
     if is_array:
         out = out.iloc[:, 0].array
+
+    return out
+
+
+def scatterv_nojit(data, root, comm):
+    """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
+    compiler which can be slow.
+    """
+
+    from bodo.ext import hdist
+    from bodo.pandas.utils import (
+        cpp_table_to_df,
+        df_to_cpp_table,
+    )
+
+    is_sender = root == MPI.ROOT
+
+    sample_data = comm.bcast(data.head(0) if is_sender else None, root)
+    data = sample_data if not is_sender else data
+
+    comm_ptr = MPI._addressof(comm)
+    cpp_table_ptr = df_to_cpp_table(data)
+    out_ptr = hdist.scatterv_py_wrapper(cpp_table_ptr, root, comm_ptr)
+    out = cpp_table_to_df(out_ptr)
 
     return out
