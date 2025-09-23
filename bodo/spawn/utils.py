@@ -199,9 +199,14 @@ def gatherv_nojit(data, root, comm):
     Throws an error if called with unsupported arguments to allow fallback to JIT.
     """
     import pandas as pd
+    from pandas.core.arrays.arrow import ArrowExtensionArray
 
-    if data is not None and not isinstance(data, (pd.DataFrame, pd.Series)):
-        raise ValueError("gatherv_nojit only supports DataFrame and Series input")
+    if data is not None and not isinstance(
+        data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
+    ):
+        raise ValueError(
+            "gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input"
+        )
 
     from bodo.ext import hdist
     from bodo.pandas.utils import (
@@ -217,15 +222,23 @@ def gatherv_nojit(data, root, comm):
     if is_receiver:
         data = comm.recv(source=0, tag=11)
     elif rank == 0:
-        comm.send(data.head(0), dest=0, tag=11)
+        comm.send(
+            data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
+            dest=0,
+            tag=11,
+        )
 
     is_series = isinstance(data, pd.Series)
+    is_array = isinstance(data, ArrowExtensionArray)
 
     if is_series:
         # None name doesn't round-trip to dataframe correctly so we use a dummy name
         # that is replaced with None in wrap_plan
         name = BODO_NONE_DUMMY if data.name is None else data.name
         data = data.to_frame(name=name)
+
+    if is_array:
+        data = pd.DataFrame({"__arrow_data__": data})
 
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
@@ -237,5 +250,8 @@ def gatherv_nojit(data, root, comm):
         # Reset name to None if it was originally None
         if out.name == BODO_NONE_DUMMY:
             out.name = None
+
+    if is_array:
+        out = out.iloc[:, 0].array
 
     return out
