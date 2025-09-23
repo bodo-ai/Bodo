@@ -3606,6 +3606,55 @@ def test_print_no_warn():
         print(S)
 
 
+@pytest.mark.parametrize(
+    "pd_in, expr",
+    [
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]}),
+            lambda x: x[x.B < len(x)],
+            id="frame_expr",
+        ),
+        pytest.param(
+            pd.Series([8, 7, 5, 4, 5, 6], name="A"),
+            lambda x: x[x < len(x)],
+            id="series_expr",
+        ),
+    ],
+)
+def test_lazy_len(pd_in, expr, index_val):
+    """Make sure len() on BodoDataFrame, BodoSeries doesn't trigger
+    execution when used in another plan.
+    """
+    reset_index = isinstance(index_val, pd.RangeIndex)
+    pd_in.index = index_val[: len(pd_in)]
+
+    if isinstance(pd_in, pd.Series):
+        pd_in_ser = pd_in.to_frame()
+        bd_in = bd.from_pandas(pd_in_ser)
+        bd_in = bd_in.A
+    else:
+        bd_in = bd.from_pandas(pd_in)
+
+    with assert_executed_plan_count(0):
+        bodo_out = expr(bd_in)
+
+    pd_out = expr(pd_in)
+
+    _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
+
+
+def test_len_no_warn(index_val):
+    """Test that collecting length does not raise warnings"""
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", BodoLibFallbackWarning)
+        assert len(bdf[bdf.A > 5]) == len(df[df.A > 5])
+
+
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
     expected and is same as pandas.
