@@ -612,6 +612,55 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         }
     }
 
+    if (arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::STRUCT) {
+        uint8_t *null_bitmask_i =
+            reinterpret_cast<uint8_t *>(in_arr->null_bitmask());
+        uint8_t *null_bitmask_o =
+            reinterpret_cast<uint8_t *>(out_arr->null_bitmask());
+
+        std::vector<int64_t> send_count_bytes(n_pes);
+        std::vector<long> send_disp_bytes(n_pes);
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            send_count_bytes[i_p] = (send_counts[i_p] + 7) >> 3;
+        }
+        calc_disp(send_disp_bytes, send_count_bytes);
+        int64_t n_recv_bytes = (n_loc + 7) >> 3;
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        size_t n_null_bytes = std::accumulate(
+            send_count_bytes.begin(), send_count_bytes.end(), size_t(0));
+
+        bodo::vector<uint8_t> tmp_null_bytes;
+        char *send_ptr = nullptr;
+
+        if (is_sender) {
+            // See get_scatter_null_bytes_buff()
+            tmp_null_bytes.resize(n_null_bytes, 0);
+            int64_t curr_tmp_byte = 0;  // current location in scatter buffer
+            int64_t curr_val = 0;       // current string in input bitmap
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                int64_t n_vals = send_counts[i_p];
+                int64_t n_bytes = (n_vals + 7) >> 3;
+                uint8_t *chunk_ptr = tmp_null_bytes.data() + curr_tmp_byte;
+                for (int64_t i = 0; i < n_vals; i++) {
+                    bool bit = GetBit(null_bitmask_i, curr_val++);
+                    SetBitTo(chunk_ptr, i, bit);
+                }
+                curr_tmp_byte += n_bytes;
+            }
+            send_ptr = reinterpret_cast<char *>(tmp_null_bytes.data());
+        }
+
+        CHECK_MPI(
+            MPI_Scatterv_c(send_ptr, send_count_bytes.data(),
+                           send_disp_bytes.data(), mpi_typ, null_bitmask_o,
+                           n_recv_bytes, mpi_typ, mpi_root, comm),
+            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+    }
+
     return out_arr;
 }
 
