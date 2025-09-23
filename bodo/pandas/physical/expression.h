@@ -17,8 +17,6 @@
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
-#include <iostream>
-
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
