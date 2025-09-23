@@ -31,6 +31,7 @@ class ParquetReader : public ArrowReader {
         }
         Py_INCREF(storage_options);
         Py_INCREF(path);
+        Py_INCREF(pyarrow_schema);
     }
 
     /**
@@ -116,6 +117,7 @@ class ParquetReader : public ArrowReader {
         Py_XDECREF(this->reader);
         Py_DECREF(this->storage_options);
         Py_DECREF(this->path);
+        Py_DECREF(this->pyarrow_schema);
     }
 
     /// a piece is a single parquet file in the context of parquet

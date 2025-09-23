@@ -44,8 +44,8 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-    - libarrow =19.0
-    - pyarrow =19.0
+    - libarrow =21.0
+    - pyarrow =21.0
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
     - hdf5 >=1.14.3,<1.14.4.0a0
@@ -64,7 +64,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=2.2
     - fsspec >=2021.09
-    - pyarrow =19.0
+    - pyarrow =21.0
     - numba >=0.60,<0.62
     - mpich =4.1  # [not win]
     - requests
@@ -78,7 +78,7 @@ requirements:
     - numpy >=1.24
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
-    - pyiceberg >=0.9
+    - pyiceberg >=0.10
 
 test:
   imports:
