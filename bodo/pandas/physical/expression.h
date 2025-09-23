@@ -870,7 +870,6 @@ class PhysicalUDFExpression : public PhysicalExpression {
           init_state(nullptr) {
         if (scalar_func_data.is_cfunc) {
             this->cfunc_ptr = (table_udf_t)1;
-            PyObject *future_args = scalar_func_data.args;
             PyObject *bodo_module =
                 PyImport_ImportModule("bodo.pandas.utils_jit");
             if (!bodo_module) {
@@ -878,6 +877,9 @@ class PhysicalUDFExpression : public PhysicalExpression {
                 throw std::runtime_error(
                     "Failed to import bodo.pandas.utils module");
             }
+            PyObject *future_args = scalar_func_data.args;
+            Py_XINCREF(future_args);
+            Py_INCREF(bodo_module);
             // https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
             PyThreadState *save = PyEval_SaveThread();
 
@@ -894,6 +896,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
                         if (!result) {
                             PyErr_Print();
                             Py_DECREF(bodo_module);
+                            Py_XDECREF(future_args);
                             throw std::runtime_error(
                                 "Error calling compile_cfunc");
                         }
@@ -901,6 +904,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
                         if (!PyLong_Check(result)) {
                             Py_DECREF(result);
                             Py_DECREF(bodo_module);
+                            Py_XDECREF(future_args);
                             throw std::runtime_error(
                                 "Expected an integer from compile_cfunc");
                         }
@@ -916,6 +920,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
                     } catch (...) {
                         // Release GIL and DECREF args before propagating.
                         PyGILState_Release(gstate);
+                        Py_DECREF(bodo_module);
                         Py_XDECREF(future_args);
                         throw;
                     }
