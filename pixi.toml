@@ -1,38 +1,21 @@
 [project]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
-# Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
-# Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
-# Pip C++ Deps
-pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
-pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
-
+default = { features = ["py312", "dev", "local-mpi"], solve-group = "312" }
+dev311 = { features = ["py311", "dev", "local-mpi"], solve-group = "311" }
+dev310 = { features = ["py310", "dev", "local-mpi"], solve-group = "310" }
+platform = { features = ["py312", "platform-mpi", "platform"], solve-group = "312-platform" }
+platform-dev = { features = ["py312", "platform-mpi", "dev"], solve-group = "312-platform" }
+azure = { features = ["py312", "dev", "local-mpi", "azure"], solve-group = "312" }
 
 # Build Commands
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-[tasks.build-bodo.env]  # SCcache Envs
-SCCACHE_BUCKET = "engine-codebuild-cache"
-SCCACHE_REGION = "us-east-2"
-SCCACHE_S3_USE_SSL = "true"
-SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
-
-[tasks.build-bodo-debug]
-cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-[tasks.build-bodo-san]
-cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 cwd = "BodoSQL"
@@ -53,53 +36,49 @@ outputs = ["iceberg/bodo_iceberg_connector.egg-info/"]
 [tasks]
 # Building
 bb = { depends-on = ["build-bodo"] }        # Alias for build-bodo
-bbd = { depends-on = ["build-bodo-debug"] } # Alias for build-bodo-debug
-bbs = { depends-on = ["build-bodo-san"] }   # Alias for build-bodo-san
 bsql = { depends-on = ["build-bodosql"] }   # Alias for build-bodosql
 bi = { depends-on = ["build-iceberg"] }     # Alias for build-iceberg
 build = { depends-on = ["build-bodo", "build-bodosql", "build-iceberg"] }
-b = { depends-on = ["build"] }              # Alias for build
+b = { depends-on = ["build"] }  # Alias for build
 # Additional
 clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash buildscripts/clean.sh" }
 
 
-[system-requirements]
-macos = "12.0"
-
 [dependencies]
-python = "3.13.*"
 pip = "*"
+# Core C++ Deps
+libcurl = "~=8.0"
+zstd = "<=1.5.6"
+fftw = { version = ">=3.3.10,<3.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+"aws-sdk-cpp" = "*"
+"boost-cpp" = "1.85"
 # Core Python Deps
-# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
-# TODO upgrade to numba 0.62.0
-numba = ">=0.60,<0.62.0"
-numpy = ">=1.24"
-pandas = ">=2.2"
-pyarrow = { version = "==21.0.0", channel = "conda-forge" }
+numba = "0.60.0"
+numpy = ">=1.24,<1.27"
+pandas = ">=2.2,<2.3"
+pyarrow = "17.0.0"
 fsspec = ">=2021.09"
 requests = "*"
-cloudpickle = ">=3.0"
-psutil = "*"
+cloudpickle = ">=3.0,<4.0"
 # Core Java Deps
-openjdk = "=17"
-py4j = "==0.10.9.9"
+openjdk = "=11"
+py4j = "==0.10.9.7"
+
 # HDFS
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = ">=1.4"
-matplotlib ="*"
+scikit-learn = "1.4.*"
+matplotlib = "<=3.8.2"
 # IO
-boto3 = ">=1.35.74"
+boto3 = "*"
 botocore = "*"
 # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.10"
-mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
-huggingface_hub = "*"
-zstandard = "*"
+gcsfs = ">=2022.1"
 # Databases
 pymysql = "*"
 psycopg2 = "*"
@@ -110,38 +89,32 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
-cx_oracle = "*"
-pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==21.0.0", channel = "bodo.ai" }
-libarrow = { version = "==21.0.0", channel = "bodo.ai" }
+libaio = "*"  # Is this still necessary?
+cx_oracle = "*"
+[target.osx-64.dependencies]
+cx_oracle = "*"
 
-# Runtime C++ Deps
-[feature.rcpp.dependencies]
-zstd = "*"
-boost-cpp = "*"
-aws-sdk-cpp = "*"
-
-[feature.rcpp.target.osx.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-[feature.rcpp.target.linux.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-[feature.rcpp.target.win.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
+[feature.py312]
+channels = ["bodo.ai", "conda-forge"]
+dependencies = { python = "3.12.*" }
+[feature.py311.dependencies]
+python = "3.11.*"
+[feature.py310.dependencies]
+python = "3.10.*"
 
 [feature.dev.dependencies]
 # Build Python
 setuptools = ">=64"
 setuptools_scm = ">=8"
-cython = ">=3.0"
-scikit-build-core = "*"
-# Copied into bodo/mpi4py (pip only)
-mpi4py = ">=4.0,<4.1"
+cython = ">=3.0,<3.1"
+"scikit-build-core" = "*"
+# Copied into bodo/mpi4py
+mpi4py = "~=3.1"
 
-# Build C++ Deps
-# Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
-cmake = "<4.0,>=3.23"
+# Build C++
+cmake = "*"
 ninja = "*"
 make = "*"
 ccache = "*"
@@ -150,50 +123,33 @@ sccache = "*"
 # BodoSQL & Iceberg Testing
 maven = "*"
 sqlglot = "*"
-# Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
-duckdb = "!=1.2.1"
-
-pyspark = "4.*"
-matplotlib = "*"
+duckdb = "*"
+# Note: PySpark 3.5 is necessary for Python 3.12
+pyspark = "3.5"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
-# Polaris (installed via pip) requires boto3/botocore <1.39
-# TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
-boto3 = "*"
-
-# Documentation Testing
-beautifulsoup4 = "*"
 
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
 
-# S3 Testing
-minio-server = "*"
-# GCS testing
-gcsfs = ">=2022.1"
-
 # Testing and CI Tools
 pytest = "*"
 pytest-cov = "*"
-pytest-mock = "*"
 pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
 flaky = "*"
-testcontainers = "*"
+credstash = "*"
 
 # Other Deps
 pyyaml = "*"
+psutil = "*"
 
 # Developer Tools
 ruff = "*"
 pre-commit = "*"
-ipython = "*"
-
-# Generation/Embedding Tests
-openai = "*"
-
+ipython = "==8.16.1"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
@@ -212,48 +168,24 @@ openai = "*"
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
-
-[feature.dev.target.linux-aarch64.dependencies]
-gcc_linux-aarch64 = ">=9"
-gxx_linux-aarch64 = ">=9"
-
 [feature.dev.target.osx-64.dependencies]
-# Adding clang =19 to prevent build errors from upgrading zstd
-# Consistent with conda package env
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 clang-tools = "=19"
-
 [feature.dev.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
 
-# Pytorch is only on pypi and doesn't support x86 macOS
-[feature.dev.target.osx-arm64.pypi-dependencies]
-# TorchTrainer
-torch = ">=2"
-
-[feature.dev.target.linux-64.pypi-dependencies]
-# TorchTrainer
-torch = ">=2"
-
-[feature.dev.target.linux-aarch64.pypi-dependencies]
-# TorchTrainer
-torch = ">=2"
-
-[feature.dev.target.win-64.pypi-dependencies]
-# TorchTrainer
-torch = ">=2"
-
+# Platform Setup (for lockfile only)
 [feature.platform]
 platforms = ["linux-64"]
-channels = ["conda-forge"]
 [feature.platform.target.linux-64.dependencies]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
+ipyparallel = "==8.6.1"
 ipywidgets = "==8.1.1"
-nbconvert = "6.5.*"
+nbconvert = "6.5.0"
 _openmp_mutex = { version = "*", build = "*gnu*" }
 jupyter_client = "==8.6.1"
 uvicorn = "*"
@@ -262,31 +194,14 @@ httpie = "*"
 
 # MPI Handling
 # Restricted to match Intel MPI. Upgrade with IMPI.
+[feature.local-mpi.dependencies]
 # Using h* to avoid the "external_*" kind
-[feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*" }
-[feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*" }
-[feature.local-mpi.target.win.dependencies]
-impi-devel = "*"
-
+mpich = { version = "4.2.*", build = "h*" }
 [feature.platform-mpi]
-channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "=4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
-
-# Feature pip
-[feature.pip.target.osx-64.dependencies]
-# Adding clang =19 to prevent build errors from upgrading zstd
-# Consistent with conda package env
-clang_osx-64 = "=19"
-clangxx_osx-64 = "=19"
-
-[feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
+dependencies = { mpich = { version = "4.2.*", build = "external_*" } }
 
 # Azure CI
 [feature.azure.dependencies]
