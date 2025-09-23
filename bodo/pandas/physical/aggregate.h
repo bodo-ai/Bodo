@@ -268,14 +268,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         time_pt start_produce = start_timer();
         bool out_is_last = false;
         std::shared_ptr<table_info> next_batch;
-        if (!this->groupby_state->output_state ||
-            this->groupby_state->output_state->buffer.total_remaining == 0) {
-            out_is_last = true;
-            next_batch = alloc_table(output_schema);
-        } else {
-            next_batch = groupby_produce_output_batch_wrapper(
-                this->groupby_state.get(), &out_is_last, true);
-        }
+        next_batch = groupby_produce_output_batch_wrapper(
+            this->groupby_state.get(), &out_is_last, true);
         this->metrics.produce_time += end_timer(start_produce);
         next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED
