@@ -56,6 +56,9 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     from bodo.io.snowflake import create_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
 
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
+
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
@@ -115,6 +118,9 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import drop_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
+
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     db = "TEST_DB"
     schema = "PUBLIC"
