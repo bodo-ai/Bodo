@@ -203,14 +203,10 @@ def gatherv_nojit(data, root, comm):
     if data is not None and not isinstance(data, (pd.DataFrame, pd.Series)):
         raise ValueError("gatherv_nojit only supports DataFrame and Series input")
 
-    import pyarrow as pa
-
     from bodo.ext import hdist
     from bodo.pandas.utils import (
         BODO_NONE_DUMMY,
-        arrow_to_empty_df,
         cpp_table_to_df,
-        cpp_table_to_series,
         df_to_cpp_table,
     )
 
@@ -221,8 +217,7 @@ def gatherv_nojit(data, root, comm):
     if is_receiver:
         data = comm.recv(source=0, tag=11)
     elif rank == 0:
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(data))
-        comm.send(empty_df, dest=0, tag=11)
+        comm.send(data.head(0), dest=0, tag=11)
 
     is_series = isinstance(data, pd.Series)
 
@@ -235,9 +230,12 @@ def gatherv_nojit(data, root, comm):
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr) if not is_series else cpp_table_to_series(out_ptr)
+    out = cpp_table_to_df(out_ptr)
 
-    if is_series and out.name == BODO_NONE_DUMMY:
-        out.name = None
+    if is_series:
+        out = out.iloc[:, 0]
+        # Reset name to None if it was originally None
+        if out.name == BODO_NONE_DUMMY:
+            out.name = None
 
     return out
