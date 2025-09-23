@@ -194,6 +194,7 @@ ipython = "*"
 # Generation/Embedding Tests
 openai = "*"
 
+
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
 # - pip:
@@ -227,6 +228,23 @@ clang-tools = "=19"
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
+
+# Pytorch is only on pypi and doesn't support x86 macOS
+[feature.dev.target.osx-arm64.pypi-dependencies]
+# TorchTrainer
+torch = ">=2"
+
+[feature.dev.target.linux-64.pypi-dependencies]
+# TorchTrainer
+torch = ">=2"
+
+[feature.dev.target.linux-aarch64.pypi-dependencies]
+# TorchTrainer
+torch = ">=2"
+
+[feature.dev.target.win-64.pypi-dependencies]
+# TorchTrainer
+torch = ">=2"
 
 [feature.platform]
 platforms = ["linux-64"]
