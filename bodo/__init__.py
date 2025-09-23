@@ -317,11 +317,17 @@ def allgatherv(*args, **kwargs):
     return allgatherv(*args, **kwargs)
 
 
-def gatherv(*args, **kwargs):
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import gatherv
-    return gatherv(*args, **kwargs)
+def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
+    # Fall back to JIT version if not a spawn gatherv
+    if allgather is True or warn_if_rep is False or comm is None:
+        # Import compiler lazily
+        import bodo.decorators
+        from bodo.libs.distributed_api import gatherv
+        return gatherv(data, allgather, warn_if_rep, root, comm)
+
+    # Avoid compiler imports for DataFrame library
+    from bodo.spawn.utils import gatherv_nojit
+    return gatherv_nojit(data, root, comm)
 
 
 def scatterv(*args, **kwargs):
