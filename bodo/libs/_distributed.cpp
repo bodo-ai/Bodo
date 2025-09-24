@@ -726,8 +726,8 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
             broadcast_array(nullptr, is_sender ? dict_arr : nullptr, nullptr,
                             true, mpi_root, myrank, comm_ptr);
         std::shared_ptr<array_info> out_inds =
-            scatter_array(in_arr->child_arrays[1], nullptr, mpi_root, n_pes,
-                          myrank, comm_ptr);
+            scatter_array(in_arr->child_arrays[1], send_counts_ptr, mpi_root,
+                          n_pes, myrank, comm_ptr);
         out_arr = create_dict_string_array(dict_arr, out_inds);
 
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
@@ -795,6 +795,15 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                   (offset_t *)out_arr->data1(),
                                   (size_t)out_arr->length);
         recv_arr_lens.clear();
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        child_arrays.reserve(in_arr->child_arrays.size());
+        for (const auto &child_array : in_arr->child_arrays) {
+            child_arrays.push_back(scatter_array(child_array, send_counts_ptr,
+                                                 mpi_root, n_pes, myrank,
+                                                 comm_ptr));
+        }
+        out_arr = alloc_struct(n_loc, std::move(child_arrays));
     }
 
     if (arr_type == bodo_array_type::STRING ||
