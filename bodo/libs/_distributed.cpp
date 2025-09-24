@@ -559,6 +559,7 @@ char *get_scatter_null_bytes_buff(std::vector<int64_t> &send_counts,
 }
 
 std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
+                                          std::vector<int64_t> *send_counts_ptr,
                                           int mpi_root, int n_pes, int myrank,
                                           MPI_Comm *comm_ptr) {
     MPI_Comm comm = MPI_COMM_WORLD;
@@ -584,11 +585,17 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
     int64_t num_categories = in_arr->num_categories;
 
     // Calculate scatterv counts and displacements
-    std::vector<int64_t> send_counts(n_pes);
-    std::vector<long> rows_disps(n_pes);
-    for (int i = 0; i < n_pes; i++) {
-        send_counts[i] = dist_get_node_portion(n_rows, n_pes, i);
+    std::vector<int64_t> send_counts;
+    if (send_counts_ptr != nullptr) {
+        send_counts = *send_counts_ptr;
+    } else {
+        send_counts.resize(n_pes);
+        for (int i = 0; i < n_pes; i++) {
+            send_counts[i] = dist_get_node_portion(n_rows, n_pes, i);
+        }
     }
+
+    std::vector<long> rows_disps(n_pes);
     calc_disp(rows_disps, send_counts);
     int64_t n_loc = 0 ? (is_intercomm && is_sender) : send_counts[myrank];
 
@@ -718,8 +725,9 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         std::shared_ptr<array_info> out_dict =
             broadcast_array(nullptr, is_sender ? dict_arr : nullptr, nullptr,
                             true, mpi_root, myrank, comm_ptr);
-        std::shared_ptr<array_info> out_inds = scatter_array(
-            in_arr->child_arrays[1], mpi_root, n_pes, myrank, comm_ptr);
+        std::shared_ptr<array_info> out_inds =
+            scatter_array(in_arr->child_arrays[1], nullptr, mpi_root, n_pes,
+                          myrank, comm_ptr);
         out_arr = create_dict_string_array(dict_arr, out_inds);
 
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
@@ -739,6 +747,54 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                  rows_disps.data(), offset_mpi_typ, data2_ptr,
                                  n_loc, offset_mpi_typ, mpi_root, comm),
                   "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+
+        offset_t *offsets =
+            (offset_t *)in_arr->data1<bodo_array_type::ARRAY_ITEM>();
+
+        // Convert offsets to number of elements
+        std::vector<uint32_t> send_arr_lens;
+        if (is_sender) {
+            send_arr_lens.resize(n_rows);
+            for (int i = 0; i < n_rows; i++) {
+                send_arr_lens[i] = offsets[i + 1] - offsets[i];
+            }
+        }
+
+        // Calculate item counts and displacements
+        std::vector<int64_t> send_counts_items(n_pes);
+        std::vector<long> rows_disps_items(n_pes);
+        if (is_sender) {
+            int64_t curr_str = 0;
+            for (int i = 0; i < n_pes; i++) {
+                send_counts_items[i] =
+                    offsets[curr_str + send_counts[i]] - offsets[curr_str];
+                curr_str += send_counts[i];
+            }
+        }
+        CHECK_MPI(MPI_Bcast(send_counts_items.data(), n_pes, MPI_INT64_T,
+                            mpi_root, comm),
+                  "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
+        calc_disp(rows_disps_items, send_counts_items);
+
+        std::shared_ptr<array_info> out_inner =
+            scatter_array(in_arr->child_arrays[0], &send_counts_items, mpi_root,
+                          n_pes, myrank, comm_ptr);
+
+        out_arr = alloc_array_item(n_loc, out_inner);
+
+        // Scatter string lengths
+        std::vector<uint32_t> recv_arr_lens(n_loc);
+        CHECK_MPI(
+            MPI_Scatterv_c(send_arr_lens.data(), send_counts.data(),
+                           rows_disps.data(), mpi_typ32, recv_arr_lens.data(),
+                           n_loc, mpi_typ32, mpi_root, comm),
+            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        convert_len_arr_to_offset(recv_arr_lens.data(),
+                                  (offset_t *)out_arr->data1(),
+                                  (size_t)out_arr->length);
+        recv_arr_lens.clear();
     }
 
     if (arr_type == bodo_array_type::STRING ||
@@ -791,8 +847,8 @@ std::shared_ptr<table_info> scatter_table(std::shared_ptr<table_info> in_table,
     }
     out_arrs.reserve(n_cols);
     for (int64_t i_col = 0; i_col < n_cols; i_col++) {
-        out_arrs.push_back(scatter_array(in_table->columns[i_col], mpi_root,
-                                         n_pes, myrank, comm_ptr));
+        out_arrs.push_back(scatter_array(in_table->columns[i_col], nullptr,
+                                         mpi_root, n_pes, myrank, comm_ptr));
     }
     return std::make_shared<table_info>(out_arrs, in_table->column_names,
                                         in_table->metadata);
