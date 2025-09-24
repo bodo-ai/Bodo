@@ -536,6 +536,27 @@ table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
         return nullptr;
     }
 }
+char *get_scatter_null_bytes_buff(std::vector<int64_t> &send_counts,
+                                  std::vector<int64_t> &send_count_bytes,
+                                  int n_pes, uint8_t *null_bitmask_i,
+                                  bodo::vector<uint8_t> &tmp_null_bytes) {
+    size_t n_null_bytes = std::accumulate(send_count_bytes.begin(),
+                                          send_count_bytes.end(), size_t(0));
+    tmp_null_bytes.resize(n_null_bytes, 0);
+    int64_t curr_tmp_byte = 0;  // current location in scatter buffer
+    int64_t curr_val = 0;       // current string in input bitmap
+    for (int i_p = 0; i_p < n_pes; i_p++) {
+        int64_t n_vals = send_counts[i_p];
+        int64_t n_bytes = (n_vals + 7) >> 3;
+        uint8_t *chunk_ptr = tmp_null_bytes.data() + curr_tmp_byte;
+        for (int64_t i = 0; i < n_vals; i++) {
+            bool bit = GetBit(null_bitmask_i, curr_val++);
+            SetBitTo(chunk_ptr, i, bit);
+        }
+        curr_tmp_byte += n_bytes;
+    }
+    return reinterpret_cast<char *>(tmp_null_bytes.data());
+}
 
 std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                           int mpi_root, int n_pes, int myrank,
@@ -579,24 +600,34 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
             // Nullable boolean arrays store 1 bit per boolean. As
             // a result we need a separate code path to handle
             // fusing the bits
-            std::vector<int64_t> send_count_bytes(n_pes),
-                send_disp_bytes(n_pes);
+            std::vector<int64_t> send_count_bytes(n_pes);
+            std::vector<long> send_disp_bytes(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++) {
                 send_count_bytes[i_p] = (send_counts[i_p] + 7) >> 3;
             }
             calc_disp(send_disp_bytes, send_count_bytes);
             int64_t n_recv_bytes = (n_loc + 7) >> 3;
-            // Boolean arrays always store data as UINT8
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+
+            bodo::vector<uint8_t> tmp_null_bytes;
+            char *send_ptr = nullptr;
+
+            if (is_sender) {
+                uint8_t *null_bitmask_i =
+                    reinterpret_cast<uint8_t *>(in_arr->data1());
+                send_ptr = get_scatter_null_bytes_buff(
+                    send_counts, send_count_bytes, n_pes, null_bitmask_i,
+                    tmp_null_bytes);
+            }
 
             out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
                                             0, num_categories);
-            char *data1_ptr = out_arr->data1();
 
             CHECK_MPI(
-                MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
-                               rows_disps.data(), mpi_typ, data1_ptr,
-                               n_recv_bytes, mpi_typ, mpi_root, comm),
+                MPI_Scatterv_c(send_ptr, send_count_bytes.data(),
+                               send_disp_bytes.data(), mpi_typ,
+                               out_arr->data1(), n_recv_bytes, mpi_typ,
+                               mpi_root, comm),
                 "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
 
         } else {
@@ -630,28 +661,14 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         calc_disp(send_disp_bytes, send_count_bytes);
         int64_t n_recv_bytes = (n_loc + 7) >> 3;
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        size_t n_null_bytes = std::accumulate(
-            send_count_bytes.begin(), send_count_bytes.end(), size_t(0));
 
         bodo::vector<uint8_t> tmp_null_bytes;
         char *send_ptr = nullptr;
 
         if (is_sender) {
-            // See get_scatter_null_bytes_buff()
-            tmp_null_bytes.resize(n_null_bytes, 0);
-            int64_t curr_tmp_byte = 0;  // current location in scatter buffer
-            int64_t curr_val = 0;       // current string in input bitmap
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                int64_t n_vals = send_counts[i_p];
-                int64_t n_bytes = (n_vals + 7) >> 3;
-                uint8_t *chunk_ptr = tmp_null_bytes.data() + curr_tmp_byte;
-                for (int64_t i = 0; i < n_vals; i++) {
-                    bool bit = GetBit(null_bitmask_i, curr_val++);
-                    SetBitTo(chunk_ptr, i, bit);
-                }
-                curr_tmp_byte += n_bytes;
-            }
-            send_ptr = reinterpret_cast<char *>(tmp_null_bytes.data());
+            send_ptr = get_scatter_null_bytes_buff(
+                send_counts, send_count_bytes, n_pes, null_bitmask_i,
+                tmp_null_bytes);
         }
 
         CHECK_MPI(
