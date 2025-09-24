@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import importlib.util
+import socket
+import typing
 from typing import Any, Callable, Literal
 
+import bodo
 import bodo.spawn.spawner
-from bodo.pandas import BodoDataFrame, BodoSeries
+from bodo.mpi4py import MPI
+
+if typing.TYPE_CHECKING:
+    from bodo.pandas import BodoDataFrame, BodoSeries
 
 
 def torch_import_guard():
@@ -16,6 +22,19 @@ def torch_import_guard():
         )
 
 
+def _get_open_port():
+    """
+    Finds and returns an available open TCP port.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("", 0))  # Bind to an ephemeral port (port 0)
+        port = s.getsockname()[1]  # Get the assigned port number
+        return port
+    finally:
+        s.close()
+
+
 def _init_process_group():
     import torch
     import torch.distributed as dist
@@ -23,10 +42,20 @@ def _init_process_group():
     if dist.is_initialized():
         dist.destroy_process_group()
 
-    acc = torch.accelerator.current_accelerator()
-    backend = torch.distributed.get_default_backend_for_device(acc)
+    if device := torch.accelerator.current_accelerator(check_available=True) is None:
+        device = "cpu"
+    backend = torch.distributed.get_default_backend_for_device(device)
+    tcp_conn_str = None
+    rank = MPI.COMM_WORLD.Get_rank()
+    if rank == 0:
+        port = _get_open_port()
+        tcp_conn_str = f"tcp://{socket.gethostname()}:{port}"
+    tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
+    npes = MPI.COMM_WORLD.Get_size()
 
-    dist.init_process_group(backend=backend)
+    dist.init_process_group(
+        backend=backend, init_method=tcp_conn_str, rank=rank, world_size=npes
+    )
 
 
 def torch_train(
@@ -35,7 +64,9 @@ def torch_train(
     train_loop_config: dict | None = None,
 ):
     def worker_func():
-        pass
+        train_loop_per_worker(
+            train_loop_config
+        ) if train_loop_config else train_loop_per_worker()
 
     bodo.spawn.spawner.submit_func_to_workers(worker_func, [])
 
@@ -67,9 +98,9 @@ def prepare_model(
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
             model = FSDP(model, **parallel_strategy_kwargs)
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
-    model.to(device)
+    if (
+        device := torch.accelerator.current_accelerator(check_available=True)
+        is not None
+    ):
+        model.to(device)
     return model
