@@ -804,6 +804,14 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                                  comm_ptr));
         }
         out_arr = alloc_struct(n_loc, std::move(child_arrays));
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> out_arr_item =
+            scatter_array(in_arr->child_arrays[0], send_counts_ptr, mpi_root,
+                          n_pes, myrank, comm_ptr);
+        out_arr = alloc_map(out_arr_item->length, out_arr_item);
+    } else {
+        throw std::runtime_error("Unexpected array type in scatter_array: " +
+                                 GetArrType_as_string(arr_type));
     }
 
     if (arr_type == bodo_array_type::STRING ||
