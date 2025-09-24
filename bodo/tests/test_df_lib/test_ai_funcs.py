@@ -402,7 +402,8 @@ def test_torch_train():
         }
     )
 
-    def train_loop():
+    def train_loop(data):
+        import torch
         import torch.nn as nn
 
         # Simple linear regression model
@@ -416,5 +417,23 @@ def test_torch_train():
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+        if model is None:
+            return  # Not a worker process
+        # train on data
+        criterion = nn.MSELoss()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        for epoch in range(100):
+            for _, row in data.iterrows():
+                model_device = next(model.parameters()).device
+                inputs = torch.tensor([[row["feature1"], row["feature2"]]]).to(
+                    model_device
+                )
+                labels = torch.tensor([[row["label"]]]).to(model_device)
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+            print(f"Epoch {epoch}, Loss: {loss.item()}")
 
     bodo.ai.train.torch_train(train_loop, df)
