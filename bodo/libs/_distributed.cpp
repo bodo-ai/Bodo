@@ -583,6 +583,7 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     int64_t num_categories = in_arr->num_categories;
 
+    // Calculate scatterv counts and displacements
     std::vector<int64_t> send_counts(n_pes);
     std::vector<long> rows_disps(n_pes);
     for (int i = 0; i < n_pes; i++) {
@@ -655,6 +656,62 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                  rows_disps.data(), mpi_typ, data2_ptr, n_loc,
                                  mpi_typ, mpi_root, comm),
                   "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+
+    } else if (arr_type == bodo_array_type::STRING) {
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+
+        offset_t *offsets =
+            (offset_t *)in_arr->data2<bodo_array_type::STRING>();
+
+        // Convert offsets to number of characters
+        std::vector<uint32_t> send_arr_lens;
+        if (is_sender) {
+            send_arr_lens.resize(n_rows);
+            for (int i = 0; i < n_rows; i++) {
+                send_arr_lens[i] = offsets[i + 1] - offsets[i];
+            }
+        }
+
+        // Calculate character counts and displacements
+        std::vector<int64_t> send_counts_chars(n_pes);
+        std::vector<long> rows_disps_chars(n_pes);
+        if (is_sender) {
+            int64_t curr_str = 0;
+            for (int i = 0; i < n_pes; i++) {
+                send_counts_chars[i] =
+                    offsets[curr_str + send_counts[i]] - offsets[curr_str];
+                curr_str += send_counts[i];
+            }
+        }
+        CHECK_MPI(MPI_Bcast(send_counts_chars.data(), n_pes, MPI_INT64_T,
+                            mpi_root, comm),
+                  "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
+        calc_disp(rows_disps_chars, send_counts_chars);
+        int64_t n_loc_chars =
+            0 ? (is_intercomm && is_sender) : send_counts_chars[myrank];
+
+        out_arr = alloc_array_top_level(n_loc, n_loc_chars, -1, arr_type, dtype,
+                                        -1, 0, num_categories);
+
+        // Scatter string lengths
+        std::vector<uint32_t> recv_arr_lens(n_loc);
+        CHECK_MPI(
+            MPI_Scatterv_c(send_arr_lens.data(), send_counts.data(),
+                           rows_disps.data(), mpi_typ32, recv_arr_lens.data(),
+                           n_loc, mpi_typ32, mpi_root, comm),
+            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        convert_len_arr_to_offset(recv_arr_lens.data(),
+                                  (offset_t *)out_arr->data2(),
+                                  (size_t)out_arr->length);
+        recv_arr_lens.clear();
+
+        // Scatter string characters
+        CHECK_MPI(
+            MPI_Scatterv_c(in_arr->data1(), send_counts_chars.data(),
+                           rows_disps_chars.data(), mpi_typ8, out_arr->data1(),
+                           n_loc_chars, mpi_typ8, mpi_root, comm),
+            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
     }
 
     if (arr_type == bodo_array_type::STRING ||
