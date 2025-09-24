@@ -69,6 +69,8 @@ def test_write_existing_fail(
     simple_dataframe,
 ):
     """Test that writing to an existing table when if_exists='fail' errors"""
+    import bodo.decorators
+
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -112,6 +114,7 @@ def test_basic_write_replace(
     memory_leak_check,
 ):
     """Test basic Iceberg table replace on Spark table"""
+    import bodo.decorators
 
     comm = MPI.COMM_WORLD
     base_name, table_name, df = simple_dataframe
@@ -146,10 +149,6 @@ def test_basic_write_replace(
 
     if read_behavior == "spark":
         py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
-        # Spark reads the column in micro-seconds instead of nano-seconds like
-        # we do, so we need to convert it to match Bodo.
-        if base_name == "DT_TSZ_TABLE":
-            py_out["B"] = py_out["B"].astype("datetime64[ns]")
     else:
         assert read_behavior == "bodo", (
             "Read Behavior can only be either `spark` or `bodo`"
@@ -366,9 +365,6 @@ def test_basic_write_new_append(
         if base_name == "DT_TSZ_TABLE":
             expected_df["B"] = expected_df["B"].fillna(
                 pd.Timestamp(1970, 1, 1, tz="UTC")
-            )
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
             )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
@@ -1763,9 +1759,6 @@ def test_write_partitioned(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
         # dataframe to match Spark.
         if base_name == "DT_TSZ_TABLE":
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
-            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -1892,9 +1885,6 @@ def test_write_sorted(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
         if base_name == "DT_TSZ_TABLE":
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
-            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
