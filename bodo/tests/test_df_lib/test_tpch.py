@@ -12,7 +12,7 @@ pytestmark = pytest.mark.jit_dependency
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 
 
-def run_tpch_query_test(query_func, plan_executions=0):
+def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
     """Run a tpch query and compare output to Pandas.
 
     Args:
@@ -35,6 +35,13 @@ def run_tpch_query_test(query_func, plan_executions=0):
 
     with assert_executed_plan_count(plan_executions):
         bd_result = query_func(*bd_args)
+
+    # We can't capture all CTEs created because the above should create
+    # and execute plans if plan_executions > 0.  If those plans executed
+    # above have CTEs then we can't capture them since they may occur on
+    # workers.
+    generated_ctes = bd_result._plan.get_cte_count()
+    assert generated_ctes == ctes_created
 
     if isinstance(
         pd_result,
@@ -60,7 +67,7 @@ def test_tpch_q01():
 
 
 def test_tpch_q02():
-    run_tpch_query_test(tpch.tpch_q02)
+    run_tpch_query_test(tpch.tpch_q02, ctes_created=1)
 
 
 def test_tpch_q03():
@@ -137,10 +144,8 @@ def test_tpch_q20():
 
 
 def test_tpch_q21():
-    run_tpch_query_test(tpch.tpch_q21)
+    run_tpch_query_test(tpch.tpch_q21, ctes_created=1)
 
 
 def test_tpch_q22():
-    run_tpch_query_test(
-        tpch.tpch_q22,
-    )
+    run_tpch_query_test(tpch.tpch_q22)
