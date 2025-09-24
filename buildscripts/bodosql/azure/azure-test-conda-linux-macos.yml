@@ -11,7 +11,7 @@ parameters:
 - name: test_type
   type: string
   default: NORMAL
-  values: 
+  values:
     - NORMAL
     - SPAWN
     - CACHE
@@ -80,9 +80,9 @@ jobs:
       pixi run -e azure python -c "import bodo; print(bodo.__version__)"
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
 
-      pixi run -e pip install transformers
+      pixi run -e azure pip install transformers
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+      pixi run -e azure pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
