@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <iostream>
 #include <memory>
 
 #include <arrow/array.h>
@@ -1359,13 +1358,11 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
-            std::cout << "large string?" << std::endl;
             return arrow_string_binary_array_to_bodo<arrow::LargeStringArray,
                                                      arrow::LargeStringArray>(
                 arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
                 src_pool);
         case arrow::Type::STRING:
-            std::cout << "string?" << std::endl;
             return arrow_string_binary_array_to_bodo<arrow::StringArray,
                                                      arrow::LargeStringArray>(
                 arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
