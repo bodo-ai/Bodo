@@ -21,6 +21,26 @@ from bodo.pandas.utils import (
 )
 
 
+class CTECreatedCounter:
+    count = 0
+
+    @classmethod
+    def increment(cls):
+        cls.count += 1
+
+    @classmethod
+    def add(cls, n):
+        cls.count += n
+
+    @classmethod
+    def reset(cls):
+        cls.count = 0
+
+    @classmethod
+    def get(cls):
+        return cls.count
+
+
 class LazyPlan:
     """Easiest mode to use DuckDB is to generate isolated queries and try to minimize
     node re-use issues due to the frequent use of unique_ptr.  This class should be
@@ -158,6 +178,7 @@ class LazyPlan:
                     Plan C will be identified as a duplicate.
                 """
                 cte_node = (cte_node, plan_optimizer.py_get_table_index())
+                CTECreatedCounter.increment()
             else:
                 do_cte_check = False
         else:
@@ -259,6 +280,12 @@ class LazyPlan:
             # Add to cache so we don't convert it again.
             cache[id(self)] = ret
             return ret
+
+    def get_cte_count(self):
+        start_cte = CTECreatedCounter.get()
+        self.generate_duckdb()
+        end_cte = CTECreatedCounter.get()
+        return end_cte - start_cte
 
     def replace_empty_data(self, empty_data):
         """Replace the empty_data of the plan with a new empty_data."""
