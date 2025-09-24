@@ -357,6 +357,12 @@ def random_shuffle(*args, **kwargs):
     from bodo.libs.distributed_api import random_shuffle
     return random_shuffle(*args, **kwargs)
 
+def get_gpu_ranks(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_gpu_ranks
+    return get_gpu_ranks(*args, **kwargs)
+
 
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
