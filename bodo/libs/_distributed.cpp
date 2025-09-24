@@ -721,6 +721,24 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         std::shared_ptr<array_info> out_inds = scatter_array(
             in_arr->child_arrays[1], mpi_root, n_pes, myrank, comm_ptr);
         out_arr = create_dict_string_array(dict_arr, out_inds);
+
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
+        MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+        // Copy the UTC timestamp and offset minutes buffers
+
+        out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1, 0,
+                                        num_categories);
+        char *data1_ptr = out_arr->data1();
+        char *data2_ptr = out_arr->data2();
+        CHECK_MPI(MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
+                                 rows_disps.data(), utc_mpi_typ, data1_ptr,
+                                 n_loc, utc_mpi_typ, mpi_root, comm),
+                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        CHECK_MPI(MPI_Scatterv_c(in_arr->data2(), send_counts.data(),
+                                 rows_disps.data(), offset_mpi_typ, data2_ptr,
+                                 n_loc, offset_mpi_typ, mpi_root, comm),
+                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
     }
 
     if (arr_type == bodo_array_type::STRING ||
