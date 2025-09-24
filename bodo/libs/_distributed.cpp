@@ -712,6 +712,15 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                            rows_disps_chars.data(), mpi_typ8, out_arr->data1(),
                            n_loc_chars, mpi_typ8, mpi_root, comm),
             "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+    } else if (arr_type == bodo_array_type::DICT) {
+        // broadcast the dictionary data (string array)
+        std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
+        std::shared_ptr<array_info> out_dict =
+            broadcast_array(nullptr, is_sender ? dict_arr : nullptr, nullptr,
+                            true, mpi_root, myrank, comm_ptr);
+        std::shared_ptr<array_info> out_inds = scatter_array(
+            in_arr->child_arrays[1], mpi_root, n_pes, myrank, comm_ptr);
+        out_arr = create_dict_string_array(dict_arr, out_inds);
     }
 
     if (arr_type == bodo_array_type::STRING ||
