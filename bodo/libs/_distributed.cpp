@@ -641,6 +641,20 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
                                mpi_typ, mpi_root, comm),
                 "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
         }
+    } else if (arr_type == bodo_array_type::INTERVAL) {
+        MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+        out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1, 0,
+                                        num_categories);
+        char *data1_ptr = out_arr->data1();
+        char *data2_ptr = out_arr->data2();
+        CHECK_MPI(MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
+                                 rows_disps.data(), mpi_typ, data1_ptr, n_loc,
+                                 mpi_typ, mpi_root, comm),
+                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        CHECK_MPI(MPI_Scatterv_c(in_arr->data2(), send_counts.data(),
+                                 rows_disps.data(), mpi_typ, data2_ptr, n_loc,
+                                 mpi_typ, mpi_root, comm),
+                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
     }
 
     if (arr_type == bodo_array_type::STRING ||
