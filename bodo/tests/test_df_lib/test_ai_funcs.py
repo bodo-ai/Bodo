@@ -13,6 +13,7 @@ import pytest
 import requests
 
 import bodo.ai.backend
+import bodo.ai.train
 import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
@@ -390,3 +391,30 @@ def test_embed_bedrock_default_formatter():
 
     assert len(res) == 4
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
+
+
+def test_torch_train():
+    df = bd.DataFrame(
+        {
+            "feature1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "feature2": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            "label": [3.0, 5.0, 7.0, 9.0, 11.0, 13.0],
+        }
+    )
+
+    def train_loop():
+        import torch.nn as nn
+
+        # Simple linear regression model
+        class SimpleModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(2, 1)
+
+            def forward(self, x):
+                return self.linear(x)
+
+        model = SimpleModel()
+        model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+
+    bodo.ai.train.torch_train(train_loop, df)
