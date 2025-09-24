@@ -39,23 +39,42 @@ def _init_process_group():
     import torch
     import torch.distributed as dist
 
+    from bodo import get_gpu_ranks
+
     if dist.is_initialized():
         dist.destroy_process_group()
 
-    if device := torch.accelerator.current_accelerator(check_available=True) is None:
+    device = torch.accelerator.current_accelerator(check_available=True)
+    pytorch_rank = MPI.COMM_WORLD.Get_rank()
+    npes = len(get_gpu_ranks()) if device != "cpu" else MPI.COMM_WORLD.Get_size()
+    if device is None:
         device = "cpu"
+    else:
+        mpi_rank = MPI.COMM_WORLD.Get_rank()
+        gpu_ranks = get_gpu_ranks()
+        if mpi_rank in gpu_ranks:
+            pytorch_rank = gpu_ranks.index(mpi_rank)
+        else:
+            pytorch_rank = None
+
+    print(
+        f"MPI Rank: {MPI.COMM_WORLD.Get_rank()}, PyTorch Rank: {pytorch_rank}, Device: {device}"
+    )
     backend = torch.distributed.get_default_backend_for_device(device)
     tcp_conn_str = None
-    rank = MPI.COMM_WORLD.Get_rank()
-    if rank == 0:
+    if pytorch_rank == 0:
         port = _get_open_port()
         tcp_conn_str = f"tcp://{socket.gethostname()}:{port}"
     tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
-    npes = MPI.COMM_WORLD.Get_size()
 
-    dist.init_process_group(
-        backend=backend, init_method=tcp_conn_str, rank=rank, world_size=npes
-    )
+    if pytorch_rank is not None:
+        dist.init_process_group(
+            backend=backend,
+            init_method=tcp_conn_str,
+            rank=pytorch_rank,
+            world_size=npes,
+        )
+    return pytorch_rank
 
 
 def torch_train(
@@ -73,7 +92,7 @@ def torch_train(
 
 def prepare_model(
     model,
-    parallel_strategy: Literal["ddp", "fsdp"] | None = None,
+    parallel_strategy: Literal["ddp", "fsdp"] | None = "ddp",
     parallel_strategy_kwargs: dict[str, Any] | None = None,
 ):
     torch_import_guard()
@@ -82,7 +101,9 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    _init_process_group()
+    pytorch_rank = _init_process_group()
+    if pytorch_rank is None:
+        return None
 
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
@@ -98,9 +119,5 @@ def prepare_model(
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
             model = FSDP(model, **parallel_strategy_kwargs)
-    if (
-        device := torch.accelerator.current_accelerator(check_available=True)
-        is not None
-    ):
-        model.to(device)
+        model.to(pytorch_rank)
     return model
