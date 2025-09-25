@@ -317,8 +317,8 @@ def allgatherv(*args, **kwargs):
 
 
 def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
-    # Fall back to JIT version if not a spawn gatherv
-    if allgather is True or warn_if_rep is False or comm is None:
+    # Fall back to JIT version if not a spawn gatherv (workers may use comm=None)
+    if allgather is True or warn_if_rep is False:
         # Import compiler lazily
         import bodo.decorators
         from bodo.libs.distributed_api import gatherv

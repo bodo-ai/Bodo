@@ -213,16 +213,18 @@ def gatherv_nojit(data, root, comm):
 
     # Get data type on receiver since it doesn't have any local data
     rank = bodo.get_rank()
-    # Receiver has to set root to MPI.ROOT in case of intercomm
-    is_receiver = root == MPI.ROOT
-    if is_receiver:
-        data = comm.recv(source=0, tag=11)
-    elif rank == 0:
-        comm.send(
-            data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
-            dest=0,
-            tag=11,
-        )
+
+    if comm is not None:
+        # Receiver has to set root to MPI.ROOT in case of intercomm
+        is_receiver = root == MPI.ROOT
+        if is_receiver:
+            data = comm.recv(source=0, tag=11)
+        elif rank == 0:
+            comm.send(
+                data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
+                dest=0,
+                tag=11,
+            )
 
     is_series = isinstance(data, pd.Series)
     is_array = isinstance(data, ArrowExtensionArray)
@@ -236,7 +238,7 @@ def gatherv_nojit(data, root, comm):
     if is_array:
         data = pd.DataFrame({"__arrow_data__": data})
 
-    comm_ptr = MPI._addressof(comm)
+    comm_ptr = 0 if comm is None else MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
     out = cpp_table_to_df(out_ptr)
