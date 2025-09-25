@@ -5,8 +5,6 @@ import socket
 import typing
 from typing import Any, Callable, Literal
 
-import bodo
-import bodo.spawn.spawner
 from bodo.mpi4py import MPI
 
 if typing.TYPE_CHECKING:
@@ -74,7 +72,7 @@ def _init_process_group():
             rank=pytorch_rank,
             world_size=npes,
         )
-    return pytorch_rank
+    return pytorch_rank, npes, device
 
 
 def torch_train(
@@ -82,12 +80,12 @@ def torch_train(
     dataset: BodoDataFrame | BodoSeries,
     train_loop_config: dict | None = None,
 ):
-    def worker_func():
+    def worker_func(data):
         train_loop_per_worker(
-            train_loop_config
-        ) if train_loop_config else train_loop_per_worker()
+            data, train_loop_config
+        ) if train_loop_config else train_loop_per_worker(data)
 
-    bodo.spawn.spawner.submit_func_to_workers(worker_func, [])
+    dataset.map_partitions(worker_func)
 
 
 def prepare_model(
@@ -101,9 +99,15 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    pytorch_rank = _init_process_group()
+    pytorch_rank, pytorch_world_size, device = _init_process_group()
     if pytorch_rank is None:
         return None
+
+    model = model.to(device)
+
+    # No need to wrap the model if only one process is used
+    if pytorch_world_size == 1:
+        return model
 
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
