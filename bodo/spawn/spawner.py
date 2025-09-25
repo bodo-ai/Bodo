@@ -174,6 +174,7 @@ class Spawner:
         # execution of commands, leading to invalid data being broadcast to workers.
         self._del_queue = deque()
         self._is_running = False
+        self._workers_imported_compiler = False
 
     def _get_spawn_command_args(self) -> tuple[str, list[str]]:
         """
@@ -284,6 +285,11 @@ class Spawner:
     ):
         """Send func to be compiled and executed on spawned process"""
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
+        # Import compiler on workers if spawner imported the compiler to avoid
+        # inconsistency issues like different scatter implementations.
+        if "bodo.decorators" in sys.modules.keys():
+            self.import_compiler_on_workers()
 
         # If we get a df/series with a plan we need to execute it and get the result id
         # so we can build the arg metadata.
@@ -398,6 +404,16 @@ class Spawner:
         self._is_running = False
         self._run_del_queue()
         return res
+
+    def import_compiler_on_workers(self):
+        if self._workers_imported_compiler:
+            return
+
+        def import_compiler():
+            import bodo.decorators  # isort:skip # noqa
+
+        self._workers_imported_compiler = True
+        self.submit_func_to_workers(lambda: import_compiler(), [])
 
     def lazy_manager_collect_func(self, res_id: str):
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL

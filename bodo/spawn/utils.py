@@ -186,11 +186,8 @@ def import_compiler_on_workers():
     """Import the JIT compiler on all workers. Done as necessary since import time
     can be significant.
     """
-
-    def import_compiler():
-        import bodo.decorators  # isort:skip # noqa
-
-    bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
+    spawner = bodo.spawn.spawner.get_spawner()
+    spawner.import_compiler_on_workers()
 
 
 def gatherv_nojit(data, root, comm):
