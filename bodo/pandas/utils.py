@@ -514,6 +514,25 @@ def df_to_cpp_table(df):
 
     # TODO: test nthreads, safe
     arrow_table = pa.Table.from_pandas(df)
+
+    # Ensure all columns have exactly 1 chunk as expected by our C++ code
+    arrow_table = arrow_table.combine_chunks()
+
+    # Handle zero chunk cases
+    new_columns = []
+    for column in arrow_table.columns:
+        if column.num_chunks == 0:
+            # Create a single empty chunk for zero-chunk columns
+            empty_array = pa.array([], type=column.type)
+            new_column = pa.chunked_array([empty_array])
+            new_columns.append(new_column)
+        else:
+            new_columns.append(column)
+
+    # Recreate table with fixed columns if any changes were made
+    if any(col.num_chunks == 0 for col in arrow_table.columns):
+        arrow_table = pa.Table.from_arrays(new_columns, schema=arrow_table.schema)
+
     return plan_optimizer.arrow_to_cpp_table(arrow_table)
 
 
