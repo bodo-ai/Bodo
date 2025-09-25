@@ -679,6 +679,111 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
             }
             return arr;
         }
+        case LogicalTypeId::DATE: {
+            // DuckDB stores as days since epoch (int32)
+            return duckdbVectorToArrowBasic<arrow::Date32Builder, int32_t>(
+                vec, count);
+        }
+        case LogicalTypeId::TIME: {
+            // Stored as int64 nanoseconds since midnight
+            return duckdbVectorToArrowBasic<arrow::Time64Builder, int64_t>(
+                vec, count);
+        }
+        case LogicalTypeId::TIMESTAMP_NS: {
+            // Stored as int64 nanoseconds since epoch
+            return duckdbVectorToArrowBasic<arrow::TimestampBuilder, int64_t>(
+                vec, count);
+        }
+        case LogicalTypeId::TIMESTAMP_TZ: {
+            // Similar to TIMESTAMP_NS but with timezone metadata
+            // You need to build a TimestampBuilder with a timezone string
+            auto data = duckdb::FlatVector::GetData<int64_t>(vec);
+            auto builder = arrow::TimestampBuilder(
+                arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
+                arrow::default_memory_pool());
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case LogicalTypeId::DECIMAL: {
+            // DuckDB stores as scaled integer; Arrow expects Decimal128
+            auto scale = DecimalType::GetScale(type);
+            auto precision = DecimalType::GetWidth(type);
+            arrow::Decimal128Builder builder(
+                arrow::decimal128(precision, scale),
+                arrow::default_memory_pool());
+            if (type.InternalType() == PhysicalType::INT64) {
+                auto data = duckdb::FlatVector::GetData<int64_t>(vec);
+                for (idx_t i = 0; i < count; i++) {
+                    if (!validity.RowIsValid(i)) {
+                        status = builder.AppendNull();
+                    } else {
+                        status = builder.Append(arrow::Decimal128(data[i]));
+                    }
+                    if (!status.ok()) {
+                        throw std::runtime_error("builder.Append failed.");
+                    }
+                }
+            } else {
+                throw std::runtime_error(
+                    "DuckDB decimal to arrow from non-underlying INT64 "
+                    "PhysicalType.");
+            }
+            // handle other internal widths similarly
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case LogicalTypeId::BLOB: {
+            arrow::BinaryBuilder builder;
+            auto data = duckdb::FlatVector::GetData<duckdb::string_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    auto s = data[i];
+                    status = builder.Append(
+                        reinterpret_cast<const uint8_t *>(s.GetDataUnsafe()),
+                        s.GetSize());
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case LogicalTypeId::SQLNULL: {
+            // Just build an array of all nulls of some placeholder type
+            arrow::NullBuilder builder;
+            builder.AppendNulls(count);
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
         default:
             throw std::runtime_error(
                 "Unsupported DuckDB type for Arrow conversion " +
