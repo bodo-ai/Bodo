@@ -260,21 +260,68 @@ def scatterv_nojit(data, root, comm):
     """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
+    import pandas as pd
 
     from bodo.ext import hdist
     from bodo.pandas.utils import (
+        BODO_NONE_DUMMY,
         cpp_table_to_df,
         df_to_cpp_table,
     )
 
     is_sender = root == MPI.ROOT
 
-    sample_data = comm.bcast(data.head(0) if is_sender else None, root)
+    sample_data = comm.bcast(_get_data_sample(data) if is_sender else None, root)
     data = sample_data if not is_sender else data
+
+    is_series = isinstance(data, pd.Series)
+
+    if is_series:
+        # None name doesn't round-trip to dataframe correctly so we use a dummy name
+        # that is replaced with None in wrap_plan
+        name = BODO_NONE_DUMMY if data.name is None else data.name
+        data = data.to_frame(name=name)
 
     comm_ptr = MPI._addressof(comm)
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.scatterv_py_wrapper(cpp_table_ptr, root, comm_ptr)
     out = cpp_table_to_df(out_ptr)
 
+    if is_series:
+        out = out.iloc[:, 0]
+        # Reset name to None if it was originally None
+        if out.name == BODO_NONE_DUMMY:
+            out.name = None
+
     return out
+
+
+def _get_data_sample(data):
+    """Get an empty sample of the data for sending to workers to determine
+    data type and structure.
+    Avoids head(0) for BodoDataFrame/BodoSeries since the serialized lazy block manager
+    causes issues on the worker side.
+    """
+    import pandas as pd
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+
+    from bodo.pandas.base import _empty_like
+    from bodo.pandas.frame import BodoDataFrame
+    from bodo.pandas.series import BodoSeries
+
+    if isinstance(data, ArrowExtensionArray):
+        return data[:0]
+
+    if data is None:
+        return None
+
+    # Should be before the pandas DataFrame/Series check
+    if isinstance(data, (BodoDataFrame, BodoSeries)):
+        return _empty_like(data)
+
+    if isinstance(data, (pd.DataFrame, pd.Series)):
+        return data.head(0)
+
+    raise ValueError(
+        "_get_data_sample only supports DataFrame, Series and ArrowExtensionArray input"
+    )
