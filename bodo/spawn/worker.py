@@ -415,11 +415,6 @@ def exec_func_handler(
     original_env_var = deepcopy(os.environ)
     _update_env_var(new_env_var, propagate_env)
 
-    # Import compiler for dispatchers since scatterv may be used with JIT to send args
-    is_dispatcher = spawner_intercomm.bcast(None, 0)
-    if is_dispatcher:
-        import bodo.decorators  # isort:skip # noqa
-
     # Receive function arguments
     pickled_args = spawner_intercomm.bcast(None, 0)
     args_and_meta, kwargs_and_meta = cloudpickle.loads(pickled_args)
