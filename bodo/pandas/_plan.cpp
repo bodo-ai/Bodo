@@ -686,13 +686,49 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
         }
         case LogicalTypeId::TIME: {
             // Stored as int64 nanoseconds since midnight
-            return duckdbVectorToArrowBasic<arrow::Time64Builder, int64_t>(
-                vec, count);
+            auto data = duckdb::FlatVector::GetData<int64_t>(vec);
+            auto builder =
+                arrow::Time64Builder(arrow::time64(arrow::TimeUnit::NANO),
+                                     arrow::default_memory_pool());
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
         }
         case LogicalTypeId::TIMESTAMP_NS: {
             // Stored as int64 nanoseconds since epoch
-            return duckdbVectorToArrowBasic<arrow::TimestampBuilder, int64_t>(
-                vec, count);
+            auto data = duckdb::FlatVector::GetData<int64_t>(vec);
+            auto builder =
+                arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::NANO),
+                                        arrow::default_memory_pool());
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
         }
         case LogicalTypeId::TIMESTAMP_TZ: {
             // Similar to TIMESTAMP_NS but with timezone metadata
@@ -776,7 +812,10 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
         case LogicalTypeId::SQLNULL: {
             // Just build an array of all nulls of some placeholder type
             arrow::NullBuilder builder;
-            builder.AppendNulls(count);
+            status = builder.AppendNulls(count);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Append failed.");
+            }
             std::shared_ptr<arrow::Array> arr;
             status = builder.Finish(&arr);
             if (!status.ok()) {
@@ -874,6 +913,77 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
                     auto view = str_arr->GetView(i);
                     data[i] =
                         StringVector::AddString(vec, view.data(), view.size());
+                }
+            }
+            break;
+        }
+        case arrow::Type::BINARY: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto bin_arr = std::static_pointer_cast<arrow::BinaryArray>(arr);
+            auto data = FlatVector::GetData<string_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (bin_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    auto view = bin_arr->GetView(i);
+                    data[i] = StringVector::AddStringOrBlob(vec, view.data(),
+                                                            view.size());
+                }
+            }
+            break;
+        }
+        case arrow::Type::DECIMAL128: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            std::shared_ptr<arrow::Decimal128Array> dec_arr =
+                std::static_pointer_cast<arrow::Decimal128Array>(arr);
+            auto data = FlatVector::GetData<int64_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (dec_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    const uint8_t *raw_value_ptr = dec_arr->Value(i);
+                    arrow::Decimal128 v = arrow::Decimal128(raw_value_ptr);
+                    int64_t low64 = static_cast<int64_t>(v.low_bits());
+                    data[i] = low64;
+                }
+            }
+            break;
+        }
+        case arrow::Type::TIMESTAMP: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto ts_arr = std::static_pointer_cast<arrow::TimestampArray>(arr);
+            auto data = FlatVector::GetData<int64_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (ts_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = ts_arr->Value(i);  // stored as int64 epoch units
+                }
+            }
+            break;
+        }
+        case arrow::Type::DATE32: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto d_arr = std::static_pointer_cast<arrow::Date32Array>(arr);
+            auto data = FlatVector::GetData<int32_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (d_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = d_arr->Value(i);  // days since epoch
+                }
+            }
+            break;
+        }
+        case arrow::Type::TIME64: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto t_arr = std::static_pointer_cast<arrow::Time64Array>(arr);
+            auto data = FlatVector::GetData<int64_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (t_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = t_arr->Value(i);  // nanoseconds since midnight
                 }
             }
             break;
