@@ -403,7 +403,6 @@ def exec_func_handler(
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
-    import numba
 
     import bodo
 
@@ -415,6 +414,11 @@ def exec_func_handler(
     propagate_env = spawner_intercomm.bcast(None, 0)
     original_env_var = deepcopy(os.environ)
     _update_env_var(new_env_var, propagate_env)
+
+    # Import compiler for dispatchers since scatterv may be used with JIT to send args
+    is_dispatcher = spawner_intercomm.bcast(None, 0)
+    if is_dispatcher:
+        import bodo.decorators  # isort:skip # noqa
 
     # Receive function arguments
     pickled_args = spawner_intercomm.bcast(None, 0)
@@ -443,7 +447,7 @@ def exec_func_handler(
     is_dispatcher = False
     try:
         func = cloudpickle.loads(pickled_func)
-        is_dispatcher = isinstance(func, numba.core.registry.CPUDispatcher)
+        is_dispatcher = type(func).__name__ == "CPUDispatcher"
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception

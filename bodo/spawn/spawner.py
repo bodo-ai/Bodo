@@ -322,6 +322,11 @@ class Spawner:
 
         # Send environment variables
         self._send_env_var(self.bcast_root, propagate_env)
+        is_dispatcher = (
+            isinstance(func_to_execute, SpawnDispatcher)
+            or type(func_to_execute).__name__ == "CPUDispatcher"
+        )
+        self.worker_intercomm.bcast(is_dispatcher, self.bcast_root)
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
