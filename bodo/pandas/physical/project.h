@@ -204,6 +204,7 @@ class PhysicalProjection : public PhysicalProcessBatch {
 
         this->metrics.output_row_count += out_size;
 
+        out_table_info->column_names = this->output_schema->column_names;
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
         return {out_table_info, prev_op_result == OperatorResult::FINISHED

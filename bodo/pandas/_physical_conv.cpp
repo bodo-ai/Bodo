@@ -7,6 +7,7 @@
 #include "_util.h"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "physical/aggregate.h"
+#include "physical/cte.h"
 #include "physical/filter.h"
 #include "physical/join.h"
 #include "physical/limit.h"
@@ -227,7 +228,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder;
+    PhysicalPlanBuilder rhs_builder(ctes);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -253,11 +254,50 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     this->active_pipeline->AddOperator(physical_join);
 }
 
+void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
+    // Create pipelines for the duplicate side of the CTE.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+    auto physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_cte));
+
+    // Save the physical_cte node away so that cte ref's on the non-duplicate
+    // side can find it.
+    ctes.insert({op.table_index, physical_cte});
+    // The active pipeline finishes after the duplicate side.
+    this->active_pipeline = nullptr;
+    /*
+     * The build side of joins want to insert at the front of the finished
+     * pipelines but that causes a problem with CTEs because the use of a
+     * CTE can then preceed its calculation.  When we are done with a CTE,
+     * we now lock the current set of finished pipelines so the ordering
+     * cannot be changed.
+     */
+    this->lock_finished();
+
+    // Create pipelines for the side that uses the duplicate side.
+    this->Visit(*op.children[1]);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
+    // Match the cte_index with the CTE node table index in the global
+    // structure.
+    auto table_index_iter = ctes.find(op.cte_index);
+    if (table_index_iter == ctes.end()) {
+        throw std::runtime_error(
+            "LogicalCTERef couldn't find matching table_index.");
+    }
+    auto physical_cte_ref =
+        std::make_shared<PhysicalCTERef>(table_index_iter->second);
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     // Same as LogicalComparisonJoin, but without conditions.
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder;
+    PhysicalPlanBuilder rhs_builder(ctes);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -308,7 +348,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
         // UNION ALL
         if (op.setop_all) {
             // Right-child will feed into a table.
-            PhysicalPlanBuilder rhs_builder;
+            PhysicalPlanBuilder rhs_builder(ctes);
             rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();

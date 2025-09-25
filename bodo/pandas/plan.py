@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 import traceback
+from collections import deque
 from contextlib import contextmanager
 
 import pandas as pd
@@ -18,6 +19,26 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     wrap_plan,
 )
+
+
+class CTECreatedCounter:
+    count = 0
+
+    @classmethod
+    def increment(cls):
+        cls.count += 1
+
+    @classmethod
+    def add(cls, n):
+        cls.count += n
+
+    @classmethod
+    def reset(cls):
+        cls.count = 0
+
+    @classmethod
+    def get(cls):
+        return cls.count
 
 
 class LazyPlan:
@@ -80,63 +101,191 @@ class LazyPlan:
 
     __repr__ = __str__
 
-    def generate_duckdb(self, cache=None):
+    def bfs_duplicate(self):
+        """Finds the top-most duplicated node in the plan.
+        Does this with a breadth-first search and inserts encountered
+        nodes into a visited set and the first node that would be inserted
+        twice is the top-most duplicated node.
+        Leaf nodes never count as a duplicated node.
+        CTEs can have CTEs inside them so we do this processed recursively
+        top-down and that is why we do this search BFS instead of DFS.
+        """
+        visited = set()
+        # Yet to be processed plan nodes starts with plan root node.
+        queue = deque([self])
+
+        while queue:
+            node = queue.popleft()
+            # If we've seen the node before and it isn't a leaf node then return
+            # it to have a CTE made from it.
+            if id(node) in visited and not isinstance(node, LogicalOperatorLeaf):
+                return node
+            else:
+                # Remember we encountered this node.
+                visited.add(id(node))
+                if isinstance(node, LogicalComparisonJoin):
+                    # For comparison join, the first two args contain source plans.
+                    for arg in node.args[0:2]:
+                        if isinstance(arg, LazyPlan):
+                            queue.append(arg)
+                elif isinstance(node.args[0], LazyPlan):
+                    # For all other node types, just look at the first arg for a
+                    # source plan.
+                    queue.append(node.args[0])
+        return None
+
+    def generate_duckdb(self, cache=None, cte_ref=None, do_cte_check=True):
         from bodo.ext import plan_optimizer
 
-        # Sometimes the same LazyPlan object is encountered twice during the same
-        # query so  we use the cache dict to only convert it once.
         if cache is None:
             cache = {}
-        # If previously converted then use the last result.
-        # Don't cache expression nodes.
-        # TODO - Try to eliminate caching altogether since it seems to cause
-        # more problems than lack of caching.
-        if not isinstance(self, Expression) and id(self) in cache:
-            return cache[id(self)]
 
-        def recursive_check(x, use_cache):
+        def recursive_check(x, use_cache, cte_ref, do_cte_check):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache if use_cache else None)
+                ret = x.generate_duckdb(
+                    cache=cache if use_cache else None,
+                    cte_ref=cte_ref,
+                    do_cte_check=do_cte_check,
+                )
+                return ret
             elif isinstance(x, (tuple, list)):
-                return type(x)(recursive_check(i, use_cache) for i in x)
+                return type(x)(
+                    recursive_check(i, use_cache, cte_ref, do_cte_check) for i in x
+                )
             else:
                 return x
 
-        # NOTE: Caching is necessary to make sure source operators which have table
-        # indexes and are reused in various nodes (e.g. expressions) are not re-created
-        # with different table indexes.
-        # Join however doesn't need this and cannot use caching since a sub-plan may
-        # be reused across right and left sides (e.g. self-join) leading to unique_ptr
-        # errors.
-        use_cache = True
-        if isinstance(
-            self,
-            (
-                LogicalComparisonJoin,
-                LogicalSetOperation,
-                LogicalInsertScalarSubquery,
-                LogicalCrossProduct,
-            ),
-        ):
-            use_cache = False
+        if cte_ref is None and do_cte_check:
+            """ This is the main path.  We are processing a plan normally
+                and checking if the plan has a duplicate node in it that
+                should become a CTE.  If we find such a plan then form a
+                tuple of the node that should become a CTE and a newly
+                requested table_index that will be shared by the creation
+                and use of the CTE.
+            """
+            cte_node = self.bfs_duplicate()
+            if cte_node is not None:
+                """ Assume we have a plan as follows:
+                    A
+                    |
+                    B -
+                    |  |
+                    C  C
+                    |  |
+                    D  D
 
-        # Convert any LazyPlan in the args.
-        # We do this in reverse order because we expect the first arg to be
-        # the source of the plan and for the node being created to take
-        # ownership of that source.  If other args reference that
-        # plan then if we process them after we have taken ownership then
-        # we will get nullptr exceptions.  So, process the args that don't
-        # claim ownership first (in the reverse direction) and finally
-        # process the first arg which we expect will take ownership.
-        args = [recursive_check(x, use_cache) for x in reversed(self.args)]
-        args.reverse()
+                    Plan C will be identified as a duplicate.
+                """
+                cte_node = (cte_node, plan_optimizer.py_get_table_index())
+                CTECreatedCounter.increment()
+            else:
+                do_cte_check = False
+        else:
+            # Don't search for duplicates if we are processing the non-duplicate
+            # side of a CTE plan.
+            cte_node = None
 
-        # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
-        # Add to cache so we don't convert it again.
-        cache[id(self)] = ret
-        return ret
+        def should_use_cache(node):
+            return not isinstance(
+                node,
+                (
+                    LogicalComparisonJoin,
+                    LogicalSetOperation,
+                    LogicalInsertScalarSubquery,
+                    LogicalCrossProduct,
+                ),
+            )
+
+        if cte_ref is not None and self is cte_ref[0]:
+            """ We must be on the non-duplicated side of a CTE and
+                the node we are processing is the duplicated one that
+                has been made into a CTE so we replace the current node
+                with a CTE ref.  For example, we've processed A in the above
+                graph on the non-duplicated side of the CTE and we find
+                the C node in cte_ref[0] and so we replace with a CTE
+                ref node using the common table_index in cte_ref[1].
+            """
+            # Can't be an expression here.
+            if id(self) in cache:
+                return cache[id(self)]
+            cte_ref_plan = LogicalCTERef(self.empty_data, cte_ref[1])
+            # Create duckdb CTE ref node.
+            ret = getattr(plan_optimizer, cte_ref_plan.plan_class)(
+                cte_ref_plan.pa_schema, cte_ref[1]
+            )
+            cache[id(self)] = ret
+            return ret
+        elif cte_node is not None:
+            # We just started processing a plan that has a duplicate node.
+            if id(self) in cache:
+                raise Exception("Should never find cache re-use for cte_node.")
+            # Generate the duckdb plan starting from the duplicated node.
+            duplicate = cte_node[0].generate_duckdb(cache=cache)
+            # Generate the duckdb plan starting from the same top-level node
+            # but with cte_ref set so that when the duplicate cte node is
+            # encountered while processing the plan tree that we replace it
+            # with a CTE ref node instead of generating the sub-tree plan again
+            # as we did on the previous line above.
+            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_node)
+            # The duckdb plan node we will generate is a materialized CTE node
+            # instead of the type of self.  We processed ourself again in the
+            # above line and uses_duplicate becomes part of the materialized
+            # CTE node.
+            cte_plan = LogicalMaterializedCTE(
+                self.empty_data, cte_node[0], self, cte_node[1]
+            )
+
+            # Generate duckdb materialized CTE node passing the duplicated
+            # and non-duplicated sides.
+            ret = getattr(plan_optimizer, cte_plan.plan_class)(
+                cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
+            )
+            cache[id(self)] = ret
+            return ret
+        else:
+            # Sometimes the same LazyPlan object is encountered twice during the same
+            # query so we use the cache dict to only convert it once.
+            # If previously converted then use the last result.
+            # Don't cache expression nodes.
+            # TODO - Try to eliminate caching altogether since it seems to cause
+            # more problems than lack of caching.
+            if not isinstance(self, Expression) and id(self) in cache:
+                return cache[id(self)]
+
+            # NOTE: Caching is necessary to make sure source operators which have table
+            # indexes and are reused in various nodes (e.g. expressions) are not re-created
+            # with different table indexes.
+            # Join however doesn't need this and cannot use caching since a sub-plan may
+            # be reused across right and left sides (e.g. self-join) leading to unique_ptr
+            # errors.
+            use_cache = should_use_cache(self)
+
+            # Convert any LazyPlan in the args.
+            # We do this in reverse order because we expect the first arg to be
+            # the source of the plan and for the node being created to take
+            # ownership of that source.  If other args reference that
+            # plan then if we process them after we have taken ownership then
+            # we will get nullptr exceptions.  So, process the args that don't
+            # claim ownership first (in the reverse direction) and finally
+            # process the first arg which we expect will take ownership.
+            args = [
+                recursive_check(x, use_cache, cte_ref, do_cte_check)
+                for x in reversed(self.args)
+            ]
+            args.reverse()
+
+            # Create real duckdb class.
+            ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
+            # Add to cache so we don't convert it again.
+            cache[id(self)] = ret
+            return ret
+
+    def get_cte_count(self):
+        start_cte = CTECreatedCounter.get()
+        self.generate_duckdb()
+        end_cte = CTECreatedCounter.get()
+        return end_cte - start_cte
 
     def replace_empty_data(self, empty_data):
         """Replace the empty_data of the plan with a new empty_data."""
@@ -153,6 +302,13 @@ class LogicalOperator(LazyPlan):
 
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)
+
+
+class LogicalOperatorLeaf(LogicalOperator):
+    """Base class for all logical operators in the Bodo query plan that are leaf of the plan tree (e.g. Parquet read)."""
+
+    def __init__(self, empty_data, *args):
+        super().__init__(empty_data, *args)
 
 
 class Expression(LazyPlan):
@@ -218,6 +374,18 @@ class LogicalDistinct(LogicalOperator):
     pass
 
 
+class LogicalMaterializedCTE(LogicalOperator):
+    """Logical operator for CTE."""
+
+    pass
+
+
+class LogicalCTERef(LogicalOperator):
+    """Logical operator for CTE ref."""
+
+    pass
+
+
 class LogicalComparisonJoin(LogicalOperator):
     """Logical operator for comparison-based joins."""
 
@@ -272,26 +440,26 @@ class LogicalOrder(LogicalOperator):
     pass
 
 
-class LogicalGetParquetRead(LogicalOperator):
+class LogicalGetParquetRead(LogicalOperatorLeaf):
     """Logical operator for reading Parquet files."""
 
     pass
 
 
-class LogicalGetPandasReadSeq(LogicalOperator):
+class LogicalGetPandasReadSeq(LogicalOperatorLeaf):
     """Logical operator for sequential read of a Pandas DataFrame."""
 
     pass
 
 
-class LogicalGetPandasReadParallel(LogicalOperator):
+class LogicalGetPandasReadParallel(LogicalOperatorLeaf):
     """Logical operator for parallel read of a Pandas DataFrame.\
     """
 
     pass
 
 
-class LogicalGetIcebergRead(LogicalOperator):
+class LogicalGetIcebergRead(LogicalOperatorLeaf):
     """Logical operator for reading Apache Iceberg tables."""
 
     def __init__(
