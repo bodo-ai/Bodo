@@ -536,8 +536,8 @@ table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
         return nullptr;
     }
 }
-char *get_scatter_null_bytes_buff(std::vector<int64_t> &send_counts,
-                                  std::vector<int64_t> &send_count_bytes,
+char *get_scatter_null_bytes_buff(std::vector<MPI_Count> &send_counts,
+                                  std::vector<MPI_Count> &send_count_bytes,
                                   int n_pes, uint8_t *null_bitmask_i,
                                   bodo::vector<uint8_t> &tmp_null_bytes) {
     size_t n_null_bytes = std::accumulate(send_count_bytes.begin(),
