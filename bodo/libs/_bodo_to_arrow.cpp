@@ -1546,9 +1546,10 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     out_arrs.reserve(table->num_columns());
     for (int64_t i = 0; i < table->num_columns(); i++) {
         if (table->column(i)->num_chunks() != 1) {
-            throw std::runtime_error("arrow_table_to_bodo(): Column " +
-                                     std::to_string(i) +
-                                     " does not have exactly one chunk");
+            throw std::runtime_error(
+                "arrow_table_to_bodo(): Column " + std::to_string(i) +
+                " does not have exactly one chunk, found " +
+                std::to_string(table->column(i)->num_chunks()));
         }
         std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
         std::shared_ptr<array_info> out_arr =

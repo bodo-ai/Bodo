@@ -191,3 +191,67 @@ def import_compiler_on_workers():
         import bodo.decorators  # isort:skip # noqa
 
     bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
+
+
+def gatherv_nojit(data, root, comm):
+    """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
+    compiler which can be slow.
+    Throws an error if called with unsupported arguments to allow fallback to JIT.
+    """
+    import pandas as pd
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+
+    if data is not None and not isinstance(
+        data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
+    ):
+        raise ValueError(
+            "gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input"
+        )
+
+    from bodo.ext import hdist
+    from bodo.pandas.utils import (
+        BODO_NONE_DUMMY,
+        cpp_table_to_df,
+        df_to_cpp_table,
+    )
+
+    # Get data type on receiver since it doesn't have any local data
+    rank = bodo.get_rank()
+    # Receiver has to set root to MPI.ROOT in case of intercomm
+    is_receiver = root == MPI.ROOT
+    if is_receiver:
+        data = comm.recv(source=0, tag=11)
+    elif rank == 0:
+        comm.send(
+            data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
+            dest=0,
+            tag=11,
+        )
+
+    is_series = isinstance(data, pd.Series)
+    is_array = isinstance(data, ArrowExtensionArray)
+
+    if is_series:
+        # None name doesn't round-trip to dataframe correctly so we use a dummy name
+        # that is replaced with None in wrap_plan
+        name = BODO_NONE_DUMMY if data.name is None else data.name
+        data = data.to_frame(name=name)
+
+    if is_array:
+        data = pd.DataFrame({"__arrow_data__": data})
+
+    comm_ptr = MPI._addressof(comm)
+    cpp_table_ptr = df_to_cpp_table(data)
+    out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
+    out = cpp_table_to_df(out_ptr)
+
+    if is_series:
+        out = out.iloc[:, 0]
+        # Reset name to None if it was originally None
+        if out.name == BODO_NONE_DUMMY:
+            out.name = None
+
+    if is_array:
+        out = out.iloc[:, 0].array
+
+    return out

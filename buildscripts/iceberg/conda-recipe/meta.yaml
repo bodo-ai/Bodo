@@ -23,7 +23,7 @@ requirements:
     - python >=3.9
     - openjdk 17
     - py4j ==0.10.9.9
-    - pyiceberg >=0.9
+    - pyiceberg >=0.10
     - boto3 *
     - mypy-boto3-glue *
 

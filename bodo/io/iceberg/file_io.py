@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from pyarrow.fs import FileSystem
 from pyiceberg.io import ADLS_ACCOUNT_KEY, ADLS_ACCOUNT_NAME
 from pyiceberg.io.pyarrow import PyArrowFileIO
+from pyiceberg.typedef import EMPTY_DICT, Properties, Tuple
 
 
 def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
@@ -46,15 +47,19 @@ class BodoPyArrowFileIO(PyArrowFileIO):
     """
 
     @staticmethod
-    def parse_location(location: str) -> tuple[str, str, str]:
-        """Return the path without the scheme."""
+    def parse_location(
+        location: str, *args, properties: Properties = EMPTY_DICT, **kwargs
+    ) -> Tuple[str, str, str]:
+        """Return (scheme, netloc, path) for the given location.
 
-        if _is_windows_path(location):
-            return "file", "", os.path.abspath(location)
+        Uses DEFAULT_SCHEME and DEFAULT_NETLOC if scheme/netloc are missing.
+        """
 
         uri = urlparse(location)
-        if not uri.scheme:
-            return "file", uri.netloc, os.path.abspath(location)
+        if not uri.scheme or _is_windows_path(location):
+            default_scheme = properties.get("DEFAULT_SCHEME", "file")
+            default_netloc = properties.get("DEFAULT_NETLOC", "")
+            return default_scheme, default_netloc, os.path.abspath(location)
         elif uri.scheme in ("hdfs", "viewfs"):
             return uri.scheme, uri.netloc, uri.path
         elif uri.scheme in ("abfs", "abfss", "azure", "wasbs", "wasb"):

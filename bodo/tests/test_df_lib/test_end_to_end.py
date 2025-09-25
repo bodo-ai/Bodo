@@ -1850,6 +1850,52 @@ def test_series_cmp_binops(datapath, index_val):
     )
 
 
+def test_scalar_arith_binops(datapath, index_val):
+    """Test various cases of BodoScalar binary operations."""
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    # Simple expression with constant
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + 1
+        bodo_S = bdf["A"].sum() + 1
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # Two BodoScalar expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"].sum()
+        bodo_S = bdf["A"].sum() + bdf["C"].sum()
+
+    _test_equal(bodo_S.get_value(), S)
+
+    # BodoScalar/Series expressions
+    with assert_executed_plan_count(0):
+        S = df["A"].sum() + df["C"]
+        bodo_S = bdf["A"].sum() + bdf["C"]
+
+    # TODO[BSE-5121]: Fix crash when execute_plan/get_value is not used directly
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+    # BodoScalar non-scalar expressions
+    with assert_executed_plan_count(1):
+        S = df["A"].sum() + np.ones(4)
+        bodo_S = bdf["A"].sum() + np.ones(4)
+
+    _test_equal(
+        bodo_S,
+        S,
+        check_pandas_types=False,
+    )
+
+
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
@@ -3558,6 +3604,55 @@ def test_print_no_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         print(S)
+
+
+@pytest.mark.parametrize(
+    "pd_in, expr",
+    [
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]}),
+            lambda x: x[x.B < len(x)],
+            id="frame_expr",
+        ),
+        pytest.param(
+            pd.Series([8, 7, 5, 4, 5, 6], name="A"),
+            lambda x: x[x < len(x)],
+            id="series_expr",
+        ),
+    ],
+)
+def test_lazy_len(pd_in, expr, index_val):
+    """Make sure len() on BodoDataFrame, BodoSeries doesn't trigger
+    execution when used in another plan.
+    """
+    reset_index = isinstance(index_val, pd.RangeIndex)
+    pd_in.index = index_val[: len(pd_in)]
+
+    if isinstance(pd_in, pd.Series):
+        pd_in_ser = pd_in.to_frame()
+        bd_in = bd.from_pandas(pd_in_ser)
+        bd_in = bd_in.A
+    else:
+        bd_in = bd.from_pandas(pd_in)
+
+    with assert_executed_plan_count(0):
+        bodo_out = expr(bd_in)
+
+    pd_out = expr(pd_in)
+
+    _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
+
+
+def test_len_no_warn(index_val):
+    """Test that collecting length does not raise warnings"""
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", BodoLibFallbackWarning)
+        assert len(bdf[bdf.A > 5]) == len(df[df.A > 5])
 
 
 def test_bodo_pandas_inside_jit():

@@ -5,9 +5,9 @@ hide:
 tags:
   - install
 ---
-# Installing Bodo Engine {#install}
+# Installing Bodo DataFrames {#install}
 
-Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
+Bodo DataFrames can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
@@ -99,12 +99,10 @@ two functions:
     computations on it.
 
 ``` python3
-import bodo
-import pandas as pd
+import bodo.pandas as pd
 import numpy as np
 import time
 
-@bodo.jit
 def gen_data():
     NUM_GROUPS = 30
     NUM_ROWS = 20_000_000
@@ -114,14 +112,15 @@ def gen_data():
     })
     df.to_parquet("example1.pq")
 
-@bodo.jit
 def test():
     df = pd.read_parquet("example1.pq")
     t0 = time.time()
     df2 = df.groupby("A")["B"].agg(
-        (lambda a: (a==1).sum(), lambda a: (a==2).sum(), lambda a: (a==3).sum())
+        sum_b1=(lambda a: (a==1).sum()),
+        sum_b2=(lambda a: (a==2).sum()),
+        sum_b3=(lambda a: (a==3).sum())
     )
-    m = df2.mean()
+    m = df2.sum_b1.mean()
     print("Result:", m, "\nCompute time:", time.time() - t0, "secs")
 
 gen_data()

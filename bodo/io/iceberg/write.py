@@ -414,24 +414,18 @@ def register_table_write_seq(
 
     if snapshot_properties is None:
         snapshot_properties = {}
-
     with transaction.update_snapshot(
         snapshot_properties=snapshot_properties
     ).fast_append() as add:
         for file_name, file_record, partition_info in zip(
             fnames, file_records, partition_infos
         ):
-            data_file = DataFile(
+            data_file = DataFile.from_args(
                 content=DataFileContent.DATA,
                 file_format=FileFormat.PARQUET,
                 file_path=transaction.table_metadata.location + "/data/" + file_name,
                 # Partition and Sort Order
-                partition=Record(
-                    **{
-                        field.name: info
-                        for field, info in zip(partition_spec.fields, partition_info)
-                    }
-                ),
+                partition=Record(*partition_info),
                 sort_order_id=sort_order_id,
                 spec_id=partition_spec.spec_id,
                 equality_ids=None,

@@ -103,7 +103,7 @@ def test_tpch_q10():
 
 
 def test_tpch_q11():
-    run_tpch_query_test(tpch.tpch_q11, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q11)
 
 
 def test_tpch_q12():
@@ -115,8 +115,7 @@ def test_tpch_q13():
 
 
 def test_tpch_q14():
-    # TODO[BSE-5113]: support division of BodoScalars in plans
-    run_tpch_query_test(tpch.tpch_q14, plan_executions=2)
+    run_tpch_query_test(tpch.tpch_q14, plan_executions=1)
 
 
 def test_tpch_q15():

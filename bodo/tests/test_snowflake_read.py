@@ -89,6 +89,8 @@ def test_sql_snowflake_independent(memory_leak_check):
     afterwards, we ensure that all other ranks must complete before rank 0,
     which means that all ranks must execute independently.
     """
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     def impl(query, conn):
         df = pd.read_sql(query, conn)

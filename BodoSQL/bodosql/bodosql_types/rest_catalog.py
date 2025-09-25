@@ -117,7 +117,7 @@ class RESTCatalog(DatabaseCatalog):
             self.rest_uri, self.warehouse, scope=self.scope, credential=self.credential
         )
         py_catalog = conn_str_to_catalog(con_str)
-        return py_catalog.properties["token"]
+        return py_catalog._session.auth.auth_manager._token
 
     def __eq__(self, other):
         if not isinstance(other, RESTCatalog):
@@ -290,6 +290,7 @@ def get_conn_str(rest_uri, warehouse, scope=None, token=None, credential=None):
         conn_str += f"&token={token}"
     if credential is not None:
         conn_str += f"&credential={credential}"
+    conn_str += "&sigv4=false"
     return conn_str
 
 

@@ -510,7 +510,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                         is_parallel, mpi_root, n_pes, myrank,
                                         comm_ptr));
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, in_table->column_names,
+                                        in_table->metadata);
 }
 
 table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
@@ -839,6 +840,51 @@ static PyObject *bcast_int64_py_wrapper(PyObject *self, PyObject *args) {
     return output_obj;
 }
 
+static PyObject *gatherv_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 3) {
+        PyErr_SetString(PyExc_TypeError,
+                        "gatherv_py_wrapper() takes exactly three arguments");
+        return nullptr;
+    }
+
+    // Ubox table pointer
+    PyObject *table_ptr_obj = PyTuple_GetItem(args, 0);
+    if (!PyLong_Check(table_ptr_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "gatherv_py_wrapper() first argument must be a integer");
+        return nullptr;
+    }
+    int64_t table_ptr = PyLong_AsLongLong(table_ptr_obj);
+
+    // Ubox root
+    PyObject *root_obj = PyTuple_GetItem(args, 1);
+    if (!PyLong_Check(root_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "gatherv_py_wrapper() second argument must be a integer");
+        return nullptr;
+    }
+    int64_t root = PyLong_AsLongLong(root_obj);
+
+    PyObject *comm_obj = PyTuple_GetItem(args, 2);
+    if (!PyLong_Check(comm_obj)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "gatherv_py_wrapper() third argument must be a integer");
+        return nullptr;
+    }
+    int64_t comm = PyLong_AsLongLong(comm_obj);
+
+    table_info *out_table =
+        gather_table_py_entry(reinterpret_cast<table_info *>(table_ptr),
+                              /*all_gather=*/false, (int)root, comm);
+
+    PyObject *output_obj =
+        PyLong_FromLongLong(reinterpret_cast<int64_t>(out_table));
+    return output_obj;
+}
+
 /**
  * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
  overhead and makes compiler debugging easier by eliminating extra compilation)
@@ -855,11 +901,9 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
-    declmethod(get_rank_py_wrapper),
-    declmethod(get_size_py_wrapper),
-    declmethod(bcast_int64_py_wrapper),
-    declmethod(finalize_py_wrapper),
-    {nullptr},
+    declmethod(get_rank_py_wrapper),    declmethod(get_size_py_wrapper),
+    declmethod(bcast_int64_py_wrapper), declmethod(gatherv_py_wrapper),
+    declmethod(finalize_py_wrapper),    {nullptr},
 #undef declmethod
 };
 
