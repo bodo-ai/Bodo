@@ -2915,6 +2915,31 @@ def test_drop_duplicates():
     )
 
 
+def test_drop_duplicates_subset():
+    """Test for drop_duplicates subset API."""
+
+    dim0 = 4
+    dim1 = 6
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(list(range(dim0)) * dim1 * 10, "Int32"),
+                "B": pd.array(list(range(dim0, dim0 + dim1)) * dim0 * 10, "Float64"),
+                "C": pd.array(list(range(dim0 * dim1 * 10)), "Float64"),
+            }
+        )
+        pdf = df.copy().drop_duplicates(subset=["A", "B"])
+        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"])
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
 

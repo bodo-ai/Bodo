@@ -48,6 +48,7 @@ BUILTIN_AGG_FUNCS = {
     "count",
     "size",
     "nunique",
+    "first",
 }
 
 
@@ -288,6 +289,13 @@ class DataFrameGroupBy:
         Compute the var of each group.
         """
         return _groupby_agg_plan(self, "var")
+
+    @check_args_fallback(supported="none")
+    def first(self):
+        """
+        Get the first entry for each group.
+        """
+        return _groupby_agg_plan(self, "first")
 
 
 class SeriesGroupBy:
@@ -920,6 +928,8 @@ def _get_agg_output_type(
         ):
             # TODO: bool/decimal median
             fallback = True
+    elif func_name == "first":
+        new_type = pa_type
     elif callable(func.func):
         # Import compiler
         import bodo.decorators  # isort:skip # noqa

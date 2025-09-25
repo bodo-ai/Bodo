@@ -1511,7 +1511,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["subset"])
     def drop_duplicates(
         self,
         subset: Hashable | Sequence[Hashable] | None = None,
@@ -1521,6 +1521,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         ignore_index: bool = False,
     ) -> BodoDataFrame | None:
         from bodo.pandas.base import _empty_like
+
+        if subset is not None:
+            subset_group = self.groupby(subset, as_index=False, sort=False)
+            return subset_group.first()
 
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
