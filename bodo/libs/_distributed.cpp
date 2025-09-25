@@ -558,10 +558,9 @@ char *get_scatter_null_bytes_buff(std::vector<int64_t> &send_counts,
     return reinterpret_cast<char *>(tmp_null_bytes.data());
 }
 
-std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
-                                          std::vector<int64_t> *send_counts_ptr,
-                                          int mpi_root, int n_pes, int myrank,
-                                          MPI_Comm *comm_ptr) {
+std::shared_ptr<array_info> scatter_array(
+    std::shared_ptr<array_info> in_arr, std::vector<MPI_Count> *send_counts_ptr,
+    int mpi_root, int n_pes, int myrank, MPI_Comm *comm_ptr) {
     MPI_Comm comm = MPI_COMM_WORLD;
     bool is_sender = (myrank == mpi_root);
     bool is_intercomm = false;
@@ -585,7 +584,7 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
     int64_t num_categories = in_arr->num_categories;
 
     // Calculate scatterv counts and displacements
-    std::vector<int64_t> send_counts;
+    std::vector<MPI_Count> send_counts;
     if (send_counts_ptr != nullptr) {
         send_counts = *send_counts_ptr;
     } else {
@@ -595,7 +594,7 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         }
     }
 
-    std::vector<long> rows_disps(n_pes);
+    std::vector<MPI_Aint> rows_disps(n_pes);
     calc_disp(rows_disps, send_counts);
     int64_t n_loc = 0 ? (is_intercomm && is_sender) : send_counts[myrank];
 
@@ -608,8 +607,8 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
             // Nullable boolean arrays store 1 bit per boolean. As
             // a result we need a separate code path to handle
             // fusing the bits
-            std::vector<int64_t> send_count_bytes(n_pes);
-            std::vector<long> send_disp_bytes(n_pes);
+            std::vector<MPI_Count> send_count_bytes(n_pes);
+            std::vector<MPI_Aint> send_disp_bytes(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++) {
                 send_count_bytes[i_p] = (send_counts[i_p] + 7) >> 3;
             }
@@ -681,8 +680,8 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         }
 
         // Calculate character counts and displacements
-        std::vector<int64_t> send_counts_chars(n_pes);
-        std::vector<long> rows_disps_chars(n_pes);
+        std::vector<MPI_Count> send_counts_chars(n_pes);
+        std::vector<MPI_Aint> rows_disps_chars(n_pes);
         if (is_sender) {
             int64_t curr_str = 0;
             for (int i = 0; i < n_pes; i++) {
@@ -763,8 +762,8 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         }
 
         // Calculate item counts and displacements
-        std::vector<int64_t> send_counts_items(n_pes);
-        std::vector<long> rows_disps_items(n_pes);
+        std::vector<MPI_Count> send_counts_items(n_pes);
+        std::vector<MPI_Aint> rows_disps_items(n_pes);
         if (is_sender) {
             int64_t curr_str = 0;
             for (int i = 0; i < n_pes; i++) {
@@ -824,8 +823,8 @@ std::shared_ptr<array_info> scatter_array(std::shared_ptr<array_info> in_arr,
         uint8_t *null_bitmask_o =
             reinterpret_cast<uint8_t *>(out_arr->null_bitmask());
 
-        std::vector<int64_t> send_count_bytes(n_pes);
-        std::vector<long> send_disp_bytes(n_pes);
+        std::vector<MPI_Count> send_count_bytes(n_pes);
+        std::vector<MPI_Aint> send_disp_bytes(n_pes);
         for (int i_p = 0; i_p < n_pes; i_p++) {
             send_count_bytes[i_p] = (send_counts[i_p] + 7) >> 3;
         }
