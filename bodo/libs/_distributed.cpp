@@ -1172,6 +1172,22 @@ static PyObject *get_size_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 /**
+ * @brief Wrapper around get_size() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *barrier_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "barrier() does not take arguments");
+        return nullptr;
+    }
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "barrier: MPI error on MPI_Barrier:");
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+/**
  * @brief Wrapper for bcast of int64 to avoid JIT import in plan_optimizer
  *
  */
@@ -1301,13 +1317,10 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
-    declmethod(get_rank_py_wrapper),
-    declmethod(get_size_py_wrapper),
-    declmethod(bcast_int64_py_wrapper),
-    declmethod(gatherv_py_wrapper),
-    declmethod(scatterv_py_wrapper),
-    declmethod(finalize_py_wrapper),
-    {nullptr},
+    declmethod(get_rank_py_wrapper), declmethod(get_size_py_wrapper),
+    declmethod(barrier_py_wrapper),  declmethod(bcast_int64_py_wrapper),
+    declmethod(gatherv_py_wrapper),  declmethod(scatterv_py_wrapper),
+    declmethod(finalize_py_wrapper), {nullptr},
 #undef declmethod
 };
 

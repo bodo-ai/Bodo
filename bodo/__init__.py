@@ -297,10 +297,9 @@ def get_size():
 
 
 def barrier():
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import barrier
-    barrier()
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.barrier_py_wrapper()
 
 
 def parallel_print(*args, **kwargs):
