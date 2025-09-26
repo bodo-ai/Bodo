@@ -627,8 +627,6 @@ def test_filter_datetime(datapath, op):
     )
 
 
-# TODO: remove JIT dependency in len(df)
-@pytest.mark.jit_dependency
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -1142,8 +1140,6 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
-# TODO: remove JIT dependency in len(df)
-@pytest.mark.jit_dependency
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1161,8 +1157,6 @@ def test_parquet_read_partitioned_filter(datapath):
     )
 
 
-# TODO: remove JIT dependency in len(df)
-@pytest.mark.jit_dependency
 def test_parquet_read_shape_head(datapath):
     """
     Test to catch a case where the original manager goes out of scope
