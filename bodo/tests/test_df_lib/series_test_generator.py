@@ -1,3 +1,5 @@
+"""Utilities for generating tests for Series methods."""
+
 import pandas as pd
 import pytest
 
@@ -8,7 +10,7 @@ from bodo.tests.utils import _test_equal
 pytestmark = pytest.mark.jit_dependency
 
 
-def _generate_series_accessor_test(name, df, accessor):
+def generate_series_accessor_test(name, df, accessor):
     """
     Generates tests for Series.<accessor>.<name> accessors.
     """
@@ -47,7 +49,7 @@ def _generate_series_accessor_test(name, df, accessor):
     return test_func
 
 
-def _generate_series_test(name, df, arg_sets, accessor=None):
+def generate_series_test(name, df, arg_sets, accessor=None):
     """
     Generates a parameterized test case for Series methods.
     """

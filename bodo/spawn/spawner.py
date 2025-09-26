@@ -101,6 +101,15 @@ def get_num_workers():
     return n_pes
 
 
+def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> bool:
+    """Check if any arg or kwarg is not a LazyPlan"""
+    from bodo.pandas.plan import LazyPlan
+
+    return not all(
+        isinstance(arg, LazyPlan) for arg in itertools.chain(args, kwargs.values())
+    )
+
+
 class BodoSQLContextMetadata:
     """Argument metadata for BodoSQLContext values which allows reconstructing
     BodoSQLContext on workers properly by receiving table DataFrames separately.
@@ -288,7 +297,11 @@ class Spawner:
 
         # Import compiler on workers if spawner imported the compiler to avoid
         # inconsistency issues like different scatter implementations.
-        if "bodo.decorators" in sys.modules.keys():
+        if "bodo.decorators" in sys.modules.keys() or _not_all_lazy_plan_args(
+            args, kwargs
+        ):
+            import bodo.decorators  # isort:skip # noqa
+
             self.import_compiler_on_workers()
 
         # If we get a df/series with a plan we need to execute it and get the result id
@@ -532,6 +545,8 @@ class Spawner:
 
         # Import compiler lazily
         import bodo.decorators  # isort:skip # noqa
+
+        self.import_compiler_on_workers()
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)

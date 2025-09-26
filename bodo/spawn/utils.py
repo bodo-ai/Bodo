@@ -12,6 +12,9 @@ import uuid
 from enum import Enum
 from time import sleep
 
+import pandas as pd
+from pandas.core.arrays.arrow import ArrowExtensionArray
+
 import bodo.user_logging
 from bodo.mpi4py import MPI
 
@@ -194,8 +197,6 @@ def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
 
     if data is not None and not isinstance(
         data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
@@ -259,8 +260,6 @@ def scatterv_nojit(data, root, comm):
     """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
-    import pandas as pd
-
     from bodo.ext import hdist
     from bodo.pandas.utils import (
         BODO_NONE_DUMMY,
@@ -301,9 +300,6 @@ def _get_data_sample(data):
     Avoids head(0) for BodoDataFrame/BodoSeries since the serialized lazy block manager
     causes issues on the worker side.
     """
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
-
     from bodo.pandas.base import _empty_like
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries

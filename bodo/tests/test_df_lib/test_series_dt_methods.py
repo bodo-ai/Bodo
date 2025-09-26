@@ -1,10 +1,10 @@
 import pandas as pd
-import pytest
-from test_series_generator import _generate_series_accessor_test, _generate_series_test
 
 from bodo.pandas.series import dt_accessors, dt_methods
-
-pytestmark = pytest.mark.jit_dependency
+from bodo.tests.test_df_lib.series_test_generator import (
+    generate_series_accessor_test,
+    generate_series_test,
+)
 
 timedelta_methods = (
     "total_seconds",
@@ -20,7 +20,7 @@ def _install_series_dt_tests():
     """Install Series.dt tests."""
 
     def install_dt_accessor_test(accessor_name):
-        test = _generate_series_accessor_test(
+        test = generate_series_accessor_test(
             accessor_name,
             timedelta_df if accessor_name in timedelta_methods else df,
             "dt",
@@ -28,7 +28,7 @@ def _install_series_dt_tests():
         globals()[f"test_{accessor_name}"] = test
 
     def install_dt_method_test(method_name):
-        test = _generate_series_test(
+        test = generate_series_test(
             method_name,
             timedelta_df if method_name in timedelta_methods else df,
             test_map_arg[method_name],

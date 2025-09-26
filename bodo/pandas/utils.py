@@ -450,16 +450,6 @@ def check_args_fallback(
                             # Fall back to Pandas below
                             except_msg = str(e)
 
-                    # The dataframe library must not support some specified option.
-                    # Get overloaded functions for this dataframe/series in JIT mode.
-                    overloads = get_overloads(self.__class__.__name__)
-                    if func.__name__ in overloads:
-                        # TO-DO: Generate a function and bodo JIT it to do this
-                        # individual operation.  If the compile fails then fallthrough
-                        # to the pure Python code below.  If the compile works then
-                        # run the operation using the JITted function.
-                        pass
-
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
                         obj_base_class = self._obj.__class__.__bases__[0]

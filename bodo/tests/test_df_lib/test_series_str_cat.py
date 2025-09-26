@@ -6,8 +6,6 @@ from bodo.pandas.plan import assert_executed_plan_count
 from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal
 
-pytestmark = pytest.mark.jit_dependency
-
 
 @pytest.fixture
 def base_df():

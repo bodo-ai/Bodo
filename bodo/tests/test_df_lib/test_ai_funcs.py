@@ -17,8 +17,6 @@ import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
 
-pytestmark = pytest.mark.jit_dependency
-
 
 def test_write_s3_vectors(datapath):
     """Test writing to S3 Vectors using Bodo DataFrame API."""
