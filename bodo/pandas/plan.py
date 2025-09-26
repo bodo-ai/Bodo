@@ -101,7 +101,7 @@ class LazyPlan:
 
     __repr__ = __str__
 
-    def bfs_duplicate(self):
+    def bfs_duplicate(self, ignore):
         """Finds the top-most duplicated node in the plan.
         Does this with a breadth-first search and inserts encountered
         nodes into a visited set and the first node that would be inserted
@@ -110,12 +110,15 @@ class LazyPlan:
         CTEs can have CTEs inside them so we do this processed recursively
         top-down and that is why we do this search BFS instead of DFS.
         """
+        # return None
         visited = set()
         # Yet to be processed plan nodes starts with plan root node.
         queue = deque([self])
 
         while queue:
             node = queue.popleft()
+            if id(node) in ignore:
+                continue
             # If we've seen the node before and it isn't a leaf node then return
             # it to have a CTE made from it.
             if id(node) in visited and not isinstance(node, LogicalOperatorLeaf):
@@ -139,6 +142,9 @@ class LazyPlan:
 
         if cache is None:
             cache = {}
+        if cte_ref is None:
+            print("initial plan\n", self)
+            cte_ref = {}
 
         def recursive_check(x, use_cache, cte_ref, do_cte_check):
             """Recursively convert LazyPlans but return other types unmodified."""
@@ -156,7 +162,7 @@ class LazyPlan:
             else:
                 return x
 
-        if cte_ref is None and do_cte_check:
+        if do_cte_check:
             """ This is the main path.  We are processing a plan normally
                 and checking if the plan has a duplicate node in it that
                 should become a CTE.  If we find such a plan then form a
@@ -164,7 +170,7 @@ class LazyPlan:
                 requested table_index that will be shared by the creation
                 and use of the CTE.
             """
-            cte_node = self.bfs_duplicate()
+            cte_node = self.bfs_duplicate(cte_ref.keys())
             if cte_node is not None:
                 """ Assume we have a plan as follows:
                     A
@@ -177,6 +183,7 @@ class LazyPlan:
 
                     Plan C will be identified as a duplicate.
                 """
+                print("cte_node\n", cte_node)
                 cte_node = (cte_node, plan_optimizer.py_get_table_index())
                 CTECreatedCounter.increment()
             else:
@@ -197,22 +204,23 @@ class LazyPlan:
                 ),
             )
 
-        if cte_ref is not None and self is cte_ref[0]:
+        if id(self) in cte_ref:
             """ We must be on the non-duplicated side of a CTE and
                 the node we are processing is the duplicated one that
                 has been made into a CTE so we replace the current node
                 with a CTE ref.  For example, we've processed A in the above
                 graph on the non-duplicated side of the CTE and we find
-                the C node in cte_ref[0] and so we replace with a CTE
-                ref node using the common table_index in cte_ref[1].
+                the C node in cte_ref and so we replace with a CTE
+                ref node using the common table_index in cte_ref.
             """
             # Can't be an expression here.
             if id(self) in cache:
                 return cache[id(self)]
-            cte_ref_plan = LogicalCTERef(self.empty_data, cte_ref[1])
+            cte_ref_plan = LogicalCTERef(self.empty_data, cte_ref[id(self)])
             # Create duckdb CTE ref node.
+            print("C++", cte_ref_plan.plan_class)
             ret = getattr(plan_optimizer, cte_ref_plan.plan_class)(
-                cte_ref_plan.pa_schema, cte_ref[1]
+                cte_ref_plan.pa_schema, cte_ref[id(self)]
             )
             cache[id(self)] = ret
             return ret
@@ -221,13 +229,16 @@ class LazyPlan:
             if id(self) in cache:
                 raise Exception("Should never find cache re-use for cte_node.")
             # Generate the duckdb plan starting from the duplicated node.
-            duplicate = cte_node[0].generate_duckdb(cache=cache)
+            print("starting CTE left side")
+            duplicate = cte_node[0].generate_duckdb(cache=cache, cte_ref=cte_ref)
+            print("ending CTE left side")
             # Generate the duckdb plan starting from the same top-level node
             # but with cte_ref set so that when the duplicate cte node is
             # encountered while processing the plan tree that we replace it
             # with a CTE ref node instead of generating the sub-tree plan again
             # as we did on the previous line above.
-            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_node)
+            cte_ref[id(cte_node[0])] = cte_node[1]
+            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_ref)
             # The duckdb plan node we will generate is a materialized CTE node
             # instead of the type of self.  We processed ourself again in the
             # above line and uses_duplicate becomes part of the materialized
@@ -238,6 +249,7 @@ class LazyPlan:
 
             # Generate duckdb materialized CTE node passing the duplicated
             # and non-duplicated sides.
+            print("C++", cte_plan.plan_class)
             ret = getattr(plan_optimizer, cte_plan.plan_class)(
                 cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
             )
@@ -251,6 +263,7 @@ class LazyPlan:
             # TODO - Try to eliminate caching altogether since it seems to cause
             # more problems than lack of caching.
             if not isinstance(self, Expression) and id(self) in cache:
+                print("C++ used cache", self.plan_class)
                 return cache[id(self)]
 
             # NOTE: Caching is necessary to make sure source operators which have table
@@ -269,6 +282,7 @@ class LazyPlan:
             # we will get nullptr exceptions.  So, process the args that don't
             # claim ownership first (in the reverse direction) and finally
             # process the first arg which we expect will take ownership.
+            print("C++", self.plan_class)
             args = [
                 recursive_check(x, use_cache, cte_ref, do_cte_check)
                 for x in reversed(self.args)

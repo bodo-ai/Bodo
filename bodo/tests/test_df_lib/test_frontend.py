@@ -298,7 +298,7 @@ def test_nested_cte():
     assert generated_ctes == 2
 
 
-def test_non_nested_cte():
+def test_partially_nested_cte():
     """final uses two versions of A but A only uses one versions of B.
     B is used outside of A so only one CTE can be formed.
     """
@@ -315,3 +315,29 @@ def test_non_nested_cte():
 
     generated_ctes = final._plan.get_cte_count()
     assert generated_ctes == 1
+
+
+def test_non_nested_cte():
+    """final uses two versions of A but A only uses one versions of B.
+    B is used outside of A so only one CTE can be formed.
+    """
+    C = pd.DataFrame({"id": [1, 2, 3, 4, 5, 6], "val": [10, 20, 30, 40, 50, 60]})
+    C = bd.DataFrame(C)
+
+    B_left = C[C["val"] < 100]
+    B1_left = B_left[B_left["id"] < 6]
+    B2_left = B_left[B_left["id"] > 1]
+    A_left = bd.merge(B1_left, B2_left, on="id")
+
+    B_right = C[C["val"] > 0]
+    B1_right = B_right[B_right["id"] < 6]
+    B2_right = B_right[B_right["id"] > 1]
+    A_right = bd.merge(B1_right, B2_right, on="id")
+
+    X = A_left[A_left["val_x"] < 100]
+    Y = A_right[A_right["val_y"] > 0]
+
+    final = bd.merge(X, Y, on="id")
+
+    generated_ctes = final._plan.get_cte_count()
+    assert generated_ctes == 2

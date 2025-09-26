@@ -139,6 +139,9 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr_internal(
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     int col_idx) {
+    if (!source) {
+        std::cout << "make_col_ref_expr source is null" << std::endl;
+    }
     auto field_res = arrow::py::unwrap_field(field_py);
     std::shared_ptr<arrow::Field> field;
     CHECK_ARROW_AND_ASSIGN(field_res,
