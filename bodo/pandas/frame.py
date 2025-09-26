@@ -1511,7 +1511,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback(supported=["subset"])
+    @check_args_fallback(supported=["subset", "keep"])
     def drop_duplicates(
         self,
         subset: Hashable | Sequence[Hashable] | None = None,
@@ -1524,7 +1524,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         if subset is not None:
             subset_group = self.groupby(subset, as_index=False, sort=False)
-            return subset_group.first()
+            if keep == "first":
+                return subset_group.first()
+            elif keep == "last":
+                return subset_group.last()
+            else:
+                raise BodoLibNotImplementedException(
+                    "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported"
+                )
 
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
