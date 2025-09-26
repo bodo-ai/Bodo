@@ -1689,7 +1689,6 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
-@pytest.mark.skip("TODO")
 @pytest.mark.parametrize(
     "func",
     [
@@ -2306,7 +2305,7 @@ def test_Series_constructor(index_val):
     _test_equal(pd_S, bodo_S, check_pandas_types=False)
 
 
-@pytest.mark.skip("TODO")
+@pytest.mark.skip("TODO fix decimal comparison")
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
@@ -2351,7 +2350,6 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.skip("TODO (hangs)")
 @pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
@@ -2937,7 +2935,6 @@ def test_drop_duplicates():
     )
 
 
-@pytest.mark.skip("TODO: fix standalone test")
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
@@ -3686,7 +3683,6 @@ def test_len_no_warn(index_val):
         assert len(bdf[bdf.A > 5]) == len(df[df.A > 5])
 
 
-@pytest.mark.skip("TODO: fix standalone test")
 @pytest.mark.jit_dependency
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
