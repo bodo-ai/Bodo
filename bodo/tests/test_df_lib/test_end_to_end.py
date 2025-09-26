@@ -22,9 +22,7 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
-
-pytestmark = pytest.mark.jit_dependency
+from bodo.tests.utils import _test_equal, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -227,6 +225,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
@@ -337,7 +336,7 @@ def test_filter_pushdown(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -410,6 +409,7 @@ def test_filter(datapath, op):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -627,6 +627,8 @@ def test_filter_datetime(datapath, op):
     )
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -644,6 +646,8 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
 
@@ -657,6 +661,8 @@ def test_projection_head_pushdown(datapath):
     assert len(bodo_df3) == 3
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_series_head(datapath):
     """Test for Series.head() reading from Pandas."""
 
@@ -671,6 +677,8 @@ def test_series_head(datapath):
     assert len(bodo_df3) == 3
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -694,6 +702,7 @@ def test_head(datapath):
     assert len(bodo_df2) == 3
 
 
+@pytest.mark.jit_dependency
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     # Multi-Index apply are not supported by JIT
@@ -715,6 +724,7 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_apply_str(datapath, index_val):
     """Test passing a string argument to func works."""
     with assert_executed_plan_count(0):
@@ -732,6 +742,7 @@ def test_apply_str(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_apply_non_jit(datapath, index_val):
     """Test unsupported UDFs fallback to Pandas execution."""
     with assert_executed_plan_count(1):
@@ -777,6 +788,7 @@ def test_chain_python_func(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "na_action",
     [
@@ -805,6 +817,7 @@ def test_series_map(datapath, index_val, na_action):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_series_map_non_jit(index_val):
     """Test non-jittable UDFs in ser.map still work."""
     df = pd.DataFrame(
@@ -850,6 +863,7 @@ def test_series_map_non_jit(index_val):
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
     with assert_executed_plan_count(0):
@@ -1133,6 +1147,8 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1150,6 +1166,8 @@ def test_parquet_read_partitioned_filter(datapath):
     )
 
 
+# TODO: remove JIT dependency in len(df)
+@pytest.mark.jit_dependency
 def test_parquet_read_shape_head(datapath):
     """
     Test to catch a case where the original manager goes out of scope
@@ -2007,7 +2025,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -2052,7 +2070,7 @@ def test_series_filter_distributed(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -2408,6 +2426,7 @@ def test_read_csv(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_df_state_change():
     """Make sure dataframe state change doesn't lead to stale result id in plan
     execution"""
@@ -3538,6 +3557,7 @@ def test_top_level_jit_fallback(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_set_column_names():
     """Check that setting columns attribute of a DataFrame works as expected."""
 

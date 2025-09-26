@@ -8,8 +8,6 @@ import pytest
 import bodo.pandas as bd
 from bodo.pandas.utils import BodoLibFallbackWarning
 
-pytestmark = pytest.mark.jit_dependency
-
 
 def test_read_join_filter_proj(datapath):
     df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -74,6 +72,7 @@ def test_df_setitem_fallback_warning():
         bdf[:] = 1
 
 
+@pytest.mark.jit_dependency
 def test_df_apply_fallback_warning():
     """Make sure DataFrame.apply() raises a warning when falling back to Pandas."""
     df = pd.DataFrame(
@@ -87,6 +86,7 @@ def test_df_apply_fallback_warning():
         bdf.apply(lambda a: pd.Series([1, 2]), axis=1)
 
 
+@pytest.mark.jit_dependency
 def test_df_apply_bad_dtype_fallback_warning():
     """Make sure DataFrame.apply() raises a warning when falling back to Pandas.
     In cases where it could not infer the dtype properly.
