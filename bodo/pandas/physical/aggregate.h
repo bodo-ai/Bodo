@@ -365,7 +365,8 @@ const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
     {"min", Bodo_FTypes::min},     {"nunique", Bodo_FTypes::nunique},
     {"size", Bodo_FTypes::size},   {"skew", Bodo_FTypes::skew},
     {"std", Bodo_FTypes::std},     {"sum", Bodo_FTypes::sum},
-    {"var", Bodo_FTypes::var}};
+    {"var", Bodo_FTypes::var},     {"first", Bodo_FTypes::first},
+    {"last", Bodo_FTypes::last}};
 
 /**
  * @brief Physical node for count_star().

@@ -48,6 +48,8 @@ BUILTIN_AGG_FUNCS = {
     "count",
     "size",
     "nunique",
+    "first",
+    "last",
 }
 
 
@@ -288,6 +290,20 @@ class DataFrameGroupBy:
         Compute the var of each group.
         """
         return _groupby_agg_plan(self, "var")
+
+    @check_args_fallback(supported="none")
+    def first(self):
+        """
+        Get the first entry for each group.
+        """
+        return _groupby_agg_plan(self, "first")
+
+    @check_args_fallback(supported="none")
+    def last(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "last")
 
 
 class SeriesGroupBy:
@@ -920,6 +936,8 @@ def _get_agg_output_type(
         ):
             # TODO: bool/decimal median
             fallback = True
+    elif func_name in ("first", "last"):
+        new_type = pa_type
     elif callable(func.func):
         # Import compiler
         import bodo.decorators  # isort:skip # noqa
