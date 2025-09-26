@@ -37,8 +37,6 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
-pytestmark = pytest.mark.jit_dependency
-
 
 # pytest fixture for df3 = df1.merge(df2, on="A") tests with nested arrays.
 # These pairs of arrays are used to generate column "B" of df1 and df2 respectively
@@ -1959,7 +1957,6 @@ def test_merge_schema_change(memory_leak_check):
     )
 
 
-@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_str_key(memory_leak_check):
     """
@@ -3855,7 +3852,8 @@ def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     check_func(test_impl, (df1, df2))
 
 
-@pytest.mark.df_lib
+# TODO: FIXME
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     """

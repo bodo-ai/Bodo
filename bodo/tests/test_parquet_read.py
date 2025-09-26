@@ -38,7 +38,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
 
-pytestmark = [pytest.mark.parquet, pytest.mark.df_lib, pytest.mark.jit_dependency]
+pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
@@ -69,7 +69,6 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
         pytest.param(
             "small_strings.pq",
             id="processes_greater_than_string_rows",
-            marks=pytest.mark.df_lib,
         ),
         pytest.param("parquet_data_nonascii1.parquet", id="nonascii"),
         pytest.param("nullable_float.pq", id="nullable_float"),
@@ -111,13 +110,8 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
-)
 def test_read_partitions_datetime(memory_leak_check):
     """Test reading and filtering partitioned parquet data for datetime data"""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
-
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             table = pa.table(
@@ -154,6 +148,8 @@ def test_read_partitions_datetime(memory_leak_check):
         )
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
             bodo_func("pq_data", "2018-01-02", "2019-10-02")
@@ -254,6 +250,7 @@ def test_read_parquet_large_string_array(memory_leak_check):
 
 
 @pytest.mark.weekly
+@pytest.mark.jit_dependency
 def test_read_parquet_vv_large_string_array(memory_leak_check):
     """
     Test that when reading a parquet dataset with total string length
@@ -326,6 +323,7 @@ def test_read_parquet_vv_large_string_array(memory_leak_check):
 
 
 # TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
+@pytest.mark.jit_dependency
 def test_pq_arrow_array_random():
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -396,13 +394,13 @@ def test_pq_categorical_read(memory_leak_check):
         df = pd.DataFrame(
             {"A": pd.Categorical(["A", "B", "AB", "A", None, "B"] * 4 + [None, "C"])}
         )
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             df.to_parquet("test_cat.pq", row_group_size=4)
         bodo.barrier()
         check_func(impl, ())
         bodo.barrier()
     finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             os.remove("test_cat.pq")
 
 
@@ -488,13 +486,13 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
         return df
 
     try:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
         check_func(impl, (), only_seq=True, reset_index=True)
         bodo.barrier()
     finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             os.remove("test.pq")
         bodo.barrier()
 
@@ -509,14 +507,14 @@ def test_pq_select_column(
         return df
 
     try:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             test_RangeIndex_input.index.name = index_name
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
         check_func(impl, (), only_seq=True, reset_index=True)
         bodo.barrier()
     finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             os.remove("test.pq")
         bodo.barrier()
 
@@ -546,7 +544,7 @@ def test_pq_multi_idx(memory_leak_check):
         return pd.read_parquet("multi_idx_parquet.pq")
 
     try:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             arrays = [
                 ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
                 ["one", "two", "one", "two", "one", "two", "one", "two"],
@@ -561,16 +559,13 @@ def test_pq_multi_idx(memory_leak_check):
         check_func(impl, ())
 
     finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             os.remove("multi_idx_parquet.pq")
 
 
 # ---------------------------- Test Read Partitions ---------------------------- #
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.dataframe_library_enabled,
-    reason="[BSE-4795] Fix filter bug without pushdown",
-)
+@pytest.mark.jit_dependency
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
     from bodo.tests.utils_jit import SeriesOptTestPipeline
@@ -941,9 +936,7 @@ def test_read_partitions_cat_ordering(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Does not use check_func."
-)
+@pytest_mark_not_df_lib
 @pytest.mark.parametrize("test_tz", [True, False])
 def test_partition_cols(test_tz: bool, memory_leak_check):
     from bodo.mpi4py import MPI
@@ -1051,13 +1044,9 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
-)
 def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
     a format string."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline, reduce_sum
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1094,6 +1083,8 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
         )
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline, reduce_sum
+
             # make sure the ParquetReader node doesn't have filters parameter set
             bodo_func = bodo.jit(
                 (
@@ -1117,15 +1108,10 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
-)
 def test_read_partitions_large(memory_leak_check):
     """
     test reading and filtering partitioned parquet data with large number of partitions
     """
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
-
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             # The number of dates can't exceed 1024 because that is the default
@@ -1148,6 +1134,8 @@ def test_read_partitions_large(memory_leak_check):
         check_func(impl1, ("pq_data", "2018-01-02", "2019-10-02"), reset_index=True)
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
                 (
@@ -1189,8 +1177,6 @@ def test_from_parquet_partition_bitsize(datapath):
 @pytest.mark.slow
 def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
     """test that predicate pushdown executes when there is Pandas range metadata."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
-
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             df = pd.DataFrame({"A": [0, 1, 2] * 10})
@@ -1214,6 +1200,8 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
 
         # TODO [BSE-4776]: Check filter conditions are set in DataFrame Lib.
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
                 (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
@@ -1222,14 +1210,8 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4768] notna expressions not supported yet.",
-)
 def test_read_predicates_isnull(memory_leak_check):
     """test that predicate pushdown with isnull in the binops."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
-
     try:
         if bodo.get_rank() == 0:
             df = pd.DataFrame(
@@ -1248,12 +1230,16 @@ def test_read_predicates_isnull(memory_leak_check):
 
         # TODO: Fix index
         check_func(impl, ("pq_data",), reset_index=True)
-        # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(
-            (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
-        )(impl)
-        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        bodo.barrier()
+
+        if not bodo.test_dataframe_library_enabled:
+            # make sure the ParquetReader node has filters parameter set
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
+            bodo_func = bodo.jit(
+                (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
+            )(impl)
+            _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+            bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             os.remove("pq_data")
@@ -1266,8 +1252,6 @@ def test_read_predicates_isnull(memory_leak_check):
 def test_read_predicates_timestamp_date(memory_leak_check):
     """Test predicate pushdown where a date column is filtered
     by a timestamp."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
-
     filepath = "pq_data"
     if bodo.get_rank() == 0:
         df = pd.DataFrame(
@@ -1296,6 +1280,8 @@ def test_read_predicates_timestamp_date(memory_leak_check):
         check_func(impl, (filepath,), reset_index=True)
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
                 (numba.types.literal(filepath),), pipeline_class=SeriesOptTestPipeline
@@ -1304,12 +1290,8 @@ def test_read_predicates_timestamp_date(memory_leak_check):
             bodo.barrier()
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] notna not supported yet."
-)
 def test_read_predicates_isnull_alone(memory_leak_check):
     """test that predicate pushdown with isnull as the sole filter."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
@@ -1331,6 +1313,8 @@ def test_read_predicates_isnull_alone(memory_leak_check):
         check_func(impl, ("pq_data",), reset_index=True)
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
                 (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
@@ -1339,9 +1323,7 @@ def test_read_predicates_isnull_alone(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] isin not supported yet."
-)
+@pytest.mark.jit_dependency
 def test_read_predicates_isin(memory_leak_check):
     """test that predicate pushdown with isin"""
 
@@ -1496,12 +1478,8 @@ def test_read_partitions_isin(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Unsupported filter type."
-)
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
-    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     if bodo.get_rank() == 0:
         df = pd.DataFrame(
@@ -1526,6 +1504,8 @@ def test_read_predicates_and_or(memory_leak_check):
         check_func(impl, ("pq_data",), reset_index=True)
 
         if not bodo.test_dataframe_library_enabled:
+            from bodo.tests.utils_jit import SeriesOptTestPipeline
+
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
                 (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
@@ -1719,6 +1699,7 @@ def test_read_pq_head_only(datapath, memory_leak_check):
             _check_for_pq_read_head_only(bodo_func)
 
 
+@pytest.mark.jit_dependency
 def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
@@ -2500,10 +2481,6 @@ def test_pq_columns(datapath):
     check_func(test_impl, (), only_seq=True, check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.dataframe_library_enabled,
-    reason="[BSE-4769] Fix duckdb internal error while creating expression.",
-)
 def test_pq_str_with_nan_seq(datapath):
     fname = datapath("example.parquet")
 
@@ -2515,6 +2492,7 @@ def test_pq_str_with_nan_seq(datapath):
     check_func(test_impl, (), dist_test=False)
 
 
+@pytest.mark.jit_dependency
 def test_series_str_upper_lower_dce(datapath):
     """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
     filename = datapath("example.parquet")
@@ -2821,10 +2799,7 @@ def test_pq_invalid_column_selection(datapath, memory_leak_check):
         bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4768] Non-binary op filter not supported yet.",
-)
+@pytest.mark.jit_dependency
 def test_python_not_filter_pushdown(memory_leak_check):
     """Tests that the Pandas ~ operator works with filter pushdown."""
     with ensure_clean2("pq_data"):
@@ -2857,10 +2832,7 @@ def test_python_not_filter_pushdown(memory_leak_check):
                 check_logger_msg(stream, "Columns loaded ['A']")
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4768] Enable filter pushdown tests.",
-)
+@pytest.mark.jit_dependency
 def test_filter_pushdown_string(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2884,6 +2856,7 @@ def test_filter_pushdown_string(datapath, memory_leak_check):
 
 
 @pytest.mark.skip("[BSE-3362] Filter pushdown with timestamp in Python not working")
+@pytest.mark.jit_dependency
 def test_filter_pushdown_timestamp(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2902,10 +2875,7 @@ def test_filter_pushdown_timestamp(datapath, memory_leak_check):
         check_logger_msg(stream, "(ds.field('DT64') < ds.scalar(f0))")
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4768] Enable filter pushdown tests.",
-)
+@pytest.mark.jit_dependency
 def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2954,10 +2924,11 @@ def test_filter_pushdown_tuple(datapath, memory_leak_check):
             check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4768] Enable filter pushdown tests.",
-)
+# @pytest.mark.skipif(
+#     bodo.test_dataframe_library_enabled,
+#     reason="[BSE-4768] Enable filter pushdown tests.",
+# )
+@pytest.mark.jit_dependency
 def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
     @bodo.jit
     def comp(val):
@@ -2981,6 +2952,7 @@ def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
             check_logger_msg(stream, "~((ds.field('A') == ds.scalar(f0)))")
 
 
+@pytest.mark.jit_dependency
 def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
     @bodo.jit
     def unused(x, test=None):
