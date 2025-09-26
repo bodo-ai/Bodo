@@ -1402,8 +1402,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
     }
 }
 
-template <class T>
-static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
+template <class T1, class T2>
+static void calc_disp(std::vector<T1>& disps, std::vector<T2> const& counts) {
     size_t n = counts.size();
     disps[0] = 0;
     for (size_t i = 1; i < n; i++) {

@@ -403,7 +403,6 @@ def exec_func_handler(
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
-    import numba
 
     import bodo
 
@@ -443,7 +442,7 @@ def exec_func_handler(
     is_dispatcher = False
     try:
         func = cloudpickle.loads(pickled_func)
-        is_dispatcher = isinstance(func, numba.core.registry.CPUDispatcher)
+        is_dispatcher = type(func).__name__ == "CPUDispatcher"
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception

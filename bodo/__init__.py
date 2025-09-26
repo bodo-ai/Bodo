@@ -297,10 +297,9 @@ def get_size():
 
 
 def barrier():
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import barrier
-    barrier()
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.barrier_py_wrapper()
 
 
 def parallel_print(*args, **kwargs):
@@ -318,8 +317,8 @@ def allgatherv(*args, **kwargs):
 
 
 def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
-    # Fall back to JIT version if not a spawn gatherv
-    if allgather is True or warn_if_rep is False or comm is None:
+    # Fall back to JIT version if not a spawn gatherv (workers may use comm=None)
+    if allgather is True or warn_if_rep is False:
         # Import compiler lazily
         import bodo.decorators
         from bodo.libs.distributed_api import gatherv
@@ -330,11 +329,17 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
     return gatherv_nojit(data, root, comm)
 
 
-def scatterv(*args, **kwargs):
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import scatterv
-    return scatterv(*args, **kwargs)
+def scatterv(data, send_counts=None, warn_if_dist=True, root=0, comm=None):
+    # Fall back to JIT version if not a spawn scatterv
+    if send_counts is not None or warn_if_dist is False or comm is None:
+        # Import compiler lazily
+        import bodo.decorators
+        from bodo.libs.distributed_api import scatterv
+        return scatterv(data, send_counts, warn_if_dist, root, comm)
+
+    # Avoid compiler imports for DataFrame library
+    from bodo.spawn.utils import scatterv_nojit
+    return scatterv_nojit(data, root, comm)
 
 
 def get_nodes_first_ranks(*args, **kwargs):

@@ -511,8 +511,12 @@ def df_to_cpp_table(df):
     metadata set properly.
     """
     from bodo.ext import plan_optimizer
+    from bodo.pandas.frame import BodoDataFrame
 
-    # TODO: test nthreads, safe
+    # Avoid "maximum recursion depth" error in case df is a BodoDataFrame
+    if isinstance(df, BodoDataFrame):
+        df = pd.DataFrame(df, copy=False)
+
     arrow_table = pa.Table.from_pandas(df)
 
     # Ensure all columns have exactly 1 chunk as expected by our C++ code
