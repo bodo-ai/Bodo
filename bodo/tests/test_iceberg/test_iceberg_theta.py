@@ -168,7 +168,11 @@ def test_iceberg_write_disabled_theta(
 
 
 def get_iceberg_pyarrow_schema(conn, table_id):
-    _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(conn, table_id)
+    import bodo.io.iceberg.read_compilation
+
+    _, _, pyarrow_schema = bodo.io.iceberg.read_compilation.get_iceberg_orig_schema(
+        conn, table_id
+    )
     return pyarrow_schema
 
 

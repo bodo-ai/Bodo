@@ -28,12 +28,6 @@ from .common import (
     flatten_tuple,
     verify_pyiceberg_installed,
 )
-from .read_compilation import (
-    get_iceberg_orig_schema,
-    get_orig_and_runtime_schema,
-    is_snowflake_managed_iceberg_wh,
-    resolve_snapshot_id,  # noqa: F401
-)
 from .read_metadata import (
     get_iceberg_file_list_parallel,
     group_file_frags_by_schema_group_identifier,
@@ -346,8 +340,5 @@ __all__ = [
     "ICEBERG_FIELD_ID_MD_KEY",
     "IcebergConnectionType",
     "get_iceberg_pq_dataset",
-    "is_snowflake_managed_iceberg_wh",
     "prefetch_sf_tables_njit",
-    "get_iceberg_orig_schema",
-    "get_orig_and_runtime_schema",
 ]
