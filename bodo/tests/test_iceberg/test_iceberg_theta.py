@@ -13,7 +13,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import _get_dist_arg
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.jit_dependency, pytest.mark.iceberg]
 
 
 def write_iceberg_table_with_puffin_files(df, table_id, conn, write_type):
@@ -62,6 +62,7 @@ def test_iceberg_write_theta_estimates(
 ):
     """Test basic streaming Iceberg write with theta sketches enabled to ensure
     that they are generated for 4/5 columns. This"""
+    import bodo.io.iceberg.stream_iceberg_write
     from bodo.tests.test_iceberg.utils_jit import (
         check_ndv_metadata,
         get_statistics_ndvs,
@@ -127,6 +128,7 @@ def test_iceberg_write_disabled_theta(
 ):
     """Same as test_iceberg_write_theta_estimates but where theta sketches are disabled for
     all columns"""
+    import bodo.io.iceberg.stream_iceberg_write
     from bodo.tests.test_iceberg.utils_jit import check_no_statistics_file
 
     table_name = "iceberg_ctas_theta_test_table_2"

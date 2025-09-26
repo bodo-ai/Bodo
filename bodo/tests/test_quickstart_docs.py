@@ -158,10 +158,13 @@ def devguide_df_path():
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_transform(devguide_df_path):
     """Test transform example from docs/quick_start/devguide.md and
     ensures behavior is consistent with pandas.
     """
+    import bodo.decorators
+
     output_df_path = "output_df.pq"
 
     def data_transform(devguide_df_path):
@@ -203,7 +206,10 @@ def test_devguide_parallel1(devguide_df_path):
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_parallel2(devguide_df_path):
+    import bodo.decorators
+
     output_df_path = "output_df.pq"
 
     def data_groupby(devguide_df_path):
@@ -230,7 +236,9 @@ def test_devguide_parallel2(devguide_df_path):
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_unsupported():
+    import bodo.decorators
     from bodo.utils.typing import BodoError
 
     @bodo.jit(spawn=True)
@@ -244,7 +252,9 @@ def test_devguide_unsupported():
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_type_error(devguide_df_path):
+    import bodo.decorators
     from bodo.utils.typing import BodoError
 
     @bodo.jit(spawn=True)
@@ -264,7 +274,10 @@ def test_devguide_type_error(devguide_df_path):
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_groupby_keys_append(devguide_df_path):
+    import bodo.decorators
+
     @bodo.jit(distributed=False)
     def get_keys(df_columns, extra_keys):
         keys = [c for c in df_columns if c not in ["B", "C"]]
@@ -284,7 +297,10 @@ def test_devguide_groupby_keys_append(devguide_df_path):
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_list_typing_error():
+    import bodo.decorators
+
     @bodo.jit(spawn=True)
     def create_list():
         out = []
@@ -299,6 +315,7 @@ def test_devguide_list_typing_error():
 
 
 @pytest.mark.spawn_mode
+@pytest.mark.jit_dependency
 def test_devguide_tuple_typing():
     def create_list():
         out = []
