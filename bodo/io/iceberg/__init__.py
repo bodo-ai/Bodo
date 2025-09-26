@@ -20,7 +20,6 @@ import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
 from bodo.mpi4py import MPI
 
-from . import merge_into
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,
     IcebergConnectionType,
@@ -344,7 +343,6 @@ def get_iceberg_pq_dataset(
 
 
 __all__ = [
-    "merge_into",
     "ICEBERG_FIELD_ID_MD_KEY",
     "IcebergConnectionType",
     "get_iceberg_pq_dataset",

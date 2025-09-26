@@ -542,6 +542,8 @@ def add_table_type(
             Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
             queries.
     """
+    import bodo
+
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
     sql_types = [
         get_sql_column_type(df_type.data[i], cname)
@@ -562,6 +564,8 @@ def add_table_type(
             else ""
         )
         if write_type == "MERGE":
+            import bodo.io.iceberg.merge_into  # noqa
+
             # Note. We only support MERGE for Iceberg. We check this in the
             # Java code to ensure we also handle catalogs. Note the
             # last argument is for passing additional arguments as key=value pairs.
