@@ -29,7 +29,6 @@ from bodo.io.iceberg.read_parquet import (
 )
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.spawn.utils import run_rank0
-from bodo.utils.utils import BodoError
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
@@ -192,7 +191,8 @@ def get_iceberg_file_list_parallel(
                 ", ".join(x.path for x in pq_infos[:ICEBERG_TRACING_NUM_FILES_TO_LOG]),
             )
     except Exception as exc:  # pragma: no cover
-        raise BodoError(
+        # TODO: raise BodoError in case of compiler (not dataframe library)
+        raise ValueError(
             f"Error reading Iceberg Table: {type(exc).__name__}: {str(exc)}\n"
         ) from exc
     finally:
@@ -280,7 +280,8 @@ def group_file_frags_by_schema_group_identifier(
                 "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
                 f"{str(e)}"
             )
-            raise BodoError(msg)
+            # TODO: raise BodoError in case of compiler (not dataframe library)
+            raise ValueError(msg)
         iceberg_field_ids.append(schema_group_identifier[0])
         pq_field_names.append(schema_group_identifier[1])
     metrics.get_sg_id_time += int((time.monotonic() - start) * 1_000_000)
