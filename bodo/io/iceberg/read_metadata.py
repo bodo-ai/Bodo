@@ -28,7 +28,8 @@ from bodo.io.iceberg.read_parquet import (
     get_schema_group_identifier_from_pa_schema,
 )
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
-from bodo.utils.utils import BodoError, run_rank0
+from bodo.spawn.utils import run_rank0
+from bodo.utils.utils import BodoError
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
