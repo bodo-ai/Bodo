@@ -18,6 +18,7 @@ from numba.core import ir, types
 import bodo
 import bodo.hiframes
 import bodo.hiframes.pd_multi_index_ext
+import bodo.io.iceberg.read_compilation
 from bodo.ir.sql_ext import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
@@ -465,7 +466,7 @@ def compute_df_types(df_list, is_bodo_type):
                         col_names,
                         col_types,
                         _pyarrow_table_schema,
-                    ) = bodo.io.iceberg.get_iceberg_orig_schema(
+                    ) = bodo.io.iceberg.read_compilation.get_iceberg_orig_schema(
                         const_conn_str,
                         f"{db_schema}.{iceberg_table_name}",
                     )
