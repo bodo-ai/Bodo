@@ -2915,7 +2915,15 @@ def test_drop_duplicates():
     )
 
 
-def test_drop_duplicates_subset():
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="default"),
+        pytest.param({"keep": "first"}, id="keep_first"),
+        pytest.param({"keep": "last"}, id="keep_last"),
+    ],
+)
+def test_drop_duplicates_subset(kwargs):
     """Test for drop_duplicates subset API."""
 
     dim0 = 4
@@ -2929,8 +2937,10 @@ def test_drop_duplicates_subset():
                 "C": pd.array(list(range(dim0 * dim1 * 10)), "Float64"),
             }
         )
-        pdf = df.copy().drop_duplicates(subset=["A", "B"])
-        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"])
+        pdf = df.copy().drop_duplicates(subset=["A", "B"], **kwargs)[["A", "B"]]
+        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"], **kwargs)[
+            ["A", "B"]
+        ]
     _test_equal(
         bdf,
         pdf,
