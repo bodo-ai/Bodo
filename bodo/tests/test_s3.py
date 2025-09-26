@@ -875,11 +875,13 @@ def test_s3_json_write_records_lines_1D_var(
 
 
 @pytest.mark.df_lib
+@pytest.mark.jit_dependency
 def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_parquet
     test the parquet file we just wrote sequentially
     """
+    import bodo.decorators  # noqa
     from bodo.utils.utils import run_rank0
 
     @run_rank0

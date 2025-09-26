@@ -3852,8 +3852,7 @@ def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     check_func(test_impl, (df1, df2))
 
 
-# TODO: FIXME
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     """
