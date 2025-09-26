@@ -417,14 +417,20 @@ def test_torch_train():
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+        model_device = next(model.parameters()).device
+        if model_device.type != "cpu":
+            # If we're using an accelerator, rebalance data to match GPU ranks
+            gpu_ranks = bodo.get_gpu_ranks()
+            data = bodo.rebalance(data, dests=gpu_ranks)
+
         if model is None:
-            return  # Not a worker process
+            # Not a worker process
+            return
         # train on data
         criterion = nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         for epoch in range(100):
             for _, row in data.iterrows():
-                model_device = next(model.parameters()).device
                 inputs = torch.tensor([[row["feature1"], row["feature2"]]]).to(
                     model_device
                 )
