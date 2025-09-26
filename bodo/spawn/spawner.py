@@ -906,7 +906,10 @@ def destroy_spawner():
 
 
 def submit_func_to_workers(
-    func_to_execute: SpawnDispatcher | pt.Callable, propagate_env, *args, **kwargs
+    func_to_execute: SpawnDispatcher | pt.Callable,
+    propagate_env: list[str],
+    *args,
+    **kwargs,
 ):
     """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()
