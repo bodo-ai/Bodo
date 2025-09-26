@@ -1015,6 +1015,12 @@ def execute_plan(plan: LazyPlan):
         import bodo.spawn.spawner
 
         start_time = time.perf_counter()
+
+        # Import compiler on workers if spawner imported the compiler to avoid
+        # inconsistency issues in different scatter implementations.
+        if "bodo.decorators" in sys.modules.keys():
+            bodo.spawn.spawner.get_spawner().import_compiler_on_workers()
+
         # Initialize LazyPlanDistributedArg objects that may need scattering data
         # to workers before execution.
         for a in plan.args:

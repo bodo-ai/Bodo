@@ -314,12 +314,9 @@ def _get_data_sample(data):
     if data is None:
         return None
 
-    # Should be before the pandas DataFrame/Series check
-    if isinstance(data, (BodoDataFrame, BodoSeries)):
+    if isinstance(data, (BodoDataFrame, BodoSeries, pd.DataFrame, pd.Series)):
+        # NOTE: handles object columns correctly using Arrow schema inference for Pandas
         return _empty_like(data)
-
-    if isinstance(data, (pd.DataFrame, pd.Series)):
-        return data.head(0)
 
     raise ValueError(
         "_get_data_sample only supports DataFrame, Series and ArrowExtensionArray input"
