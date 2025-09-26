@@ -42,7 +42,7 @@ def run_queries(data_folder):
     print("Total Query time (s): ", time.time() - t1)
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_lineitem(data_folder):
     t0 = time.time()
     data_path = data_folder + "/lineitem.pq"
@@ -53,7 +53,7 @@ def load_lineitem(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_part(data_folder):
     t0 = time.time()
     data_path = data_folder + "/part.pq"
@@ -64,7 +64,7 @@ def load_part(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_orders(data_folder):
     t0 = time.time()
     data_path = data_folder + "/orders.pq"
@@ -75,7 +75,7 @@ def load_orders(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_customer(data_folder):
     t0 = time.time()
     data_path = data_folder + "/customer.pq"
@@ -110,7 +110,7 @@ def load_region(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_supplier(data_folder):
     t0 = time.time()
     data_path = data_folder + "/supplier.pq"
@@ -121,7 +121,7 @@ def load_supplier(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_partsupp(data_folder):
     t0 = time.time()
     data_path = data_folder + "/partsupp.pq"
