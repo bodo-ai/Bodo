@@ -16,9 +16,6 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 import bodo
-
-# TODO(ehsan): avoid compiler import in Iceberg read
-import bodo.decorators  # isort:skip # noqa
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
 from bodo.mpi4py import MPI
