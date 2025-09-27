@@ -9,7 +9,6 @@ import typing as pt
 from urllib.parse import parse_qs, urlparse
 
 import requests
-from numba.core import types
 from pyarrow.fs import FileSystem, FSSpecHandler
 
 from bodo.spawn.utils import run_rank0
@@ -171,15 +170,6 @@ def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
 
 
 # ----------------------- Connection String Handling ----------------------- #
-
-
-class IcebergConnectionType(types.Type):
-    """
-    Abstract base class for IcebergConnections
-    """
-
-    def __init__(self, name):  # pragma: no cover
-        super().__init__(name=name)
 
 
 def _fs_from_file_path(file_path: str, io: FileIO) -> FileSystem:

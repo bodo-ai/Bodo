@@ -16,7 +16,7 @@ from numba.extending import (
     unbox,
 )
 
-from bodo.io.iceberg import IcebergConnectionType
+from bodo.ir.iceberg_ext import IcebergConnectionType
 from bodo.utils.typing import get_literal_value, raise_bodo_error
 from bodosql import DatabaseCatalog, DatabaseCatalogType
 from bodosql.imported_java_classes import JavaEntryPoint

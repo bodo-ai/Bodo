@@ -3755,6 +3755,7 @@ class TypingTransforms:
         """transform pd.read_sql_table into a SQL node"""
         import bodo.io.iceberg
         import bodo.io.iceberg.read_compilation
+        from bodo.ir.iceberg_ext import IcebergConnectionType
 
         func_str = "pandas.read_sql_table"
         lhs = assign.target
@@ -3771,7 +3772,7 @@ class TypingTransforms:
             err_msg = "pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
             con_type = self.typemap[con_arg.name]
 
-            if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+            if isinstance(con_type, IcebergConnectionType):
                 con_str = con_type.conn_str
             else:
                 con_str = self._get_const_value(
@@ -3779,7 +3780,7 @@ class TypingTransforms:
                 )
 
             # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var
-            if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+            if not isinstance(con_type, IcebergConnectionType):
                 con_arg = ir.Const(con_str, con_arg.loc)
 
             if not isinstance(con_str, str):

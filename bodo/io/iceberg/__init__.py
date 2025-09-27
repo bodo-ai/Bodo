@@ -22,7 +22,6 @@ from bodo.mpi4py import MPI
 
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,
-    IcebergConnectionType,
     _fs_from_file_path,
     flatten_concatenation,
     flatten_tuple,
@@ -340,6 +339,5 @@ def get_iceberg_pq_dataset(
 
 __all__ = [
     "ICEBERG_FIELD_ID_MD_KEY",
-    "IcebergConnectionType",
     "get_iceberg_pq_dataset",
 ]

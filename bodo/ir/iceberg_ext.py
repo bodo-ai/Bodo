@@ -91,6 +91,15 @@ from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.ir.object_mode import no_warning_objmode
 
 
+class IcebergConnectionType(types.Type):
+    """
+    Abstract base class for IcebergConnections
+    """
+
+    def __init__(self, name):  # pragma: no cover
+        super().__init__(name=name)
+
+
 @overload(conn_str_to_catalog)
 def conn_str_to_catalog_overload(
     conn_str,
@@ -664,8 +673,6 @@ def iceberg_distributed_run(
     is_independent: bool = False,
     meta_head_only_info=None,
 ):
-    from bodo.io.iceberg.common import IcebergConnectionType
-
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         op_id_msg = (

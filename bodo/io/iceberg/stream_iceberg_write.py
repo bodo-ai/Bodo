@@ -39,7 +39,6 @@ from bodo.io.helpers import (
     stream_writer_alloc_codegen,
 )
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import IcebergConnectionType
 from bodo.io.iceberg.theta import (
     _write_puffin_file,
     commit_statistics_file,
@@ -334,6 +333,8 @@ def conn_wrapper_to_str(conn_wrapper) -> str:  # pragma: no cover
 @overload(conn_wrapper_to_str)
 def overload_conn_wrapper_to_str(conn_wrapper):
     """Convert a connection wrapper to a string"""
+    from bodo.ir.iceberg_ext import IcebergConnectionType
+
     if isinstance(conn_wrapper, IcebergConnectionType):
 
         def impl(conn_wrapper):
