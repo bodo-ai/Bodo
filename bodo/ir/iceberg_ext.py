@@ -1299,7 +1299,26 @@ def _gen_iceberg_reader_chunked_py(
         correct indices.
     """
 
+    from numba.extending import overload
+
+    from bodo.io.helpers import pyiceberg_catalog_type
     from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.ir.object_mode import no_warning_objmode
+
+    @overload(conn_str_to_catalog)
+    def conn_str_to_catalog_overload(
+        conn_str,
+    ):
+        """
+        Overload for conn_str_to_catalog
+        """
+
+        def impl(conn_str):
+            with no_warning_objmode(catalog=pyiceberg_catalog_type):
+                catalog = conn_str_to_catalog(conn_str)
+            return catalog
+
+        return impl
 
     source_pyarrow_schema = pyarrow_schema
     assert source_pyarrow_schema is not None, (

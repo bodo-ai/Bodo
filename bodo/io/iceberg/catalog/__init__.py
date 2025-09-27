@@ -12,11 +12,6 @@ import typing as pt
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
-from numba.extending import overload
-
-from bodo.io.helpers import pyiceberg_catalog_type
-from bodo.ir.object_mode import no_warning_objmode
-
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
 
@@ -154,19 +149,3 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
         cat_inst = catalog(catalog_name, **cast(dict[str, str], merged_conf))
         CATALOG_CACHE[cache_key] = cat_inst
         return cat_inst
-
-
-@overload(conn_str_to_catalog)
-def conn_str_to_catalog_overload(
-    conn_str,
-):
-    """
-    Overload for conn_str_to_catalog
-    """
-
-    def impl(conn_str):
-        with no_warning_objmode(catalog=pyiceberg_catalog_type):
-            catalog = conn_str_to_catalog(conn_str)
-        return catalog
-
-    return impl
