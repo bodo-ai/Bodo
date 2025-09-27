@@ -82,6 +82,28 @@ ll.add_symbol(
     "iceberg_pq_reader_init_py_entry", arrow_cpp.iceberg_pq_reader_init_py_entry
 )
 
+from numba.extending import overload
+
+from bodo.io.helpers import pyiceberg_catalog_type
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.ir.object_mode import no_warning_objmode
+
+
+@overload(conn_str_to_catalog)
+def conn_str_to_catalog_overload(
+    conn_str,
+):
+    """
+    Overload for conn_str_to_catalog
+    """
+
+    def impl(conn_str):
+        with no_warning_objmode(catalog=pyiceberg_catalog_type):
+            catalog = conn_str_to_catalog(conn_str)
+        return catalog
+
+    return impl
+
 
 class ParquetFilterScalarsListType(types.Type):
     """
@@ -1298,27 +1320,6 @@ def _gen_iceberg_reader_chunked_py(
         This is used for "remapping" the build columns in rtjf_interval_cols to the
         correct indices.
     """
-
-    from numba.extending import overload
-
-    from bodo.io.helpers import pyiceberg_catalog_type
-    from bodo.io.iceberg.catalog import conn_str_to_catalog
-    from bodo.ir.object_mode import no_warning_objmode
-
-    @overload(conn_str_to_catalog)
-    def conn_str_to_catalog_overload(
-        conn_str,
-    ):
-        """
-        Overload for conn_str_to_catalog
-        """
-
-        def impl(conn_str):
-            with no_warning_objmode(catalog=pyiceberg_catalog_type):
-                catalog = conn_str_to_catalog(conn_str)
-            return catalog
-
-        return impl
 
     source_pyarrow_schema = pyarrow_schema
     assert source_pyarrow_schema is not None, (
