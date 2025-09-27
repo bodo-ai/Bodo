@@ -488,7 +488,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.table.sorting
 
         import bodo.io.iceberg
-        import bodo.io.iceberg.stream_iceberg_write
         from bodo.pandas.base import _empty_like
         from bodo.utils.typing import CreateTableMetaType
 
