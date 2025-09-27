@@ -487,8 +487,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.partitioning
         import pyiceberg.table.sorting
 
-        # TODO(ehsan): avoid compiler import in Iceberg write
-        import bodo.decorators  # isort:skip # noqa
         import bodo.io.iceberg
         import bodo.io.iceberg.stream_iceberg_write
         from bodo.pandas.base import _empty_like
@@ -564,7 +562,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
         max_pq_chunksize = properties.get(
             "write.target-file-size-bytes",
-            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+            bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
         )
         compression = properties.get("write.parquet.compression-codec", "snappy")
         # TODO: support Theta sketches

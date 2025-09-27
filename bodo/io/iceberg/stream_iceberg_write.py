@@ -89,7 +89,7 @@ if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.table import Transaction
 
 
-ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
+from bodo.io.iceberg import ICEBERG_WRITE_PARQUET_CHUNK_SIZE
 
 
 def get_enable_theta() -> bool:  # type: ignore

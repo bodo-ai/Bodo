@@ -48,6 +48,9 @@ if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.expressions import BooleanExpression
 
 
+ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
+
+
 try:
     importlib.import_module("pyiceberg")
     from . import monkey_patch as _  # noqa: F401

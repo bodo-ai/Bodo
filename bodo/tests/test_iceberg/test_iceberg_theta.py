@@ -97,12 +97,10 @@ def test_iceberg_write_theta_estimates(
     table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = True
     try:
         f = write_iceberg_table_with_puffin_files(df, table_id, conn, "replace")
@@ -116,9 +114,7 @@ def test_iceberg_write_theta_estimates(
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
         bodo.enable_theta_sketches = orig_enable_theta
 
 
@@ -147,12 +143,10 @@ def test_iceberg_write_disabled_theta(
     table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = False
     try:
         f = write_iceberg_table_with_puffin_files(df, table_id, conn, "replace")
@@ -161,9 +155,7 @@ def test_iceberg_write_disabled_theta(
         check_no_statistics_file(warehouse_loc, db_schema, table_name)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
         bodo.enable_theta_sketches = orig_enable_theta
 
 
