@@ -5,6 +5,7 @@ from caching_tests_common import fn_distribution  # noqa
 
 import bodo
 import bodo.decorators  # noqa
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
@@ -12,7 +13,6 @@ from bodo.tests.utils import (
     sql_user_pass_and_hostname,
 )
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.utils import run_rank0
 
 
 @bodo.jit

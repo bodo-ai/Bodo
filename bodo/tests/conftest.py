@@ -934,7 +934,7 @@ def tmp_abfs_path(abfs_fs):
     """
     Create a temporary ABFS path for testing.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     @run_rank0
     def setup():

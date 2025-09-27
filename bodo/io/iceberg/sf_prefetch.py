@@ -9,7 +9,7 @@ from __future__ import annotations
 from numba.extending import overload
 
 import bodo
-from bodo.utils.utils import run_rank0
+from bodo.spawn.utils import run_rank0
 
 
 @run_rank0

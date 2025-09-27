@@ -91,7 +91,7 @@ def test_basic_write(memory_leak_check):
     """
     Test writing a complete Iceberg table to S3 Tables
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     @bodo.jit(distributed=["df"])
     def write(df, table_name, conn, db_schema):

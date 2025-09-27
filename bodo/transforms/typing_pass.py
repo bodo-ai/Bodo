@@ -3754,6 +3754,7 @@ class TypingTransforms:
     ):
         """transform pd.read_sql_table into a SQL node"""
         import bodo.io.iceberg
+        import bodo.io.iceberg.read_compilation
 
         func_str = "pandas.read_sql_table"
         lhs = assign.target
@@ -3938,8 +3939,10 @@ class TypingTransforms:
             # we will make the decision ourselves. At this point, we will only
             # do the dict-encoding ourselves if the table is a Snowflake managed
             # Iceberg table. If it isn't, we will let Arrow do it.
-            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(
-                con_str
+            dict_encode_in_bodo = (
+                bodo.io.iceberg.read_compilation.is_snowflake_managed_iceberg_wh(
+                    con_str
+                )
             )
 
         # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
@@ -4076,12 +4079,12 @@ class TypingTransforms:
             else -1
         )
 
-        snapshot_id = bodo.io.iceberg.resolve_snapshot_id(
+        snapshot_id = bodo.io.iceberg.read_compilation.resolve_snapshot_id(
             con_str, table_id, snapshot_id, snapshot_timestamp_ms
         )
 
         (orig_col_names, orig_arr_types, pyarrow_table_schema, col_names, arr_types) = (
-            bodo.io.iceberg.get_orig_and_runtime_schema(
+            bodo.io.iceberg.read_compilation.get_orig_and_runtime_schema(
                 con_str,
                 table_id,
                 selected_cols=columns_obj,

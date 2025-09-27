@@ -9,6 +9,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     SparkAwsIcebergCatalog,
     get_spark,
@@ -26,7 +27,6 @@ from bodo.tests.utils import (
     pytest_polaris,
     temp_env_override,
 )
-from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.rest_catalog import get_REST_connection
 from bodosql.tests.test_types.utils import create_iceberg_table
 

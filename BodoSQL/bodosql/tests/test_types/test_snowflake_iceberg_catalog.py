@@ -9,6 +9,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -24,7 +25,6 @@ from bodo.tests.utils import (
     pytest_snowflake,
     temp_config_override,
 )
-from bodo.utils.utils import run_rank0
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
 
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake

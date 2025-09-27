@@ -139,7 +139,7 @@ def polaris_package():
     """
     Ensure that the polaris client is installed
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     # Install the polaris client if it is not already installed
     # This is a temporary solution until the polaris client is published
@@ -168,7 +168,7 @@ def polaris_token(polaris_server, polaris_package):
         Configuration as CatalogApiClientConfiguration,
     )
 
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     host, port, user, password = polaris_server
 
@@ -216,7 +216,7 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         ApiClient as ManagementApiClient,
     )
 
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     host, port, _, _ = polaris_server
 
@@ -316,7 +316,7 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         ApiClient as ManagementApiClient,
     )
 
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     host, port, _, _ = polaris_server
 

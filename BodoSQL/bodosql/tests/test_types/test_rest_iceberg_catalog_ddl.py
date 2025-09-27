@@ -13,6 +13,7 @@ import pytest
 
 import bodo
 import bodosql
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
     get_spark_catalog_for_connection,
@@ -25,7 +26,6 @@ from bodo.tests.utils import (
 )
 from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par, gen_unique_id
 
 pytestmark = pytest_polaris

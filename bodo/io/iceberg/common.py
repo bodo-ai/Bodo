@@ -12,7 +12,7 @@ import requests
 from numba.core import types
 from pyarrow.fs import FileSystem, FSSpecHandler
 
-from bodo.utils.utils import BodoError, run_rank0
+from bodo.spawn.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from typing import Any
@@ -50,6 +50,8 @@ def verify_pyiceberg_installed():
     try:
         return importlib.import_module("pyiceberg")
     except ImportError:
+        from bodo.utils.utils import BodoError
+
         raise BodoError(
             "Please install the pyiceberg package to use Iceberg functionality. "
             "You can install it by running 'pip install pyiceberg'."
@@ -123,6 +125,8 @@ def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
     @param conn: Iceberg connection string.
     @return: Tuple of uri, user_token, warehouse if successful, None otherwise (e.g. invalid connection string or not a rest catalog).
     """
+    from bodo.utils.utils import BodoError
+
     parsed_conn = urlparse(conn)
     if parsed_conn.scheme.lower() not in {"http", "https"}:
         return None

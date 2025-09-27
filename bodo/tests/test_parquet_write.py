@@ -41,7 +41,7 @@ def check_write_func(
     pandas_fn=None,
 ):
     import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     DISTRIBUTIONS = {
         "sequential": [lambda x, *args: x, [], {}],

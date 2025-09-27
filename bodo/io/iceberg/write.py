@@ -29,9 +29,10 @@ from bodo.io.iceberg.theta import theta_sketch_collection_type
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_opaque_class, install_py_obj_class
 from bodo.utils.typing import EMPTY_CREATE_TABLE_META, CreateTableMetaType
-from bodo.utils.utils import BodoError, run_rank0
+from bodo.utils.utils import BodoError
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyarrow.fs import FileSystem

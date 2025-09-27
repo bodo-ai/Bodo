@@ -16,14 +16,10 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 
 import bodo
-
-# TODO(ehsan): avoid compiler import in Iceberg read
-import bodo.decorators  # isort:skip # noqa
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
 from bodo.mpi4py import MPI
 
-from . import merge_into
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,
     IcebergConnectionType,
@@ -31,12 +27,6 @@ from .common import (
     flatten_concatenation,
     flatten_tuple,
     verify_pyiceberg_installed,
-)
-from .read_compilation import (
-    get_iceberg_orig_schema,
-    get_orig_and_runtime_schema,
-    is_snowflake_managed_iceberg_wh,
-    resolve_snapshot_id,  # noqa: F401
 )
 from .read_metadata import (
     get_iceberg_file_list_parallel,
@@ -168,8 +158,8 @@ def get_iceberg_pq_dataset(
     # 1. Select a slice of the list of files based on the rank.
     n_pes, rank = bodo.get_size(), bodo.get_rank()
     total_num_files = len(pq_infos)
-    start = bodo.libs.distributed_api.get_start(total_num_files, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(total_num_files, n_pes, rank)
+    start = bodo.get_start(total_num_files, n_pes, rank)
+    end = bodo.get_end(total_num_files, n_pes, rank)
 
     local_pq_infos = pq_infos[start:end]
     metrics.n_files_analyzed += len(local_pq_infos)
@@ -347,12 +337,8 @@ def get_iceberg_pq_dataset(
 
 
 __all__ = [
-    "merge_into",
     "ICEBERG_FIELD_ID_MD_KEY",
     "IcebergConnectionType",
     "get_iceberg_pq_dataset",
-    "is_snowflake_managed_iceberg_wh",
     "prefetch_sf_tables_njit",
-    "get_iceberg_orig_schema",
-    "get_orig_and_runtime_schema",
 ]

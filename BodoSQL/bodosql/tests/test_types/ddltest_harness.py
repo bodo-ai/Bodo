@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 
 import pandas as pd
 
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import gen_unique_table_id
-from bodo.utils.utils import run_rank0
 
 
 class DDLTestHarness(ABC):

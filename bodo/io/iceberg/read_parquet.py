@@ -18,6 +18,7 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 
 import bodo
+from bodo import BodoWarning
 from bodo.io import arrow_cpp
 from bodo.io.iceberg.common import (
     FieldID,
@@ -38,7 +39,6 @@ from bodo.io.parquet_pio import (
     schema_with_dict_cols,
 )
 from bodo.mpi4py import MPI
-from bodo.utils.utils import BodoError, BodoWarning
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     import pyarrow.fs as pa_fs
@@ -1223,7 +1223,8 @@ def get_row_counts_for_schema_group(
                 )
             except Exception as e:
                 msg = f"Schema of file {pq_info.path} is not compatible.\n{str(e)}"
-                raise BodoError(msg)
+                # TODO: raise BodoError in case of compiler (not dataframe library)
+                raise ValueError(msg)
 
     ## 2. Perform filtering to get row counts and construct the IcebergPieces.
     pieces: list[IcebergPiece] = []

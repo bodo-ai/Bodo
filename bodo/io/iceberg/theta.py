@@ -31,8 +31,8 @@ from bodo.libs.array import (
     info_to_array,
 )
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.table import Transaction
