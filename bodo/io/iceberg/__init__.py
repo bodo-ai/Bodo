@@ -41,7 +41,6 @@ from .read_parquet import (
     get_row_counts_for_schema_group,
     warn_if_non_ideal_io_parallelism,
 )
-from .sf_prefetch import prefetch_sf_tables_njit
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
@@ -343,5 +342,4 @@ __all__ = [
     "ICEBERG_FIELD_ID_MD_KEY",
     "IcebergConnectionType",
     "get_iceberg_pq_dataset",
-    "prefetch_sf_tables_njit",
 ]

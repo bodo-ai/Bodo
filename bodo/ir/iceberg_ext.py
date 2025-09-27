@@ -84,6 +84,8 @@ ll.add_symbol(
 
 from numba.extending import overload
 
+# Used in BodoSQL codegen
+import bodo.io.iceberg.sf_prefetch  # noqa
 from bodo.io.helpers import pyiceberg_catalog_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.ir.object_mode import no_warning_objmode
