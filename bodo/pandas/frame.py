@@ -488,8 +488,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.table.sorting
 
         import bodo.io.iceberg
+        from bodo.io.iceberg.write_utils import CreateTableMeta
         from bodo.pandas.base import _empty_like
-        from bodo.utils.typing import CreateTableMetaType
 
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
@@ -546,13 +546,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             sort_order_id,
             sort_tuples,
             properties,
-        ) = bodo.io.iceberg.write.start_write_rank_0(
+        ) = bodo.io.iceberg.write_utils.start_write_rank_0(
             catalog,
             table_identifier,
             df_schema,
             if_exists,
             False,
-            CreateTableMetaType(None, None, properties),
+            CreateTableMeta(None, None, properties),
             location,
             partition_spec,
             sort_order,
@@ -590,10 +590,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             fnames,
             file_records,
             partition_infos,
-        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+        ) = bodo.io.iceberg.write_utils.generate_data_file_info_seq(
+            all_iceberg_files_infos
+        )
 
         # Register file names, metrics and schema in transaction
-        success = bodo.io.iceberg.write.register_table_write_seq(
+        success = bodo.io.iceberg.write_utils.register_table_write_seq(
             txn,
             fnames,
             file_records,
