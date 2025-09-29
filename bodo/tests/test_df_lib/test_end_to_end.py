@@ -2925,6 +2925,76 @@ def test_drop_duplicates():
     )
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="default"),
+        pytest.param({"keep": "first"}, id="keep_first"),
+        pytest.param({"keep": "last"}, id="keep_last"),
+    ],
+)
+def test_drop_duplicates_subset(kwargs):
+    """Test for drop_duplicates subset API."""
+
+    dim0 = 4
+    dim1 = 6
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(list(range(dim0)) * dim1 * 10, "Int32"),
+                "B": pd.array(list(range(dim0, dim0 + dim1)) * dim0 * 10, "Float64"),
+                "C": pd.array(list(range(dim0 * dim1 * 10)), "Float64"),
+            }
+        )
+        pdf = df.copy().drop_duplicates(subset=["A", "B"], **kwargs)[["A", "B"]]
+        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"], **kwargs)[
+            ["A", "B"]
+        ]
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="default"),
+        pytest.param({"keep": "first"}, id="keep_first"),
+        pytest.param({"keep": "last"}, id="keep_last"),
+    ],
+)
+def test_drop_duplicates_subset(kwargs):
+    """Test for drop_duplicates subset API."""
+
+    dim0 = 4
+    dim1 = 6
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(list(range(dim0)) * dim1 * 10, "Int32"),
+                "B": pd.array(list(range(dim0, dim0 + dim1)) * dim0 * 10, "Float64"),
+                "C": pd.array(list(range(dim0 * dim1 * 10)), "Float64"),
+            }
+        )
+        pdf = df.copy().drop_duplicates(subset=["A", "B"], **kwargs)[["A", "B"]]
+        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"], **kwargs)[
+            ["A", "B"]
+        ]
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""

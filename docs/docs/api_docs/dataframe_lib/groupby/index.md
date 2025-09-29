@@ -30,6 +30,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`DataFrameGroupBy.skew`][frame-agg-skew]
 - [`DataFrameGroupBy.nunique`][frame-agg-nunique]
 - [`DataFrameGroupBy.size`][frame-agg-size]
+- [`DataFrameGroupBy.first`][frame-agg-first]
+- [`DataFrameGroupBy.last`][frame-agg-last]
 
 ## SeriesGroupby Computations / Descriptive Stats
 
@@ -44,6 +46,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`SeriesGroupBy.skew`][series-agg-skew]
 - [`SeriesGroupBy.nunique`][series-agg-nunique]
 - [`SeriesGroupBy.size`][series-agg-size]
+- [`SeriesGroupBy.first`][series-agg-first]
+- [`SeriesGroupBy.last`][series-agg-last]
 
 
 [frame-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.sum.html
@@ -57,6 +61,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 [frame-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.skew.html
 [frame-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.nunique.html
 [frame-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.size.html
+[frame-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.first.html
+[frame-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.last.html
 
 [series-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.sum.html
 [series-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.count.html
@@ -69,3 +75,5 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 [series-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.skew.html
 [series-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.nunique.html
 [series-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.size.html
+[series-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.first.html
+[series-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.last.html
