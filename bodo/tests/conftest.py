@@ -121,14 +121,13 @@ def memory_leak_check():
 
 
 @pytest.fixture(scope="function")
-def jit_import_check(request):
+def jit_import_check():
     """Fixture used to assert that a test should not import JIT."""
+    jit_already_imported = "bodo.decorators" in sys.modules
     yield
-    # assert jit_already_imported or "bodo.decorators" not in sys.modules, (
-    #     "Test was not explicitly marked as a JIT dependency, but imported JIT."
-    # )
-    if "bodo.decorators" in sys.modules:
-        pytest.exit(f"JIT was imported during a test. {request.node.nodeid}")
+    assert jit_already_imported or "bodo.decorators" not in sys.modules, (
+        "Test was not explicitly marked as a JIT dependency, but imported JIT."
+    )
 
 
 def item_file_name(item):

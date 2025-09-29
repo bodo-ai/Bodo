@@ -240,7 +240,6 @@ def gatherv_nojit(data, root, comm):
         data = pd.DataFrame({"__arrow_data__": data})
 
     comm_ptr = 0 if comm is None else MPI._addressof(comm)
-
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
     out = cpp_table_to_df(out_ptr)
