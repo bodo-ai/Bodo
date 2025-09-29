@@ -55,9 +55,6 @@ def _init_process_group():
         else:
             pytorch_rank = None
 
-    print(
-        f"MPI Rank: {MPI.COMM_WORLD.Get_rank()}, PyTorch Rank: {pytorch_rank}, Device: {device}"
-    )
     backend = torch.distributed.get_default_backend_for_device(device)
     tcp_conn_str = None
     if pytorch_rank == 0:
@@ -88,7 +85,6 @@ def torch_train(
         ) if train_loop_config else train_loop_per_worker(data)
 
     submit_func_to_workers(worker_func, [], dataset)
-    # worker_func(dataset)
 
 
 def prepare_model(

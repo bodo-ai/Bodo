@@ -410,10 +410,12 @@ def test_torch_train():
         class SimpleModel(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.linear = nn.Linear(2, 1)
+                self.linear1 = nn.Linear(2, 32)
+                self.relu = nn.ReLU()
+                self.linear2 = nn.Linear(32, 1)
 
             def forward(self, x):
-                return self.linear(x)
+                return self.linear2(self.relu(self.linear1(x)))
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
@@ -429,7 +431,7 @@ def test_torch_train():
         # train on data
         criterion = nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-        for epoch in range(100):
+        for epoch in range(config.get("epochs", 5)):
             batch_size = config.get("batch_size", 2)
             for i in range(0, len(data), batch_size):
                 batch = data[i : i + batch_size]
@@ -441,6 +443,7 @@ def test_torch_train():
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+
             print(f"Epoch {epoch}, Loss: {loss.item()}")
 
     bodo.ai.train.torch_train(train_loop, df, {"batch_size": 2})
