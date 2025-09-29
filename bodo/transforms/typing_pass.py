@@ -3754,6 +3754,8 @@ class TypingTransforms:
     ):
         """transform pd.read_sql_table into a SQL node"""
         import bodo.io.iceberg
+        import bodo.io.iceberg.read_compilation
+        from bodo.ir.iceberg_ext import IcebergConnectionType
 
         func_str = "pandas.read_sql_table"
         lhs = assign.target
@@ -3770,7 +3772,7 @@ class TypingTransforms:
             err_msg = "pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
             con_type = self.typemap[con_arg.name]
 
-            if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+            if isinstance(con_type, IcebergConnectionType):
                 con_str = con_type.conn_str
             else:
                 con_str = self._get_const_value(
@@ -3778,7 +3780,7 @@ class TypingTransforms:
                 )
 
             # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var
-            if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+            if not isinstance(con_type, IcebergConnectionType):
                 con_arg = ir.Const(con_str, con_arg.loc)
 
             if not isinstance(con_str, str):
@@ -3938,8 +3940,10 @@ class TypingTransforms:
             # we will make the decision ourselves. At this point, we will only
             # do the dict-encoding ourselves if the table is a Snowflake managed
             # Iceberg table. If it isn't, we will let Arrow do it.
-            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(
-                con_str
+            dict_encode_in_bodo = (
+                bodo.io.iceberg.read_compilation.is_snowflake_managed_iceberg_wh(
+                    con_str
+                )
             )
 
         # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
@@ -4076,12 +4080,12 @@ class TypingTransforms:
             else -1
         )
 
-        snapshot_id = bodo.io.iceberg.resolve_snapshot_id(
+        snapshot_id = bodo.io.iceberg.read_compilation.resolve_snapshot_id(
             con_str, table_id, snapshot_id, snapshot_timestamp_ms
         )
 
         (orig_col_names, orig_arr_types, pyarrow_table_schema, col_names, arr_types) = (
-            bodo.io.iceberg.get_orig_and_runtime_schema(
+            bodo.io.iceberg.read_compilation.get_orig_and_runtime_schema(
                 con_str,
                 table_id,
                 selected_cols=columns_obj,

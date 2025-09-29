@@ -82,6 +82,39 @@ ll.add_symbol(
     "iceberg_pq_reader_init_py_entry", arrow_cpp.iceberg_pq_reader_init_py_entry
 )
 
+from numba.extending import overload
+
+# Used in BodoSQL codegen
+import bodo.io.iceberg.sf_prefetch  # noqa
+from bodo.io.helpers import pyiceberg_catalog_type
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.ir.object_mode import no_warning_objmode
+
+
+class IcebergConnectionType(types.Type):
+    """
+    Abstract base class for IcebergConnections
+    """
+
+    def __init__(self, name):  # pragma: no cover
+        super().__init__(name=name)
+
+
+@overload(conn_str_to_catalog)
+def conn_str_to_catalog_overload(
+    conn_str,
+):
+    """
+    Overload for conn_str_to_catalog
+    """
+
+    def impl(conn_str):
+        with no_warning_objmode(catalog=pyiceberg_catalog_type):
+            catalog = conn_str_to_catalog(conn_str)
+        return catalog
+
+    return impl
+
 
 class ParquetFilterScalarsListType(types.Type):
     """
@@ -640,8 +673,6 @@ def iceberg_distributed_run(
     is_independent: bool = False,
     meta_head_only_info=None,
 ):
-    from bodo.io.iceberg.common import IcebergConnectionType
-
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         op_id_msg = (
@@ -1298,8 +1329,6 @@ def _gen_iceberg_reader_chunked_py(
         This is used for "remapping" the build columns in rtjf_interval_cols to the
         correct indices.
     """
-
-    from bodo.io.iceberg.catalog import conn_str_to_catalog
 
     source_pyarrow_schema = pyarrow_schema
     assert source_pyarrow_schema is not None, (

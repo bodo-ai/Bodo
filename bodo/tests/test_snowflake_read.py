@@ -897,7 +897,7 @@ def test_snowflake_runtime_upcasting_int_to_decimal(
     schema uses larger types than the runtime data for integers.
     The larger type is a decimal type
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     # Mock the compile-time schema info
     # Original (and runtime data):

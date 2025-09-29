@@ -18,6 +18,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.tests.conftest import iceberg_database  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
     SparkFilesystemIcebergCatalog,
@@ -31,7 +32,6 @@ from bodo.tests.utils import (
     pytest_mark_one_rank,
 )
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par
 
 pytestmark = pytest.mark.iceberg

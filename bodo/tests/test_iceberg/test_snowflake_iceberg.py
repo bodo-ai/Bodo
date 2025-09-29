@@ -4,7 +4,6 @@ import pandas as pd
 import pyarrow
 import pytest
 
-import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -23,13 +22,16 @@ pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 @pytest_mark_one_rank
 def test_get_iceberg_schema_snowflake(memory_leak_check):
     """Get the Iceberg read schema from a Snowflake-managed table"""
+    import bodo.io.iceberg.read_compilation
 
     conn = "iceberg+" + get_snowflake_connection_string(
         "TEST_DB", "PUBLIC", {"role": "ACCOUNTADMIN", "warehouse": "DEMO_WH"}
     )
 
-    col_names, bodo_col_types, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(
-        conn, "TEST_DB.PUBLIC.TEST_ICEBERG_TABLE"
+    col_names, bodo_col_types, pyarrow_schema = (
+        bodo.io.iceberg.read_compilation.get_iceberg_orig_schema(
+            conn, "TEST_DB.PUBLIC.TEST_ICEBERG_TABLE"
+        )
     )
 
     assert col_names == ["VAL", "B"]
