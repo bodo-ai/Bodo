@@ -388,7 +388,6 @@ def test_basic_write_runtime_cols_fail(
     Test that Iceberg writes throw an error at compile-time when
     writing a DataFrame with runtime columns (created using a pivot)
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -403,7 +402,7 @@ def test_basic_write_runtime_cols_fail(
         return df_piv.to_sql(table_name, conn, db_schema, if_exists="replace")
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=r"DataFrame\.to_sql\(\) on DataFrames with columns determined at runtime is not yet supported\. Please return the DataFrame to regular Python to update typing information\.",
     ):
         impl(table_name, conn, db_schema)
@@ -953,7 +952,6 @@ def test_basic_write_downcasting_fail(
     Test that writing to an Iceberg table with incorrect types
     that would need to be downcasted fails.
     """
-    from bodo.utils.typing import BodoError
 
     id, sql_schema, df, df_write, _, _ = downcasting_table_info
     table_name = id + "_DOWNCASTING_FAIL_TEST"
@@ -971,7 +969,7 @@ def test_basic_write_downcasting_fail(
         df.to_sql(table_name, conn, db_schema, if_exists="append")
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
     ):
         impl(_get_dist_arg(df_write), table_name, conn, db_schema)
@@ -1247,7 +1245,6 @@ def test_iceberg_missing_optional_column_missing_error(
     Test that the correct error is thrown when a dataframe is missing a required
     column.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1264,7 +1261,7 @@ def test_iceberg_missing_optional_column_missing_error(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
     ):
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
@@ -1278,7 +1275,6 @@ def test_iceberg_missing_optional_column_extra_error(
     Test support for adding a dataframe to an iceberg table where the dataframe
     has an additional column that is not in the Iceberg table schema.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1296,7 +1292,7 @@ def test_iceberg_missing_optional_column_extra_error(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
         ),
@@ -1311,7 +1307,6 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     """
     Test that the correct error is thrown when a dataframe columns in incorrect order.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1329,7 +1324,7 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
         ),
