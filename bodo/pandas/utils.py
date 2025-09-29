@@ -506,7 +506,7 @@ def get_n_index_arrays(index):
         raise TypeError(f"Invalid index type: {type(index)}")
 
 
-def df_to_cpp_table(df):
+def df_to_cpp_table(df, return_schema=False):
     """Convert a pandas DataFrame to a C++ table pointer with column names and
     metadata set properly.
     """
@@ -536,6 +536,9 @@ def df_to_cpp_table(df):
     # Recreate table with fixed columns if any changes were made
     if any(col.num_chunks == 0 for col in arrow_table.columns):
         arrow_table = pa.Table.from_arrays(new_columns, schema=arrow_table.schema)
+
+    if return_schema:
+        return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
 
     return plan_optimizer.arrow_to_cpp_table(arrow_table)
 

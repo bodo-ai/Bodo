@@ -257,6 +257,11 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                mpi_root, comm, all_gather),
                 "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         }
+        // Set scale and precision for decimal type
+        if ((dtype == Bodo_CTypes::DECIMAL) && (is_receiver || all_gather)) {
+            out_arr->scale = in_arr->scale;
+            out_arr->precision = in_arr->precision;
+        }
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         // Computing the total number of rows.
@@ -647,6 +652,11 @@ std::shared_ptr<array_info> scatter_array(
                                rows_disps.data(), mpi_typ, data1_ptr, n_loc,
                                mpi_typ, mpi_root, comm),
                 "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        }
+        // Set scale and precision for decimal type
+        if (dtype == Bodo_CTypes::DECIMAL) {
+            out_arr->scale = in_arr->scale;
+            out_arr->precision = in_arr->precision;
         }
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
