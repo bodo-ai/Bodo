@@ -80,12 +80,15 @@ def torch_train(
     dataset: BodoDataFrame | BodoSeries,
     train_loop_config: dict | None = None,
 ):
+    from bodo.spawn.spawner import submit_func_to_workers
+
     def worker_func(data):
         train_loop_per_worker(
             data, train_loop_config
         ) if train_loop_config else train_loop_per_worker(data)
 
-    dataset.map_partitions(worker_func)
+    submit_func_to_workers(worker_func, [], dataset)
+    # worker_func(dataset)
 
 
 def prepare_model(

@@ -402,7 +402,7 @@ def test_torch_train():
         }
     )
 
-    def train_loop(data):
+    def train_loop(data, config):
         import torch
         import torch.nn as nn
 
@@ -417,24 +417,25 @@ def test_torch_train():
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+        if model is None:
+            # Not a worker process
+            return
         model_device = next(model.parameters()).device
         if model_device.type != "cpu":
             # If we're using an accelerator, rebalance data to match GPU ranks
             gpu_ranks = bodo.get_gpu_ranks()
             data = bodo.rebalance(data, dests=gpu_ranks)
 
-        if model is None:
-            # Not a worker process
-            return
         # train on data
         criterion = nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         for epoch in range(100):
-            for _, row in data.iterrows():
-                inputs = torch.tensor([[row["feature1"], row["feature2"]]]).to(
-                    model_device
-                )
-                labels = torch.tensor([[row["label"]]]).to(model_device)
+            batch_size = config.get("batch_size", 2)
+            for i in range(0, len(data), batch_size):
+                batch = data[i : i + batch_size]
+                batch_tensor = torch.tensor(batch.to_numpy("float32")).to(model_device)
+                inputs = batch_tensor[:, :2]
+                labels = batch_tensor[:, 2].unsqueeze(1)
                 optimizer.zero_grad()
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
@@ -442,4 +443,4 @@ def test_torch_train():
                 optimizer.step()
             print(f"Epoch {epoch}, Loss: {loss.item()}")
 
-    bodo.ai.train.torch_train(train_loop, df)
+    bodo.ai.train.torch_train(train_loop, df, {"batch_size": 2})
