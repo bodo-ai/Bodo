@@ -891,6 +891,11 @@ class Spawner:
         """Spawn a process on all workers and return a WorkerProcess object"""
         assert not self._is_running, "spawn_process_on_nodes: already running"
 
+        # Import compiler for handle_spawn_process on workers
+        import bodo.decorators  # isort:skip # noqa
+
+        self.import_compiler_on_workers()
+
         self._is_running = True
         self.worker_intercomm.bcast(
             CommandType.SPAWN_PROCESS.value, root=self.bcast_root
