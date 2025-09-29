@@ -28,8 +28,8 @@ class SortField(NamedTuple):
 # `spark.jars.packages` is not a run time option and cannot be modified.
 SPARK_JAR_PACKAGES = [
     "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0",
-    "software.amazon.awssdk:bundle:2.29.19",
-    "software.amazon.awssdk:url-connection-client:2.29.19",
+    "software.amazon.awssdk:bundle:2.34.5",
+    "software.amazon.awssdk:url-connection-client:2.34.5",
     "org.apache.iceberg:iceberg-azure-bundle:1.10.0",
 ]
 
