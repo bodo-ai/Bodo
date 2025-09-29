@@ -846,6 +846,11 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     bool no_scalars = false);
 
+std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
+    duckdb::Expression &expr,
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    bool no_scalars = false);
+
 struct PhysicalUDFExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t cpp_to_py_time = 0;

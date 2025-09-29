@@ -159,19 +159,30 @@ def merge(lhs, rhs, *args, **kwargs):
 
 def _empty_like(val):
     """Create an empty Pandas DataFrame or Series having the same schema as
-    the given BodoDataFrame or BodoSeries
+    the given BodoDataFrame or BodoSeries or Pandas DataFrame or Series.
+    For Pandas DataFrame or Series, uses Arrow for schema inference of object columns
+    and returns typed output.
     """
     import pyarrow as pa
 
-    if type(val) not in {BodoDataFrame, BodoSeries, BodoScalar}:
+    if type(val) not in (
+        BodoDataFrame,
+        BodoSeries,
+        BodoScalar,
+        pd.Series,
+        pd.DataFrame,
+    ):
         raise TypeError(f"val must be a BodoDataFrame or BodoSeries, got {type(val)}")
 
     if type(val) is BodoScalar:
         return val.wrapped_series.head(0).dtype.type()
 
     is_series = isinstance(val, BodoSeries)
-    # Avoid triggering data collection
-    val = val.head(0)
+
+    if isinstance(val, (BodoDataFrame, BodoSeries)):
+        # Avoid triggering data collection
+        # Ok since BodoDataFrame/Series always have Arrow schema and not objects
+        val = val.head(0)
 
     if is_series:
         val = val.to_frame(name=BODO_NONE_DUMMY if val.name is None else val.name)
@@ -213,12 +224,8 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
-    # TODO(ehsan): avoid compiler import in Iceberg read
-    import bodo.decorators  # isort:skip # noqa
     from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
-
-    bodo.spawn.utils.import_compiler_on_workers()
 
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")

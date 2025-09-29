@@ -10,6 +10,8 @@ import numba
 import pandas as pd
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.utils.tracing as tracing
 from bodo.io.iceberg.common import get_rest_catalog_config
 from bodo.io.iceberg.write import (

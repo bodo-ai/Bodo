@@ -4,6 +4,7 @@ import pytest
 
 import bodosql
 from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.spawn.utils import run_rank0
 from bodo.tests.test_iceberg.conftest import (  # noqa
     aws_polaris_connection,
     aws_polaris_warehouse,
@@ -14,7 +15,6 @@ from bodo.tests.test_iceberg.conftest import (  # noqa
     polaris_token,
 )
 from bodo.tests.utils import get_rest_catalog_connection_string
-from bodo.utils.utils import run_rank0
 
 
 @pytest.fixture()

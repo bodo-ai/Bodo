@@ -7,7 +7,7 @@
 std::unique_ptr<array_info> alloc_empty_array(
     const std::unique_ptr<bodo::DataType>& datatype,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm,
-    std::shared_ptr<DictionaryBuilder> dict_builder = nullptr) {
+    std::shared_ptr<DictionaryBuilder> dict_builder) {
     if (datatype->is_array()) {
         auto array_type = static_cast<bodo::ArrayType*>(datatype.get());
         auto inner_arr = alloc_empty_array(

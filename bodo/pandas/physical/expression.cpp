@@ -348,18 +348,23 @@ std::shared_ptr<array_info> do_arrow_compute_case(
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
+    bool no_scalars);
+
+std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
+    duckdb::Expression& expr,
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
     bool no_scalars) {
     // Class and type here are really like the general type of the
     // expression node (expr_class) and a sub-type of that general
     // type (expr_type).
-    duckdb::ExpressionClass expr_class = expr->GetExpressionClass();
-    duckdb::ExpressionType expr_type = expr->GetExpressionType();
+    duckdb::ExpressionClass expr_class = expr.GetExpressionClass();
+    duckdb::ExpressionType expr_type = expr.GetExpressionType();
 
     switch (expr_class) {
         case duckdb::ExpressionClass::BOUND_COMPARISON: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundComparisonExpression>();
+            auto& bce = expr.Cast<duckdb::BoundComparisonExpression>();
             // This node type has left and right children which are recursively
             // processed first and then the resulting Bodo Physical expression
             // subtrees are combined with the expression sub-type (e.g., equal,
@@ -373,7 +378,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundColumnRefExpression>();
+            auto& bce = expr.Cast<duckdb::BoundColumnRefExpression>();
             duckdb::ColumnBinding binding = bce.binding;
             size_t col_idx =
                 col_ref_map[{binding.table_index, binding.column_index}];
@@ -385,7 +390,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_CONSTANT: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundConstantExpression>();
+            auto& bce = expr.Cast<duckdb::BoundConstantExpression>();
             if (bce.value.IsNull()) {
                 // Get the constant out of the duckdb node as a C++ variant.
                 // Using auto since variant set will be extended.
@@ -422,7 +427,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundConjunctionExpression>();
+            auto& bce = expr.Cast<duckdb::BoundConjunctionExpression>();
             // This node type has left and right children which are recursively
             // processed first and then the resulting Bodo Physical expression
             // subtrees are combined with the expression sub-type (e.g., equal,
@@ -438,7 +443,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_OPERATOR: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& boe = expr->Cast<duckdb::BoundOperatorExpression>();
+            auto& boe = expr.Cast<duckdb::BoundOperatorExpression>();
             switch (boe.children.size()) {
                 case 1: {
                     return std::static_pointer_cast<PhysicalExpression>(
@@ -463,8 +468,9 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_FUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
+            // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bfe = expr->Cast<duckdb::BoundFunctionExpression>();
+            auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
             if (bfe.bind_info &&
                 (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
                  !bfe.bind_info->Cast<BodoScalarFunctionData>()
@@ -519,7 +525,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_CAST: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundCastExpression>();
+            auto& bce = expr.Cast<duckdb::BoundCastExpression>();
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
@@ -528,7 +534,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_BETWEEN: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bbe = expr->Cast<duckdb::BoundBetweenExpression>();
+            auto& bbe = expr.Cast<duckdb::BoundBetweenExpression>();
             // Convert to conjunction and comparison nodes.
             std::shared_ptr<PhysicalExpression> input_expr =
                 buildPhysicalExprTree(bbe.input, col_ref_map, no_scalars);
@@ -561,7 +567,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_CASE: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            auto& bce = expr->Cast<duckdb::BoundCaseExpression>();
+            auto& bce = expr.Cast<duckdb::BoundCaseExpression>();
             if (bce.case_checks.size() != 1) {
                 throw std::runtime_error(
                     "Only single WHEN case expressions are supported.");
@@ -584,6 +590,13 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     throw std::logic_error("Control should never reach here");
 }
 
+std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
+    duckdb::unique_ptr<duckdb::Expression>& expr,
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
+    bool no_scalars) {
+    return buildPhysicalExprTree(*expr, col_ref_map, no_scalars);
+}
+
 std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
     std::vector<std::shared_ptr<array_info>> child_results;
@@ -597,11 +610,19 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
         std::shared_ptr<ArrayExprResult> child_as_array =
             std::dynamic_pointer_cast<ArrayExprResult>(child_res);
-        if (!child_as_array) {
-            throw std::runtime_error("Child of UDF did not return an array.");
+        std::shared_ptr<ScalarExprResult> child_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(child_res);
+
+        if (child_as_array) {
+            child_results.emplace_back(child_as_array->result);
+            column_names.emplace_back(child_as_array->column_name);
+        } else if (child_as_scalar) {
+            child_results.emplace_back(child_as_scalar->result);
+            column_names.emplace_back("scalar");
+        } else {
+            throw std::runtime_error(
+                "Child of UDF did not return an array or scalar.");
         }
-        child_results.emplace_back(child_as_array->result);
-        column_names.emplace_back(child_as_array->column_name);
     }
     // Put them all back together for the UDF to process.
     std::shared_ptr<table_info> udf_input = std::make_shared<table_info>(

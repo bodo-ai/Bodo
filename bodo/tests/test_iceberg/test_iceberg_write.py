@@ -1348,7 +1348,7 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     The entire column should be filled with nulls instead of failing.
     """
     import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
     write_table_name = f"{table_name}_WRITE"

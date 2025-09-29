@@ -585,24 +585,6 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         raise bodo.utils.typing.BodoError(msg)
 
 
-def get_start(total_size, pes, rank):  # pragma: no cover
-    """Same as bodo.libs.distributed_api.get_start() but avoiding JIT compiler import
-    here.
-    """
-    res = total_size % pes
-    blk_size = (total_size - res) // pes
-    return rank * blk_size + min(rank, res)
-
-
-def get_end(total_size, pes, rank):  # pragma: no cover
-    """Same as bodo.libs.distributed_api.get_end() but avoiding JIT compiler import
-    here.
-    """
-    res = total_size % pes
-    blk_size = (total_size - res) // pes
-    return (rank + 1) * blk_size + min(rank + 1, res)
-
-
 def populate_row_counts_in_pq_dataset_pieces(
     dataset: ParquetDataset,
     fpath: str | list[str],
@@ -650,8 +632,8 @@ def populate_row_counts_in_pq_dataset_pieces(
         ev_row_counts.add_attribute("g_filters", str(filters))
     ds_scan_time = 0.0
     num_pieces = len(dataset.pieces)
-    start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
-    end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
+    start = bodo.get_start(num_pieces, bodo.get_size(), bodo.get_rank())
+    end = bodo.get_end(num_pieces, bodo.get_size(), bodo.get_rank())
     total_rows_chunk = 0
     total_row_groups_chunk = 0
     total_row_groups_size_chunk = 0
