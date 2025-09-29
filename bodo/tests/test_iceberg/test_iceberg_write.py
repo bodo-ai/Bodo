@@ -69,7 +69,6 @@ def test_write_existing_fail(
     simple_dataframe,
 ):
     """Test that writing to an existing table when if_exists='fail' errors"""
-    import bodo.decorators
 
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -114,7 +113,6 @@ def test_basic_write_replace(
     memory_leak_check,
 ):
     """Test basic Iceberg table replace on Spark table"""
-    import bodo.decorators
 
     comm = MPI.COMM_WORLD
     base_name, table_name, df = simple_dataframe
