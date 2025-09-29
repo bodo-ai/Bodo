@@ -496,9 +496,10 @@ def get_n_index_arrays(index):
         raise TypeError(f"Invalid index type: {type(index)}")
 
 
-def df_to_cpp_table(df, return_schema=False):
+def df_to_cpp_table(df) -> tuple[int, pa.Schema]:
     """Convert a pandas DataFrame to a C++ table pointer with column names and
-    metadata set properly.
+    metadata set properly and returns a pointer to the C++ along with the Arrow
+    schema of the input DataFrame.
     """
     from bodo.ext import plan_optimizer
     from bodo.pandas.frame import BodoDataFrame
@@ -527,10 +528,7 @@ def df_to_cpp_table(df, return_schema=False):
     if any(col.num_chunks == 0 for col in arrow_table.columns):
         arrow_table = pa.Table.from_arrays(new_columns, schema=arrow_table.schema)
 
-    if return_schema:
-        return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
-
-    return plan_optimizer.arrow_to_cpp_table(arrow_table)
+    return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
 
 
 def _empty_pd_array(pa_type):
@@ -683,7 +681,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
             out.array._pa_array.combine_chunks(), str(out.name), cpp_table
         )
     else:
-        out_ptr = df_to_cpp_table(pd.DataFrame({out.name: out}))
+        out_ptr, _ = df_to_cpp_table(pd.DataFrame({out.name: out}))
     py_to_cpp = (time.perf_counter_ns() - py_to_cpp_start) // 1000
     return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
