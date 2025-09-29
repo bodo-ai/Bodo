@@ -243,9 +243,9 @@ def gatherv_nojit(data, root, comm):
         data = pd.DataFrame({"__arrow_data__": data})
 
     comm_ptr = 0 if comm is None else MPI._addressof(comm)
-    cpp_table_ptr = df_to_cpp_table(data)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data, return_schema=True)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
 
     if is_series:
         out = out.iloc[:, 0]
@@ -284,9 +284,9 @@ def scatterv_nojit(data, root, comm):
         data = data.to_frame(name=name)
 
     comm_ptr = MPI._addressof(comm)
-    cpp_table_ptr = df_to_cpp_table(data)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data, return_schema=True)
     out_ptr = hdist.scatterv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
 
     if is_series:
         out = out.iloc[:, 0]
