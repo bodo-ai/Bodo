@@ -13,7 +13,6 @@ from enum import Enum
 from time import sleep
 
 import pandas as pd
-import pyarrow as pa
 from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
@@ -242,13 +241,9 @@ def gatherv_nojit(data, root, comm):
 
     comm_ptr = 0 if comm is None else MPI._addressof(comm)
 
-    # Get schema for df for struct field names (not preserved in cpp table)
-    preserve_index = not isinstance(data.index, pd.RangeIndex)
-    df_schema = pa.Schema.from_pandas(data, preserve_index=preserve_index)
-
     cpp_table_ptr = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr, arrow_schema=df_schema)
+    out = cpp_table_to_df(out_ptr)
 
     if is_series:
         out = out.iloc[:, 0]
