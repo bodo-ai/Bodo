@@ -536,10 +536,6 @@ def test_pq_index(datapath, memory_leak_check):
     check_func(test_impl2, (), only_seq=True, check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="MultiIndex with non-string columns not supported.",
-)
 def test_pq_multi_idx(memory_leak_check):
     """Remove this test when multi index is supported for read_parquet"""
     np.random.seed(0)

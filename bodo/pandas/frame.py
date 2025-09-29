@@ -69,6 +69,7 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BODO_NONE_DUMMY,
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
@@ -340,7 +341,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @property
     def index(self):
         self.execute_plan()
-        return super().index
+        index = super().index
+
+        # We use BODO_NONE_DUMMY as a placeholder for missing multi-index names
+        # so that they round trip correctly from Arrow.
+        if isinstance(index, pd.MultiIndex):
+            index.names = [None if n == BODO_NONE_DUMMY else n for n in index.names]
+
+        return index
 
     @index.setter
     def index(self, value):
