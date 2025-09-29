@@ -1903,7 +1903,6 @@ def test_scalar_arith_binops(datapath, index_val):
     )
 
 
-# Depends on jit (for scattering args)
 @pytest.mark.jit_dependency
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
@@ -1939,7 +1938,6 @@ def test_map_partitions_df():
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
 
 
-# Depends on jit (for scattering args)
 @pytest.mark.jit_dependency
 def test_map_partitions_series():
     """Simple tests for map_partition on lazy Series."""
