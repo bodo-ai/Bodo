@@ -342,6 +342,24 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=0, comm=None):
     return scatterv_nojit(data, root, comm)
 
 
+def get_start(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_start() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return rank * blk_size + min(rank, res)
+
+
+def get_end(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_end() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return (rank + 1) * blk_size + min(rank + 1, res)
+
+
 def get_nodes_first_ranks(*args, **kwargs):
     # Import compiler lazily
     import bodo.decorators

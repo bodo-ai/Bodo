@@ -24,7 +24,7 @@ def test_iceberg_polaris_read(polaris_connection, memory_leak_check):
     Column names are used to verify the schema is read correctly.
     """
     from bodo.io.iceberg.catalog import conn_str_to_catalog
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(
@@ -84,7 +84,7 @@ def test_iceberg_polaris_write_basic(
     Checksum is used to verify the data is written correctly.
     """
     from bodo.io.iceberg.catalog import conn_str_to_catalog
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     table_uuid = run_rank0(uuid4)()
@@ -141,7 +141,7 @@ def test_get_table_len(polaris_connection, memory_leak_check):
     Test getting the length of an Iceberg table in a Polaris REST catalog.
     """
     from bodo.io.iceberg.catalog import conn_str_to_catalog
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     rest_uri, polaris_warehouse, polaris_credential = polaris_connection
     con_str = get_rest_catalog_connection_string(

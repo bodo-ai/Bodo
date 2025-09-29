@@ -24,8 +24,9 @@ from bodo.io.iceberg.common import (
 )
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.utils import BodoError, run_rank0
+from bodo.utils.utils import BodoError
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.table import Table

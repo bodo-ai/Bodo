@@ -6185,7 +6185,7 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
     """Tests 4 runtime join filters with int, strings, dict encoded string arrs,
     castings from int64 <-> int32 and string <-> dict encoded string array"""
 
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     build_df = pd.DataFrame(
         {
