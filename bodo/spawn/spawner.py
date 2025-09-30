@@ -102,7 +102,11 @@ def get_num_workers():
 
 
 def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> bool:
-    """Check if any arg or kwarg is not a LazyPlan"""
+    """Check if any arg or kwarg is not a LazyPlan
+
+    Useful for determining if we need to import the compiler on spawner/workers.
+    Since non-lazy DataFrame and Series args require bodo.typeof to determine types.
+    """
     from bodo.pandas.plan import LazyPlan
 
     return not all(
@@ -543,9 +547,11 @@ class Spawner:
         if data_type is None:
             return None
 
-        # Import compiler lazily
+        # Import compiler lazily.
         import bodo.decorators  # isort:skip # noqa
 
+        # The compiler should already have been imported before this point,
+        # but just to be safe.
         self.import_compiler_on_workers()
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
@@ -891,7 +897,8 @@ class Spawner:
         """Spawn a process on all workers and return a WorkerProcess object"""
         assert not self._is_running, "spawn_process_on_nodes: already running"
 
-        # Import compiler for handle_spawn_process on workers
+        # Import compiler for handle_spawn_process on workers which depends on
+        # get_node_first_rank, which depends on the compiler.
         import bodo.decorators  # isort:skip # noqa
 
         self.import_compiler_on_workers()

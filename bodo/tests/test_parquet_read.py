@@ -64,7 +64,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
         pytest.param("bool_nulls.pq", id="bool_with_nulls"),
         pytest.param("list_str_arr.pq", id="list_str_arr"),
         pytest.param("list_str_parts.pq", id="list_str_parts"),
-        pytest.param("decimal1.pq", id="decimal", marks=pytest.mark.skip("TODO:FIXME")),
+        pytest.param("decimal1.pq", id="decimal"),
         pytest.param("date32_1.pq", id="date32"),
         pytest.param(
             "small_strings.pq",
@@ -2924,10 +2924,6 @@ def test_filter_pushdown_tuple(datapath, memory_leak_check):
             check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
-# @pytest.mark.skipif(
-#     bodo.test_dataframe_library_enabled,
-#     reason="[BSE-4768] Enable filter pushdown tests.",
-# )
 @pytest.mark.jit_dependency
 def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
     @bodo.jit

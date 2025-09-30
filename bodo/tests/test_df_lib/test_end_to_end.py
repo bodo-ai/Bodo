@@ -644,7 +644,6 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.jit_dependency
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
 
@@ -2295,7 +2294,6 @@ def test_Series_constructor(index_val):
     _test_equal(pd_S, bodo_S, check_pandas_types=False)
 
 
-@pytest.mark.skip("TODO fix decimal comparison")
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
