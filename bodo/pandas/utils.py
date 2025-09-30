@@ -879,6 +879,7 @@ def _reconstruct_pandas_index(df, arrow_schema):
 
     # Reconstruct the row index
     if len(index_arrays) > 1:
+        index_names = [None if n == BODO_NONE_DUMMY else n for n in index_names]
         index = pd.MultiIndex.from_arrays(index_arrays, names=index_names)
     elif len(index_arrays) == 1:
         index = index_arrays[0]
