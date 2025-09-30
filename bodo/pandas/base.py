@@ -490,14 +490,32 @@ def to_datetime(
         )
 
     # 2. Series Case
-    return _get_series_func_plan(
-        arg._plan,
-        new_metadata,
-        "pandas.to_datetime",
-        (),
-        in_kwargs,
-        is_method=False,
-    )
+    if (
+        errors == "raise"
+        and dayfirst == False
+        and yearfirst == False
+        and utc == False
+        and unit == None
+        and origin == "unix"
+        and cache == True
+    ):
+        # If only options supported by Bodo JIT then run as cfunc over map.
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.utils.utils import bodo_spawn_exec
+
+        func = "def bodo_to_datetime(x):\n"
+        func += f"    return pd.to_datetime(x, format='{in_kwargs['format']}')\n"
+        to_datetime_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
+        return arg.map(to_datetime_func)
+    else:
+        return _get_series_func_plan(
+            arg._plan,
+            new_metadata,
+            "pandas.to_datetime",
+            (),
+            in_kwargs,
+            is_method=False,
+        )
 
 
 @check_args_fallback(unsupported="all")
