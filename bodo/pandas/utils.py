@@ -277,8 +277,14 @@ def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
     it contains invalid Arrow types."""
     try:
         return cls(obj)
-    except pa.lib.ArrowInvalid:
+    except pa.lib.ArrowInvalid as e:
         # Types are not supported by Arrow, use Pandas object
+        warnings.warn(
+            BodoLibFallbackWarning,
+            "Could not convert fallback output to Bodo."
+            "Verify that columns types are compatible with Pyarrow:",
+            e,
+        )
         return obj
 
 
