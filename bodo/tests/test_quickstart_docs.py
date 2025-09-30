@@ -10,7 +10,7 @@ import pytest
 from numba.core.errors import TypingError  # noqa TID253
 
 import bodo
-from bodo.tests.utils import check_func, temp_env_override
+from bodo.tests.utils import check_func, pytest_mark_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = [pytest.mark.test_docs]
@@ -53,7 +53,7 @@ def test_quickstart_local_python_df():
     pd.testing.assert_frame_equal(bodo_out, pandas_out, check_dtype=False)
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_quickstart_local_python_jit():
     """Runs example equivalent to Bodo jit code from top-level README.md
@@ -101,7 +101,7 @@ def test_quickstart_local_iceberg_df():
 
 
 @pytest.mark.iceberg
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_quickstart_local_iceberg_jit():
     """Test the Bodo jit example in docs/quick_start/quickstart_local_iceberg.md"""
@@ -156,7 +156,7 @@ def devguide_df_path():
         os.remove(out_path)
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_transform(devguide_df_path):
     """Test transform example from docs/quick_start/devguide.md and
@@ -188,7 +188,7 @@ def test_devguide_transform(devguide_df_path):
     )
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_parallel1(devguide_df_path):
     def load_data_bodo(devguide_df_path):
@@ -203,7 +203,7 @@ def test_devguide_parallel1(devguide_df_path):
     pd.testing.assert_frame_equal(bodo_out, pandas_out)
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_parallel2(devguide_df_path):
     output_df_path = "output_df.pq"
@@ -231,7 +231,7 @@ def test_devguide_parallel2(devguide_df_path):
     )
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_unsupported():
     from bodo.utils.typing import BodoError
@@ -246,7 +246,7 @@ def test_devguide_unsupported():
         df_unsupported()
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_type_error(devguide_df_path):
     from bodo.utils.typing import BodoError
@@ -267,7 +267,7 @@ def test_devguide_type_error(devguide_df_path):
         groupby_keys(devguide_df_path, False)
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_groupby_keys_append(devguide_df_path):
     @bodo.jit(distributed=False)
@@ -288,7 +288,7 @@ def test_devguide_groupby_keys_append(devguide_df_path):
     )
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 @pytest.mark.jit_dependency
 def test_devguide_list_typing_error():
     @bodo.jit(spawn=True)
@@ -304,7 +304,7 @@ def test_devguide_list_typing_error():
         create_list()
 
 
-@pytest.mark.spawn_mode
+@pytest_mark_spawn_mode
 def test_devguide_tuple_typing():
     def create_list():
         out = []
