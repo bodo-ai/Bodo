@@ -1,13 +1,11 @@
 import pandas as pd
 import pytest
 from test_end_to_end import index_val  # noqa
-from test_series_generator import _generate_series_test
 
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
+from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 from bodo.tests.utils import _test_equal
-
-pytestmark = pytest.mark.jit_dependency
 
 
 @pytest.mark.parametrize("use_index1", [True, False])
@@ -81,7 +79,7 @@ def test_series_where(index_val):
 def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():
-        test = _generate_series_test(method_name, df, arg_sets)
+        test = generate_series_test(method_name, df, arg_sets)
         globals()[f"test_dir_{method_name}"] = test
 
 
