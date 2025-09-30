@@ -315,3 +315,14 @@ def test_non_nested_cte():
 
     generated_ctes = final._plan.get_cte_count()
     assert generated_ctes == 1
+
+
+def test_bodo_fallback():
+    """Make sure we are returning Bodo objects during fallback where possible."""
+    pass
+
+    # Supported method with unsupported arguments
+
+    # Unsupported method
+
+    # Top level methods

@@ -272,6 +272,28 @@ if bodo.dataframe_library_profile:
     atexit.register(report_times)
 
 
+def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
+    """Wrap obj with a Bodo constructor or return obj unchanged if
+    it contains invalid Arrow types."""
+    try:
+        return cls(obj)
+    except pa.lib.ArrowInvalid:
+        # Types are not supported by Arrow, use Pandas object
+        return obj
+
+
+def convert_to_bodo(obj):
+    """Returns a new version of *obj* that is the equivalent Bodo type or leave unchanged
+    if not a DataFrame or Series."""
+    from bodo.pandas import BodoDataFrame, BodoSeries
+
+    if isinstance(obj, pd.DataFrame) and not isinstance(obj, BodoDataFrame):
+        return _maybe_create_bodo_obj(BodoDataFrame, obj)
+    elif isinstance(obj, pd.Series) and not isinstance(obj, BodoSeries):
+        return _maybe_create_bodo_obj(BodoSeries, obj)
+    return obj
+
+
 def check_args_fallback(
     unsupported=None,
     supported=None,
@@ -413,7 +435,8 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    py_res = getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    return convert_to_bodo(py_res)
             else:
 
                 @functools.wraps(func)
@@ -1154,7 +1177,7 @@ def fallback_wrapper(self, attr, name, msg):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 try:
-                    return attr(*args, **kwargs)
+                    return convert_to_bodo(attr(*args, **kwargs))
                 except TypeError as e:
                     msg = e
                     pass
@@ -1174,7 +1197,9 @@ def fallback_wrapper(self, attr, name, msg):
                         )
                     )
                     converted = pd_self.array._pa_array.to_pandas()
-                    return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    return convert_to_bodo(
+                        getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    )
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.
             raise TypeError(msg)
