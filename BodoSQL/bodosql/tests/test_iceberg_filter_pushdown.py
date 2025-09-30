@@ -12,6 +12,7 @@ import pytest
 
 import bodo
 import bodosql
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
@@ -22,7 +23,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import check_func
-from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
 

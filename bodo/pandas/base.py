@@ -224,12 +224,8 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
-    # TODO(ehsan): avoid compiler import in Iceberg read
-    import bodo.decorators  # isort:skip # noqa
     from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
-
-    bodo.spawn.utils.import_compiler_on_workers()
 
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")

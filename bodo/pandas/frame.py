@@ -487,12 +487,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.partitioning
         import pyiceberg.table.sorting
 
-        # TODO(ehsan): avoid compiler import in Iceberg write
-        import bodo.decorators  # isort:skip # noqa
         import bodo.io.iceberg
-        import bodo.io.iceberg.stream_iceberg_write
+        from bodo.io.iceberg.write_utils import CreateTableMeta
         from bodo.pandas.base import _empty_like
-        from bodo.utils.typing import CreateTableMetaType
 
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
@@ -549,13 +546,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             sort_order_id,
             sort_tuples,
             properties,
-        ) = bodo.io.iceberg.write.start_write_rank_0(
+        ) = bodo.io.iceberg.write_utils.start_write_rank_0(
             catalog,
             table_identifier,
             df_schema,
             if_exists,
             False,
-            CreateTableMetaType(None, None, properties),
+            CreateTableMeta(None, None, properties),
             location,
             partition_spec,
             sort_order,
@@ -564,7 +561,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
         max_pq_chunksize = properties.get(
             "write.target-file-size-bytes",
-            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+            bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
         )
         compression = properties.get("write.parquet.compression-codec", "snappy")
         # TODO: support Theta sketches
@@ -593,10 +590,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             fnames,
             file_records,
             partition_infos,
-        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+        ) = bodo.io.iceberg.write_utils.generate_data_file_info_seq(
+            all_iceberg_files_infos
+        )
 
         # Register file names, metrics and schema in transaction
-        success = bodo.io.iceberg.write.register_table_write_seq(
+        success = bodo.io.iceberg.write_utils.register_table_write_seq(
             txn,
             fnames,
             file_records,
@@ -1511,7 +1510,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["subset", "keep"])
     def drop_duplicates(
         self,
         subset: Hashable | Sequence[Hashable] | None = None,
@@ -1521,6 +1520,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         ignore_index: bool = False,
     ) -> BodoDataFrame | None:
         from bodo.pandas.base import _empty_like
+
+        if subset is not None:
+            subset_group = self.groupby(subset, as_index=False, sort=False)
+            if keep == "first":
+                return subset_group.first()
+            elif keep == "last":
+                return subset_group.last()
+            else:
+                raise BodoLibNotImplementedException(
+                    "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported"
+                )
 
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)

@@ -1497,7 +1497,6 @@ class CreateTableMetaType(MetaType):
         types.Type.__init__(self, f"CreateTableMetaType({meta})")
 
 
-EMPTY_CREATE_TABLE_META = CreateTableMetaType(None, None, None)
 register_model(CreateTableMetaType)(models.OpaqueModel)
 
 

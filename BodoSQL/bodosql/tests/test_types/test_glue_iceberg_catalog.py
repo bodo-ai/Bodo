@@ -6,13 +6,13 @@ from pyiceberg.catalog.glue import GlueCatalog
 
 import bodo
 import bodosql
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     assert_tables_equal,
     check_func,
     gen_unique_table_id,
     pytest_glue,
 )
-from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.glue_catalog import GlueConnectionType
 
 pytestmark = pytest_glue

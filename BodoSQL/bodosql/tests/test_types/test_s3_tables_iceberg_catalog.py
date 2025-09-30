@@ -3,6 +3,7 @@ import pandas as pd
 import bodo
 import bodosql
 from bodo.io.iceberg.catalog.s3_tables import S3TablesCatalog
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     assert_tables_equal,
     check_func,
@@ -10,7 +11,6 @@ from bodo.tests.utils import (
     pytest_s3_tables,
     temp_env_override,
 )
-from bodo.utils.utils import run_rank0
 from bodosql.bodosql_types.s3_tables_catalog import S3TablesConnectionType
 
 pytestmark = pytest_s3_tables

@@ -74,7 +74,7 @@ def test_read_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -130,8 +130,8 @@ def test_write_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
+    from bodo.spawn.utils import run_rank0
     from bodo.tests.utils_jit import reduce_sum
-    from bodo.utils.utils import run_rank0
 
     if ("DECIMALS_TABLE" in table_name) or (
         "DECIMALS_PRECISION_PROMOTION_TABLE" in table_name
@@ -204,7 +204,7 @@ def test_filter_pushdown(
     even when the tables have gone through one or more levels
     of schema evolution.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -259,7 +259,7 @@ def test_filter_pushdown_adversarial_renamed_and_swapped_cols(
     over time and have been re-ordered such that columns originally
     at position 2 & 3 in a table have both swapped names and locations.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     table_name = "filter_pushdown_adversarial"
     db_schema, warehouse_loc = iceberg_database()
@@ -571,7 +571,7 @@ def test_filter_pushdown_on_newly_added_column(
     filters to verify that the null handling and equality semantics
     are correct.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     (
         dtype,
@@ -849,7 +849,7 @@ def test_filter_pushdown_filter_on_pruned_column(
     in our code. We test this with both streaming and non-streaming.
     """
     from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     table_name = "ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -973,7 +973,7 @@ def test_read_partition_schema_evolved_table(
     more exhaustive tests, one can remove the filter in the
     pytest parameter for 'table_name'.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -1023,8 +1023,8 @@ def test_write_partition_schema_evolved_table(
     more exhaustive tests, one can remove
     the filter in the pytest parameter for 'table_name'.
     """
+    from bodo.spawn.utils import run_rank0
     from bodo.tests.utils_jit import reduce_sum
-    from bodo.utils.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_WRITE_TEST"
@@ -1094,7 +1094,7 @@ def test_partition_schema_evolved_table_filter_pushdown(
     partition evolution, including schema evolution on the partition
     columns and vice-versa.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -1146,7 +1146,7 @@ def test_mixed_partition_schema_evolution(
     Smoke test that we can read from tables that have gone through
     both schema and partition evolution.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_MIXED_PARTITION_SCHEMA_EVOLUTION"
@@ -1216,7 +1216,7 @@ def test_evolved_struct_fields_within_list_and_map(
     Test that we are able to read tables after the sub-fields
     of a struct within list/map fields have been modified.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     table_name = "ADD_DROP_FIELD_TO_STRUCT_IN_LIST_TEST"
@@ -1493,7 +1493,7 @@ def test_rename_and_swap_struct_fields(
     where two sub-fields of a struct have been renamed and
     swapped over time.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_TEST"
@@ -1698,7 +1698,7 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
     time the struct itself is within other nested types like
     another struct or a map or a list.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_INSIDE_OTHERS_TEST"
@@ -1968,7 +1968,7 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
 
 
 def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_check):
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     table_name = "PARTSORT_EVOLUTION_TEST_TABLE"
@@ -2037,7 +2037,7 @@ def test_drop_and_readd_struct_field(
     and also when the struct itself is inside another nested field
     like another struct or a map or a list.
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database()
     table_name = "DROP_AND_READD_STRUCT_FIELDS_TEST"

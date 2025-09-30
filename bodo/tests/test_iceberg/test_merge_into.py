@@ -309,6 +309,7 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
     Tests a simple end to end example of reading with _bodo_merge_into, performing some modifications,
     and that writing the changes back with iceberg_merge_cow_py
     """
+    import bodo.io.iceberg.merge_into
 
     comm = MPI.COMM_WORLD
 
@@ -389,6 +390,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
     and then writing the changes back with iceberg_merge_cow_py, this time, on a partitioned table,
     where we should only read/write back certain files.
     """
+    import bodo.io.iceberg.merge_into
 
     comm = MPI.COMM_WORLD
 
