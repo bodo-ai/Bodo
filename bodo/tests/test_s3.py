@@ -11,7 +11,7 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
 from bodo.utils.testing import ensure_clean2
 
-pytestmark = [pytest.mark.s3, pytest.mark.jit_dependency]
+pytestmark = pytest.mark.s3
 
 
 @pytest.mark.parquet
