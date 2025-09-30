@@ -503,8 +503,11 @@ def to_datetime(
         import bodo.decorators  # isort:skip # noqa
         from bodo.utils.utils import bodo_spawn_exec
 
+        # Declare function to be compiled to run to_datetime over series.
         func = "def bodo_to_datetime(x):\n"
+        # Embed format string as constant in function.
         func += f"    return pd.to_datetime(x, format='{in_kwargs['format']}')\n"
+        # Create the function from string.
         to_datetime_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
         return arg.map(to_datetime_func)
     else:
