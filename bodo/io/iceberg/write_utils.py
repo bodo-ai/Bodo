@@ -320,7 +320,7 @@ def validate_append_target(
 
 def list_field_names(
     df_schema: pa.StructType | pa.Schema, prefix: str = ""
-) -> pt.Generator[str]:
+) -> pt.Generator[str, None, None]:
     """
     Iterate over all field names in a PyArrow schema, including nested fields
     inside of structs and the elements of lists. Note that we don't
