@@ -74,6 +74,7 @@ from bodo.pandas.utils import (
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _fix_multi_index_names,
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
@@ -596,6 +597,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def index(self):
         self.execute_plan()
+        index = super().index
+
+        if isinstance(index, pd.MultiIndex):
+            index.names = _fix_multi_index_names(index.names)
+
         return super().index
 
     @index.setter
