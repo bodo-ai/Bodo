@@ -275,17 +275,39 @@ if bodo.dataframe_library_profile:
 def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
     """Wrap obj with a Bodo constructor or return obj unchanged if
     it contains invalid Arrow types."""
-    try:
-        return cls(obj)
-    except pa.lib.ArrowInvalid as e:
-        # Types are not supported by Arrow, use Pandas object
-        warnings.warn(
-            BodoLibFallbackWarning,
-            "Could not convert fallback output to Bodo."
-            "Verify that columns types are compatible with Pyarrow:",
-            e,
+
+    supported = True
+    if isinstance(obj, pd.DataFrame):
+        # validate we support the input DataFrame column names
+        if isinstance(obj.columns, pd.MultiIndex):
+            supported = False
+            msg = "MultiIndex column names are not supported in Bodo yet."
+        else:
+            for c in obj.columns:
+                if not isinstance(c, str):
+                    supported = False
+                    msg = f"Column name {c} of type {type(c)} is not supported in Bodo yet."
+                    break
+                elif isinstance(obj[c], pd.DataFrame):
+                    supported = False
+                    msg = f"Duplicate column name {c} is not supported in Bodo yet."
+                    break
+
+    if supported:
+        try:
+            return cls(obj)
+        except pa.lib.ArrowInvalid as e:
+            # Types are not supported by Arrow, use Pandas object
+            msg = f"Could not convert Series to Bodo: {e}"
+
+    warnings.warn(
+        BodoLibFallbackWarning(
+            f"Could not convert fallback result to {cls.__name__}: {msg}"
+            "execution will continue on the Pandas object."
         )
-        return obj
+    )
+
+    return obj
 
 
 def convert_to_bodo(obj):
@@ -1145,6 +1167,9 @@ def ensure_datetime64ns(df):
     return df
 
 
+fallback_level = 0
+
+
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
 def fallback_wrapper(self, attr, name, msg):
     """
@@ -1167,15 +1192,19 @@ def fallback_wrapper(self, attr, name, msg):
                 pass
 
             nonlocal msg
+            global fallback_level
             warnings.warn(BodoLibFallbackWarning(msg))
             msg = ""
+            fallback_level += 1
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 try:
-                    return convert_to_bodo(attr(*args, **kwargs))
+                    py_res = attr(*args, **kwargs)
+                    fallback_level -= 1
+
+                    return py_res if fallback_level > 0 else convert_to_bodo(py_res)
                 except TypeError as e:
                     msg = e
-                    pass
 
             # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
             # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.

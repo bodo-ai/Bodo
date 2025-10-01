@@ -1169,7 +1169,8 @@ def sort_series_values_index(S):
     # dict(large_string)
     if S1.dtype == pd.StringDtype("pyarrow"):
         S1 = S1.astype("string")
-    return S1.sort_values(kind="mergesort")
+    S2 = S1.sort_values(kind="mergesort")
+    return S2
 
 
 def _is_nested_arrow_dtype(dtype):
@@ -1223,7 +1224,9 @@ def sort_dataframe_values_index(df):
             pa_index_arr = pa_index_arr.dictionary_decode()
         df = df.set_index(pa_index_arr.to_pandas()).rename_axis(df.index.names)
 
-    return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
+    df1 = df.rename_axis(eName)
+    df2 = df1.sort_values(list_col_names, kind="mergesort")
+    return df2
 
 
 def _get_arrow_type_no_dict(pa_type: pa.DataType) -> pa.DataType:
