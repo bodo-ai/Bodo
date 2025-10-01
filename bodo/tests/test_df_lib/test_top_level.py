@@ -47,6 +47,7 @@ def test_top_level_redirects(nulls_df, top_func, method_name):
         _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
 
 
+@pytest.mark.jit_dependency
 def test_top_level_to_datetime():
     with assert_executed_plan_count(0):
         # Single column string case
