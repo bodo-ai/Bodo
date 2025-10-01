@@ -241,6 +241,12 @@ class BodoLibNotImplementedException(Exception):
     """
 
 
+class BodoDictionaryTypeInvalidException(Exception):
+    """Exception raised in the Bodo DataFrames when unsupported dictionary type is
+    encountered (either values are not strings or index type is not int32).
+    """
+
+
 class BodoLibFallbackWarning(Warning):
     """Warning raised in the Bodo library in the fallback decorator when some
     functionality is not implemented yet and we need to fall back to Pandas.
@@ -276,36 +282,15 @@ def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
     """Wrap obj with a Bodo constructor or return obj unchanged if
     it contains invalid Arrow types."""
 
-    supported = True
-    if isinstance(obj, pd.DataFrame):
-        # validate we support the input DataFrame column names
-        if isinstance(obj.columns, pd.MultiIndex):
-            supported = False
-            msg = "MultiIndex column names are not supported in Bodo yet."
-        else:
-            for c in obj.columns:
-                if not isinstance(c, str):
-                    supported = False
-                    msg = f"Column name {c} of type {type(c)} is not supported in Bodo yet."
-                    break
-                elif isinstance(obj[c], pd.DataFrame):
-                    supported = False
-                    msg = f"Duplicate column name {c} is not supported in Bodo yet."
-                    break
-
-    if supported:
-        try:
-            return cls(obj)
-        except pa.lib.ArrowInvalid as e:
-            # Types are not supported by Arrow, use Pandas object
-            msg = f"Could not convert Series to Bodo: {e}"
-
-    warnings.warn(
-        BodoLibFallbackWarning(
-            f"Could not convert fallback result to {cls.__name__}: {msg}"
-            "execution will continue on the Pandas object."
+    try:
+        return cls(obj)
+    except BodoLibNotImplementedException as e:
+        warnings.warn(
+            BodoLibFallbackWarning(
+                f"Could not convert object to {cls.__name__} during fallback, "
+                + f"execution will continue using Pandas: {e}"
+            )
         )
-    )
 
     return obj
 
@@ -582,19 +567,26 @@ def df_to_cpp_table(df) -> tuple[int, pa.Schema]:
     return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
 
 
-def _empty_pd_array(pa_type):
+def _empty_pd_array(pa_type, field_name=None):
     """Create an empty pandas array with the given Arrow type."""
 
     # Workaround Arrows conversion gaps for dictionary types
     if isinstance(pa_type, pa.DictionaryType):
-        assert pa_type.index_type == pa.int32() and (
-            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), (
-            "Invalid dictionary type "
-            + str(pa_type.index_type)
-            + " "
-            + str(pa_type.value_type)
-        )
+        if not (
+            pa_type.index_type == pa.int32()
+            and (
+                pa_type.value_type == pa.string()
+                or pa_type.value_type == pa.large_string()
+            )
+        ):
+            field_part = f" at column {field_name}" if field_name is not None else ""
+            raise BodoDictionaryTypeInvalidException(
+                f"Encountered invalid dictionary type{field_part}: "
+                + str(pa_type.index_type)
+                + " "
+                + str(pa_type.value_type)
+                + " not supported yet."
+            )
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]
@@ -950,7 +942,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(
-        {field.name: _empty_pd_array(field.type) for field in arrow_schema}
+        {
+            field.name: _empty_pd_array(field.type, field_name=field.name)
+            for field in arrow_schema
+        }
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 

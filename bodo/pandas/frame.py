@@ -1440,6 +1440,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise ValueError(
                 "DataFrame.sort_values(): argument by not a string, list or tuple"
             )
+
         if not all(isinstance(item, str) for item in by):
             raise ValueError(
                 "DataFrame.sort_values(): argument by iterable does not contain only strings"

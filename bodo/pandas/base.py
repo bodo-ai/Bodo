@@ -54,6 +54,7 @@ from bodo.pandas.scalar import BodoScalar
 from bodo.pandas.series import BodoSeries, _get_series_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
+    BodoDictionaryTypeInvalidException,
     BodoLibNotImplementedException,
     arrow_to_empty_df,
     check_args_fallback,
@@ -73,6 +74,21 @@ def from_pandas(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
 
+    if isinstance(df.columns, pd.MultiIndex):
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Hierarchical column names are not supported in Bodo yet."
+        )
+
+    for c in df.columns:
+        if not isinstance(c, str):
+            raise BodoLibNotImplementedException(
+                f"from_pandas(): Expected column names to be type string, found: {type(c)}."
+            )
+        elif isinstance(df[c], pd.DataFrame):
+            raise BodoLibNotImplementedException(
+                f"from_pandas(): Duplicate column names are not supported: '{c}'."
+            )
+
     # Avoid datetime64[us] that is commonly used in Pandas but not supported in Bodo.
     df = ensure_datetime64ns(df)
 
@@ -84,8 +100,24 @@ def from_pandas(df):
     for col in df.select_dtypes(include=["object"]).columns:
         if len(df[col]) > 0 and type(df[col].iloc[0]) is BodoScalar:
             df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
-    pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
-    empty_df = arrow_to_empty_df(pa_schema)
+
+    try:
+        pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
+    except pa.lib.ArrowInvalid as e:
+        # TODO: add specific unsupported columns to message.
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Could not convert DataFrame to Bodo: "
+            + "Unsupported datatype encountered in one or more columns:"
+            + str(e)
+        )
+
+    try:
+        empty_df = arrow_to_empty_df(pa_schema)
+    except BodoDictionaryTypeInvalidException as e:
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Could not convert DataFrame to Bodo: " + str(e)
+        )
+
     n_rows = len(df)
 
     res_id = None
