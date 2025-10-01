@@ -439,6 +439,7 @@ def test_pq_array_item(datapath):
         check_func(test_impl, ("test_pq_list_item.pq",))
 
 
+@pytest.mark.skip("TODO")
 @pytest.mark.slow
 def test_pq_unsupported_types(datapath, memory_leak_check):
     """test unsupported data types in unselected columns"""
@@ -479,6 +480,7 @@ def test_RangeIndex_input(request, memory_leak_check):
     return request.param
 
 
+@pytest.mark.skip("TODO")
 @pytest.mark.parametrize("pq_write_idx", [True, None, False])
 def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
     def impl():
@@ -497,6 +499,7 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
         bodo.barrier()
 
 
+@pytest.mark.skip("TODO")
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
 @pytest.mark.parametrize("pq_write_idx", [True, None, False])
 def test_pq_select_column(

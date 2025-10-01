@@ -1167,7 +1167,22 @@ def ensure_datetime64ns(df):
     return df
 
 
-fallback_level = 0
+class FallbackContext:
+    """Context manager for tracking nested fallback calls."""
+
+    level = 0
+
+    @classmethod
+    def is_top_level(cls):
+        """Check we are in the top level context i.e. this fallback was not triggered
+        by another fallback."""
+        return FallbackContext.level == 0
+
+    def __enter__(self):
+        FallbackContext.level += 1
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        FallbackContext.level -= 1
 
 
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
@@ -1192,17 +1207,19 @@ def fallback_wrapper(self, attr, name, msg):
                 pass
 
             nonlocal msg
-            global fallback_level
             warnings.warn(BodoLibFallbackWarning(msg))
             msg = ""
-            fallback_level += 1
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 try:
-                    py_res = attr(*args, **kwargs)
-                    fallback_level -= 1
+                    with FallbackContext():
+                        py_res = attr(*args, **kwargs)
 
-                    return py_res if fallback_level > 0 else convert_to_bodo(py_res)
+                    # Convert objects to Bodo before returning them to the user.
+                    if FallbackContext.is_top_level():
+                        return convert_to_bodo(py_res)
+
+                    return py_res
                 except TypeError as e:
                     msg = e
 
