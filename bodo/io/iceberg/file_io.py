@@ -92,16 +92,11 @@ class BodoPyArrowFileIO(PyArrowFileIO):
                 account_name = self.properties.get(ADLS_ACCOUNT_NAME) or os.environ.get(
                     "AZURE_STORAGE_ACCOUNT_NAME"
                 )
+                self.properties[ADLS_ACCOUNT_NAME] = account_name
 
             account_key = self.properties.get(ADLS_ACCOUNT_KEY) or os.environ.get(
                 "AZURE_STORAGE_ACCOUNT_KEY"
             )
-
-            from pyarrow.fs import AzureFileSystem
-
-            return AzureFileSystem(
-                account_name=account_name,
-                account_key=account_key,
-            )
+            self.properties[ADLS_ACCOUNT_KEY] = account_key
 
         return super()._initialize_fs(scheme, netloc)
