@@ -388,6 +388,7 @@ def test_basic_write_runtime_cols_fail(
     Test that Iceberg writes throw an error at compile-time when
     writing a DataFrame with runtime columns (created using a pivot)
     """
+    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -402,7 +403,7 @@ def test_basic_write_runtime_cols_fail(
         return df_piv.to_sql(table_name, conn, db_schema, if_exists="replace")
 
     with pytest.raises(
-        ValueError,
+        BodoError,
         match=r"DataFrame\.to_sql\(\) on DataFrames with columns determined at runtime is not yet supported\. Please return the DataFrame to regular Python to update typing information\.",
     ):
         impl(table_name, conn, db_schema)
