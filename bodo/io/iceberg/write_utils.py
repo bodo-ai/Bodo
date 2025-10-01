@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from itertools import zip_longest
 
