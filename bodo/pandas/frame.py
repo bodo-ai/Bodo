@@ -69,6 +69,7 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BODO_NONE_DUMMY,
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
@@ -340,7 +341,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @property
     def index(self):
         self.execute_plan()
-        return super().index
+        index = super().index
+
+        # We use BODO_NONE_DUMMY as a placeholder for missing multi-index names
+        # so that they round trip correctly from Arrow.
+        if isinstance(index, pd.MultiIndex):
+            index.names = [None if n == BODO_NONE_DUMMY else n for n in index.names]
+
+        return index
 
     @index.setter
     def index(self, value):
@@ -1510,7 +1518,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["subset", "keep"])
     def drop_duplicates(
         self,
         subset: Hashable | Sequence[Hashable] | None = None,
@@ -1520,6 +1528,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         ignore_index: bool = False,
     ) -> BodoDataFrame | None:
         from bodo.pandas.base import _empty_like
+
+        if subset is not None:
+            subset_group = self.groupby(subset, as_index=False, sort=False)
+            if keep == "first":
+                return subset_group.first()
+            elif keep == "last":
+                return subset_group.last()
+            else:
+                raise BodoLibNotImplementedException(
+                    "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported"
+                )
 
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
