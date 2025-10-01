@@ -1598,9 +1598,7 @@ void StreamingUDFColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Allocate a dummy array column, actual column will be filled in by update
-    bodo_array_type::arr_type_enum arr_type = out_table->columns[0]->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = out_table->columns[0]->dtype;
-    auto update_col = alloc_array_top_level(0, 0, 0, arr_type, dtype);
+    auto update_col = alloc_array_like(out_table->columns[0]);
     out_cols.push_back(std::move(update_col));
 }
 

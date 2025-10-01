@@ -4,13 +4,19 @@ This file should import JIT lazily to avoid slowing down non-JIT code paths.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import sys
+import traceback
 import typing as pt
 import uuid
+from collections.abc import Callable
 from enum import Enum
 from time import sleep
+
+import pandas as pd
+from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
 from bodo.mpi4py import MPI
@@ -186,20 +192,14 @@ def import_compiler_on_workers():
     """Import the JIT compiler on all workers. Done as necessary since import time
     can be significant.
     """
-
-    def import_compiler():
-        import bodo.decorators  # isort:skip # noqa
-
-    bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
+    spawner = bodo.spawn.spawner.get_spawner()
+    spawner.import_compiler_on_workers()
 
 
 def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
-    Throws an error if called with unsupported arguments to allow fallback to JIT.
     """
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
 
     if data is not None and not isinstance(
         data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
@@ -217,16 +217,18 @@ def gatherv_nojit(data, root, comm):
 
     # Get data type on receiver since it doesn't have any local data
     rank = bodo.get_rank()
-    # Receiver has to set root to MPI.ROOT in case of intercomm
-    is_receiver = root == MPI.ROOT
-    if is_receiver:
-        data = comm.recv(source=0, tag=11)
-    elif rank == 0:
-        comm.send(
-            data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
-            dest=0,
-            tag=11,
-        )
+
+    if comm is not None:
+        # Receiver has to set root to MPI.ROOT in case of intercomm
+        is_receiver = root == MPI.ROOT
+        if is_receiver:
+            data = comm.recv(source=0, tag=11)
+        elif rank == 0:
+            comm.send(
+                data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
+                dest=0,
+                tag=11,
+            )
 
     is_series = isinstance(data, pd.Series)
     is_array = isinstance(data, ArrowExtensionArray)
@@ -240,10 +242,10 @@ def gatherv_nojit(data, root, comm):
     if is_array:
         data = pd.DataFrame({"__arrow_data__": data})
 
-    comm_ptr = MPI._addressof(comm)
-    cpp_table_ptr = df_to_cpp_table(data)
+    comm_ptr = 0 if comm is None else MPI._addressof(comm)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
 
     if is_series:
         out = out.iloc[:, 0]
@@ -255,3 +257,108 @@ def gatherv_nojit(data, root, comm):
         out = out.iloc[:, 0].array
 
     return out
+
+
+def scatterv_nojit(data, root, comm):
+    """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
+    compiler which can be slow.
+    """
+    from bodo.ext import hdist
+    from bodo.pandas.utils import (
+        BODO_NONE_DUMMY,
+        cpp_table_to_df,
+        df_to_cpp_table,
+    )
+
+    is_sender = root == MPI.ROOT
+
+    sample_data = comm.bcast(_get_data_sample(data) if is_sender else None, root)
+    data = sample_data if not is_sender else data
+
+    is_series = isinstance(data, pd.Series)
+
+    if is_series:
+        # None name doesn't round-trip to dataframe correctly so we use a dummy name
+        # that is replaced with None in wrap_plan
+        name = BODO_NONE_DUMMY if data.name is None else data.name
+        data = data.to_frame(name=name)
+
+    comm_ptr = MPI._addressof(comm)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data)
+    out_ptr = hdist.scatterv_py_wrapper(cpp_table_ptr, root, comm_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
+
+    if is_series:
+        out = out.iloc[:, 0]
+        # Reset name to None if it was originally None
+        if out.name == BODO_NONE_DUMMY:
+            out.name = None
+
+    return out
+
+
+def _get_data_sample(data):
+    """Get an empty sample of the data for sending to workers to determine
+    data type and structure.
+    Avoids head(0) for BodoDataFrame/BodoSeries since the serialized lazy block manager
+    causes issues on the worker side.
+    """
+    from bodo.pandas.base import _empty_like
+    from bodo.pandas.frame import BodoDataFrame
+    from bodo.pandas.series import BodoSeries
+
+    if isinstance(data, ArrowExtensionArray):
+        return data[:0]
+
+    if data is None:
+        return None
+
+    if isinstance(data, (BodoDataFrame, BodoSeries, pd.DataFrame, pd.Series)):
+        # NOTE: handles object columns correctly using Arrow schema inference for Pandas
+        return _empty_like(data)
+
+    raise ValueError(
+        "_get_data_sample only supports DataFrame, Series and ArrowExtensionArray input"
+    )
+
+
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+    """
+    Utility function decorator to run a function on just rank 0
+    but re-raise any Exceptions safely on all ranks.
+    NOTE: 'func' must be a simple python function that doesn't require
+    any synchronization.
+    e.g. Using a bodo.jit function might be unsafe in this situation.
+    Similarly, a function that uses any MPI collective
+    operation would be unsafe and could result in a hang.
+
+    Args:
+        func: Function to run.
+        bcast_result (bool, optional): Whether the function should be
+            broadcasted to all ranks. Defaults to True.
+        result_default (optional): Default for result. This is only
+            useful in the bcase_result=False case. Defaults to None.
+    """
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        comm = MPI.COMM_WORLD
+        result = result_default
+        err = None
+        # Run on rank 0 and catch any exceptions.
+        if comm.Get_rank() == 0:
+            try:
+                result = func(*args, **kwargs)
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                err = e
+        # Synchronize and re-raise any exception on all ranks.
+        err = comm.bcast(err)
+        if isinstance(err, Exception):
+            raise err
+        # Broadcast the result to all ranks.
+        if bcast_result:
+            result = comm.bcast(result)
+        return result  # type: ignore
+
+    return inner

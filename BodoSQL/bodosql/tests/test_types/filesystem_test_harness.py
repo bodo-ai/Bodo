@@ -3,12 +3,12 @@ from pathlib import Path
 from ddltest_harness import DDLTestHarness
 
 import bodosql
+from bodo.spawn.utils import run_rank0
 from bodo.tests.conftest import iceberg_database  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
     SparkFilesystemIcebergCatalog,
     get_spark,
 )
-from bodo.utils.utils import run_rank0
 
 
 class FilesystemTestHarness(DDLTestHarness):

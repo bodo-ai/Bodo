@@ -8,8 +8,6 @@ import pytest
 import bodo.pandas as bd
 from bodo.pandas.utils import BodoLibFallbackWarning
 
-pytestmark = pytest.mark.jit_dependency
-
 
 def test_read_join_filter_proj(datapath):
     df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -74,6 +72,7 @@ def test_df_setitem_fallback_warning():
         bdf[:] = 1
 
 
+@pytest.mark.jit_dependency
 def test_df_apply_fallback_warning():
     """Make sure DataFrame.apply() raises a warning when falling back to Pandas."""
     df = pd.DataFrame(
@@ -87,6 +86,7 @@ def test_df_apply_fallback_warning():
         bdf.apply(lambda a: pd.Series([1, 2]), axis=1)
 
 
+@pytest.mark.jit_dependency
 def test_df_apply_bad_dtype_fallback_warning():
     """Make sure DataFrame.apply() raises a warning when falling back to Pandas.
     In cases where it could not infer the dtype properly.
@@ -274,3 +274,44 @@ def test_execution_counter():
         )  # Created an assertion but not the expected error message.
     else:
         assert False  # Shouldn't have created an assertion but didn't.
+
+
+def test_nested_cte():
+    """final uses two versions of A and A use two versions of B.
+    So, the B CTE is nested inside the A CTE.
+    """
+    C = pd.DataFrame({"id": [1, 2, 3, 4, 5, 6], "val": [10, 20, 30, 40, 50, 60]})
+    C = bd.DataFrame(C)
+
+    # So CTE won't just be based on a dataframe.
+    B = C[C["val"] < 100]
+    B1 = B[B["id"] < 6]
+    B2 = B[B["id"] > 1]
+
+    A = bd.merge(B1, B2, on="id")
+    A_left = A[A["val_x"] < 50]
+    A_right = A[A["val_y"] > 0]
+
+    final = bd.merge(A_left, A_right, left_on="val_x", right_on="val_y")
+
+    generated_ctes = final._plan.get_cte_count()
+    assert generated_ctes == 2
+
+
+def test_non_nested_cte():
+    """final uses two versions of A but A only uses one versions of B.
+    B is used outside of A so only one CTE can be formed.
+    """
+    C = pd.DataFrame({"id": [1, 2, 3, 4, 5, 6], "val": [10, 20, 30, 40, 50, 60]})
+    C = bd.DataFrame(C)
+
+    B = C[C["val"] < 100]
+    A = B[B["val"] > 0]
+    A_left = A[A["val"] < 40]
+    A_right = A[A["val"] > 10]
+    B_extra = B[B["val"] < 80]
+    tmp = bd.merge(A_left, A_right, on="id")
+    final = bd.merge(tmp, B_extra, on="id")
+
+    generated_ctes = final._plan.get_cte_count()
+    assert generated_ctes == 1

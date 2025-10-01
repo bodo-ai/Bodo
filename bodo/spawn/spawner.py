@@ -101,6 +101,19 @@ def get_num_workers():
     return n_pes
 
 
+def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> bool:
+    """Check if any arg or kwarg is not a LazyPlan
+
+    Useful for determining if we need to import the compiler on spawner/workers
+    since non-lazy plan args require bodo.typeof to determine types.
+    """
+    from bodo.pandas.plan import LazyPlan
+
+    return not all(
+        isinstance(arg, LazyPlan) for arg in itertools.chain(args, kwargs.values())
+    )
+
+
 class BodoSQLContextMetadata:
     """Argument metadata for BodoSQLContext values which allows reconstructing
     BodoSQLContext on workers properly by receiving table DataFrames separately.
@@ -174,6 +187,7 @@ class Spawner:
         # execution of commands, leading to invalid data being broadcast to workers.
         self._del_queue = deque()
         self._is_running = False
+        self._workers_imported_compiler = False
 
     def _get_spawn_command_args(self) -> tuple[str, list[str]]:
         """
@@ -285,6 +299,15 @@ class Spawner:
         """Send func to be compiled and executed on spawned process"""
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 
+        # Import compiler on workers if spawner imported the compiler to avoid
+        # inconsistency issues like different scatter implementations.
+        if "bodo.decorators" in sys.modules.keys() or _not_all_lazy_plan_args(
+            args, kwargs
+        ):
+            import bodo.decorators  # isort:skip # noqa
+
+            self.import_compiler_on_workers()
+
         # If we get a df/series with a plan we need to execute it and get the result id
         # so we can build the arg metadata.
         # We do this first so nothing is already running when we execute the plan.
@@ -393,6 +416,16 @@ class Spawner:
         self._is_running = False
         self._run_del_queue()
         return res
+
+    def import_compiler_on_workers(self):
+        if self._workers_imported_compiler:
+            return
+
+        def import_compiler():
+            import bodo.decorators  # isort:skip # noqa
+
+        self._workers_imported_compiler = True
+        self.submit_func_to_workers(lambda: import_compiler(), [])
 
     def lazy_manager_collect_func(self, res_id: str):
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
@@ -514,8 +547,12 @@ class Spawner:
         if data_type is None:
             return None
 
-        # Import compiler lazily
+        # Import compiler lazily.
         import bodo.decorators  # isort:skip # noqa
+
+        # The compiler should have already been imported on workers before this point,
+        # but just to be safe.
+        self.import_compiler_on_workers()
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
@@ -859,6 +896,12 @@ class Spawner:
     ) -> WorkerProcess:
         """Spawn a process on all workers and return a WorkerProcess object"""
         assert not self._is_running, "spawn_process_on_nodes: already running"
+
+        # Import compiler for handle_spawn_process call on workers which depends on
+        # get_nodes_first_rank, which depends on the compiler.
+        import bodo.decorators  # isort:skip # noqa
+
+        self.import_compiler_on_workers()
 
         self._is_running = True
         self.worker_intercomm.bcast(

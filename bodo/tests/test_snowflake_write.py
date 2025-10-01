@@ -56,6 +56,9 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     from bodo.io.snowflake import create_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
 
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
+
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
@@ -115,6 +118,9 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import drop_internal_stage, snowflake_connect
     from bodo.tests.utils_jit import reduce_sum
+
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -1614,8 +1620,8 @@ def test_batched_write_agg(
         snowflake_writer_append_table,
         snowflake_writer_init,
     )
+    from bodo.spawn.utils import run_rank0
     from bodo.tests.utils_jit import reduce_sum
-    from bodo.utils.utils import run_rank0
 
     comm = MPI.COMM_WORLD
     col_meta = bodo.utils.typing.ColNamesMetaType(
@@ -1902,7 +1908,7 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     if is_variant and write_type == "replace":
         pytest.skip("When replacing a table columns are never written as variant")

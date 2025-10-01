@@ -89,6 +89,8 @@ def test_sql_snowflake_independent(memory_leak_check):
     afterwards, we ensure that all other ranks must complete before rank 0,
     which means that all ranks must execute independently.
     """
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     def impl(query, conn):
         df = pd.read_sql(query, conn)
@@ -895,7 +897,7 @@ def test_snowflake_runtime_upcasting_int_to_decimal(
     schema uses larger types than the runtime data for integers.
     The larger type is a decimal type
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     # Mock the compile-time schema info
     # Original (and runtime data):

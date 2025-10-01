@@ -130,8 +130,14 @@ def _build_index_data(
     """
     Construct distributed return metadata for the index of res if it has an index
     """
+    from bodo.pandas.utils import BODO_NONE_DUMMY
+
     if isinstance(res, (pd.DataFrame, pd.Series)):
         if isinstance(res.index, pd.MultiIndex):
+            res.index.names = [
+                name if name is not None else BODO_NONE_DUMMY
+                for name in res.index.names
+            ]
             return _build_distributed_return_metadata(
                 res.index.to_frame(index=False, allow_duplicates=True), logger
             )
@@ -403,7 +409,6 @@ def exec_func_handler(
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
-    import numba
 
     import bodo
 
@@ -443,7 +448,7 @@ def exec_func_handler(
     is_dispatcher = False
     try:
         func = cloudpickle.loads(pickled_func)
-        is_dispatcher = isinstance(func, numba.core.registry.CPUDispatcher)
+        is_dispatcher = type(func).__name__ == "CPUDispatcher"
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception

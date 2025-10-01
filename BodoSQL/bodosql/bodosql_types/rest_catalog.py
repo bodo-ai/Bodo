@@ -21,10 +21,10 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.io.iceberg import IcebergConnectionType
 from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.ir.iceberg_ext import IcebergConnectionType
+from bodo.spawn.utils import run_rank0
 from bodo.utils.typing import get_literal_value, raise_bodo_error
-from bodo.utils.utils import run_rank0
 from bodosql import DatabaseCatalog, DatabaseCatalogType
 from bodosql.imported_java_classes import JavaEntryPoint
 

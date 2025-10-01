@@ -267,10 +267,11 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         override {
         time_pt start_produce = start_timer();
         bool out_is_last = false;
-        std::shared_ptr<table_info> next_batch =
-            groupby_produce_output_batch_wrapper(this->groupby_state.get(),
-                                                 &out_is_last, true);
+        std::shared_ptr<table_info> next_batch;
+        next_batch = groupby_produce_output_batch_wrapper(
+            this->groupby_state.get(), &out_is_last, true);
         this->metrics.produce_time += end_timer(start_produce);
+        next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED
                                         : OperatorResult::HAVE_MORE_OUTPUT};
     }
@@ -364,7 +365,8 @@ const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
     {"min", Bodo_FTypes::min},     {"nunique", Bodo_FTypes::nunique},
     {"size", Bodo_FTypes::size},   {"skew", Bodo_FTypes::skew},
     {"std", Bodo_FTypes::std},     {"sum", Bodo_FTypes::sum},
-    {"var", Bodo_FTypes::var}};
+    {"var", Bodo_FTypes::var},     {"first", Bodo_FTypes::first},
+    {"last", Bodo_FTypes::last}};
 
 /**
  * @brief Physical node for count_star().
