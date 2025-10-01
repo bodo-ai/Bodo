@@ -197,6 +197,7 @@ def test_read_parquet_series_len_shape(datapath):
         assert bodo_out.shape == py_out.shape
 
 
+@pytest.mark.jit_dependency
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
     and filter column isn't used anywhere in the query.
@@ -559,6 +560,7 @@ def test_filter_string(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -590,6 +592,7 @@ def test_filter_datetime_pushdown(datapath, op):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
