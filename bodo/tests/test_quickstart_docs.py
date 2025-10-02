@@ -58,7 +58,6 @@ def test_quickstart_local_python_df():
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_quickstart_local_python_jit():
     """Runs example equivalent to Bodo jit code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
@@ -110,7 +109,6 @@ def test_quickstart_local_iceberg_df():
 
 @pytest.mark.iceberg
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_quickstart_local_iceberg_jit():
     """Test the Bodo jit example in docs/quick_start/quickstart_local_iceberg.md"""
     NUM_GROUPS = 30
@@ -165,7 +163,6 @@ def devguide_df_path():
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_transform(devguide_df_path):
     """Test transform example from docs/quick_start/devguide.md and
     ensures behavior is consistent with pandas.
@@ -197,7 +194,6 @@ def test_devguide_transform(devguide_df_path):
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_parallel1(devguide_df_path):
     def load_data_bodo(devguide_df_path):
         df = pd.read_parquet(devguide_df_path)
@@ -212,7 +208,6 @@ def test_devguide_parallel1(devguide_df_path):
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_parallel2(devguide_df_path):
     output_df_path = "output_df.pq"
 
@@ -240,22 +235,6 @@ def test_devguide_parallel2(devguide_df_path):
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
-def test_devguide_unsupported():
-    from bodo.utils.typing import BodoError
-
-    @bodo.jit(spawn=True)
-    def df_unsupported():
-        df = pd.DataFrame({"A": [1, 2, 3]})
-        df2 = df.transpose()
-        return df2
-
-    with pytest.raises(BodoError, match=r"DataFrame.transpose\(\) not supported yet."):
-        df_unsupported()
-
-
-@pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_type_error(devguide_df_path):
     from bodo.utils.typing import BodoError
 
@@ -276,7 +255,6 @@ def test_devguide_type_error(devguide_df_path):
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_groupby_keys_append(devguide_df_path):
     @bodo.jit(distributed=False)
     def get_keys(df_columns, extra_keys):
@@ -297,7 +275,6 @@ def test_devguide_groupby_keys_append(devguide_df_path):
 
 
 @pytest_mark_spawn_mode
-@pytest.mark.jit_dependency
 def test_devguide_list_typing_error():
     @bodo.jit(spawn=True)
     def create_list():

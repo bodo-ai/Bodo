@@ -737,7 +737,7 @@ std::shared_ptr<array_info> scatter_array(
         std::shared_ptr<array_info> out_inds =
             scatter_array(in_arr->child_arrays[1], send_counts_ptr, mpi_root,
                           n_pes, myrank, comm_ptr);
-        out_arr = create_dict_string_array(dict_arr, out_inds);
+        out_arr = create_dict_string_array(out_dict, out_inds);
 
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
         MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
