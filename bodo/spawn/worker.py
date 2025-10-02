@@ -381,6 +381,13 @@ def _update_env_var(new_env_var, propagate_env):
                 del os.environ[env_var]
 
 
+def _is_iceberg_file_info(val):
+    """Check special case of val being an Iceberg file info object
+    to avoid importing compiler for iceberg write.
+    """
+    return
+
+
 def _is_distributable_result(res):
     """
     Check if the worker result is a distributable type which requires gather to spawner.
@@ -396,6 +403,16 @@ def _is_distributable_result(res):
         return True
 
     if pd.api.types.is_scalar(res):
+        return False
+
+    # df.to_iceberg returns a list of lists of tuples with information
+    # about each file written. We check for this case separately to avoid
+    # importing the compiler.
+    if (
+        isinstance(res, list)
+        and isinstance(res[0], list)
+        and isinstance(res[0][0], tuple)
+    ):
         return False
 
     # Import compiler lazily
