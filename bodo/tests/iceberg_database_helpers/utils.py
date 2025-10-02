@@ -28,8 +28,8 @@ class SortField(NamedTuple):
 # `spark.jars.packages` is not a run time option and cannot be modified.
 SPARK_JAR_PACKAGES = [
     "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0",
-    "software.amazon.awssdk:bundle:2.29.19",
-    "software.amazon.awssdk:url-connection-client:2.29.19",
+    "software.amazon.awssdk:bundle:2.34.5",
+    "software.amazon.awssdk:url-connection-client:2.34.5",
     "org.apache.iceberg:iceberg-azure-bundle:1.10.0",
 ]
 
@@ -101,7 +101,6 @@ def get_spark(
     if bodo.get_rank() != 0:
         return None
 
-    # TODO[BSE-4883]: enable Iceberg tests after Iceberg 1.10 upgrade
     builder = SparkSession.builder.appName("spark")
     builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
     builder.config("spark.sql.execution.arrow.enabled", "true")
@@ -148,6 +147,11 @@ def get_spark(
             builder.config(
                 f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
                 "true",
+            )
+        if isinstance(catalog, SparkAwsIcebergCatalog):
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.client.region",
+                catalog.region,
             )
         if catalog.default_schema:
             builder.config(
