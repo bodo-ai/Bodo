@@ -11,6 +11,7 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
+    _test_equal,
     pytest_mark_one_rank,
     pytest_spawn_mode,
 )
@@ -280,6 +281,8 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     """
     Test basic operations on a bodo series using a pandas manager.
     """
+    # import bodo.decorators  # noqa
+
     _, pandas_manager = pandas_managers
     base_df = pd.DataFrame(
         {
@@ -300,16 +303,17 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
             [8, 8, 8, 8, 8], index=pd.Index([1, 2, 3, 4, 5], dtype="Int64", name="A0")
         )
     )
-    assert df.describe().equals(
-        pd.DataFrame(
-            {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
-            index=pd.Index(
-                ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
-                dtype="object",
-            ),
-            dtype="Float64",
-        )
+
+    expected = pd.DataFrame(
+        {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
+        index=pd.Index(
+            ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
+            dtype="object",
+        ),
+        dtype="Float64",
     )
+
+    _test_equal(df.describe(), expected)
 
 
 def test_del_func_called_if_not_collected(pandas_managers, head_df, collect_func):

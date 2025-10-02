@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 import importlib
 import typing as pt
+import warnings
 from collections.abc import (
     Hashable,
     Iterable,
@@ -79,15 +80,20 @@ def from_pandas(df):
             "from_pandas(): Hierarchical column names are not supported in Bodo yet."
         )
 
+    new_columns = []
     for c in df.columns:
-        if not isinstance(c, str):
-            raise BodoLibNotImplementedException(
-                f"from_pandas(): Expected column names to be type string, found: {type(c)}."
-            )
-        elif isinstance(df[c], pd.DataFrame):
+        if isinstance(df[c], pd.DataFrame):
             raise BodoLibNotImplementedException(
                 f"from_pandas(): Duplicate column names are not supported: '{c}'."
             )
+        elif not isinstance(c, str):
+            warnings.warn(
+                f"The column name '{c}' with type {type(c)} was converted to string "
+                + "and will not round trip correctly."
+            )
+        new_columns.append(str(c))
+
+    df.columns = new_columns
 
     # Avoid datetime64[us] that is commonly used in Pandas but not supported in Bodo.
     df = ensure_datetime64ns(df)
