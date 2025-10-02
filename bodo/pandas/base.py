@@ -502,10 +502,19 @@ def to_datetime(
         # If only options supported by Bodo JIT then run as cfunc over map.
         import bodo.decorators  # isort:skip # noqa
 
-        def bodo_df_lib_to_datetime(x):
-            return pd.to_datetime(x, format=format)
+        if format is None:
 
-        return arg.map(bodo_df_lib_to_datetime)
+            def bodo_df_lib_to_datetime(x):
+                print("bodo_df_lib_to_datetime", x)
+                return pd.to_datetime(x)
+
+            return arg.map(bodo_df_lib_to_datetime, na_action="ignore")
+        else:
+
+            def bodo_df_lib_to_datetime_format(x):
+                return pd.to_datetime(x, format=format)
+
+            return arg.map(bodo_df_lib_to_datetime_format, na_action="ignore")
     else:
         return _get_series_func_plan(
             arg._plan,

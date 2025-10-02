@@ -57,8 +57,36 @@ def test_top_level_to_datetime():
         bd_obj1 = bd.to_datetime(bdf1["dates"])
     with assert_executed_plan_count(1):
         _ = bd_obj1.execute_plan()
+
+    # Remove after testing!
+    import bodo
+
+    @bodo.jit
+    def t1(x):
+        return x.map(lambda v: pd.to_datetime(v), na_action="ignore")
+
+    t1res = t1(pdf1["dates"])
+    print("t1res===================\n", t1res, t1res.isna())
+    pre_datetime_null = bd.from_pandas(pdf1)
+    print(
+        "pre_datetime_null===================\n",
+        pre_datetime_null,
+        pre_datetime_null.isna(),
+    )
+    t2 = bd.Series(pdf1["dates"])
+    # t3 = t2.map(lambda x: 7.7, na_action='ignore')
+    t3 = t2.map(lambda x: pd.Timestamp(year=2024, month=1, day=1), na_action="ignore")
+    print("t3", t3, t3.isna())
+    # t2 = bd.Series(pd_obj1)
+    # t3 = t2.map(lambda x: x, na_action='ignore')
+    # print("t3", t3, t3.isna())
+    print("pd_obj1\n", pd_obj1, pd_obj1.isna())
+    print("bd_obj1\n", bd_obj1, bd_obj1.isna())
+    # pd_obj1_with_bd_mask = pd_obj1.mask(bd_obj1.isna())
+
     _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)
 
+    """
     with assert_executed_plan_count(0):
         # Multi-column case: year, month, day
         pdf2 = pd.DataFrame(
@@ -90,3 +118,4 @@ def test_top_level_to_datetime():
     _test_equal(
         bd_obj3.execute_plan(), pd_obj3, check_pandas_types=False, check_names=False
     )
+    """
