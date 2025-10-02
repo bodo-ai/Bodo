@@ -20,6 +20,8 @@ def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
     elif scheme == "wasbs":
         scheme = "abfss"
         netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+    elif scheme == "azure":
+        return _map_wasb_to_abfs("abfs", netloc)
 
     return scheme, netloc
 
