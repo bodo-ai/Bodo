@@ -886,6 +886,12 @@ def _is_generated_index_name(name):
     return re.match(pattern, name) is not None
 
 
+def _fix_multi_index_names(names: list[str]) -> list[str]:
+    """Replace instances of BODO_NONE_DUMMY in MultiIndex names with None
+    to ensure missing index names round trip correctly from Arrow."""
+    return [None if n == BODO_NONE_DUMMY else n for n in names]
+
+
 def _reconstruct_pandas_index(df, arrow_schema):
     """Reconstruct the pandas Index from the metadata in Arrow schema (some columns may
     be moved to Index/MultiIndex).
@@ -922,7 +928,7 @@ def _reconstruct_pandas_index(df, arrow_schema):
 
     # Reconstruct the row index
     if len(index_arrays) > 1:
-        index_names = [None if n == BODO_NONE_DUMMY else n for n in index_names]
+        index_names = _fix_multi_index_names(index_names)
         index = pd.MultiIndex.from_arrays(index_arrays, names=index_names)
     elif len(index_arrays) == 1:
         index = index_arrays[0]
