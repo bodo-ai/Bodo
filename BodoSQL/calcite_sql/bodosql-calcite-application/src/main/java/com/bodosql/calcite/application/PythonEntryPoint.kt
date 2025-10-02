@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.adapter.pandas.PandasTableScan
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoGlueCatalog
@@ -12,8 +13,10 @@ import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
+import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.bodosql.calcite.table.LocalTable
+import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
@@ -570,5 +573,18 @@ class PythonEntryPoint {
                 prefetchSFIceberg,
                 defaultTz,
             )
+
+        /**
+         * Return name of local table from scan node.
+         * @param scan Input scan node
+         * @return name of local table
+         */
+        @JvmStatic
+        fun getLocalTableName(scan: PandasTableScan): String {
+            // TODO: Make sure the scan node is a local table in the right format
+            val bodoSQLTable = (scan.table as RelOptTableImpl).table() as BodoSqlTable
+            val table = bodoSQLTable as LocalTable
+            return table.name
+        }
     }
 }
