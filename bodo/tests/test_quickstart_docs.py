@@ -17,6 +17,10 @@ pytestmark = [pytest.mark.test_docs]
 
 
 @pytest.mark.df_lib
+@pytest.mark.skipif(
+    os.getenv("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") == "0",
+    reason="BODO_ENABLE_TEST_DATAFRAME_LIBRARY is not set, this is required for df_lib tests",
+)
 def test_quickstart_local_python_df():
     """Runs example equivalent to Bodo DF Library code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
@@ -86,6 +90,10 @@ def test_quickstart_local_python_jit():
 
 @pytest.mark.iceberg
 @pytest.mark.df_lib
+@pytest.mark.skipif(
+    os.getenv("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") == "0",
+    reason="BODO_ENABLE_TEST_DATAFRAME_LIBRARY is not set, this is required for df_lib tests",
+)
 def test_quickstart_local_iceberg_df():
     """Test the Bodo DF Library example in docs/quick_start/quickstart_local_iceberg.md"""
     import bodo.pandas as pd
