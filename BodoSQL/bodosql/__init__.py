@@ -1,3 +1,5 @@
+import os
+
 # Initialize JIT compiler
 import bodo.decorators
 
@@ -48,6 +50,9 @@ import bodosql.kernels.listagg
 import bodosql.kernels.crypto_funcs
 
 from bodosql.context import BodoSQLContext
+
+use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "0") != "0"
+verbose_cpp_backend = os.environ.get("BODOSQL_VERBOSE_CPP_BACKEND", "0") != "0"
 
 # ------------------------------ Version Import ------------------------------
 from importlib.metadata import version, PackageNotFoundError
