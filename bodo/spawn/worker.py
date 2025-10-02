@@ -381,13 +381,6 @@ def _update_env_var(new_env_var, propagate_env):
                 del os.environ[env_var]
 
 
-def _is_iceberg_file_info(val):
-    """Check special case of val being an Iceberg file info object
-    to avoid importing compiler for iceberg write.
-    """
-    return
-
-
 def _is_distributable_result(res):
     """
     Check if the worker result is a distributable type which requires gather to spawner.
