@@ -14,6 +14,7 @@ import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.bodosql.calcite.table.LocalTable
+import org.apache.calcite.rel.RelNode
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
 
@@ -77,6 +78,27 @@ class PythonEntryPoint {
             generator.getOptimizedPlanString(
                 sql,
                 includeCosts,
+                dynamicParamTypes,
+                namedParamTypeMap,
+            )
+
+        /**
+         * Return the optimized plan for the query.
+         * @param generator The generator to use.
+         * @param sql The SQL query to optimize.
+         * @param dynamicParamTypes The dynamic parameter types.
+         * @param namedParamTypeMap The named parameter types.
+         * @return The optimized plan.
+         */
+        @JvmStatic
+        fun getOptimizedPlan(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+            dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
+            namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
+        ): RelNode =
+            generator.getOptimizedPlan(
+                sql,
                 dynamicParamTypes,
                 namedParamTypeMap,
             )
