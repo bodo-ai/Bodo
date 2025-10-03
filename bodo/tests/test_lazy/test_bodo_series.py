@@ -266,7 +266,7 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     lazy_manager, pandas_manager = single_pandas_managers
 
     if pandas_manager == SingleArrayManager:
-        pytest.skip("ArrayManager does not support slicing")
+        pytest.skip("TODO: fix SingleArrayManager Series tests")
 
     lsam = lazy_manager(
         [],
