@@ -369,7 +369,7 @@ def test_non_nested_cte():
     ],
 )
 def test_bodo_fallback(expr, expected_type, index_val):
-    """Test fallback returns a BodoDataFrame."""
+    """Test fallback returns a BodoDataFrame or BodoSeries."""
 
     df = pd.DataFrame({"A": [1, 2, 3] * 2, "B": [1.2, 2.4, 4.5] * 2})
     df.index = index_val[: len(df)]

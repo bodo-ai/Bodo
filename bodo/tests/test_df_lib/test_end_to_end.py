@@ -1109,7 +1109,6 @@ def test_set_df_column_extra_proj(datapath, index_val):
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
 
-@pytest.mark.skip("TODO")
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")

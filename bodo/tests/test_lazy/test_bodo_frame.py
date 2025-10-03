@@ -281,7 +281,6 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     """
     Test basic operations on a bodo series using a pandas manager.
     """
-    # import bodo.decorators  # noqa
 
     _, pandas_manager = pandas_managers
     base_df = pd.DataFrame(
@@ -414,7 +413,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
     lam_sliced_head_df = lam_df[1:3]
     assert lam_df._lazy
-    assert lam_sliced_head_df.equals(head_df[1:3])
+    pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[1:3])
 
     # Slicing with negative indices (does not trigger a data fetch)
     lam = lazy_manager(
@@ -429,7 +428,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
     lam_sliced_head_df = lam_df.iloc[-38:-37]
     assert lam_df._lazy
-    assert lam_sliced_head_df.equals(head_df[2:3])
+    pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[2:3])
 
     # Trigger a fetch
     lam_sliced_head_df = lam_df.iloc[-3:]

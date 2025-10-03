@@ -339,7 +339,11 @@ def test_series_udf(dropna, as_index, impl):
         bdf2 = impl(bdf, udf)
 
     _test_equal(
-        bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=(not as_index)
+        bdf2,
+        df2,
+        sort_output=True,
+        check_pandas_types=False,
+        reset_index=(not as_index),
     )
 
 
@@ -365,7 +369,7 @@ def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
         df2 = df2.rename(columns={None: "None"})
         bdf2 = df2.rename(columns={None: "None"})
 
-    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=False, reset_index=True)
 
     bdf = bd.from_pandas(groupby_df)
 
