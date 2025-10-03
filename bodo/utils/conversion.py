@@ -259,15 +259,35 @@ def overload_np_to_nullable_array(data):
             )  # pragma: no cover
     elif data.dtype == bodo.types.datetime64ns:
         if data.layout != "C":
-            return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
-                np.ascontiguousarray(data),
-                np.full((len(data) + 7) >> 3, 255, np.uint8),
-                None,
-            )  # pragma: no cover
+
+            def func(data):
+                new_bitmask = np.full((len(data) + 7) >> 3, 255, np.uint8)
+
+                for i in range(len(data)):
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        new_bitmask, i, 0 if np.isnat(data[i]) else 1
+                    )
+
+                return bodo.libs.pd_datetime_arr_ext.init_datetime_array(
+                    np.ascontiguousarray(data), new_bitmask, None
+                )
+
+            return func
         else:
-            return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
-                data, np.full((len(data) + 7) >> 3, 255, np.uint8), None
-            )  # pragma: no cover
+
+            def func(data):
+                new_bitmask = np.full((len(data) + 7) >> 3, 255, np.uint8)
+
+                for i in range(len(data)):
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        new_bitmask, i, 0 if np.isnat(data[i]) else 1
+                    )
+
+                return bodo.libs.pd_datetime_arr_ext.init_datetime_array(
+                    data, new_bitmask, None
+                )
+
+            return func
 
     raise BodoError(
         f"np_to_nullable_array: invalid dtype {data.dtype}, integer, bool or float dtype expected"
