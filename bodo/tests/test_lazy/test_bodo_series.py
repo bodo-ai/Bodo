@@ -300,7 +300,7 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     lam_sliced_head_s = lam_s[-38:-37]
     assert lam_s._lazy
     pd.testing.assert_series_equal(
-        lam_sliced_head_s, head_s[2:3], check_series_type=False
+        lam_sliced_head_s, head_s[2:3], check_series_type=False, reset_index=True
     )
 
     # Triggers a fetch
