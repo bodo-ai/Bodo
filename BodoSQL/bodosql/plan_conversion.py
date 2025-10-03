@@ -13,8 +13,10 @@ def java_plan_to_python_plan(ctx, java_plan):
     """
     java_class_name = java_plan.getClass().getSimpleName()
 
-    if java_class_name == "PandasToBodoPhysicalConverter":
+    if java_class_name in ("PandasToBodoPhysicalConverter", "CombineStreamsExchange"):
         # PandasToBodoPhysicalConverter is a no-op
+        # CombineStreamsExchange is a no-op here since C++ runtime accumulates results
+        # in output buffer by default
         input = java_plan.getInput()
         return java_plan_to_python_plan(ctx, input)
 
