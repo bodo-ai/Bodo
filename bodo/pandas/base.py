@@ -492,12 +492,12 @@ def to_datetime(
     # 2. Series Case
     if (
         errors == "raise"
-        and dayfirst == False
-        and yearfirst == False
-        and utc == False
-        and unit == None
+        and dayfirst is False
+        and yearfirst is False
+        and utc is False
+        and unit is None
         and origin == "unix"
-        and cache == True
+        and cache is True
     ):
         # If only options supported by Bodo JIT then run as cfunc over map.
         import bodo.decorators  # isort:skip # noqa
@@ -505,7 +505,6 @@ def to_datetime(
         if format is None:
 
             def bodo_df_lib_to_datetime(x):
-                print("bodo_df_lib_to_datetime", x)
                 return pd.to_datetime(x)
 
             return arg.map(bodo_df_lib_to_datetime, na_action="ignore")

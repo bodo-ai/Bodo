@@ -654,8 +654,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             arr_type = bodo.typeof(empty_series).data
 
-            @bodo.jit(spawn=False, distributed=False)
-            # @bodo.jit(cache=True, spawn=False, distributed=False)
+            @bodo.jit(cache=True, spawn=False, distributed=False)
             def map_wrapper_inner(series):
                 return series.map(arg, na_action=na_action)
 
