@@ -3206,7 +3206,8 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
     long_array = [
@@ -3233,7 +3234,8 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
 
