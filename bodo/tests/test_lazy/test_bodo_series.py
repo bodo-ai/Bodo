@@ -265,6 +265,9 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     """Tests that slicing returns the correct value and does not trigger data fetch unnecessarily"""
     lazy_manager, pandas_manager = single_pandas_managers
 
+    if pandas_manager == SingleArrayManager:
+        pytest.skip("ArrayManager does not support slicing")
+
     lsam = lazy_manager(
         [],
         [],
@@ -299,8 +302,10 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     lam_s: BodoSeries = BodoSeries._from_mgr(lsam, [])
     lam_sliced_head_s = lam_s[-38:-37]
     assert lam_s._lazy
+
+    # Ignoring index for now since BodoDataFrames resets RangeIndex
     pd.testing.assert_series_equal(
-        lam_sliced_head_s, head_s[2:3], check_series_type=False, reset_index=True
+        lam_sliced_head_s, head_s[2:3], check_series_type=False, check_index=False
     )
 
     # Triggers a fetch

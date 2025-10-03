@@ -7,7 +7,7 @@ import pytest
 from test_end_to_end import index_val  # noqa
 
 import bodo.pandas as bd
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoLibFallbackWarning, BodoLibNotImplementedException
 from bodo.tests.utils import _test_equal
 
 
@@ -382,3 +382,24 @@ def test_bodo_fallback(expr, expected_type, index_val):
 
     assert isinstance(bodo_out, expected_type)
     _test_equal(py_out, bodo_out, check_pandas_types=False)
+
+
+def test_from_pandas_errorchecking():
+    df1 = pd.DataFrame(
+        {"A": pd.Categorical(["a", "b", "a", "c", "b", "a"], ["a", "b", "c"])}
+    )
+    # invalid bodo type (dict<string, int8>)
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df1)
+
+    df2 = pd.DataFrame({"A": [(1, "A"), (2, "A"), (3, "B")]})
+    # invalid arrow type
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df2)
+
+    df3 = pd.DataFrame({"A": [(1, "A"), (2, "A"), (3, "B")]})
+    df3 = pd.concat([df3, df3], axis=1)
+
+    # Duplicate column names
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df3)

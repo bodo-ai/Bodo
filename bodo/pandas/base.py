@@ -79,17 +79,15 @@ def from_pandas(df):
         raise BodoLibNotImplementedException(
             "from_pandas(): Hierarchical column names are not supported in Bodo yet."
         )
-
     new_columns = []
     for c in df.columns:
         if isinstance(df[c], pd.DataFrame):
             raise BodoLibNotImplementedException(
-                f"from_pandas(): Duplicate column names are not supported: '{c}'."
+                f"from_pandas(): Duplicate column name: '{c}'."
             )
         elif not isinstance(c, str):
             warnings.warn(
-                f"The column name '{c}' with type {type(c)} was converted to string "
-                + "and will not round trip correctly."
+                f"The column name '{c}' with type {type(c)} was converted to string."
             )
         new_columns.append(str(c))
 
@@ -113,7 +111,7 @@ def from_pandas(df):
         # TODO: add specific unsupported columns to message.
         raise BodoLibNotImplementedException(
             "from_pandas(): Could not convert DataFrame to Bodo: "
-            + "Unsupported datatype encountered in one or more columns:"
+            + "Unsupported datatype encountered in one or more columns: "
             + str(e)
         )
 
