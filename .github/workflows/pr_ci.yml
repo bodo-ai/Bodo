@@ -144,7 +144,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib and not jit_dependency and not weekly and not iceberg"
+      pytest-marker: "df_lib and not jit_dependency and not weekly"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB_NO_JIT"
