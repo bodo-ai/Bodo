@@ -13,10 +13,16 @@ def java_plan_to_python_plan(ctx, java_plan):
     """
     java_class_name = java_plan.getClass().getSimpleName()
 
-    if java_class_name in ("PandasToBodoPhysicalConverter", "CombineStreamsExchange"):
+    if java_class_name in (
+        "PandasToBodoPhysicalConverter",
+        "CombineStreamsExchange",
+        "SeparateStreamExchange",
+    ):
         # PandasToBodoPhysicalConverter is a no-op
         # CombineStreamsExchange is a no-op here since C++ runtime accumulates results
         # in output buffer by default
+        # SeparateStreamExchange is a no-op here since PhysicalReadPandas in C++ runtime
+        # streams data in batches by default
         input = java_plan.getInput()
         return java_plan_to_python_plan(ctx, input)
 
@@ -26,7 +32,7 @@ def java_plan_to_python_plan(ctx, java_plan):
         df = ctx.tables[table_name]
         return bodo.pandas.from_pandas(df)._plan
 
-    if java_class_name == "PandasProject":
+    if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
         exprs = [
             java_expr_to_python_expr(e, input_plan) for e in java_plan.getProjects()
