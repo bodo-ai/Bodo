@@ -5,6 +5,7 @@ from pandas.core.internals.array_manager import SingleArrayManager
 
 from bodo.pandas.series import BodoSeries
 from bodo.tests.test_lazy.utils import single_pandas_managers  # noqa
+from bodo.tests.utils import _test_equal
 
 
 @pytest.fixture
@@ -304,13 +305,11 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     assert lam_s._lazy
 
     # Ignoring index for now since BodoDataFrames resets RangeIndex
-    pd.testing.assert_series_equal(
-        lam_sliced_head_s, head_s[2:3], check_series_type=False, check_index=False
+    _test_equal(
+        lam_sliced_head_s, head_s[2:3], check_pandas_types=False, reset_index=True
     )
 
     # Triggers a fetch
     lam_sliced_head_s = lam_s[-3:]
     assert not lam_s._lazy
-    pd.testing.assert_series_equal(
-        lam_sliced_head_s, collect_func(0)[-3:], check_series_type=False
-    )
+    _test_equal(lam_sliced_head_s, collect_func(0)[-3:], check_pandas_types=False)
