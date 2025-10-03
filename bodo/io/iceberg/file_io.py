@@ -20,6 +20,8 @@ def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
     elif scheme == "wasbs":
         scheme = "abfss"
         netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+    elif scheme == "azure":
+        return _map_wasb_to_abfs("abfs", netloc)
 
     return scheme, netloc
 
@@ -82,6 +84,7 @@ class BodoPyArrowFileIO(PyArrowFileIO):
             scheme, netloc = _map_wasb_to_abfs(scheme, netloc)
 
         if scheme in {"abfs", "abfss", "azure"}:
+            account_name = None
             if netloc and netloc.endswith(".blob.core.windows.net"):
                 account_name = netloc.removesuffix(".blob.core.windows.net")
             elif netloc and netloc.endswith(".dfs.core.windows.net"):
@@ -92,16 +95,11 @@ class BodoPyArrowFileIO(PyArrowFileIO):
                 account_name = self.properties.get(ADLS_ACCOUNT_NAME) or os.environ.get(
                     "AZURE_STORAGE_ACCOUNT_NAME"
                 )
+            self.properties[ADLS_ACCOUNT_NAME] = account_name
 
             account_key = self.properties.get(ADLS_ACCOUNT_KEY) or os.environ.get(
                 "AZURE_STORAGE_ACCOUNT_KEY"
             )
-
-            from pyarrow.fs import AzureFileSystem
-
-            return AzureFileSystem(
-                account_name=account_name,
-                account_key=account_key,
-            )
+            self.properties[ADLS_ACCOUNT_KEY] = account_key
 
         return super()._initialize_fs(scheme, netloc)
