@@ -401,10 +401,12 @@ def _is_distributable_result(res):
     # df.to_iceberg returns a list of lists of tuples with information
     # about each file written. We check for this case separately to avoid
     # importing the compiler.
-    if (
-        isinstance(res, list)
-        and isinstance(res[0], list)
-        and isinstance(res[0][0], tuple)
+    if isinstance(res, list) and (
+        len(res) == 0
+        or (
+            isinstance(res[0], list)
+            and (len(res[0]) == 0 or isinstance(res[0][0], tuple))
+        )
     ):
         return False
 
