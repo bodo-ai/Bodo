@@ -166,7 +166,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 }
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
-    std::shared_ptr<ExprResult> left_res, const std::string& comparator) {
+    std::shared_ptr<ExprResult> left_res, const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -187,7 +188,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     }
 
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {src1});
+        arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_unary: Error in Arrow compute: " +
@@ -665,6 +666,31 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // which returns a struct. To match the output dtype of Pandas, we Cast
         // to Date32 instead.
         result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+    } else if (scalar_func_data.arrow_func_name == "match_substring_regex") {
+        if (!PyTuple_Check(scalar_func_data.args) ||
+            PyTuple_Size(scalar_func_data.args) != 1) {
+            throw std::runtime_error(
+                "match_substring_regex args not a 1-element tuple.");
+        }
+
+        // Get the first element (borrowed reference)
+        PyObject* py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+        if (!PyUnicode_Check(py_str)) {
+            throw std::runtime_error(
+                "match_substring_regex args element is not a Python string.");
+        }
+
+        // Convert to UTF‑8 C string
+        const char* c_str = PyUnicode_AsUTF8(py_str);
+        if (!c_str) {
+            throw std::runtime_error(
+                "match_substring_regex error extracting Python string.");
+        }
+
+        arrow::compute::MatchSubstringOptions opts(c_str);
+        result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name,
+                                        &opts);
     } else {
         result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
     }

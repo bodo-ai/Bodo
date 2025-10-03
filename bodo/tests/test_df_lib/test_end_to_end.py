@@ -3764,3 +3764,18 @@ def test_join_non_equi_key_not_in_output():
         reset_index=True,
         sort_output=True,
     )
+
+
+def test_series_str_match():
+    s = pd.Series(["abc", "a1c", "zzz", None], dtype="string")
+    bs = bd.Series(s)
+
+    # Match strings that start with 'a' and end with 'c'
+    pmask = s.str.match(r"a.*c")
+    bmask = bs.str.match(r"a.*c")
+
+    _test_equal(
+        bmask,
+        pmask,
+        check_pandas_types=False,
+    )

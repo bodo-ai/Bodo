@@ -2728,6 +2728,7 @@ def _get_series_func_plan(
         "str.swapcase",
         "str.title",
         "str.reverse",
+        "str.match",
     )
 
     def get_arrow_func(name):
@@ -2739,13 +2740,15 @@ def _get_series_func_plan(
         if name.startswith("str.is"):
             body = name.split(".")[1]
             return "utf8_" + body[:2] + "_" + body[2:]
+        if name == "str.match":
+            return "match_substring_regex"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
         return name.split(".")[1]
 
     if func in arrow_compute_list:
         func_name = get_arrow_func(func)
-        func_args = ()  # TODO: expand this to enable arrow compute calls with args
+        func_args = tuple(args)
         is_cfunc = False
         has_state = False
         expr = ArrowScalarFuncExpression(
@@ -2753,6 +2756,7 @@ def _get_series_func_plan(
             source_data,
             (col_index,) + tuple(index_cols),
             func_name,
+            func_args,
         )
     else:
         # Empty func_name separates Python calls from Arrow calls.
