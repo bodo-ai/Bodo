@@ -2792,7 +2792,7 @@ def get_num_gpus(framework="torch"):  # pragma: no cover
         try:
             import torch
 
-            return torch.cuda.device_count()
+            return torch.accelerator.device_count()
         except ImportError:
             raise RuntimeError(
                 "PyTorch is not installed. Please install PyTorch to use GPU features."
