@@ -2743,7 +2743,7 @@ def _get_series_func_plan(
             return "utf8_" + name.split(".")[1]
         return name.split(".")[1]
 
-    if func in arrow_compute_list:
+    if func in arrow_compute_list and len(kwargs) == 0:
         func_name = get_arrow_func(func)
         func_args = tuple(args)
         is_cfunc = False
