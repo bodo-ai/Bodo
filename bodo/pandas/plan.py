@@ -768,6 +768,7 @@ class ArrowScalarFuncExpression(Expression):
                 new_source_plan,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.function_name,
+                self.function_args,
             )
             expr.is_series = self.is_series
             return expr
