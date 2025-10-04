@@ -676,11 +676,12 @@ cdef class ArrowScalarFuncExpression(Expression):
         object out_schema,
         LogicalOperator source,
         vector[int] input_column_indices,
-        str function_name):
+        str function_name,
+        object args):
 
         self.out_schema = out_schema
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, None, input_column_indices, False, False, function_name.encode())
+            source.c_logical_operator, out_schema, args, input_column_indices, False, False, function_name.encode())
 
     def __str__(self):
         return f"ArrowScalarFuncExpression({self.function_name})"
