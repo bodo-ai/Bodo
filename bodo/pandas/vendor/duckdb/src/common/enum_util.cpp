@@ -85,9 +85,6 @@
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/execution/index/art/node.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_option.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_state.hpp"
-#include "duckdb/execution/operator/csv_scanner/quote_rules.hpp"
 #include "duckdb/execution/reservoir_sample.hpp"
 #include "duckdb/function/aggregate_state.hpp"
 #include "duckdb/function/compression_function.hpp"
@@ -583,25 +580,25 @@ CAPIResultSetType EnumUtil::FromString<CAPIResultSetType>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetCSVStateValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(CSVState::STANDARD), "STANDARD" },
-		{ static_cast<uint32_t>(CSVState::DELIMITER), "DELIMITER" },
-		{ static_cast<uint32_t>(CSVState::DELIMITER_FIRST_BYTE), "DELIMITER_FIRST_BYTE" },
-		{ static_cast<uint32_t>(CSVState::DELIMITER_SECOND_BYTE), "DELIMITER_SECOND_BYTE" },
-		{ static_cast<uint32_t>(CSVState::DELIMITER_THIRD_BYTE), "DELIMITER_THIRD_BYTE" },
-		{ static_cast<uint32_t>(CSVState::RECORD_SEPARATOR), "RECORD_SEPARATOR" },
-		{ static_cast<uint32_t>(CSVState::CARRIAGE_RETURN), "CARRIAGE_RETURN" },
-		{ static_cast<uint32_t>(CSVState::QUOTED), "QUOTED" },
-		{ static_cast<uint32_t>(CSVState::UNQUOTED), "UNQUOTED" },
-		{ static_cast<uint32_t>(CSVState::ESCAPE), "ESCAPE" },
-		{ static_cast<uint32_t>(CSVState::INVALID), "INVALID" },
-		{ static_cast<uint32_t>(CSVState::NOT_SET), "NOT_SET" },
-		{ static_cast<uint32_t>(CSVState::QUOTED_NEW_LINE), "QUOTED_NEW_LINE" },
-		{ static_cast<uint32_t>(CSVState::EMPTY_SPACE), "EMPTY_SPACE" },
-		{ static_cast<uint32_t>(CSVState::COMMENT), "COMMENT" },
-		{ static_cast<uint32_t>(CSVState::STANDARD_NEWLINE), "STANDARD_NEWLINE" },
-		{ static_cast<uint32_t>(CSVState::UNQUOTED_ESCAPE), "UNQUOTED_ESCAPE" },
-		{ static_cast<uint32_t>(CSVState::ESCAPED_RETURN), "ESCAPED_RETURN" },
-		{ static_cast<uint32_t>(CSVState::MAYBE_QUOTED), "MAYBE_QUOTED" }
+		{ 0, "STANDARD" },
+		{ 1, "DELIMITER" },
+		{ 2, "DELIMITER_FIRST_BYTE" },
+		{ 3, "DELIMITER_SECOND_BYTE" },
+		{ 4, "DELIMITER_THIRD_BYTE" },
+		{ 5, "RECORD_SEPARATOR" },
+		{ 6, "CARRIAGE_RETURN" },
+		{ 7, "QUOTED" },
+		{ 8, "UNQUOTED" },
+		{ 9, "ESCAPE" },
+		{ 10, "INVALID" },
+		{ 11, "NOT_SET" },
+		{ 12, "QUOTED_NEW_LINE" },
+		{ 13, "EMPTY_SPACE" },
+		{ 14, "COMMENT" },
+		{ 15, "STANDARD_NEWLINE" },
+		{ 16, "UNQUOTED_ESCAPE" },
+		{ 17, "ESCAPED_RETURN" },
+		{ 18, "MAYBE_QUOTED" }
 	};
 	return values;
 }
@@ -2465,10 +2462,10 @@ NType EnumUtil::FromString<NType>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetNewLineIdentifierValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(NewLineIdentifier::SINGLE_N), "SINGLE_N" },
-		{ static_cast<uint32_t>(NewLineIdentifier::CARRY_ON), "CARRY_ON" },
-		{ static_cast<uint32_t>(NewLineIdentifier::NOT_SET), "NOT_SET" },
-		{ static_cast<uint32_t>(NewLineIdentifier::SINGLE_R), "SINGLE_R" }
+		{ 0, "SINGLE_N" },
+		{ 1, "CARRY_ON" },
+		{ 2, "NOT_SET" },
+		{ 3, "SINGLE_R" }
 	};
 	return values;
 }
@@ -3115,9 +3112,9 @@ QueryResultType EnumUtil::FromString<QueryResultType>(const char *value) {
 
 const StringUtil::EnumStringLiteral *GetQuoteRuleValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(QuoteRule::QUOTES_RFC), "QUOTES_RFC" },
-		{ static_cast<uint32_t>(QuoteRule::QUOTES_OTHER), "QUOTES_OTHER" },
-		{ static_cast<uint32_t>(QuoteRule::NO_QUOTES), "NO_QUOTES" }
+		{ 0, "QUOTES_RFC" },
+		{ 1, "QUOTES_OTHER" },
+		{ 2, "NO_QUOTES" }
 	};
 	return values;
 }

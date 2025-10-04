@@ -21,7 +21,6 @@ namespace duckdb {
 class BaseStatistics;
 class Expression;
 class PhysicalOperator;
-class PhysicalTableScan;
 
 enum class TableFilterType : uint8_t {
 	CONSTANT_COMPARISON = 0, // constant comparison (e.g. =C, >C, >=C, <C, <=C)
@@ -119,8 +118,6 @@ public:
 	void PushFilter(const PhysicalOperator &op, idx_t column_index, unique_ptr<TableFilter> filter);
 
 	bool HasFilters() const;
-	unique_ptr<TableFilterSet> GetFinalTableFilters(const PhysicalTableScan &scan,
-	                                                optional_ptr<TableFilterSet> existing_filters) const;
 
 private:
 	mutable mutex lock;

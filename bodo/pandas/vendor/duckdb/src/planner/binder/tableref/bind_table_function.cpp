@@ -19,7 +19,6 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
-#include "duckdb/function/table/read_csv.hpp"
 
 namespace duckdb {
 

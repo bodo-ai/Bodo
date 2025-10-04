@@ -9,8 +9,6 @@
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
-#include "duckdb/execution/operator/helper/physical_result_collector.hpp"
-#include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/main/appender.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_context_file_opener.hpp"
@@ -327,8 +325,6 @@ unique_ptr<QueryResult> ClientContext::FetchResultInternal(ClientContextLock &lo
 	bool create_stream_result = prepared.properties.allow_stream_result && pending.allow_stream_result;
 	unique_ptr<QueryResult> result;
 	D_ASSERT(executor.HasResultCollector());
-	// we have a result collector - fetch the result directly from the result collector
-	result = executor.GetResult();
 	if (!create_stream_result) {
 		CleanupInternal(lock, result.get(), false);
 	} else {
@@ -394,13 +390,7 @@ ClientContext::CreatePreparedStatementInternal(ClientContextLock &lock, const st
 #endif
 	}
 
-	// Convert the logical query plan into a physical query plan.
-	profiler.StartPhase(MetricsType::PHYSICAL_PLANNER);
-	PhysicalPlanGenerator physical_planner(*this);
-	result->physical_plan = physical_planner.Plan(std::move(logical_plan));
-	profiler.EndPhase();
-	D_ASSERT(result->physical_plan);
-	return result;
+ 	return result;
 }
 
 shared_ptr<PreparedStatementData>
@@ -503,51 +493,6 @@ void ClientContext::CheckIfPreparedStatementIsExecutable(PreparedStatementData &
 	}
 }
 
-unique_ptr<PendingQueryResult>
-ClientContext::PendingPreparedStatementInternal(ClientContextLock &lock, shared_ptr<PreparedStatementData> statement_p,
-                                                const PendingQueryParameters &parameters) {
-	D_ASSERT(active_query);
-	auto &statement = *statement_p;
-
-	BindPreparedStatementParameters(statement, parameters);
-
-	active_query->executor = make_uniq<Executor>(*this);
-	auto &executor = *active_query->executor;
-	if (config.enable_progress_bar) {
-		progress_bar_display_create_func_t display_create_func = nullptr;
-		if (config.print_progress_bar) {
-			// If a custom display is set, use that, otherwise just use the default
-			display_create_func =
-			    config.display_create_func ? config.display_create_func : ProgressBar::DefaultProgressBarDisplay;
-		}
-		active_query->progress_bar =
-		    make_uniq<ProgressBar>(executor, NumericCast<idx_t>(config.wait_time), display_create_func);
-		active_query->progress_bar->Start();
-		query_progress.Restart();
-	}
-	auto stream_result = parameters.allow_stream_result && statement.properties.allow_stream_result;
-
-	get_result_collector_t get_method = PhysicalResultCollector::GetResultCollector;
-	auto &client_config = ClientConfig::GetConfig(*this);
-	if (!stream_result && client_config.result_collector) {
-		get_method = client_config.result_collector;
-	}
-	statement.is_streaming = stream_result;
-	auto collector = get_method(*this, statement);
-	D_ASSERT(collector->type == PhysicalOperatorType::RESULT_COLLECTOR);
-	executor.Initialize(std::move(collector));
-
-	auto types = executor.GetTypes();
-	D_ASSERT(types == statement.types);
-	D_ASSERT(!active_query->HasOpenResult());
-
-	auto pending_result =
-	    make_uniq<PendingQueryResult>(shared_from_this(), *statement_p, std::move(types), stream_result);
-	active_query->prepared = std::move(statement_p);
-	active_query->SetOpenResult(*pending_result);
-	return pending_result;
-}
-
 unique_ptr<PendingQueryResult> ClientContext::PendingPreparedStatement(ClientContextLock &lock, const string &query,
                                                                        shared_ptr<PreparedStatementData> prepared,
                                                                        const PendingQueryParameters &parameters) {
@@ -569,7 +514,7 @@ unique_ptr<PendingQueryResult> ClientContext::PendingPreparedStatement(ClientCon
 		RebindPreparedStatement(lock, query, prepared, parameters);
 		CheckIfPreparedStatementIsExecutable(*prepared); // rerun this too as modified_databases might have changed
 	}
-	return PendingPreparedStatementInternal(lock, prepared, parameters);
+	return nullptr;
 }
 
 void ClientContext::WaitForTask(ClientContextLock &lock, BaseQueryResult &result) {
@@ -781,7 +726,7 @@ unique_ptr<PendingQueryResult> ClientContext::PendingStatementInternal(ClientCon
 	}
 	// execute the prepared statement
 	CheckIfPreparedStatementIsExecutable(*prepared);
-	return PendingPreparedStatementInternal(lock, std::move(prepared), parameters);
+	return nullptr;
 }
 
 unique_ptr<QueryResult>
