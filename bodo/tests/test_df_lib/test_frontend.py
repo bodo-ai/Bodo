@@ -4,9 +4,11 @@ Tests dataframe library frontend (no triggering of execution).
 
 import pandas as pd
 import pytest
+from test_end_to_end import index_val  # noqa
 
 import bodo.pandas as bd
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoLibFallbackWarning, BodoLibNotImplementedException
+from bodo.tests.utils import _test_equal
 
 
 def test_read_join_filter_proj(datapath):
@@ -315,3 +317,89 @@ def test_non_nested_cte():
 
     generated_ctes = final._plan.get_cte_count()
     assert generated_ctes == 1
+
+
+@pytest.mark.parametrize(
+    "expr, expected_type",
+    [
+        # Exprs returning dataframes
+        pytest.param(
+            lambda df, _: df.apply(lambda x: x.round(), axis=0),
+            bd.DataFrame,
+            id="df_semi_supported_method",
+        ),
+        pytest.param(
+            lambda df, _: df.interpolate(), bd.DataFrame, id="df_unsupported_method"
+        ),
+        pytest.param(
+            lambda df, pd_: pd_.concat(
+                [df, df.rename(columns={"A": "AA", "B": "BB"})], axis=1
+            ),
+            bd.DataFrame,
+            id="semi_supported_toplevel",
+        ),
+        pytest.param(
+            lambda df, pd_: pd_.melt(df, id_vars=["A"], value_vars=["B"]),
+            bd.DataFrame,
+            id="df_unsupported_toplevel",
+            marks=pytest.mark.skip(
+                "TODO: Warning and fallback for toplevel unsupported methods."
+            ),
+        ),
+        # Exprs returning series
+        pytest.param(
+            lambda df, _: df.A[:], bd.Series, id="series_semi_supported_method"
+        ),
+        pytest.param(
+            lambda df, _: df.A.interpolate(), bd.Series, id="series_unsupported_method"
+        ),
+        pytest.param(
+            lambda df, pd_: pd_.concat([df.A, df.A], sort=True),
+            bd.Series,
+            id="series_semi_supported_toplevel",
+        ),
+        pytest.param(
+            lambda df, pd_: pd_.cut(df.A, bins=[1, 2, 3, 4]),
+            bd.Series,
+            id="series_unsupported_toplevel",
+            marks=pytest.mark.skip(
+                "TODO: Warning and fallback for toplevel unsupported methods."
+            ),
+        ),
+    ],
+)
+def test_bodo_fallback(expr, expected_type, index_val):
+    """Test fallback returns a BodoDataFrame or BodoSeries."""
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 2, "B": [1.2, 2.4, 4.5] * 2})
+    df.index = index_val[: len(df)]
+
+    bdf = bd.from_pandas(df)
+
+    py_out = expr(df, pd)
+    with pytest.warns(BodoLibFallbackWarning):
+        bodo_out = expr(bdf, bd)
+
+    assert isinstance(bodo_out, expected_type)
+    _test_equal(py_out, bodo_out, check_pandas_types=False)
+
+
+def test_from_pandas_errorchecking():
+    df1 = pd.DataFrame(
+        {"A": pd.Categorical(["a", "b", "a", "c", "b", "a"], ["a", "b", "c"])}
+    )
+    # invalid bodo type (dict<string, int8>)
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df1)
+
+    df2 = pd.DataFrame({"A": [(1, "A"), (2, "A"), (3, "B")]})
+    # invalid arrow type
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df2)
+
+    df3 = pd.DataFrame({"A": [(1, "A"), (2, "A"), (3, "B")]})
+    df3 = pd.concat([df3, df3], axis=1)
+
+    # Duplicate column names
+    with pytest.raises(BodoLibNotImplementedException):
+        bd.from_pandas(df3)
