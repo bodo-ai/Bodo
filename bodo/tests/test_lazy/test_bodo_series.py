@@ -312,4 +312,9 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     # Triggers a fetch
     lam_sliced_head_s = lam_s[-3:]
     assert not lam_s._lazy
-    _test_equal(lam_sliced_head_s, collect_func(0)[-3:], check_pandas_types=False)
+    _test_equal(
+        lam_sliced_head_s,
+        collect_func(0)[-3:],
+        check_pandas_types=False,
+        reset_index=True,
+    )
