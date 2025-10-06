@@ -135,9 +135,9 @@ jobs:
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
             # BodoSQL C++ Backend
-            BODOSQL_CPP_BACKEND: ${{ inputs.test-type != 'BODOSQL_CPP' && '1' || '0' }}
-            BODOSQL_VERBOSE_CPP_BACKEND: ${{ inputs.test-type != 'BODOSQL_CPP' && '1' || '0' }}
-            BODOSQL_CPP_BACKEND_NO_FALLBACK: ${{ inputs.test-type != 'BODOSQL_CPP' && '1' || '0' }}
+            BODOSQL_CPP_BACKEND: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
+            BODOSQL_VERBOSE_CPP_BACKEND: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
+            BODOSQL_CPP_BACKEND_NO_FALLBACK: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
