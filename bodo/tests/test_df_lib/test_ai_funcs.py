@@ -395,6 +395,8 @@ def test_embed_bedrock_default_formatter():
 
 @pytest.mark.jit_dependency
 def test_torch_train():
+    import tempfile
+
     df = bd.DataFrame(
         {
             "feature1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -405,6 +407,7 @@ def test_torch_train():
 
     def train_loop(data, config):
         import torch
+        import torch.distributed.checkpoint
         import torch.nn as nn
 
         # Simple linear regression model
@@ -445,7 +448,21 @@ def test_torch_train():
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+            # Create checkpoint.
+            base_model = (
+                model.module
+                if isinstance(model, torch.nn.parallel.DistributedDataParallel)
+                else model
+            )
+            torch.distributed.checkpoint.state_dict_saver.save(
+                {"model_state_dict": base_model.state_dict()},
+                checkpoint_id=config["checkpoint_dir"],
+            )
 
             print(f"Epoch {epoch}, Loss: {loss.item()}")
 
-    bodo.ai.train.torch_train(train_loop, df, {"batch_size": 2})
+    bodo.ai.train.torch_train(
+        train_loop,
+        df,
+        {"batch_size": 2, "checkpoint_dir": tempfile.mkdtemp("checkpoint_dir")},
+    )

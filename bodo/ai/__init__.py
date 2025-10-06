@@ -1,4 +1,4 @@
 from .series import embed, llm_generate, tokenize
-from .train import torch_train
+from .train import prepare_model, torch_train
 
-__all__ = ["tokenize", "llm_generate", "embed", "torch_train"]
+__all__ = ["tokenize", "llm_generate", "embed", "torch_train", "prepare_model"]
