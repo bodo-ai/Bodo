@@ -393,6 +393,7 @@ def test_embed_bedrock_default_formatter():
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
 
+@pytest.mark.jit_dependency
 def test_torch_train():
     df = bd.DataFrame(
         {
@@ -419,13 +420,14 @@ def test_torch_train():
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+        gpu_ranks = bodo.get_gpu_ranks()
         if model is None:
             # Not a worker process
+            bodo.rebalance(data, dests=gpu_ranks)
             return
         model_device = next(model.parameters()).device
         if model_device.type != "cpu":
             # If we're using an accelerator, rebalance data to match GPU ranks
-            gpu_ranks = bodo.get_gpu_ranks()
             data = bodo.rebalance(data, dests=gpu_ranks)
 
         # train on data
