@@ -74,6 +74,7 @@ from bodo.pandas.utils import (
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _fix_multi_index_names,
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
@@ -108,6 +109,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = pd.DataFrame({f"{S.name}": S})
         bodo_S = bodo.pandas.base.from_pandas(df)[f"{S.name}"]
         bodo_S._name = S.name
+        bodo_S._head_s.name = S.name
         return bodo_S
 
     def __init__(self, *args, **kwargs):
@@ -596,6 +598,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def index(self):
         self.execute_plan()
+        index = super().index
+
+        if isinstance(index, pd.MultiIndex):
+            index.names = _fix_multi_index_names(index.names)
+
         return super().index
 
     @index.setter
@@ -2547,10 +2554,7 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ArrowScalarFuncExpression(
-            empty_data,
-            plan,
-            (idx,) + tuple(index_cols),
-            expr.function_name,
+            empty_data, plan, (idx,) + tuple(index_cols), expr.function_name, ()
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -2722,6 +2726,7 @@ def _get_series_func_plan(
         "str.swapcase",
         "str.title",
         "str.reverse",
+        "str.match",
     )
 
     def get_arrow_func(name):
@@ -2733,13 +2738,15 @@ def _get_series_func_plan(
         if name.startswith("str.is"):
             body = name.split(".")[1]
             return "utf8_" + body[:2] + "_" + body[2:]
+        if name == "str.match":
+            return "match_substring_regex"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
         return name.split(".")[1]
 
-    if func in arrow_compute_list:
+    if func in arrow_compute_list and len(kwargs) == 0:
         func_name = get_arrow_func(func)
-        func_args = ()  # TODO: expand this to enable arrow compute calls with args
+        func_args = tuple(args)
         is_cfunc = False
         has_state = False
         expr = ArrowScalarFuncExpression(
@@ -2747,6 +2754,7 @@ def _get_series_func_plan(
             source_data,
             (col_index,) + tuple(index_cols),
             func_name,
+            func_args,
         )
     else:
         # Empty func_name separates Python calls from Arrow calls.

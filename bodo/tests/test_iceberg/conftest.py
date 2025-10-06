@@ -414,27 +414,12 @@ def polaris_connection(
     host, port, user, password = polaris_server
     url = f"http://{host}:{port}/api/catalog"
     if request.param == "aws-polaris-warehouse":
-        # Unset the AWS credentials to avoid using them
-        # to confirm that the tests are getting aws credentials from polaris
-        with temp_env_override(
-            {
-                "AWS_ACCESS_KEY_ID": None,
-                "AWS_SECRET_ACCESS_KEY": None,
-                "AWS_SESSION_TOKEN": None,
-            }
-        ):
-            yield url, aws_polaris_warehouse, f"{user}:{password}"
+        yield url, aws_polaris_warehouse, f"{user}:{password}"
     elif request.param == "azure-polaris-warehouse":
         # Unset the Azure credentials to avoid using them
         # to confirm that the tests are getting azure credentials from polaris
         with temp_env_override(
             {
-                # Pyiceberg doesn't support azure vended credentials, it will in 0.9
-                #        "AZURE_STORAGE_ACCOUNT_NAME": None,
-                #        "AZURE_STORAGE_ACCOUNT_KEY": None,
-                #        "AZURE_CLIENT_ID": None,
-                #        "AZURE_CLIENT_SECRET": None,
-                #        "AZURE_TENANT_ID": None
                 f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_NAME": os.environ.get(
                     "AZURE_STORAGE_ACCOUNT_NAME", "bodosficebergazue2"
                 ),

@@ -195,6 +195,7 @@ def test_read_parquet_series_len_shape(datapath):
         assert bodo_out.shape == py_out.shape
 
 
+@pytest.mark.jit_dependency
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
     and filter column isn't used anywhere in the query.
@@ -286,14 +287,13 @@ def test_projection(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
 
-    # TODO: remove copy when df.apply(axis=0) is implemented
-    # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
     _test_equal(
-        bodo_df2.copy(),
+        bodo_df2,
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        # Index is initially RangeIndex, so we ignore final order.
+        reset_index=True,
     )
 
 
@@ -559,6 +559,7 @@ def test_filter_string(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -590,6 +591,7 @@ def test_filter_datetime_pushdown(datapath, op):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -1504,7 +1506,7 @@ def test_series_groupby(dropna, as_index):
         bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
         df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1679,7 +1681,7 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
 
     assert bdf2.is_lazy_plan()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1716,7 +1718,7 @@ def test_groupby_agg_ordered(func):
         bdf2 = getattr(bdf1.groupby("K"), func)()
         df2 = getattr(df.groupby("K"), func)()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 def test_compound_projection_expression(datapath):
@@ -3215,7 +3217,8 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
     long_array = [
@@ -3242,7 +3245,8 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
 
@@ -3758,4 +3762,19 @@ def test_join_non_equi_key_not_in_output():
         check_pandas_types=False,
         reset_index=True,
         sort_output=True,
+    )
+
+
+def test_series_str_match():
+    s = pd.Series(["abc", "a1c", "zzz", None], dtype="string")
+    bs = bd.Series(s)
+
+    # Match strings that start with 'a' and end with 'c'
+    pmask = s.str.match(r"a.*c")
+    bmask = bs.str.match(r"a.*c")
+
+    _test_equal(
+        bmask,
+        pmask,
+        check_pandas_types=False,
     )

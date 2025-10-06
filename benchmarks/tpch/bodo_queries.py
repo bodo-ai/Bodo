@@ -9,40 +9,64 @@ Set the environment variable `BODO_NUM_WORKERS` to limit the number of cores use
 import argparse
 import time
 
+import numpy as np
 import pandas as pd
 
 import bodo
 
 
 @bodo.jit(cache=True)
-def run_queries(data_folder):
+def run_queries(data_folder, queries):
     t1 = time.time()
-    q01(data_folder)
-    q02(data_folder)
-    q03(data_folder)
-    q04(data_folder)
-    q05(data_folder)
-    q06(data_folder)
-    q07(data_folder)
-    q08(data_folder)
-    q09(data_folder)
-    q10(data_folder)
-    q11(data_folder)
-    q12(data_folder)
-    q13(data_folder)
-    q14(data_folder)
-    q15(data_folder)
-    q16(data_folder)
-    q17(data_folder)
-    q18(data_folder)
-    q19(data_folder)
-    q20(data_folder)
-    q21(data_folder)
-    q22(data_folder)
+    for i in range(len(queries)):
+        if queries[i] == 1:
+            q01(data_folder)
+        elif queries[i] == 2:
+            q02(data_folder)
+        elif queries[i] == 3:
+            q03(data_folder)
+        elif queries[i] == 4:
+            q04(data_folder)
+        elif queries[i] == 5:
+            q05(data_folder)
+        elif queries[i] == 6:
+            q06(data_folder)
+        elif queries[i] == 7:
+            q07(data_folder)
+        elif queries[i] == 8:
+            q08(data_folder)
+        elif queries[i] == 9:
+            q09(data_folder)
+        elif queries[i] == 10:
+            q10(data_folder)
+        elif queries[i] == 11:
+            q11(data_folder)
+        elif queries[i] == 12:
+            q12(data_folder)
+        elif queries[i] == 13:
+            q13(data_folder)
+        elif queries[i] == 14:
+            q14(data_folder)
+        elif queries[i] == 15:
+            q15(data_folder)
+        elif queries[i] == 16:
+            q16(data_folder)
+        elif queries[i] == 17:
+            q17(data_folder)
+        elif queries[i] == 18:
+            q18(data_folder)
+        elif queries[i] == 19:
+            q19(data_folder)
+        elif queries[i] == 20:
+            q20(data_folder)
+        elif queries[i] == 21:
+            q21(data_folder)
+        elif queries[i] == 22:
+            q22(data_folder)
     print("Total Query time (s): ", time.time() - t1)
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_lineitem(data_folder):
     t0 = time.time()
     data_path = data_folder + "/lineitem.pq"
@@ -53,7 +77,7 @@ def load_lineitem(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_part(data_folder):
     t0 = time.time()
     data_path = data_folder + "/part.pq"
@@ -64,7 +88,7 @@ def load_part(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_orders(data_folder):
     t0 = time.time()
     data_path = data_folder + "/orders.pq"
@@ -75,7 +99,7 @@ def load_orders(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_customer(data_folder):
     t0 = time.time()
     data_path = data_folder + "/customer.pq"
@@ -110,7 +134,7 @@ def load_region(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_supplier(data_folder):
     t0 = time.time()
     data_path = data_folder + "/supplier.pq"
@@ -121,7 +145,7 @@ def load_supplier(data_folder):
     return df
 
 
-@bodo.jit
+@bodo.jit(cache=True)
 def load_partsupp(data_folder):
     t0 = time.time()
     data_path = data_folder + "/partsupp.pq"
@@ -1099,9 +1123,21 @@ def main():
         default="s3://bodo-example-data/tpch/SF1",
         help="The folder containing TPCH data",
     )
+    parser.add_argument(
+        "--queries",
+        type=int,
+        nargs="+",
+        required=False,
+        help="Space separated TPC-H queries to run.",
+    )
     args = parser.parse_args()
     folder = args.folder
-    run_queries(folder)
+    queries = list(range(1, 23))
+    if args.queries is not None:
+        queries = args.queries
+    print(f"Queries to run: {queries}")
+    qarr = np.array(queries)
+    run_queries(folder, qarr)
 
 
 if __name__ == "__main__":

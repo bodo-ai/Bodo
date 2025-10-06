@@ -20,7 +20,7 @@ def read_iceberg_table(table_name, database_name, spark=None):
     # Convert datetime64 to tz-aware UTC to match Bodo output
     for i in range(len(pd_df.columns)):
         if pd_df.dtypes.iloc[i] == np.dtype("datetime64[ns]"):
-            pd_df.iloc[:, i] = pd_df.iloc[:, i].dt.tz_localize("UTC")
+            pd_df[pd_df.columns[i]] = pd_df[pd_df.columns[i]].dt.tz_localize("UTC")
 
     return pd_df, count, spark_schema
 
