@@ -123,7 +123,7 @@ class LazyPlan:
             else:
                 # Remember we encountered this node.
                 visited.add(id(node))
-                if isinstance(node, LogicalComparisonJoin):
+                if isinstance(node, (LogicalComparisonJoin, LogicalCrossProduct)):
                     # For comparison join, the first two args contain source plans.
                     for arg in node.args[0:2]:
                         if isinstance(arg, LazyPlan):

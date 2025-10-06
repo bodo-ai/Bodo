@@ -398,6 +398,18 @@ def _is_distributable_result(res):
     if pd.api.types.is_scalar(res):
         return False
 
+    # df.to_iceberg returns a list of lists of tuples with information
+    # about each file written. We check for this case separately to avoid
+    # importing the compiler.
+    if isinstance(res, list) and (
+        len(res) == 0
+        or (
+            isinstance(res[0], list)
+            and (len(res[0]) == 0 or isinstance(res[0][0], tuple))
+        )
+    ):
+        return False
+
     # Import compiler lazily
     import bodo.decorators  # isort:skip # noqa
 
