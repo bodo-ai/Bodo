@@ -1289,7 +1289,7 @@ class BodoSQLContext:
                 generator, sql, java_params_array, java_named_params_map
             )
             plan = java_plan_to_python_plan(self, java_plan)
-            out = bodo.pandas.plan.execute_plan(plan)
+            out = bodo.pandas.plan.execute_plan(plan, optimize=False)
         except Exception as e:
             message = error_to_string(e)
             if bodosql.verbose_cpp_backend:
