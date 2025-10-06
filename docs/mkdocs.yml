@@ -6,7 +6,7 @@ site_description: >-
   Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.
 
 # Copyright
-copyright: Copyright &copy; 2019 - 2024 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
+copyright: Copyright &copy; 2019 - 2025 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
 
 # Configuration
 theme:
