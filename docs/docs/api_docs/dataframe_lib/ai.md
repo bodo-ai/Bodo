@@ -55,7 +55,8 @@ Trains a PyTorch model in a distributed manner across multiple workers using the
 Example:
 The following example demonstrates how to use `bodo.ai.torch_train` to train a simple neural network on a dataset. The training loop is able to handle both CPU and GPU training based on the available hardware. If you know which you will be training on you can simplify the code by removing the irrelevant code.
 
-``` py
+```py
+
 import bodo.pandas as pd
 import tempfile
 
@@ -95,7 +96,7 @@ def train_loop(data, config):
         # If we're using an accelerator, rebalance data to match GPU ranks
         data = bodo.rebalance(data, dests=gpu_ranks)
 
-    # train on data
+    # Train on data
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     for epoch in range(config.get("epochs", 5)):
@@ -111,7 +112,7 @@ def train_loop(data, config):
             loss.backward()
             optimizer.step()
 
-         # Create checkpoint.
+        # Create checkpoint
         base_model = (model.module
             if isinstance(model, DistributedDataParallel) else model)
         torch.distributed.checkpoint.state_dict_saver.save(
@@ -122,4 +123,9 @@ def train_loop(data, config):
         print(f"Epoch {epoch}, Loss: {loss.item()}")
 
 
-bodo.ai.train.torch_train(train_loop, df, {"batch_size": 2, "checkpoint_dir": tempfile.mkdtemp("checkpoint_dir")})
+bodo.ai.train.torch_train(
+    train_loop,
+    df,
+    {"batch_size": 2, "checkpoint_dir": tempfile.mkdtemp("checkpoint_dir")},
+)
+```
