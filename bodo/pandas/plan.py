@@ -739,6 +739,11 @@ class ArrowScalarFuncExpression(Expression):
         """Return the function name."""
         return self.args[2]
 
+    @property
+    def function_args(self):
+        """Return the function args."""
+        return self.args[3]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
@@ -763,6 +768,7 @@ class ArrowScalarFuncExpression(Expression):
                 new_source_plan,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.function_name,
+                self.function_args,
             )
             expr.is_series = self.is_series
             return expr
