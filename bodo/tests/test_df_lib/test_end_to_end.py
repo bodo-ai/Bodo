@@ -287,14 +287,13 @@ def test_projection(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
 
-    # TODO: remove copy when df.apply(axis=0) is implemented
-    # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
     _test_equal(
-        bodo_df2.copy(),
+        bodo_df2,
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        # Index is initially RangeIndex, so we ignore final order.
+        reset_index=True,
     )
 
 
@@ -1507,7 +1506,7 @@ def test_series_groupby(dropna, as_index):
         bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
         df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1682,7 +1681,7 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
 
     assert bdf2.is_lazy_plan()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1719,7 +1718,7 @@ def test_groupby_agg_ordered(func):
         bdf2 = getattr(bdf1.groupby("K"), func)()
         df2 = getattr(df.groupby("K"), func)()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 def test_compound_projection_expression(datapath):

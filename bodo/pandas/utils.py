@@ -241,6 +241,12 @@ class BodoLibNotImplementedException(Exception):
     """
 
 
+class BodoDictionaryTypeInvalidException(Exception):
+    """Exception raised in the Bodo DataFrames when unsupported dictionary type is
+    encountered (either values are not strings or index type is not int32).
+    """
+
+
 class BodoLibFallbackWarning(Warning):
     """Warning raised in the Bodo library in the fallback decorator when some
     functionality is not implemented yet and we need to fall back to Pandas.
@@ -270,6 +276,35 @@ def report_times():
 
 if bodo.dataframe_library_profile:
     atexit.register(report_times)
+
+
+def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
+    """Wrap obj with a Bodo constructor or return obj unchanged if
+    it contains invalid Arrow types."""
+
+    try:
+        return cls(obj)
+    except BodoLibNotImplementedException as e:
+        warnings.warn(
+            BodoLibFallbackWarning(
+                f"Could not convert object to {cls.__name__} during fallback, "
+                + f"execution will continue using Pandas: {e}"
+            )
+        )
+
+    return obj
+
+
+def convert_to_bodo(obj):
+    """Returns a new version of *obj* that is the equivalent Bodo type or leave unchanged
+    if not a DataFrame or Series."""
+    from bodo.pandas import BodoDataFrame, BodoSeries
+
+    if isinstance(obj, pd.DataFrame) and not isinstance(obj, BodoDataFrame):
+        return _maybe_create_bodo_obj(BodoDataFrame, obj)
+    elif isinstance(obj, pd.Series) and not isinstance(obj, BodoSeries):
+        return _maybe_create_bodo_obj(BodoSeries, obj)
+    return obj
 
 
 def check_args_fallback(
@@ -413,7 +448,8 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    py_res = getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    return convert_to_bodo(py_res)
             else:
 
                 @functools.wraps(func)
@@ -531,19 +567,26 @@ def df_to_cpp_table(df) -> tuple[int, pa.Schema]:
     return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
 
 
-def _empty_pd_array(pa_type):
+def _empty_pd_array(pa_type, field_name=None):
     """Create an empty pandas array with the given Arrow type."""
 
     # Workaround Arrows conversion gaps for dictionary types
     if isinstance(pa_type, pa.DictionaryType):
-        assert pa_type.index_type == pa.int32() and (
-            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), (
-            "Invalid dictionary type "
-            + str(pa_type.index_type)
-            + " "
-            + str(pa_type.value_type)
-        )
+        if not (
+            pa_type.index_type == pa.int32()
+            and (
+                pa_type.value_type == pa.string()
+                or pa_type.value_type == pa.large_string()
+            )
+        ):
+            field_part = f" at column {field_name}" if field_name is not None else ""
+            raise BodoDictionaryTypeInvalidException(
+                f"Encountered invalid dictionary type{field_part}: "
+                + str(pa_type.index_type)
+                + " "
+                + str(pa_type.value_type)
+                + " not supported yet."
+            )
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]
@@ -905,7 +948,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(
-        {field.name: _empty_pd_array(field.type) for field in arrow_schema}
+        {
+            field.name: _empty_pd_array(field.type, field_name=field.name)
+            for field in arrow_schema
+        }
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
@@ -1122,6 +1168,24 @@ def ensure_datetime64ns(df):
     return df
 
 
+class FallbackContext:
+    """Context manager for tracking nested fallback calls."""
+
+    level = 0
+
+    @classmethod
+    def is_top_level(cls):
+        """Check we are in the top level context i.e. this fallback was not triggered
+        by another fallback."""
+        return FallbackContext.level == 0
+
+    def __enter__(self):
+        FallbackContext.level += 1
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        FallbackContext.level -= 1
+
+
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
 def fallback_wrapper(self, attr, name, msg):
     """
@@ -1149,10 +1213,16 @@ def fallback_wrapper(self, attr, name, msg):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 try:
-                    return attr(*args, **kwargs)
+                    with FallbackContext():
+                        py_res = attr(*args, **kwargs)
+
+                    # Convert objects to Bodo before returning them to the user.
+                    if FallbackContext.is_top_level():
+                        return convert_to_bodo(py_res)
+
+                    return py_res
                 except TypeError as e:
                     msg = e
-                    pass
 
             # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
             # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.
@@ -1169,7 +1239,9 @@ def fallback_wrapper(self, attr, name, msg):
                         )
                     )
                     converted = pd_self.array._pa_array.to_pandas()
-                    return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    return convert_to_bodo(
+                        getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    )
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.
             raise TypeError(msg)

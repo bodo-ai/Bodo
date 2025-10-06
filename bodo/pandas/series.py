@@ -109,6 +109,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = pd.DataFrame({f"{S.name}": S})
         bodo_S = bodo.pandas.base.from_pandas(df)[f"{S.name}"]
         bodo_S._name = S.name
+        bodo_S._head_s.name = S.name
         return bodo_S
 
     def __init__(self, *args, **kwargs):
