@@ -300,6 +300,10 @@ def convert_to_bodo(obj):
     if not a DataFrame or Series."""
     from bodo.pandas import BodoDataFrame, BodoSeries
 
+    # Avoid converting to Bodo types if dataframe library is disabled for testing
+    if not bodo.dataframe_library_enabled:
+        return obj
+
     if isinstance(obj, pd.DataFrame) and not isinstance(obj, BodoDataFrame):
         return _maybe_create_bodo_obj(BodoDataFrame, obj)
     elif isinstance(obj, pd.Series) and not isinstance(obj, BodoSeries):
