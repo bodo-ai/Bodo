@@ -44,7 +44,6 @@ def _init_process_group():
 
     device = torch.accelerator.current_accelerator(check_available=True)
     pytorch_rank = MPI.COMM_WORLD.Get_rank()
-    npes = len(get_gpu_ranks()) if device != "cpu" else MPI.COMM_WORLD.Get_size()
     if device is None:
         device = "cpu"
     else:
@@ -54,6 +53,7 @@ def _init_process_group():
             pytorch_rank = gpu_ranks.index(mpi_rank)
         else:
             pytorch_rank = None
+    npes = len(get_gpu_ranks()) if device != "cpu" else MPI.COMM_WORLD.Get_size()
 
     backend = torch.distributed.get_default_backend_for_device(device)
     tcp_conn_str = None
