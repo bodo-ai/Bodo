@@ -1286,8 +1286,8 @@ def _check_query_equal(
         expected_output = expected_output.reset_index(drop=True)
     # check_names=False doesn't seem to work inside pd.testing.assert_frame_equal, so manually rename
     if not check_names:
-        bodosql_output.columns = range(len(bodosql_output.columns))
-        expected_output.columns = range(len(expected_output.columns))
+        bodosql_output.columns = [str(i) for i in range(len(bodosql_output.columns))]
+        expected_output.columns = [str(i) for i in range(len(expected_output.columns))]
 
     passed = 1
     n_ranks = bodo.get_size()

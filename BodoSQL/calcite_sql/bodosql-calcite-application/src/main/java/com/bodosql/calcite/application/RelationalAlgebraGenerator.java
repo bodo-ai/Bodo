@@ -560,6 +560,33 @@ public class RelationalAlgebraGenerator {
   }
 
   /**
+   * Return the optimized plan generated for the given SQL query.
+   *
+   * @param sql The SQL query to process.
+   * @param dynamicParamTypes The dynamic parameter types.
+   * @param namedParamTypeMap The named parameter types.
+   * @return The optimized plan generated for the given SQL query.
+   * @throws Exception If an error occurs while processing the SQL query.
+   */
+  RelNode getOptimizedPlan(
+      @NonNull String sql,
+      @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
+      @NonNull Map<String, ColumnDataTypeInfo> namedParamTypeMap)
+      throws Exception {
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
+      Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
+      return BodoUtilKt.bodoPhysicalProject(optimizedPlan.getLeft());
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
+  }
+
+  /**
    * Get the Pandas code and the optimized plan string for the given SQL query.
    *
    * @param sql The SQL query to process.

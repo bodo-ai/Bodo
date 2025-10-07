@@ -110,7 +110,8 @@ def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> b
     from bodo.pandas.plan import LazyPlan
 
     return not all(
-        isinstance(arg, LazyPlan) for arg in itertools.chain(args, kwargs.values())
+        isinstance(arg, LazyPlan) or pd.api.types.is_scalar(arg)
+        for arg in itertools.chain(args, kwargs.values())
     )
 
 
@@ -534,6 +535,9 @@ class Spawner:
                 self._get_arg_metadata(val, arg_name, is_replicated, dist_flags)
                 for val in arg
             )
+
+        if pd.api.types.is_scalar(arg):
+            return None
 
         # Arguments could be functions which fail in typeof.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1

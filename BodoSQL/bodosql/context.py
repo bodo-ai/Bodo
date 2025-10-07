@@ -20,6 +20,7 @@ import bodo.hiframes
 import bodo.hiframes.pd_multi_index_ext
 import bodo.io.iceberg.merge_into  # noqa
 import bodo.io.iceberg.read_compilation
+import bodosql
 from bodo.ir.sql_ext import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
@@ -31,6 +32,7 @@ from bodosql.imported_java_classes import (
     build_java_array_list,
     build_java_hash_map,
 )
+from bodosql.plan_conversion import java_plan_to_python_plan
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
@@ -125,6 +127,15 @@ _numba_to_sql_param_type_map = {
     bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
+
+
+class _CPPBackendExecutionFailed:
+    """Sentinel class to indicate C++ backend execution failed and we should fall back to JIT"""
+
+    pass
+
+
+CPP_BACKEND_EXECUTION_FAILED = _CPPBackendExecutionFailed()
 
 
 def construct_tz_aware_array_type(typ, nullable):
@@ -1093,6 +1104,16 @@ class BodoSQLContext:
         if is_ddl:
             # Just execute DDL operations directly and return the DataFrame.
             return self.execute_ddl(sql, generator)
+        elif (
+            bodosql.use_cpp_backend
+            and (
+                output := self.execute_cpp_backend(
+                    sql, generator, dynamic_params_list, params_dict
+                )
+            )
+            is not CPP_BACKEND_EXECUTION_FAILED
+        ):
+            return output
         else:
             func_text, lowered_globals = self._convert_to_pandas(
                 sql,
@@ -1239,6 +1260,47 @@ class BodoSQLContext:
                 f"Unable to compile SQL Query. Error message:\n{message}"
             )
         return pd_code, JavaEntryPoint.getLoweredGlobals(generator)
+
+    def execute_cpp_backend(
+        self,
+        sql: str,
+        generator,
+        dynamic_params_list: list[Any],
+        named_params_dict: dict[str, Any],
+    ) -> pd.DataFrame | None | _CPPBackendExecutionFailed:
+        """Execute the query using the C++ backend if possible.
+
+        Args:
+            sql (str): The SQL query text.
+            generator (RelationalAlgebraGenerator Java Object): The relational algebra generator
+                used to generate the plan.
+
+        Returns:
+            pd.DataFrame | None | _CPPBackendExecutionFailed: The result of the query execution or a failure indicator.
+        """
+        try:
+            java_params_array = create_java_dynamic_parameter_type_list(
+                dynamic_params_list
+            )
+            java_named_params_map = create_java_named_parameter_type_map(
+                named_params_dict
+            )
+            java_plan = JavaEntryPoint.getOptimizedPlan(
+                generator, sql, java_params_array, java_named_params_map
+            )
+            plan = java_plan_to_python_plan(self, java_plan)
+            out = bodo.pandas.plan.execute_plan(plan, optimize=False)
+        except Exception as e:
+            message = error_to_string(e)
+            if bodosql.verbose_cpp_backend:
+                print(f"C++ backend execution failed with error:\n{message}")
+            if bodosql.cpp_backend_no_fallback:
+                raise RuntimeError(
+                    f"C++ backend execution failed with error:\n{message}"
+                ) from e
+            out = CPP_BACKEND_EXECUTION_FAILED
+
+        return out
 
     def _create_generator(self, hide_credentials: bool):
         """Creates a RelationalAlgebraGenerator from the schema.
