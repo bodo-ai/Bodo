@@ -10,6 +10,8 @@ from bodo.mpi4py import MPI
 if typing.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
 
+PROCESS_GROUP_INIT_RETRIES = 5
+
 
 def torch_import_guard():
     try:
@@ -41,8 +43,10 @@ def _init_process_group():
 
     if dist.is_initialized():
         dist.destroy_process_group()
-
-    device = torch.accelerator.current_accelerator(check_available=True)
+    if hasattr(torch, "accelerator"):
+        device = torch.accelerator.current_accelerator(check_available=True)
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pytorch_rank = MPI.COMM_WORLD.Get_rank()
     if device is None:
         device = "cpu"
@@ -56,20 +60,27 @@ def _init_process_group():
     npes = len(get_gpu_ranks()) if device != "cpu" else MPI.COMM_WORLD.Get_size()
 
     backend = torch.distributed.get_default_backend_for_device(device)
-    tcp_conn_str = None
-    if pytorch_rank == 0:
-        port = _get_open_port()
-        tcp_conn_str = f"tcp://{socket.gethostname()}:{port}"
-    tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
+    # Incase something binds to the port between getting the port and initializing
+    # the process group, we retry a few times.
+    for i in range(PROCESS_GROUP_INIT_RETRIES):
+        try:
+            tcp_conn_str = None
+            if pytorch_rank == 0:
+                port = _get_open_port()
+                tcp_conn_str = f"tcp://{socket.gethostname()}:{port}"
+            tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
 
-    if pytorch_rank is not None:
-        dist.init_process_group(
-            backend=backend,
-            init_method=tcp_conn_str,
-            rank=pytorch_rank,
-            world_size=npes,
-        )
-    return pytorch_rank, npes, device
+            if pytorch_rank is not None:
+                dist.init_process_group(
+                    backend=backend,
+                    init_method=tcp_conn_str,
+                    rank=pytorch_rank,
+                    world_size=npes,
+                )
+            return pytorch_rank, npes, device
+        except Exception as e:
+            if i == PROCESS_GROUP_INIT_RETRIES - 1:
+                raise e
 
 
 def torch_train(
