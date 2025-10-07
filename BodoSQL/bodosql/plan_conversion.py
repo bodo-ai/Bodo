@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pandas as pd
 import pyarrow as pa
 
 import bodo
+import bodo.pandas as bd
+import bodosql
 from bodo.pandas.plan import (
     ArithOpExpression,
     LogicalProjection,
@@ -34,8 +37,20 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "PandasTableScan":
         # TODO: support other table types and check table details
         table_name = JavaEntryPoint.getLocalTableName(java_plan)
-        df = ctx.tables[table_name]
-        return bodo.pandas.from_pandas(df)._plan
+        table = ctx.tables[table_name]
+        if isinstance(table, bodosql.TablePath):
+            if table._file_type == "pq":
+                return bd.read_parquet(table._file_path)._plan
+            else:
+                raise NotImplementedError(
+                    f"TablePath with file type {table._file_type} not supported in C++ backend yet"
+                )
+        elif isinstance(table, pd.DataFrame):
+            return bodo.pandas.from_pandas(table)._plan
+        else:
+            raise NotImplementedError(
+                f"Table type {type(table)} not supported in C++ backend yet"
+            )
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
