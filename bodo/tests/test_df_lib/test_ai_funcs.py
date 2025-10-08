@@ -13,6 +13,7 @@ import pytest
 import requests
 
 import bodo.ai.backend
+import bodo.ai.train
 import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
@@ -390,3 +391,76 @@ def test_embed_bedrock_default_formatter():
 
     assert len(res) == 4
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
+
+
+@pytest.mark.jit_dependency
+def test_torch_train():
+    import tempfile
+
+    df = bd.DataFrame(
+        {
+            "feature1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "feature2": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            "label": [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0],
+        }
+    )
+
+    def train_loop(data, config):
+        import torch
+        import torch.distributed.checkpoint
+        import torch.nn as nn
+
+        # Simple linear regression model
+        class SimpleModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear1 = nn.Linear(2, 32)
+                self.relu = nn.ReLU()
+                self.linear2 = nn.Linear(32, 1)
+
+            def forward(self, x):
+                return self.linear2(self.relu(self.linear1(x)))
+
+        model = SimpleModel()
+        model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+        gpu_ranks = bodo.get_gpu_ranks()
+        if model is None:
+            # Not a worker process
+            bodo.rebalance(data, dests=gpu_ranks)
+            return
+        model_device = next(model.parameters()).device
+        if model_device.type != "cpu":
+            # If we're using an accelerator, rebalance data to match GPU ranks
+            data = bodo.rebalance(data, dests=gpu_ranks)
+
+        # train on data
+        criterion = nn.MSELoss()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        for epoch in range(config.get("epochs", 5)):
+            batch_size = config.get("batch_size", 2)
+            for i in range(0, len(data), batch_size):
+                batch = data[i : i + batch_size]
+                batch_tensor = torch.tensor(batch.to_numpy("float32")).to(model_device)
+                inputs = batch_tensor[:, :2]
+                labels = batch_tensor[:, 2].unsqueeze(1)
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+            # Create checkpoint.
+            base_model = (
+                model.module
+                if isinstance(model, torch.nn.parallel.DistributedDataParallel)
+                else model
+            )
+            torch.distributed.checkpoint.state_dict_saver.save(
+                {"model_state_dict": base_model.state_dict()},
+                checkpoint_id=config["checkpoint_dir"],
+            )
+
+    bodo.ai.train.torch_train(
+        train_loop,
+        df,
+        {"batch_size": 2, "checkpoint_dir": tempfile.mkdtemp("checkpoint_dir")},
+    )
