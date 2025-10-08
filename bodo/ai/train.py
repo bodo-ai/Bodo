@@ -48,26 +48,26 @@ def _init_process_group():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pytorch_rank = MPI.COMM_WORLD.Get_rank()
+
+    gpu_ranks = get_gpu_ranks()
     if device is None or device == torch.device("cpu"):
         device = torch.device("cpu")
     else:
         # Assign each rank to an accelerator
         mpi_rank = MPI.COMM_WORLD.Get_rank()
-        gpu_ranks = get_gpu_ranks()
         num_local_gpus = len(gpu_ranks) // get_num_nodes()
         if mpi_rank in gpu_ranks:
             pytorch_rank = gpu_ranks.index(mpi_rank)
             if hasattr(torch, "accelerator"):
-                device = torch.accelerator.set_device_idx(pytorch_rank % num_local_gpus)
+                torch.accelerator.set_device_index(pytorch_rank % num_local_gpus)
+                device = torch.accelerator.current_accelerator()
             else:
+                torch.cuda.set_device(pytorch_rank % num_local_gpus)
                 device = torch.device(f"cuda:{pytorch_rank % num_local_gpus}")
-
         else:
             pytorch_rank = None
     npes = (
-        len(get_gpu_ranks())
-        if device != torch.device("cpu")
-        else MPI.COMM_WORLD.Get_size()
+        len(gpu_ranks) if device != torch.device("cpu") else MPI.COMM_WORLD.Get_size()
     )
 
     backend = torch.distributed.get_default_backend_for_device(device)
@@ -129,12 +129,6 @@ def prepare_model(
     if pytorch_rank is None:
         return None
 
-    model = model.to(device)
-
-    # No need to wrap the model if only one process is used
-    if pytorch_world_size == 1:
-        return model
-
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
             "parallel_strategy should be either 'ddp' or 'fsdp'"
@@ -149,5 +143,5 @@ def prepare_model(
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
             model = FSDP(model, **parallel_strategy_kwargs)
-        model.to(pytorch_rank)
+    model.to(device)
     return model
