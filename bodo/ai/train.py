@@ -48,7 +48,6 @@ def _init_process_group():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pytorch_rank = MPI.COMM_WORLD.Get_rank()
-    device = None
     if device is None or device == torch.device("cpu"):
         device = torch.device("cpu")
     else:
