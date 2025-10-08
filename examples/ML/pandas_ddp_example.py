@@ -15,15 +15,16 @@ from transformers import BertModel, BertTokenizer
 class PandasDataset(torch.utils.data.Dataset):
 
     def __init__(self, df):
-        self.df = df[["tokenized", "label"]]
+        self.labels : pd.Series = df["label"]
+        self.tokenized : pd.Series = df["tokenized"]
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
 
-        batch_texts = self.df.tokenized.iloc[idx]
-        batch_y = self.df.label.iloc[idx]
+        batch_texts = self.labels.iloc[idx]
+        batch_y = self.tokenized.iloc[idx]
 
         return batch_texts, batch_y
 
@@ -34,7 +35,7 @@ class BertClassifier(nn.Module):
 
         super().__init__()
 
-        self.bert = BertModel.from_pretrained('bert-base-cased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.dropout = nn.Dropout(dropout)
         self.linear = nn.Linear(768, 5)
         self.relu = nn.ReLU()
@@ -58,7 +59,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
         }
 
     df.drop_duplicates(subset=["text"])
-    df["text"] = df.text.str.lower().str.strip().str.replace(r"\s+", " ", regex=True)
+    df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
         tokenized = tokenizer(x, max_length=10, truncation=True, padding='max_length')
@@ -181,7 +182,7 @@ def ddp_main(rank, world_size):
     torch.cuda.set_device(rank)
     device = torch.device(f"cuda:{rank}")
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     train_df, val_df, _test_df = prepare_datasets(tokenizer)
     train_dataset = PandasDataset(train_df)
