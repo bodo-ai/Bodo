@@ -3778,3 +3778,26 @@ def test_series_str_match():
         pmask,
         check_pandas_types=False,
     )
+
+
+def test_asarray_df():
+    """
+    Tests that np.asarray(df) produces the correct ndarray
+    when all columns have the same dtype.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4], dtype="Int32"),
+            "B": pd.array([5, 6, 7, 8], dtype="Int32"),
+            "C": pd.array([9, 10, 11, 12], dtype="Int32"),
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    result_bodo = np.asarray(bdf)
+    result_pandas = np.asarray(df)
+
+    assert result_bodo.shape == (4, 3)
+    assert result_bodo.dtype == np.int32
+    np.testing.assert_array_equal(result_bodo, result_pandas)
