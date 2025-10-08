@@ -459,8 +459,6 @@ def test_torch_train():
                 checkpoint_id=config["checkpoint_dir"],
             )
 
-            print(f"Epoch {epoch}, Loss: {loss.item()}")
-
     bodo.ai.train.torch_train(
         train_loop,
         df,

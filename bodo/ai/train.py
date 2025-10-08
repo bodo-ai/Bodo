@@ -88,6 +88,11 @@ def torch_train(
     dataset: BodoDataFrame | BodoSeries,
     train_loop_config: dict | None = None,
 ):
+    # We need the compiler on the spawner since the workers will import it
+    # for get_gpu_ranks, if the workers have it and not the spawner it can
+    # cause a hang in gather/scatter operations since they will have
+    # different implementations.
+    import bodo.decorators  # noqa: F401
     from bodo.spawn.spawner import submit_func_to_workers
 
     def worker_func(data):
