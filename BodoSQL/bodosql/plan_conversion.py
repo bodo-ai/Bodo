@@ -70,8 +70,8 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalJoin":
         return java_join_to_python_join(ctx, java_plan)
 
-    # TODO: support runtime join filters (ok to ignore for now since they are just
-    # optimizations)
+    # TODO[BSE-5152]: support runtime join filters (ok to ignore for now since they are
+    # just optimizations)
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
         return java_plan_to_python_plan(ctx, java_plan.getInput())
 
@@ -126,7 +126,7 @@ def java_join_to_python_join(ctx, java_join):
 
     join_info = java_join.analyzeCondition()
 
-    # TODO: support non-equi joins
+    # TODO[BSE-5149]: support non-equi joins
     if not join_info.isEqui():
         raise NotImplementedError("Only equi-joins are supported")
 
@@ -149,7 +149,7 @@ def java_join_to_python_join(ctx, java_join):
     # Avoid duplicate column names
     empty_join_out.columns = [c + str(i) for i, c in enumerate(empty_join_out.columns)]
 
-    # TODO: support broadcast join flag
+    # TODO[BSE-5150]: support broadcast join flag
     planComparisonJoin = LogicalComparisonJoin(
         empty_join_out,
         left_plan,

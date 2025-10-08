@@ -43,8 +43,8 @@ def test_join(
 ):
     """test simple join queries"""
 
-    # TODO: support non-equi joins in BodoSQL C++ backend
-    # TODO: support filter in BodoSQL C++ backend to enable non-outer join plans
+    # TODO[BSE-5149]: support non-equi joins in BodoSQL C++ backend
+    # TODO[BSE-5151]: support filter in BodoSQL C++ backend to enable non-outer join plans
     if bodosql.use_cpp_backend and (comparison_ops != "=" or join_type != "FULL OUTER"):
         return
 
