@@ -39,7 +39,7 @@ def _init_process_group():
     import torch
     import torch.distributed as dist
 
-    from bodo import get_gpu_ranks
+    from bodo import get_gpu_ranks, get_num_nodes
 
     if dist.is_initialized():
         dist.destroy_process_group()
@@ -51,10 +51,17 @@ def _init_process_group():
     if device is None or device == torch.device("cpu"):
         device = torch.device("cpu")
     else:
+        # Assign each rank to an accelerator
         mpi_rank = MPI.COMM_WORLD.Get_rank()
         gpu_ranks = get_gpu_ranks()
+        num_local_gpus = len(gpu_ranks) // get_num_nodes()
         if mpi_rank in gpu_ranks:
             pytorch_rank = gpu_ranks.index(mpi_rank)
+            if hasattr(torch, "accelerator"):
+                device = torch.accelerator.set_device_idx(pytorch_rank % num_local_gpus)
+            else:
+                device = torch.device(f"cuda:{pytorch_rank % num_local_gpus}")
+
         else:
             pytorch_rank = None
     npes = (

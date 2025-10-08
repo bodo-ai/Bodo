@@ -2844,7 +2844,7 @@ def get_gpu_ranks():  # pragma: no cover
                 for local_rank, global_rank in enumerate(ranks):
                     if local_rank % cores_per_gpu == 0:
                         # pin this rank to GPU
-                        my_gpu = local_rank / cores_per_gpu
+                        my_gpu = local_rank // cores_per_gpu
                         if my_gpu < n_gpus:
                             gpu_ranks.append(global_rank)
             if error:  # pragma: no cover
