@@ -19,7 +19,7 @@ class PandasDataset(torch.utils.data.Dataset):
         self.tokenized : pd.Series = df["tokenized"]
 
     def __len__(self):
-        return len(self.df)
+        return len(self.labels)
 
     def __getitem__(self, idx):
 
