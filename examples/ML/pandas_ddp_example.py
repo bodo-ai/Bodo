@@ -11,6 +11,10 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, DistributedSampler
 from transformers import BertModel, BertTokenizer
 
+LR = 1e-6
+EPOCHS = 1
+NUM_CLASSES = 5
+SEQ_LENGTH = 512
 
 class PandasDataset(torch.utils.data.Dataset):
 
@@ -37,7 +41,7 @@ class BertClassifier(nn.Module):
 
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(768, 5)
+        self.linear = nn.Linear(768, NUM_CLASSES)
         self.relu = nn.ReLU()
 
     def forward(self, input_id, mask):
@@ -62,7 +66,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
     df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
-        tokenized = tokenizer(x, max_length=10, truncation=True, padding='max_length')
+        tokenized = tokenizer(x, max_length=SEQ_LENGTH, truncation=True, padding='max_length')
         return {"input_ids": tokenized.input_ids, "attention_mask": tokenized.attention_mask}
 
     df["label"] = df.label.map(labels)
@@ -175,8 +179,6 @@ def ddp_train_one_epoch(model, rank, train_loader, loss_fn, optimizer, epoch, sa
 def ddp_main(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
-    LR = 1e-6
-    EPOCHS = 1
 
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
