@@ -48,8 +48,9 @@ def _init_process_group():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pytorch_rank = MPI.COMM_WORLD.Get_rank()
-    if device is None or device == "cpu":
-        device = "cpu"
+    device = None
+    if device is None or device == torch.device("cpu"):
+        device = torch.device("cpu")
     else:
         mpi_rank = MPI.COMM_WORLD.Get_rank()
         gpu_ranks = get_gpu_ranks()
@@ -57,7 +58,11 @@ def _init_process_group():
             pytorch_rank = gpu_ranks.index(mpi_rank)
         else:
             pytorch_rank = None
-    npes = len(get_gpu_ranks()) if device != "cpu" else MPI.COMM_WORLD.Get_size()
+    npes = (
+        len(get_gpu_ranks())
+        if device != torch.device("cpu")
+        else MPI.COMM_WORLD.Get_size()
+    )
 
     backend = torch.distributed.get_default_backend_for_device(device)
     # Incase something binds to the port between getting the port and initializing
