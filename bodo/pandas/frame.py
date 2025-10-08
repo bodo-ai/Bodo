@@ -338,6 +338,21 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
             return super().__repr__()
 
+    def __array__(self, dtype=None, copy=None):
+        if dtype is None and copy is None and len(self.dtypes) > 0:
+            common_dtype = self.dtypes.iloc[0]
+            if (
+                isinstance(common_dtype, pd.ArrowDtype)
+                and (
+                    pa.types.is_integer(common_dtype.pyarrow_dtype)
+                    or pa.types.is_floating(common_dtype.pyarrow_dtype)
+                )
+                and all(self.dtypes == common_dtype)
+            ):
+                return np.asarray(self, dtype=common_dtype.numpy_dtype)
+
+        return super().__array__(dtype, copy)
+
     @property
     def index(self):
         self.execute_plan()
