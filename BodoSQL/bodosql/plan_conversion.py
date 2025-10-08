@@ -146,6 +146,8 @@ def java_join_to_python_join(ctx, java_join):
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
 
     empty_join_out = pd.concat([left_plan.empty_data, right_plan.empty_data], axis=1)
+    # Avoid duplicate column names
+    empty_join_out.columns = [c + str(i) for i, c in enumerate(empty_join_out.columns)]
 
     # TODO: support broadcast join flag
     planComparisonJoin = LogicalComparisonJoin(
