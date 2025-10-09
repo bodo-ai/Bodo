@@ -195,6 +195,9 @@ def java_literal_to_python_literal(java_literal):
         if isinstance(val, decimal.Decimal) and val == int(val):
             return int(val)
 
+    if lit_type_name.equals(SqlTypeName.DOUBLE):
+        return java_literal.getValue()
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
