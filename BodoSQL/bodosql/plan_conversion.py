@@ -64,7 +64,10 @@ def java_plan_to_python_plan(ctx, java_plan):
         exprs = [
             java_expr_to_python_expr(e, input_plan) for e in java_plan.getProjects()
         ]
-        new_schema = pa.schema([e.pa_schema.field(0) for e in exprs])
+        names = list(java_plan.getRowType().getFieldNames())
+        new_schema = pa.schema(
+            [pa.field(name, e.pa_schema.field(0).type) for e, name in zip(exprs, names)]
+        )
         empty_data = arrow_to_empty_df(new_schema)
         proj_plan = LogicalProjection(
             empty_data,
@@ -204,16 +207,17 @@ def java_literal_to_python_literal(java_literal, input_plan):
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
 
-    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.null()))
     # TODO: support all Calcite literal types
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         # Integer constants are represented as DECIMAL in Calcite
         val = java_literal.getValue()
         if isinstance(val, decimal.Decimal) and val == int(val):
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ConstantExpression(dummy_empty_data, input_plan, int(val))
 
     if lit_type_name.equals(SqlTypeName.DOUBLE):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
     raise NotImplementedError(
