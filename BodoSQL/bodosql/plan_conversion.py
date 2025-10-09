@@ -128,9 +128,25 @@ def java_call_to_python_call(java_call, input_plan):
             expr = ArithOpExpression(left.empty_data, left, right, "__add__")
             return expr
 
+        # Comparison operators
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        if kind.equals(SqlKind.EQUALS):
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.eq)
+
+        if kind.equals(SqlKind.NOT_EQUALS):
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.ne)
+
+        if kind.equals(SqlKind.LESS_THAN):
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.lt)
+
         if kind.equals(SqlKind.GREATER_THAN):
-            expr = ComparisonOpExpression(left.empty_data, left, right, operator.gt)
-            return expr
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.gt)
+
+        if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.ge)
+
+        if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
+            return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
 
     raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
 
