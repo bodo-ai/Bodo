@@ -39,7 +39,8 @@ class PhysicalProjection : public PhysicalProcessBatch {
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
-        for (auto& expr : exprs) {
+	for (size_t expr_idx = 0; expr_idx < exprs.size(); ++expr_idx) {
+            auto& expr = exprs[expr_idx];
             physical_exprs.emplace_back(
                 buildPhysicalExprTree(expr, col_ref_map, true));
 
@@ -70,10 +71,15 @@ class PhysicalProjection : public PhysicalProcessBatch {
                     col_names.emplace_back(
                         scalar_func_data.out_schema->field(0)->name());
                 } else {
-                    // Will use types from LogicalProjection here eventually.
-                    throw std::runtime_error(
-                        "Unsupported bound_function in projection " +
-                        expr->ToString());
+		    if (func_expr.function.name == "floor") {
+                        this->output_schema->append_column(std::move(input_schema->column_types[expr_idx]->copy()));
+                        col_names.emplace_back("floor");
+		    } else {
+                        // Will use types from LogicalProjection here eventually.
+                        throw std::runtime_error(
+                            "Unsupported bound_function in projection " +
+                            expr->ToString());
+		    }
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
                 auto& const_expr =
