@@ -126,7 +126,7 @@ def java_call_to_python_call(java_call, input_plan):
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.PLUS):
-            # TODO: support all BodoSQL data types in backend (including date/time)
+            # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
             # TODO: upcast output to avoid overflow?
             expr = ArithOpExpression(left.empty_data, left, right, "__add__")
             return expr
@@ -156,7 +156,7 @@ def java_call_to_python_call(java_call, input_plan):
         operand_type = operand.getType()
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-        # TODO: support all Calcite casts
+        # TODO[BSE-5154]: support all Calcite casts
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
             operand_type
@@ -220,7 +220,7 @@ def java_literal_to_python_literal(java_literal, input_plan):
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
 
-    # TODO: support all Calcite literal types
+    # TODO[BSE-5156]: support all Calcite literal types
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         lit_type_scale = lit_type.getScale()
