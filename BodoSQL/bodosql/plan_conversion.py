@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import operator
+
 import pandas as pd
 import pyarrow as pa
 
@@ -8,7 +10,9 @@ import bodo.pandas as bd
 import bodosql
 from bodo.pandas.plan import (
     ArithOpExpression,
+    ComparisonOpExpression,
     LogicalComparisonJoin,
+    LogicalFilter,
     LogicalProjection,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -75,6 +79,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
         return java_plan_to_python_plan(ctx, java_plan.getInput())
 
+    if java_class_name == "BodoPhysicalFilter":
+        return java_filter_to_python_filter(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -98,23 +105,27 @@ def java_call_to_python_call(java_call, input_plan):
     """Convert a BodoSQL Java call expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
     """
-    operator = java_call.getOperator()
-    operator_class_name = operator.getClass().getSimpleName()
+    op = java_call.getOperator()
+    operator_class_name = op.getClass().getSimpleName()
 
     if (
-        operator_class_name == "SqlMonotonicBinaryOperator"
+        operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator")
         and len(java_call.getOperands()) == 2
     ):
         operands = java_call.getOperands()
         left = java_expr_to_python_expr(operands[0], input_plan)
         right = java_expr_to_python_expr(operands[1], input_plan)
-        kind = operator.getKind()
+        kind = op.getKind()
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.PLUS):
             # TODO: support all BodoSQL data types in backend (including date/time)
             # TODO: upcast output to avoid overflow?
             expr = ArithOpExpression(left.empty_data, left, right, "__add__")
+            return expr
+
+        if kind.equals(SqlKind.GREATER_THAN):
+            expr = ComparisonOpExpression(left.empty_data, left, right, operator.gt)
             return expr
 
     raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
@@ -158,3 +169,10 @@ def java_join_to_python_join(ctx, java_join):
         key_indices,
     )
     return planComparisonJoin
+
+
+def java_filter_to_python_filter(ctx, java_filter):
+    """Convert a BodoSQL Java filter plan to a Python filter plan."""
+    input_plan = java_plan_to_python_plan(ctx, java_filter.getInput())
+    condition = java_expr_to_python_expr(java_filter.getCondition(), input_plan)
+    return LogicalFilter(input_plan.empty_data, input_plan, condition)
