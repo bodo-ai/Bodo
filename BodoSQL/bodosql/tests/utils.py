@@ -337,9 +337,11 @@ def check_query(
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params, bind_variables))
 
-    if expected_output is None and (bodo.get_rank() == 0 and spark is None):
+    if expected_output is None and (
+        bodo.get_rank() == 0 and spark is None and not use_duckdb
+    ):
         raise ValueError(
-            "Either `expected_output` or `spark` argument must be set to not None"
+            "Either `expected_output` or `spark` argument must be set to not None or use_duckdb must be True."
         )
 
     # Determine the Spark output.
