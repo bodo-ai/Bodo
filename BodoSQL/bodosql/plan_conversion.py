@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import decimal
 import operator
 
 import pandas as pd
@@ -219,15 +218,21 @@ def java_literal_to_python_literal(java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant"""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
+    lit_type = java_literal.getType()
 
     # TODO: support all Calcite literal types
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
-        # Integer constants are represented as DECIMAL in Calcite
+        lit_type_scale = lit_type.getScale()
         val = java_literal.getValue()
-        if isinstance(val, decimal.Decimal) and val == int(val):
+        if lit_type_scale == 0:
+            # Integer constants are represented as DECIMAL in Calcite
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ConstantExpression(dummy_empty_data, input_plan, int(val))
+        else:
+            # TODO: support proper decimal types in C++ backend
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            return ConstantExpression(dummy_empty_data, input_plan, float(val))
 
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
