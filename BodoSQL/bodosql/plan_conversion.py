@@ -152,6 +152,19 @@ def java_call_to_python_call(java_call, input_plan):
         if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
             return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
 
+    if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
+        operand = java_call.getOperands()[0]
+        operand_type = operand.getType()
+        target_type = java_call.getType()
+        SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+        # TODO: support all Calcite casts
+
+        if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
+            operand_type
+        ):
+            # Cast of int to DECIMAL is unnecessary in C++ backend
+            return java_expr_to_python_expr(operand, input_plan)
+
     raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
 
 
@@ -222,4 +235,16 @@ def java_literal_to_python_literal(java_literal, input_plan):
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
+    )
+
+
+def is_int_type(java_type):
+    """Check if a Calcite type is an integer type."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    type_name = java_type.getSqlTypeName()
+    return (
+        type_name.equals(SqlTypeName.TINYINT)
+        or type_name.equals(SqlTypeName.SMALLINT)
+        or type_name.equals(SqlTypeName.INTEGER)
+        or type_name.equals(SqlTypeName.BIGINT)
     )
