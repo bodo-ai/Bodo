@@ -8,6 +8,7 @@ import bodo.pandas as bd
 import bodosql
 from bodo.pandas.plan import (
     ArithOpExpression,
+    LogicalComparisonJoin,
     LogicalProjection,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -66,6 +67,14 @@ def java_plan_to_python_plan(ctx, java_plan):
         )
         return proj_plan
 
+    if java_class_name == "BodoPhysicalJoin":
+        return java_join_to_python_join(ctx, java_plan)
+
+    # TODO[BSE-5152]: support runtime join filters (ok to ignore for now since they are
+    # just optimizations)
+    if java_class_name == "BodoPhysicalRuntimeJoinFilter":
+        return java_plan_to_python_plan(ctx, java_plan.getInput())
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -109,3 +118,43 @@ def java_call_to_python_call(java_call, input_plan):
             return expr
 
     raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
+
+
+def java_join_to_python_join(ctx, java_join):
+    """Convert a BodoSQL Java join plan to a Python join plan."""
+    from bodo.ext import plan_optimizer
+
+    join_info = java_join.analyzeCondition()
+
+    # TODO[BSE-5149]: support non-equi joins
+    if not join_info.isEqui():
+        raise NotImplementedError("Only equi-joins are supported")
+
+    left_keys, right_keys = join_info.keys()
+    key_indices = list(zip(left_keys, right_keys))
+    is_left = java_join.getJoinType().generatesNullsOnLeft()
+    is_right = java_join.getJoinType().generatesNullsOnRight()
+    join_type = plan_optimizer.CJoinType.INNER
+    if is_left and is_right:
+        join_type = plan_optimizer.CJoinType.OUTER
+    elif is_left:
+        join_type = plan_optimizer.CJoinType.LEFT
+    elif is_right:
+        join_type = plan_optimizer.CJoinType.RIGHT
+
+    left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
+    right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
+
+    empty_join_out = pd.concat([left_plan.empty_data, right_plan.empty_data], axis=1)
+    # Avoid duplicate column names
+    empty_join_out.columns = [c + str(i) for i, c in enumerate(empty_join_out.columns)]
+
+    # TODO[BSE-5150]: support broadcast join flag
+    planComparisonJoin = LogicalComparisonJoin(
+        empty_join_out,
+        left_plan,
+        right_plan,
+        join_type,
+        key_indices,
+    )
+    return planComparisonJoin

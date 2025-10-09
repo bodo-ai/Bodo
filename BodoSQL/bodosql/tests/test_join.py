@@ -37,10 +37,17 @@ def join_type(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_join(
     join_dataframes, spark_info, join_type, comparison_ops, memory_leak_check
 ):
     """test simple join queries"""
+
+    # TODO[BSE-5149]: support non-equi joins in BodoSQL C++ backend
+    # TODO[BSE-5151]: support filter in BodoSQL C++ backend to enable non-outer join plans
+    if bodosql.use_cpp_backend and (comparison_ops != "=" or join_type != "FULL OUTER"):
+        return
+
     # For nullable integers convert the pyspark output from
     # float to object
     if any(

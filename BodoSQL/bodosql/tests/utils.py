@@ -313,11 +313,11 @@ def check_query(
         run_jit_1DVar = False
 
     # Only run Python mode when spawn testing is enabled since others aren't applicable
-    if bodo.tests.utils.test_spawn_mode_enabled:
+    if bodo.tests.utils.test_spawn_mode_enabled or bodosql.use_cpp_backend:
         run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
         if only_jit_seq:
             warnings.warn(
-                "check_query: no tests are being run since spawn enabled and only_jit_seq=True."
+                "check_query: no tests are being run since spawn or BodoSQL C++ backend enabled and only_jit_seq=True."
             )
             return
 
