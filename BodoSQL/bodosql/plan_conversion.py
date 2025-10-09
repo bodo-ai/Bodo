@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import decimal
 import operator
 
 import pandas as pd
@@ -98,6 +99,9 @@ def java_expr_to_python_expr(java_expr, input_plan):
     if java_class_name == "RexCall":
         return java_call_to_python_call(java_expr, input_plan)
 
+    if java_class_name == "RexLiteral":
+        return java_literal_to_python_literal(java_expr)
+
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
 
 
@@ -176,3 +180,21 @@ def java_filter_to_python_filter(ctx, java_filter):
     input_plan = java_plan_to_python_plan(ctx, java_filter.getInput())
     condition = java_expr_to_python_expr(java_filter.getCondition(), input_plan)
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
+
+
+def java_literal_to_python_literal(java_literal):
+    """Convert a BodoSQL Java literal expression to a DataFrame library constant"""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    lit_type_name = java_literal.getTypeName()
+
+    # TODO: support all Calcite literal types
+
+    if lit_type_name.equals(SqlTypeName.DECIMAL):
+        # Integer constants are represented as DECIMAL in Calcite
+        val = java_literal.getValue()
+        if isinstance(val, decimal.Decimal) and val == int(val):
+            return int(val)
+
+    raise NotImplementedError(
+        f"Literal type {lit_type_name.toString()} not supported yet"
+    )
