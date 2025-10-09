@@ -12,6 +12,7 @@ import bodosql
 from bodo.pandas.plan import (
     ArithOpExpression,
     ComparisonOpExpression,
+    ConstantExpression,
     LogicalComparisonJoin,
     LogicalFilter,
     LogicalProjection,
@@ -100,7 +101,7 @@ def java_expr_to_python_expr(java_expr, input_plan):
         return java_call_to_python_call(java_expr, input_plan)
 
     if java_class_name == "RexLiteral":
-        return java_literal_to_python_literal(java_expr)
+        return java_literal_to_python_literal(java_expr, input_plan)
 
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
 
@@ -198,21 +199,22 @@ def java_filter_to_python_filter(ctx, java_filter):
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
-def java_literal_to_python_literal(java_literal):
+def java_literal_to_python_literal(java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant"""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
 
+    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.null()))
     # TODO: support all Calcite literal types
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         # Integer constants are represented as DECIMAL in Calcite
         val = java_literal.getValue()
         if isinstance(val, decimal.Decimal) and val == int(val):
-            return int(val)
+            return ConstantExpression(dummy_empty_data, input_plan, int(val))
 
     if lit_type_name.equals(SqlTypeName.DOUBLE):
-        return java_literal.getValue()
+        return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
