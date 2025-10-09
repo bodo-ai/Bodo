@@ -1353,6 +1353,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
+    def to_list(self):
+        return super().to_list()
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""

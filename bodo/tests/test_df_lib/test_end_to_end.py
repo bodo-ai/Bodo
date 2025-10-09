@@ -3707,3 +3707,12 @@ def test_join_non_equi_key_not_in_output():
         reset_index=True,
         sort_output=True,
     )
+
+def test_series_to_list():
+    s1 = pd.Series(list(range(37)))
+    bs1 = bd.Series(s1)
+    s2 = s1 + 1
+    bs2 = bs1 + 1
+    l1 = s2.to_list()
+    bl1 = bs2.to_list()
+    assert(l1 == bl1)
