@@ -399,9 +399,15 @@ def test_torch_train():
 
     df = bd.DataFrame(
         {
-            "feature1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-            "feature2": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            "label": [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0],
+            "feature1": pd.array(
+                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], dtype="float32"
+            ),
+            "feature2": pd.array(
+                [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], dtype="float32"
+            ),
+            "label": pd.array(
+                [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0], dtype="float32"
+            ),
         }
     )
 
@@ -423,31 +429,25 @@ def test_torch_train():
 
         model = SimpleModel()
         model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
-        gpu_ranks = bodo.get_gpu_ranks()
+        dataloader = bodo.ai.train.prepare_dataset(
+            data, batch_size=config.get("batch_size", 2)
+        )
         if model is None:
-            # Not a worker process
-            bodo.rebalance(data, dests=gpu_ranks)
             return
-        model_device = next(model.parameters()).device
-        if model_device.type != "cpu":
-            # If we're using an accelerator, rebalance data to match GPU ranks
-            data = bodo.rebalance(data, dests=gpu_ranks)
 
         # train on data
         criterion = nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         for epoch in range(config.get("epochs", 5)):
-            batch_size = config.get("batch_size", 2)
-            for i in range(0, len(data), batch_size):
-                batch = data[i : i + batch_size]
-                batch_tensor = torch.tensor(batch.to_numpy("float32")).to(model_device)
-                inputs = batch_tensor[:, :2]
-                labels = batch_tensor[:, 2].unsqueeze(1)
+            for batch in dataloader:
+                inputs = batch[:, :2]
+                labels = batch[:, 2].unsqueeze(1)
                 optimizer.zero_grad()
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+            print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
             # Create checkpoint.
             base_model = (
                 model.module
@@ -458,6 +458,7 @@ def test_torch_train():
                 {"model_state_dict": base_model.state_dict()},
                 checkpoint_id=config["checkpoint_dir"],
             )
+            print(f"Checkpoint saved at {config['checkpoint_dir']}")
 
     bodo.ai.train.torch_train(
         train_loop,
