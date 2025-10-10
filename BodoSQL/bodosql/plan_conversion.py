@@ -266,11 +266,17 @@ def java_agg_to_python_agg(ctx, java_plan):
     from bodo.pandas.groupby import GroupbyAggFunc, _get_agg_output_type
 
     keys = list(java_plan.getGroupSet().toList())
+
+    if len(keys) == 0:
+        raise NotImplementedError("Aggregations without group by not supported yet")
+
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
 
     exprs = []
     out_types = [input_plan.pa_schema.field(k).type for k in keys]
     for func in java_plan.getAggCallList():
+        if func.hasFilter():
+            raise NotImplementedError("Filtered aggregations are not supported yet")
         agg = func.getAggregation()
         func_name = _agg_to_func_name(agg)
         arg_cols = list(func.getArgList())
