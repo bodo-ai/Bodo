@@ -346,8 +346,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
         )
 
-        # Compute schema of new series.
-        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        if op == "__mod__":
+            empty_data = zero_size_self
+        else:
+            # Compute schema of new series.
+            empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
             "_numeric_binop: empty_data is not a Series"
         )
@@ -434,6 +437,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
         return self._arith_binop(other, "__rfloordiv__", True)
+
+    @check_args_fallback("all")
+    def __mod__(self, other):
+        return self._arith_binop(other, "__mod__", False)
+
+    @check_args_fallback("all")
+    def __rmod__(self, other):
+        return self._arith_binop(other, "__rmod__", True)
 
     @check_args_fallback("all")
     def __getitem__(self, key):

@@ -1,6 +1,7 @@
 #include "expression.h"
 #include "_util.h"
 
+
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
@@ -710,3 +711,116 @@ void PhysicalExpression::join_expr_batch(
 }
 
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
+
+template <typename ArrowType>
+arrow::Status ModInt(arrow::compute::KernelContext* ctx, const arrow::compute::ExecSpan& batch, arrow::compute::ExecResult* out) {
+    using CType      = typename ArrowType::c_type;
+    using ScalarType = typename arrow::TypeTraits<ArrowType>::ScalarType;
+
+    const arrow::ArraySpan& left = batch[0].array;
+    const arrow::compute::ExecValue& right_span = batch[1];
+
+    if (!left.type) {
+        throw std::runtime_error("ModInt left.type not valid.");
+    }
+
+    arrow::Status status;
+    const CType* left_values = left.GetValues<CType>(1);
+    const uint8_t* left_valid_bits = left.buffers[0].data;
+
+    auto is_valid_bit = [](const uint8_t* bits, int64_t offset, int64_t i) -> bool {
+        return !bits || arrow::bit_util::GetBit(bits, offset + i);
+    };
+
+    arrow::ArraySpan& out_span = std::get<arrow::ArraySpan>(out->value);
+    CType* out_values = out_span.GetValues<CType>(1);
+    uint8_t* out_valid_bits = out_span.buffers[0].data;
+    int64_t offset = out_span.offset;
+
+    auto set_valid = [](uint8_t* bits, int64_t i) {
+        if (bits) arrow::bit_util::SetBit(bits, i);
+    };
+
+    auto clear_valid = [](uint8_t* bits, int64_t i) {
+        if (bits) arrow::bit_util::ClearBit(bits, i);
+    };
+
+
+    if (right_span.is_scalar()) {
+        // Right side is a scalar
+        const arrow::Scalar* scalar = right_span.scalar;
+        if (!scalar || !scalar->is_valid) {
+            // If scalar is null, all outputs are null
+            for (int64_t i = 0; i < left.length; ++i) {
+                clear_valid(out_valid_bits, offset + i);
+            }
+        } else {
+	    const ScalarType& sc = right_span.scalar_as<ScalarType>();
+            CType r = sc.value;
+            for (int64_t i = 0; i < left.length; ++i) {
+                if (!is_valid_bit(left_valid_bits, left.offset, i)) {
+                    clear_valid(out_valid_bits, offset + i);
+                } else {
+                    CType l = left_values[i];
+		    CType res = (r == 0 ? 0 : (l % r));
+		    out_values[i] = res;
+                    set_valid(out_valid_bits, offset + i);
+                }
+            }
+        }
+    } else {
+        const arrow::ArraySpan& right = right_span.array;
+        const CType* right_values = right.GetValues<CType>(1);
+        const uint8_t* right_valid_bits = right.buffers[0].data;
+        for (int64_t i = 0; i < left.length; ++i) {
+            if (!is_valid_bit(left_valid_bits, left.offset, i) ||
+                !is_valid_bit(right_valid_bits, right.offset, i)) {
+                clear_valid(out_valid_bits, offset + i);
+            } else {
+                CType l = left_values[i];
+                CType r = right_values[i];
+                CType res = (r == 0 ? 0 : (l % r));
+                out_values[i] = res;
+                set_valid(out_valid_bits, offset + i);
+            }
+        }
+    }
+
+    return arrow::Status::OK();
+}
+
+void RegisterMod(arrow::compute::FunctionRegistry* registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_mod", arrow::compute::Arity::Binary(),
+        arrow::compute::FunctionDoc{"Modulo of two int arrays", "Returns lhs % rhs", {"lhs", "rhs"}});
+
+    arrow::compute::ScalarKernel kernel32({arrow::compute::InputType(arrow::int32()),
+  		           arrow::compute::InputType(arrow::int32())},
+                           arrow::compute::OutputType(arrow::int32()), ModInt<arrow::Int32Type>);
+    arrow::compute::ScalarKernel kernel64({arrow::compute::InputType(arrow::int64()),
+  		           arrow::compute::InputType(arrow::int64())},
+                           arrow::compute::OutputType(arrow::int64()), ModInt<arrow::Int64Type>);
+
+    arrow::Status status;
+    status = func->AddKernel(kernel32);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+    }
+    status = func->AddKernel(kernel64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+    }
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod AddFunction failed.");
+    }
+}
+
+void EnsureModRegistered() {
+    static std::once_flag flag;
+    std::call_once(flag, [] {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterMod(registry);
+    });
+}
+

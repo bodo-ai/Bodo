@@ -757,6 +757,8 @@ def python_arith_dunder_to_duckdb(str opstr):
         return "*"
     elif opstr == "__truediv__" or opstr == "__rtruediv__":
         return "/"
+    elif opstr == "__mod__" or opstr == "__rmod__":
+        return "%"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
 
