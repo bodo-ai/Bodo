@@ -2792,7 +2792,10 @@ def get_num_gpus(framework="torch"):  # pragma: no cover
         try:
             import torch
 
-            return torch.cuda.device_count()
+            if hasattr(torch, "accelerator"):
+                return torch.accelerator.device_count()
+            else:
+                return torch.cuda.device_count()
         except ImportError:
             raise RuntimeError(
                 "PyTorch is not installed. Please install PyTorch to use GPU features."
@@ -2841,7 +2844,7 @@ def get_gpu_ranks():  # pragma: no cover
                 for local_rank, global_rank in enumerate(ranks):
                     if local_rank % cores_per_gpu == 0:
                         # pin this rank to GPU
-                        my_gpu = local_rank / cores_per_gpu
+                        my_gpu = local_rank // cores_per_gpu
                         if my_gpu < n_gpus:
                             gpu_ranks.append(global_rank)
             if error:  # pragma: no cover

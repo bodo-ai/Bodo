@@ -130,8 +130,14 @@ def _build_index_data(
     """
     Construct distributed return metadata for the index of res if it has an index
     """
+    from bodo.pandas.utils import BODO_NONE_DUMMY
+
     if isinstance(res, (pd.DataFrame, pd.Series)):
         if isinstance(res.index, pd.MultiIndex):
+            res.index.names = [
+                name if name is not None else BODO_NONE_DUMMY
+                for name in res.index.names
+            ]
             return _build_distributed_return_metadata(
                 res.index.to_frame(index=False, allow_duplicates=True), logger
             )
@@ -390,6 +396,18 @@ def _is_distributable_result(res):
         return True
 
     if pd.api.types.is_scalar(res):
+        return False
+
+    # df.to_iceberg returns a list of lists of tuples with information
+    # about each file written. We check for this case separately to avoid
+    # importing the compiler.
+    if isinstance(res, list) and (
+        len(res) == 0
+        or (
+            isinstance(res[0], list)
+            and (len(res[0]) == 0 or isinstance(res[0][0], tuple))
+        )
+    ):
         return False
 
     # Import compiler lazily

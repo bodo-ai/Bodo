@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 import importlib
 import typing as pt
+import warnings
 from collections.abc import (
     Hashable,
     Iterable,
@@ -54,6 +55,7 @@ from bodo.pandas.scalar import BodoScalar
 from bodo.pandas.series import BodoSeries, _get_series_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
+    BodoDictionaryTypeInvalidException,
     BodoLibNotImplementedException,
     arrow_to_empty_df,
     check_args_fallback,
@@ -73,6 +75,26 @@ def from_pandas(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
 
+    if isinstance(df.columns, pd.MultiIndex):
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Hierarchical column names are not supported in Bodo yet."
+        )
+
+    if df.columns.has_duplicates:
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Duplicate column names are not supported in Bodo yet."
+        )
+
+    new_columns = []
+    for c in df.columns:
+        if not isinstance(c, str):
+            warnings.warn(
+                f"The column name '{c}' with type {type(c)} was converted to string."
+            )
+        new_columns.append(str(c))
+
+    df.columns = new_columns
+
     # Avoid datetime64[us] that is commonly used in Pandas but not supported in Bodo.
     df = ensure_datetime64ns(df)
 
@@ -84,8 +106,24 @@ def from_pandas(df):
     for col in df.select_dtypes(include=["object"]).columns:
         if len(df[col]) > 0 and type(df[col].iloc[0]) is BodoScalar:
             df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
-    pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
-    empty_df = arrow_to_empty_df(pa_schema)
+
+    try:
+        pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
+    except pa.lib.ArrowInvalid as e:
+        # TODO: add specific unsupported columns to message.
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Could not convert DataFrame to Bodo: "
+            + "Unsupported datatype encountered in one or more columns: "
+            + str(e)
+        )
+
+    try:
+        empty_df = arrow_to_empty_df(pa_schema)
+    except BodoDictionaryTypeInvalidException as e:
+        raise BodoLibNotImplementedException(
+            "from_pandas(): Could not convert DataFrame to Bodo: " + str(e)
+        )
+
     n_rows = len(df)
 
     res_id = None
@@ -224,12 +262,8 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
-    # TODO(ehsan): avoid compiler import in Iceberg read
-    import bodo.decorators  # isort:skip # noqa
     from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
-
-    bodo.spawn.utils.import_compiler_on_workers()
 
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")
@@ -494,14 +528,39 @@ def to_datetime(
         )
 
     # 2. Series Case
-    return _get_series_func_plan(
-        arg._plan,
-        new_metadata,
-        "pandas.to_datetime",
-        (),
-        in_kwargs,
-        is_method=False,
-    )
+    if (
+        errors == "raise"
+        and dayfirst is False
+        and yearfirst is False
+        and utc is False
+        and unit is None
+        and origin == "unix"
+        and cache is True
+    ):
+        # If only options supported by Bodo JIT then run as cfunc over map.
+        import bodo.decorators  # isort:skip # noqa
+
+        if format is None:
+
+            def bodo_df_lib_to_datetime(x):
+                return pd.to_datetime(x)
+
+            return arg.map(bodo_df_lib_to_datetime, na_action="ignore")
+        else:
+
+            def bodo_df_lib_to_datetime_format(x):
+                return pd.to_datetime(x, format=format)
+
+            return arg.map(bodo_df_lib_to_datetime_format, na_action="ignore")
+    else:
+        return _get_series_func_plan(
+            arg._plan,
+            new_metadata,
+            "pandas.to_datetime",
+            (),
+            in_kwargs,
+            is_method=False,
+        )
 
 
 @check_args_fallback(unsupported="all")

@@ -1,10 +1,8 @@
 import re
 
 import pandas as pd
-import pytest
-from test_series_generator import _generate_series_test
 
-pytestmark = pytest.mark.jit_dependency
+from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 
 
 def _install_series_str_tests():
@@ -13,7 +11,7 @@ def _install_series_str_tests():
     for method_name in test_map_arg:
         idx = 0
         for frame in exception_dfmap.get(method_name, (df,)):
-            test = _generate_series_test(
+            test = generate_series_test(
                 method_name,
                 frame,
                 test_map_arg[method_name],
@@ -26,7 +24,7 @@ def _install_series_str_tests():
     for method_name in test_map_no_arg:
         idx = 0
         for frame in exception_dfmap.get(method_name, (df,)):
-            test = _generate_series_test(
+            test = generate_series_test(
                 method_name,
                 frame,
                 empty_arg,

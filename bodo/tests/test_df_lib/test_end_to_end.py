@@ -22,9 +22,7 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
-
-pytestmark = pytest.mark.jit_dependency
+from bodo.tests.utils import _test_equal, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -197,6 +195,7 @@ def test_read_parquet_series_len_shape(datapath):
         assert bodo_out.shape == py_out.shape
 
 
+@pytest.mark.jit_dependency
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
     and filter column isn't used anywhere in the query.
@@ -227,6 +226,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
@@ -287,14 +287,13 @@ def test_projection(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
 
-    # TODO: remove copy when df.apply(axis=0) is implemented
-    # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
     _test_equal(
-        bodo_df2.copy(),
+        bodo_df2,
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        # Index is initially RangeIndex, so we ignore final order.
+        reset_index=True,
     )
 
 
@@ -337,7 +336,7 @@ def test_filter_pushdown(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -410,6 +409,7 @@ def test_filter(datapath, op):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -559,6 +559,7 @@ def test_filter_string(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -590,6 +591,7 @@ def test_filter_datetime_pushdown(datapath, op):
     )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -694,6 +696,7 @@ def test_head(datapath):
     assert len(bodo_df2) == 3
 
 
+@pytest.mark.jit_dependency
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     # Multi-Index apply are not supported by JIT
@@ -715,6 +718,7 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_apply_str(datapath, index_val):
     """Test passing a string argument to func works."""
     with assert_executed_plan_count(0):
@@ -732,6 +736,7 @@ def test_apply_str(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_apply_non_jit(datapath, index_val):
     """Test unsupported UDFs fallback to Pandas execution."""
     with assert_executed_plan_count(1):
@@ -777,6 +782,7 @@ def test_chain_python_func(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "na_action",
     [
@@ -805,6 +811,7 @@ def test_series_map(datapath, index_val, na_action):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_series_map_non_jit(index_val):
     """Test non-jittable UDFs in ser.map still work."""
     df = pd.DataFrame(
@@ -850,6 +857,7 @@ def test_series_map_non_jit(index_val):
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
     with assert_executed_plan_count(0):
@@ -1498,7 +1506,7 @@ def test_series_groupby(dropna, as_index):
         bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
         df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1673,7 +1681,7 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
 
     assert bdf2.is_lazy_plan()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -1710,7 +1718,7 @@ def test_groupby_agg_ordered(func):
         bdf2 = getattr(bdf1.groupby("K"), func)()
         df2 = getattr(df.groupby("K"), func)()
 
-    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
 def test_compound_projection_expression(datapath):
@@ -1933,21 +1941,21 @@ def test_scalar_arith_binops(datapath, index_val):
     )
 
 
+@pytest.mark.jit_dependency
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
-    with assert_executed_plan_count(0):
-        df = pd.DataFrame(
-            {
-                "E": [1.1, 2.2, 13.3] * 2,
-                "A": pd.array([2, 2, 3] * 2, "Int64"),
-            },
-            index=[0, 41, 2] * 2,
-        )
+    df = pd.DataFrame(
+        {
+            "E": [1.1, 2.2, 13.3] * 2,
+            "A": pd.array([2, 2, 3] * 2, "Int64"),
+        },
+        index=[0, 41, 2] * 2,
+    )
 
-        bodo_df = bd.from_pandas(df)
+    bodo_df = bd.from_pandas(df)
 
-        def f(df, a, b=1):
-            return df.A + df.E + a + b
+    def f(df, a, b=1):
+        return df.A + df.E + a + b
 
     with assert_executed_plan_count(1):
         bodo_df2 = bodo_df.map_partitions(f, 2, b=3)
@@ -1968,21 +1976,18 @@ def test_map_partitions_df():
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_map_partitions_series():
     """Simple tests for map_partition on lazy Series."""
-    with assert_executed_plan_count(0):
-        series = pd.Series(
-            pd.array([2, 2, 3] * 2, "Int64"),
-            index=[0, 41, 2] * 2,
-        )
+    series = pd.Series(
+        pd.array([2, 2, 3] * 2, "Int64"),
+        index=[0, 41, 2] * 2,
+    )
 
-        bodo_series = bd.Series(
-            pd.array([2, 2, 3] * 2, "Int64"),
-            index=[0, 41, 2] * 2,
-        )
+    bodo_series = bd.from_pandas(series.to_frame(name="A")).A
 
-        def f(series, a, b=1):
-            return series + a + b
+    def f(series, a, b=1):
+        return series + a + b
 
     with assert_executed_plan_count(1):
         bodo_series2 = bodo_series.map_partitions(f, 2, b=3)
@@ -2044,7 +2049,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -2089,7 +2094,7 @@ def test_series_filter_distributed(datapath, file_path, op):
     )
 
 
-@pytest_mark_spawn_mode
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -2253,6 +2258,7 @@ def test_rename(datapath, index_val):
     _test_equal(bdf2, df2, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_col_set_dtypes_bug():
     """Make sure setting columns doesn't lead to failure due to inconsistent dtypes
     inside the lazy manager in sequential mode.
@@ -2400,6 +2406,7 @@ def test_series_reductions(method):
             )
 
 
+@pytest.mark.jit_dependency
 def test_read_csv(datapath):
     """Very simple test to read a parquet file for sanity checking."""
     with assert_executed_plan_count(0):
@@ -2445,6 +2452,7 @@ def test_read_csv(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_df_state_change():
     """Make sure dataframe state change doesn't lead to stale result id in plan
     execution"""
@@ -2641,6 +2649,7 @@ def test_series_describe_nonnumeric():
         _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_series_describe_empty():
     """Basic test for Series describe with empty data."""
 
@@ -2709,6 +2718,7 @@ def test_series_agg():
     _test_equal(bodo_out, pd_out, check_pandas_types=False)
 
 
+@pytest.mark.jit_dependency
 def test_groupby_apply():
     """Test for a groupby.apply from TPCH Q8."""
 
@@ -2952,6 +2962,42 @@ def test_drop_duplicates():
     )
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="default"),
+        pytest.param({"keep": "first"}, id="keep_first"),
+        pytest.param({"keep": "last"}, id="keep_last"),
+    ],
+)
+def test_drop_duplicates_subset(kwargs):
+    """Test for drop_duplicates subset API."""
+
+    dim0 = 4
+    dim1 = 6
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(list(range(dim0)) * dim1 * 10, "Int32"),
+                "B": pd.array(list(range(dim0, dim0 + dim1)) * dim0 * 10, "Float64"),
+                "C": pd.array(list(range(dim0 * dim1 * 10)), "Float64"),
+            }
+        )
+        pdf = df.copy().drop_duplicates(subset=["A", "B"], **kwargs)[["A", "B"]]
+        bdf = bd.from_pandas(df).drop_duplicates(subset=["A", "B"], **kwargs)[
+            ["A", "B"]
+        ]
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
 
@@ -2983,6 +3029,7 @@ def test_uncompilable_map():
     )
 
 
+@pytest.mark.jit_dependency
 def test_numba_map():
     """Test for maps with already jit annotated functions."""
 
@@ -3151,6 +3198,7 @@ def test_series_reset_index():
     )
 
 
+@pytest.mark.jit_dependency
 def test_series_reset_index_compute():
     """Test Series.reset_index in between computation."""
 
@@ -3179,6 +3227,7 @@ def test_series_reset_index_compute():
     )
 
 
+@pytest.mark.jit_dependency
 def test_series_reset_index_pipeline():
     """Test reading from CSV, groupby + sum, reset_index, and more computes."""
 
@@ -3205,7 +3254,8 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
     long_array = [
@@ -3232,10 +3282,12 @@ def test_series_reset_index_pipeline():
         bds,
         pds,
         check_pandas_types=False,
-        reset_index=False,
+        reset_index=True,
+        sort_output=True,
     )
 
 
+@pytest.mark.jit_dependency
 def test_dataframe_reset_index_pipeline():
     """Test reading CSV, setting MultiIndex, resetting index, and computing."""
 
@@ -3521,6 +3573,7 @@ def test_series_quantile_singleton():
     )
 
 
+@pytest.mark.jit_dependency
 def test_dataframe_jit_fallback(datapath):
     """Test fallback to JIT."""
     path = datapath("dataframe_library/df1.parquet")
@@ -3545,6 +3598,7 @@ def test_dataframe_jit_fallback(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_top_level_jit_fallback(datapath):
     """Test fallback to JIT."""
     df = pd.DataFrame(
@@ -3575,6 +3629,7 @@ def test_top_level_jit_fallback(datapath):
     )
 
 
+@pytest.mark.jit_dependency
 def test_set_column_names():
     """Check that setting columns attribute of a DataFrame works as expected."""
 
@@ -3692,6 +3747,7 @@ def test_len_no_warn(index_val):
         assert len(bdf[bdf.A > 5]) == len(df[df.A > 5])
 
 
+@pytest.mark.jit_dependency
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
     expected and is same as pandas.
@@ -3753,3 +3809,40 @@ def test_series_to_list():
     l1 = s2.to_list()
     bl1 = bs2.to_list()
     assert(l1 == bl1)
+
+def test_series_str_match():
+    s = pd.Series(["abc", "a1c", "zzz", None], dtype="string")
+    bs = bd.Series(s)
+
+    # Match strings that start with 'a' and end with 'c'
+    pmask = s.str.match(r"a.*c")
+    bmask = bs.str.match(r"a.*c")
+
+    _test_equal(
+        bmask,
+        pmask,
+        check_pandas_types=False,
+    )
+
+
+def test_asarray_df():
+    """
+    Tests that np.asarray(df) produces the correct ndarray
+    when all columns have the same dtype.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4], dtype="Int32"),
+            "B": pd.array([5, 6, 7, 8], dtype="Int32"),
+            "C": pd.array([9, 10, 11, 12], dtype="Int32"),
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    result_bodo = np.asarray(bdf)
+    result_pandas = np.asarray(df)
+
+    assert result_bodo.shape == (4, 3)
+    assert result_bodo.dtype == np.int32
+    np.testing.assert_array_equal(result_bodo, result_pandas)

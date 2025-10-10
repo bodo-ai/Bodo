@@ -143,7 +143,8 @@ extern std::function<bool(int)> less_equal_test;
  *
  */
 std::shared_ptr<array_info> do_arrow_compute_unary(
-    std::shared_ptr<ExprResult> left_res, const std::string &comparator);
+    std::shared_ptr<ExprResult> left_res, const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
  * @brief Convert two ExprResults to arrow and run compute operation on them.

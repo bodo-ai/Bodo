@@ -4,11 +4,11 @@ import bodo
 
 import bodo.decorators  # isort:skip # noqa
 from bodo.io.iceberg.theta import read_puffin_file_ndvs
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
     get_metadata_path,
 )
-from bodo.utils.utils import run_rank0
 
 
 @numba.njit

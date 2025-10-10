@@ -144,7 +144,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib and not jit_dependency and not weekly and not iceberg"
+      pytest-marker: "df_lib and not jit_dependency and not weekly"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB_NO_JIT"
@@ -166,6 +166,19 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
+    secrets: inherit
+
+  bodosql-cpp-ci:
+    needs: [compile-bodo]
+    name: Test BodoSQL C++ Backend
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "bodosql_cpp and not weekly"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "BODOSQL_CPP"
     secrets: inherit
 
   java-ci:
@@ -255,6 +268,7 @@ jobs:
       - collect-results
       - df-lib-ci
       - df-lib-non-jit-ci
+      - bodosql-cpp-ci
       - validate
     runs-on: ubuntu-latest
     steps:

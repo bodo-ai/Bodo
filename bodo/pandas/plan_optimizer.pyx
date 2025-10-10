@@ -676,11 +676,12 @@ cdef class ArrowScalarFuncExpression(Expression):
         object out_schema,
         LogicalOperator source,
         vector[int] input_column_indices,
-        str function_name):
+        str function_name,
+        object args):
 
         self.out_schema = out_schema
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, None, input_column_indices, False, False, function_name.encode())
+            source.c_logical_operator, out_schema, args, input_column_indices, False, False, function_name.encode())
 
     def __str__(self):
         return f"ArrowScalarFuncExpression({self.function_name})"
@@ -964,8 +965,6 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     cdef readonly str table_identifier
 
     def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
-        # TODO(ehsan): avoid compiler import in Iceberg read
-        import bodo.decorators  # isort:skip # noqa
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema

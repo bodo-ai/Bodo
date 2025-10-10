@@ -228,13 +228,11 @@ def test_iceberg_write_basic(
     table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
     # set chunk size to a small number to make sure multiple iterations write files
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
     create_table_meta = init_create_table_meta()
 
@@ -242,9 +240,7 @@ def test_iceberg_write_basic(
         _write_iceberg_table(df, table_id, conn, create_table_meta, "replace")
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
 
     py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
     py_out = _gather_output(py_out)
@@ -288,11 +284,9 @@ def test_iceberg_write_with_comment_and_properties(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     table_id = f"{db_schema}.{table_name}"
 
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     # set chunk size to a small number to make sure multiple iterations write files
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
     create_table_meta = init_create_table_meta(
         table_comments=table_comments,
@@ -303,9 +297,7 @@ def test_iceberg_write_with_comment_and_properties(
     try:
         _write_iceberg_table(df, table_id, conn, create_table_meta, "replace")
     finally:
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
 
     py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
     py_out = _gather_output(py_out)
@@ -354,7 +346,7 @@ def test_iceberg_write_basic_rep(
     table_id = f"{db_schema}.{table_name}"
 
     # set chunk size to a small number to make sure multiple iterations write files
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
     create_table_meta = init_create_table_meta()
 
@@ -419,18 +411,14 @@ def test_iceberg_write_part_sort(
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     bodo.hiframes.boxing._use_dict_str_type = use_dict_encoding_boxing
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
 
     try:
         _write_iceberg_table(df, table_id, conn, None, "append")
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
     bodo.barrier()
 
     data_files = glob.glob(
@@ -517,20 +505,14 @@ def test_iceberg_field_ids_in_pq_schema(
     )
 
     # Write using Bodo
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     # set chunk size to a small number to make sure multiple iterations write files
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-        1 * 1024
-    )  # (1KiB)
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 1 * 1024  # (1KiB)
 
     try:
         _write_iceberg_table(df, table_id, conn, None, mode)
     finally:
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
 
     bodo.barrier()
 
@@ -548,7 +530,7 @@ def test_iceberg_max_pq_chunksize(
     Test that number of raw bytes written to each parquet file are less than "write.target-file-size-bytes"
     and that number of files generated is also consistent with the threshold
     """
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     table_name = "SIMPLE_INT_TABLE_test_pq_chunksize"
 

@@ -345,6 +345,24 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=0, comm=None):
     return scatterv_nojit(data, root, comm)
 
 
+def get_start(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_start() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return rank * blk_size + min(rank, res)
+
+
+def get_end(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_end() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return (rank + 1) * blk_size + min(rank + 1, res)
+
+
 def get_nodes_first_ranks(*args, **kwargs):
     # Import compiler lazily
     import bodo.decorators
@@ -364,6 +382,18 @@ def random_shuffle(*args, **kwargs):
     import bodo.decorators
     from bodo.libs.distributed_api import random_shuffle
     return random_shuffle(*args, **kwargs)
+
+def get_num_nodes(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_num_nodes
+    return get_num_nodes(*args, **kwargs)
+
+def get_gpu_ranks(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_gpu_ranks
+    return get_gpu_ranks(*args, **kwargs)
 
 
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes

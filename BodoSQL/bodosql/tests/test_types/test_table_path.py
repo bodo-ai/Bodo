@@ -102,6 +102,7 @@ def test_table_path_pq_constructor(reorder_io, memory_leak_check):
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 @pytest.mark.slow
 @pytest.mark.parquet
+@pytest.mark.bodosql_cpp
 def test_table_path_pq_bodosqlContext_python(
     reorder_io, parquet_filepaths, memory_leak_check
 ):

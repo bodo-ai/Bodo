@@ -69,6 +69,7 @@ def test_write_existing_fail(
     simple_dataframe,
 ):
     """Test that writing to an existing table when if_exists='fail' errors"""
+
     base_name, table_name, df = simple_dataframe
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -146,10 +147,6 @@ def test_basic_write_replace(
 
     if read_behavior == "spark":
         py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
-        # Spark reads the column in micro-seconds instead of nano-seconds like
-        # we do, so we need to convert it to match Bodo.
-        if base_name == "DT_TSZ_TABLE":
-            py_out["B"] = py_out["B"].astype("datetime64[ns]")
     else:
         assert read_behavior == "bodo", (
             "Read Behavior can only be either `spark` or `bodo`"
@@ -366,9 +363,6 @@ def test_basic_write_new_append(
         if base_name == "DT_TSZ_TABLE":
             expected_df["B"] = expected_df["B"].fillna(
                 pd.Timestamp(1970, 1, 1, tz="UTC")
-            )
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
             )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
@@ -959,7 +953,6 @@ def test_basic_write_downcasting_fail(
     Test that writing to an Iceberg table with incorrect types
     that would need to be downcasted fails.
     """
-    from bodo.utils.typing import BodoError
 
     id, sql_schema, df, df_write, _, _ = downcasting_table_info
     table_name = id + "_DOWNCASTING_FAIL_TEST"
@@ -977,7 +970,7 @@ def test_basic_write_downcasting_fail(
         df.to_sql(table_name, conn, db_schema, if_exists="append")
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
     ):
         impl(_get_dist_arg(df_write), table_name, conn, db_schema)
@@ -1253,7 +1246,6 @@ def test_iceberg_missing_optional_column_missing_error(
     Test that the correct error is thrown when a dataframe is missing a required
     column.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1270,7 +1262,7 @@ def test_iceberg_missing_optional_column_missing_error(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
     ):
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
@@ -1284,7 +1276,6 @@ def test_iceberg_missing_optional_column_extra_error(
     Test support for adding a dataframe to an iceberg table where the dataframe
     has an additional column that is not in the Iceberg table schema.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1302,7 +1293,7 @@ def test_iceberg_missing_optional_column_extra_error(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
         ),
@@ -1317,7 +1308,6 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     """
     Test that the correct error is thrown when a dataframe columns in incorrect order.
     """
-    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1335,7 +1325,7 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
         ),
@@ -1352,7 +1342,7 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     The entire column should be filled with nulls instead of failing.
     """
     import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.utils import run_rank0
+    from bodo.spawn.utils import run_rank0
 
     table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
     write_table_name = f"{table_name}_WRITE"
@@ -1763,9 +1753,6 @@ def test_write_partitioned(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
         # dataframe to match Spark.
         if base_name == "DT_TSZ_TABLE":
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
-            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -1892,9 +1879,6 @@ def test_write_sorted(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
         if base_name == "DT_TSZ_TABLE":
-            spark_out["B"] = (
-                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
-            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,

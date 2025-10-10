@@ -101,6 +101,20 @@ def get_num_workers():
     return n_pes
 
 
+def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> bool:
+    """Check if any arg or kwarg is not a LazyPlan
+
+    Useful for determining if we need to import the compiler on spawner/workers
+    since non-lazy plan args require bodo.typeof to determine types.
+    """
+    from bodo.pandas.plan import LazyPlan
+
+    return not all(
+        isinstance(arg, LazyPlan) or pd.api.types.is_scalar(arg)
+        for arg in itertools.chain(args, kwargs.values())
+    )
+
+
 class BodoSQLContextMetadata:
     """Argument metadata for BodoSQLContext values which allows reconstructing
     BodoSQLContext on workers properly by receiving table DataFrames separately.
@@ -288,7 +302,11 @@ class Spawner:
 
         # Import compiler on workers if spawner imported the compiler to avoid
         # inconsistency issues like different scatter implementations.
-        if "bodo.decorators" in sys.modules.keys():
+        if "bodo.decorators" in sys.modules.keys() or _not_all_lazy_plan_args(
+            args, kwargs
+        ):
+            import bodo.decorators  # isort:skip # noqa
+
             self.import_compiler_on_workers()
 
         # If we get a df/series with a plan we need to execute it and get the result id
@@ -518,6 +536,9 @@ class Spawner:
                 for val in arg
             )
 
+        if pd.api.types.is_scalar(arg):
+            return None
+
         # Arguments could be functions which fail in typeof.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         # Similar to dispatcher argument handling:
@@ -530,8 +551,12 @@ class Spawner:
         if data_type is None:
             return None
 
-        # Import compiler lazily
+        # Import compiler lazily.
         import bodo.decorators  # isort:skip # noqa
+
+        # The compiler should have already been imported on workers before this point,
+        # but just to be safe.
+        self.import_compiler_on_workers()
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
@@ -876,6 +901,12 @@ class Spawner:
         """Spawn a process on all workers and return a WorkerProcess object"""
         assert not self._is_running, "spawn_process_on_nodes: already running"
 
+        # Import compiler for handle_spawn_process call on workers which depends on
+        # get_nodes_first_rank, which depends on the compiler.
+        import bodo.decorators  # isort:skip # noqa
+
+        self.import_compiler_on_workers()
+
         self._is_running = True
         self.worker_intercomm.bcast(
             CommandType.SPAWN_PROCESS.value, root=self.bcast_root
@@ -922,7 +953,10 @@ def destroy_spawner():
 
 
 def submit_func_to_workers(
-    func_to_execute: SpawnDispatcher | pt.Callable, propagate_env, *args, **kwargs
+    func_to_execute: SpawnDispatcher | pt.Callable,
+    propagate_env: list[str],
+    *args,
+    **kwargs,
 ):
     """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()

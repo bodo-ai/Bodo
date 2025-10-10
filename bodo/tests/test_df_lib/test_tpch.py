@@ -103,7 +103,7 @@ def test_tpch_q10():
 
 
 def test_tpch_q11():
-    run_tpch_query_test(tpch.tpch_q11)
+    run_tpch_query_test(tpch.tpch_q11, ctes_created=1)
 
 
 def test_tpch_q12():
@@ -119,7 +119,7 @@ def test_tpch_q14():
 
 
 def test_tpch_q15():
-    run_tpch_query_test(tpch.tpch_q15)
+    run_tpch_query_test(tpch.tpch_q15, ctes_created=1)
 
 
 def test_tpch_q16():
@@ -147,4 +147,4 @@ def test_tpch_q21():
 
 
 def test_tpch_q22():
-    run_tpch_query_test(tpch.tpch_q22)
+    run_tpch_query_test(tpch.tpch_q22, ctes_created=1)

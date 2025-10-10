@@ -13,7 +13,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import _get_dist_arg
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg]
 
 
 def write_iceberg_table_with_puffin_files(df, table_id, conn, write_type):
@@ -62,6 +62,7 @@ def test_iceberg_write_theta_estimates(
 ):
     """Test basic streaming Iceberg write with theta sketches enabled to ensure
     that they are generated for 4/5 columns. This"""
+    import bodo.io.iceberg.stream_iceberg_write
     from bodo.tests.test_iceberg.utils_jit import (
         check_ndv_metadata,
         get_statistics_ndvs,
@@ -97,12 +98,10 @@ def test_iceberg_write_theta_estimates(
     table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = True
     try:
         f = write_iceberg_table_with_puffin_files(df, table_id, conn, "replace")
@@ -116,9 +115,7 @@ def test_iceberg_write_theta_estimates(
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
         bodo.enable_theta_sketches = orig_enable_theta
 
 
@@ -147,12 +144,10 @@ def test_iceberg_write_disabled_theta(
     table_id = f"{db_schema}.{table_name}"
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    orig_chunk_size = (
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-    )
+    orig_chunk_size = bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
     orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
-    bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     bodo.enable_theta_sketches = False
     try:
         f = write_iceberg_table_with_puffin_files(df, table_id, conn, "replace")
@@ -161,14 +156,16 @@ def test_iceberg_write_disabled_theta(
         check_no_statistics_file(warehouse_loc, db_schema, table_name)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
-        bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = (
-            orig_chunk_size
-        )
+        bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
         bodo.enable_theta_sketches = orig_enable_theta
 
 
 def get_iceberg_pyarrow_schema(conn, table_id):
-    _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(conn, table_id)
+    import bodo.io.iceberg.read_compilation
+
+    _, _, pyarrow_schema = bodo.io.iceberg.read_compilation.get_iceberg_orig_schema(
+        conn, table_id
+    )
     return pyarrow_schema
 
 

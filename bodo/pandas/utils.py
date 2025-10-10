@@ -241,6 +241,12 @@ class BodoLibNotImplementedException(Exception):
     """
 
 
+class BodoDictionaryTypeInvalidException(Exception):
+    """Exception raised in the Bodo DataFrames when unsupported dictionary type is
+    encountered (either values are not strings or index type is not int32).
+    """
+
+
 class BodoLibFallbackWarning(Warning):
     """Warning raised in the Bodo library in the fallback decorator when some
     functionality is not implemented yet and we need to fall back to Pandas.
@@ -270,6 +276,39 @@ def report_times():
 
 if bodo.dataframe_library_profile:
     atexit.register(report_times)
+
+
+def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
+    """Wrap obj with a Bodo constructor or return obj unchanged if
+    it contains invalid Arrow types."""
+
+    try:
+        return cls(obj)
+    except BodoLibNotImplementedException as e:
+        warnings.warn(
+            BodoLibFallbackWarning(
+                f"Could not convert object to {cls.__name__} during fallback, "
+                + f"execution will continue using Pandas: {e}"
+            )
+        )
+
+    return obj
+
+
+def convert_to_bodo(obj):
+    """Returns a new version of *obj* that is the equivalent Bodo type or leave unchanged
+    if not a DataFrame or Series."""
+    from bodo.pandas import BodoDataFrame, BodoSeries
+
+    # Avoid converting to Bodo types if dataframe library is disabled for testing
+    if not bodo.dataframe_library_enabled:
+        return obj
+
+    if isinstance(obj, pd.DataFrame) and not isinstance(obj, BodoDataFrame):
+        return _maybe_create_bodo_obj(BodoDataFrame, obj)
+    elif isinstance(obj, pd.Series) and not isinstance(obj, BodoSeries):
+        return _maybe_create_bodo_obj(BodoSeries, obj)
+    return obj
 
 
 def check_args_fallback(
@@ -414,7 +453,8 @@ def check_args_fallback(
                         msg += f"\nException: {except_msg}"
                     if bodo.dataframe_library_warn:
                         warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    py_res = getattr(py_pkg, func.__name__)(*args, **kwargs)
+                    return convert_to_bodo(py_res)
             else:
 
                 @functools.wraps(func)
@@ -450,16 +490,6 @@ def check_args_fallback(
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
                             except_msg = str(e)
-
-                    # The dataframe library must not support some specified option.
-                    # Get overloaded functions for this dataframe/series in JIT mode.
-                    overloads = get_overloads(self.__class__.__name__)
-                    if func.__name__ in overloads:
-                        # TO-DO: Generate a function and bodo JIT it to do this
-                        # individual operation.  If the compile fails then fallthrough
-                        # to the pure Python code below.  If the compile works then
-                        # run the operation using the JITted function.
-                        pass
 
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
@@ -507,9 +537,10 @@ def get_n_index_arrays(index):
         raise TypeError(f"Invalid index type: {type(index)}")
 
 
-def df_to_cpp_table(df):
+def df_to_cpp_table(df) -> tuple[int, pa.Schema]:
     """Convert a pandas DataFrame to a C++ table pointer with column names and
-    metadata set properly.
+    metadata set properly and returns a pointer to the C++ along with the Arrow
+    schema of the input DataFrame.
     """
     from bodo.ext import plan_optimizer
     from bodo.pandas.frame import BodoDataFrame
@@ -538,22 +569,29 @@ def df_to_cpp_table(df):
     if any(col.num_chunks == 0 for col in arrow_table.columns):
         arrow_table = pa.Table.from_arrays(new_columns, schema=arrow_table.schema)
 
-    return plan_optimizer.arrow_to_cpp_table(arrow_table)
+    return plan_optimizer.arrow_to_cpp_table(arrow_table), arrow_table.schema
 
 
-def _empty_pd_array(pa_type):
+def _empty_pd_array(pa_type, field_name=None):
     """Create an empty pandas array with the given Arrow type."""
 
     # Workaround Arrows conversion gaps for dictionary types
     if isinstance(pa_type, pa.DictionaryType):
-        assert pa_type.index_type == pa.int32() and (
-            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), (
-            "Invalid dictionary type "
-            + str(pa_type.index_type)
-            + " "
-            + str(pa_type.value_type)
-        )
+        if not (
+            pa_type.index_type == pa.int32()
+            and (
+                pa_type.value_type == pa.string()
+                or pa_type.value_type == pa.large_string()
+            )
+        ):
+            field_part = f" at column {field_name}" if field_name is not None else ""
+            raise BodoDictionaryTypeInvalidException(
+                f"Encountered invalid dictionary type{field_part}: "
+                + str(pa_type.index_type)
+                + " "
+                + str(pa_type.value_type)
+                + " not supported yet."
+            )
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]
@@ -691,7 +729,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
             out.array._pa_array.combine_chunks(), str(out.name), cpp_table
         )
     else:
-        out_ptr = df_to_cpp_table(pd.DataFrame({out.name: out}))
+        out_ptr, _ = df_to_cpp_table(pd.DataFrame({out.name: out}))
     py_to_cpp = (time.perf_counter_ns() - py_to_cpp_start) // 1000
     return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
@@ -853,6 +891,12 @@ def _is_generated_index_name(name):
     return re.match(pattern, name) is not None
 
 
+def _fix_multi_index_names(names: list[str]) -> list[str]:
+    """Replace instances of BODO_NONE_DUMMY in MultiIndex names with None
+    to ensure missing index names round trip correctly from Arrow."""
+    return [None if n == BODO_NONE_DUMMY else n for n in names]
+
+
 def _reconstruct_pandas_index(df, arrow_schema):
     """Reconstruct the pandas Index from the metadata in Arrow schema (some columns may
     be moved to Index/MultiIndex).
@@ -889,6 +933,7 @@ def _reconstruct_pandas_index(df, arrow_schema):
 
     # Reconstruct the row index
     if len(index_arrays) > 1:
+        index_names = _fix_multi_index_names(index_names)
         index = pd.MultiIndex.from_arrays(index_arrays, names=index_names)
     elif len(index_arrays) == 1:
         index = index_arrays[0]
@@ -908,7 +953,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(
-        {field.name: _empty_pd_array(field.type) for field in arrow_schema}
+        {
+            field.name: _empty_pd_array(field.type, field_name=field.name)
+            for field in arrow_schema
+        }
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
@@ -1125,6 +1173,24 @@ def ensure_datetime64ns(df):
     return df
 
 
+class FallbackContext:
+    """Context manager for tracking nested fallback calls."""
+
+    level = 0
+
+    @classmethod
+    def is_top_level(cls):
+        """Check we are in the top level context i.e. this fallback was not triggered
+        by another fallback."""
+        return FallbackContext.level == 0
+
+    def __enter__(self):
+        FallbackContext.level += 1
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        FallbackContext.level -= 1
+
+
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
 def fallback_wrapper(self, attr, name, msg):
     """
@@ -1153,10 +1219,16 @@ def fallback_wrapper(self, attr, name, msg):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 try:
-                    return attr(*args, **kwargs)
+                    with FallbackContext():
+                        py_res = attr(*args, **kwargs)
+
+                    # Convert objects to Bodo before returning them to the user.
+                    if FallbackContext.is_top_level():
+                        return convert_to_bodo(py_res)
+
+                    return py_res
                 except TypeError as e:
                     msg = e
-                    pass
 
             # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
             # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.
@@ -1174,7 +1246,9 @@ def fallback_wrapper(self, attr, name, msg):
                             )
                         )
                     converted = pd_self.array._pa_array.to_pandas()
-                    return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    return convert_to_bodo(
+                        getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                    )
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.
             raise TypeError(msg)

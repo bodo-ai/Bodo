@@ -4,13 +4,19 @@ This file should import JIT lazily to avoid slowing down non-JIT code paths.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import sys
+import traceback
 import typing as pt
 import uuid
+from collections.abc import Callable
 from enum import Enum
 from time import sleep
+
+import pandas as pd
+from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
 from bodo.mpi4py import MPI
@@ -194,8 +200,6 @@ def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
 
     if data is not None and not isinstance(
         data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
@@ -239,9 +243,9 @@ def gatherv_nojit(data, root, comm):
         data = pd.DataFrame({"__arrow_data__": data})
 
     comm_ptr = 0 if comm is None else MPI._addressof(comm)
-    cpp_table_ptr = df_to_cpp_table(data)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data)
     out_ptr = hdist.gatherv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
 
     if is_series:
         out = out.iloc[:, 0]
@@ -259,8 +263,6 @@ def scatterv_nojit(data, root, comm):
     """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
-    import pandas as pd
-
     from bodo.ext import hdist
     from bodo.pandas.utils import (
         BODO_NONE_DUMMY,
@@ -282,9 +284,9 @@ def scatterv_nojit(data, root, comm):
         data = data.to_frame(name=name)
 
     comm_ptr = MPI._addressof(comm)
-    cpp_table_ptr = df_to_cpp_table(data)
+    cpp_table_ptr, in_schema = df_to_cpp_table(data)
     out_ptr = hdist.scatterv_py_wrapper(cpp_table_ptr, root, comm_ptr)
-    out = cpp_table_to_df(out_ptr)
+    out = cpp_table_to_df(out_ptr, in_schema)
 
     if is_series:
         out = out.iloc[:, 0]
@@ -301,9 +303,6 @@ def _get_data_sample(data):
     Avoids head(0) for BodoDataFrame/BodoSeries since the serialized lazy block manager
     causes issues on the worker side.
     """
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
-
     from bodo.pandas.base import _empty_like
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.series import BodoSeries
@@ -321,3 +320,45 @@ def _get_data_sample(data):
     raise ValueError(
         "_get_data_sample only supports DataFrame, Series and ArrowExtensionArray input"
     )
+
+
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+    """
+    Utility function decorator to run a function on just rank 0
+    but re-raise any Exceptions safely on all ranks.
+    NOTE: 'func' must be a simple python function that doesn't require
+    any synchronization.
+    e.g. Using a bodo.jit function might be unsafe in this situation.
+    Similarly, a function that uses any MPI collective
+    operation would be unsafe and could result in a hang.
+
+    Args:
+        func: Function to run.
+        bcast_result (bool, optional): Whether the function should be
+            broadcasted to all ranks. Defaults to True.
+        result_default (optional): Default for result. This is only
+            useful in the bcase_result=False case. Defaults to None.
+    """
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        comm = MPI.COMM_WORLD
+        result = result_default
+        err = None
+        # Run on rank 0 and catch any exceptions.
+        if comm.Get_rank() == 0:
+            try:
+                result = func(*args, **kwargs)
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                err = e
+        # Synchronize and re-raise any exception on all ranks.
+        err = comm.bcast(err)
+        if isinstance(err, Exception):
+            raise err
+        # Broadcast the result to all ranks.
+        if bcast_result:
+            result = comm.bcast(result)
+        return result  # type: ignore
+
+    return inner

@@ -123,7 +123,7 @@ class LazyPlan:
             else:
                 # Remember we encountered this node.
                 visited.add(id(node))
-                if isinstance(node, LogicalComparisonJoin):
+                if isinstance(node, (LogicalComparisonJoin, LogicalCrossProduct)):
                     # For comparison join, the first two args contain source plans.
                     for arg in node.args[0:2]:
                         if isinstance(arg, LazyPlan):
@@ -739,6 +739,11 @@ class ArrowScalarFuncExpression(Expression):
         """Return the function name."""
         return self.args[2]
 
+    @property
+    def function_args(self):
+        """Return the function args."""
+        return self.args[3]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
@@ -763,6 +768,7 @@ class ArrowScalarFuncExpression(Expression):
                 new_source_plan,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.function_name,
+                self.function_args,
             )
             expr.is_series = self.is_series
             return expr
@@ -952,7 +958,7 @@ total_init_lazy = 0
 total_execute_plan = 0
 
 
-def execute_plan(plan: LazyPlan):
+def execute_plan(plan: LazyPlan, optimize=True):
     """Execute a dataframe plan using Bodo's execution engine.
 
     Args:
@@ -965,7 +971,7 @@ def execute_plan(plan: LazyPlan):
 
     PlanExecutionCounter.increment()
 
-    def _exec_plan(plan):
+    def _exec_plan(plan, optimize=True):
         import bodo
         from bodo.ext import plan_optimizer
 
@@ -987,7 +993,9 @@ def execute_plan(plan: LazyPlan):
 
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
-        optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+        optimized_plan = (
+            plan_optimizer.py_optimize_plan(duckdb_plan) if optimize else duckdb_plan
+        )
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time opt", time.perf_counter() - start_time)
 
@@ -1043,7 +1051,7 @@ def execute_plan(plan: LazyPlan):
             print("")  # Print on new line during tests.
 
         start_time = time.perf_counter()
-        ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+        ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan, optimize)
         exec_time = time.perf_counter() - start_time
         global total_execute_plan
         total_execute_plan += exec_time
@@ -1051,7 +1059,7 @@ def execute_plan(plan: LazyPlan):
             print("profile_time total_execute_plan", exec_time)
         return ret
 
-    return _exec_plan(plan)
+    return _exec_plan(plan, optimize)
 
 
 def _init_lazy_distributed_arg(arg, visited_plans=None):

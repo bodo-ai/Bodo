@@ -313,11 +313,11 @@ def check_query(
         run_jit_1DVar = False
 
     # Only run Python mode when spawn testing is enabled since others aren't applicable
-    if bodo.tests.utils.test_spawn_mode_enabled:
+    if bodo.tests.utils.test_spawn_mode_enabled or bodosql.use_cpp_backend:
         run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
         if only_jit_seq:
             warnings.warn(
-                "check_query: no tests are being run since spawn enabled and only_jit_seq=True."
+                "check_query: no tests are being run since spawn or BodoSQL C++ backend enabled and only_jit_seq=True."
             )
             return
 
@@ -337,9 +337,11 @@ def check_query(
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params, bind_variables))
 
-    if expected_output is None and (bodo.get_rank() == 0 and spark is None):
+    if expected_output is None and (
+        bodo.get_rank() == 0 and spark is None and not use_duckdb
+    ):
         raise ValueError(
-            "Either `expected_output` or `spark` argument must be set to not None"
+            "Either `expected_output` or `spark` argument must be set to not None or use_duckdb must be True."
         )
 
     # Determine the Spark output.
@@ -1286,8 +1288,8 @@ def _check_query_equal(
         expected_output = expected_output.reset_index(drop=True)
     # check_names=False doesn't seem to work inside pd.testing.assert_frame_equal, so manually rename
     if not check_names:
-        bodosql_output.columns = range(len(bodosql_output.columns))
-        expected_output.columns = range(len(expected_output.columns))
+        bodosql_output.columns = [str(i) for i in range(len(bodosql_output.columns))]
+        expected_output.columns = [str(i) for i in range(len(expected_output.columns))]
 
     passed = 1
     n_ranks = bodo.get_size()
