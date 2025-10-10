@@ -176,14 +176,12 @@ def prepare_dataset(
 
     import bodo
 
+    from .bodo_dist_sampler import BodoDistributedSampler
     from .pandas_dataset import PandasDataset
 
     gpu_ranks = bodo.get_gpu_ranks()
-    if pytorch_rank is None:
-        bodo.rebalance(data, dests=gpu_ranks)
-        return None
 
-    if device.type != "cpu":
+    if device.type != "cpu" or pytorch_rank is None:
         data = bodo.rebalance(data, dests=gpu_ranks)
 
     assert isinstance(data, (DataFrame, Series)), (
@@ -194,18 +192,17 @@ def prepare_dataset(
 
     dataset = PandasDataset(data, device=device)
 
-    # Use DistributedSampler to partition the data among workers
-    # sampler = torch.utils.data.distributed.DistributedSampler(
-    #    tensor_dataset,
-    #    num_replicas=pytorch_world_size,
-    #    rank=pytorch_rank,
-    #    shuffle=shuffle,
-    # )
+    sampler = BodoDistributedSampler(
+        dataset,
+        shuffle=shuffle,
+        worker_ranks=gpu_ranks
+        if device.type != "cpu"
+        else list(range(MPI.COMM_WORLD.Get_size())),
+    )
 
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
-        # sampler=sampler,
-        # shuffle=False if sampler else shuffle,
+        sampler=sampler,
     )
     return dataloader

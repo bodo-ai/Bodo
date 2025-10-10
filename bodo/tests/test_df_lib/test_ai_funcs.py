@@ -399,15 +399,9 @@ def test_torch_train():
 
     df = bd.DataFrame(
         {
-            "feature1": pd.array(
-                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], dtype="float32"
-            ),
-            "feature2": pd.array(
-                [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], dtype="float32"
-            ),
-            "label": pd.array(
-                [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0], dtype="float32"
-            ),
+            "feature1": pd.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], dtype="float32"),
+            "feature2": pd.array([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], dtype="float32"),
+            "label": pd.array([3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0], dtype="float32"),
         }
     )
 
@@ -447,7 +441,6 @@ def test_torch_train():
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
-            print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
             # Create checkpoint.
             base_model = (
                 model.module
@@ -458,7 +451,6 @@ def test_torch_train():
                 {"model_state_dict": base_model.state_dict()},
                 checkpoint_id=config["checkpoint_dir"],
             )
-            print(f"Checkpoint saved at {config['checkpoint_dir']}")
 
     bodo.ai.train.torch_train(
         train_loop,
