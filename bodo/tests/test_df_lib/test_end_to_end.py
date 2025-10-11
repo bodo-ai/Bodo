@@ -3808,7 +3808,7 @@ def test_series_to_list():
     bs2 = bs1 + 1
     l1 = s2.to_list()
     bl1 = bs2.to_list()
-    assert(l1 == bl1)
+    assert l1 == bl1
 
 
 def test_series_str_match():
