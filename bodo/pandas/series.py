@@ -348,7 +348,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
         )
 
-        if op == "__mod__":
+        if op in ("__mod__", "__rmod__"):
             empty_data = zero_size_self
         else:
             # Compute schema of new series.
