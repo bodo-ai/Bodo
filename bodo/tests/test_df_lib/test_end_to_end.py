@@ -1795,7 +1795,6 @@ def test_series_mod(datapath):
 
 
 def test_series_compound_expression(datapath):
-def test_series_compound_expression(datapath):
     """Very simple test for projection expressions."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -3801,6 +3800,7 @@ def test_join_non_equi_key_not_in_output():
         sort_output=True,
     )
 
+
 def test_series_to_list():
     s1 = pd.Series(list(range(37)))
     bs1 = bd.Series(s1)
@@ -3809,6 +3809,7 @@ def test_series_to_list():
     l1 = s2.to_list()
     bl1 = bs2.to_list()
     assert(l1 == bl1)
+
 
 def test_series_str_match():
     s = pd.Series(["abc", "a1c", "zzz", None], dtype="string")
