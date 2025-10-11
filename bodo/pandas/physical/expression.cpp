@@ -739,8 +739,8 @@ PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
 
 template <typename ArrowType, typename ModOp>
 arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
-                     const arrow::compute::ExecSpan& batch,
-                     arrow::compute::ExecResult* out) {
+                      const arrow::compute::ExecSpan& batch,
+                      arrow::compute::ExecResult* out) {
     using CType = typename ArrowType::c_type;
     using ScalarType = typename arrow::TypeTraits<ArrowType>::ScalarType;
 
@@ -840,17 +840,17 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
 }
 
 struct NativeMod {
-  template <typename T>
-  static T apply(T l, T r) {
-    return (r == 0 ? 0 : (l % r));
-  }
+    template <typename T>
+    static T apply(T l, T r) {
+        return (r == 0 ? 0 : (l % r));
+    }
 };
 
 struct AltMod {
-  template <typename T>
-  static T apply(T l, T r) {
-    return (r == 0 ? 0 : (l - ((int64_t)(l / r) * r)));
-  }
+    template <typename T>
+    static T apply(T l, T r) {
+        return (r == 0 ? 0 : (l - ((int64_t)(l / r) * r)));
+    }
 };
 
 void RegisterMod(arrow::compute::FunctionRegistry* registry) {
