@@ -307,8 +307,7 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 std::unique_ptr<duckdb::Expression> make_cast_expr(
-    std::unique_ptr<duckdb::Expression> &source,
-    PyObject *out_schema_py);
+    std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.

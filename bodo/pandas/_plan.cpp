@@ -340,8 +340,7 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
 }
 
 std::unique_ptr<duckdb::Expression> make_cast_expr(
-    std::unique_ptr<duckdb::Expression> &source,
-    PyObject *out_schema_py) {
+    std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
