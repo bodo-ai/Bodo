@@ -139,6 +139,19 @@ class PhysicalProjection : public PhysicalProcessBatch {
                 } else {
                     col_names.emplace_back("Case");
                 }
+            } else if (expr->type == duckdb::ExpressionType::OPERATOR_CAST) {
+                auto& bce = expr->Cast<duckdb::BoundCastExpression>();
+
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        duckdbTypeToArrow(bce.return_type))
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("Cast");
+                }
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
