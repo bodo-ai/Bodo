@@ -3388,9 +3388,6 @@ allowed_types_map = {
         datetime.datetime,
         numpy.datetime64,
         numpy.timedelta64,
-        # numpy.int64,
-        # numpy.float64,
-        # numpy.bool_,
     ),
 }
 
