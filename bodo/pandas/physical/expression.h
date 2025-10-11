@@ -2,8 +2,13 @@
 
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/function.h>
+#include <arrow/compute/kernel.h>
+#include <arrow/result.h>
+#include <arrow/status.h>
 #include <arrow/type_traits.h>
 #include <future>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -716,6 +721,8 @@ class PhysicalUnaryExpression : public PhysicalExpression {
     std::string comparator;
 };
 
+void EnsureModRegistered();
+
 /**
  * @brief Physical expression tree node type for binary op non-boolean arrays.
  *
@@ -750,6 +757,9 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             comparator = "divide";
         } else if (opstr == "floor") {
             comparator = "floor";
+        } else if (opstr == "%") {
+            EnsureModRegistered();
+            comparator = "bodo_mod";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);
