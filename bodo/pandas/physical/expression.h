@@ -22,7 +22,6 @@
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
-
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
@@ -759,7 +758,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "floor") {
             comparator = "floor";
         } else if (opstr == "%") {
-	    EnsureModRegistered();
+            EnsureModRegistered();
             comparator = "bodo_mod";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
