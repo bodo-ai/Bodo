@@ -332,7 +332,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
 
-        if is_numeric(other):
+        self_bool = is_bool(self)
+        other_bool = is_bool(other)
+        if (is_numeric(self) or self_bool) and (is_numeric(other) or other_bool) and not (self_bool and other_bool):
+            if self_bool:
+                self = self.map({True: 1, False: 0})
+
+            if other_bool:
+                if isinstance(other, BodoSeries):
+                    other = other.map({True: 1, False: 0})
+                else:
+                    other = 1 if other else 0
             return self._numeric_binop(other, op, reverse)
 
         return self._non_numeric_binop(other, op, reverse)
@@ -717,7 +727,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                warnings.warn(BodoCompilationFailedWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoCompilationFailedWarning(msg))
 
         # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
@@ -841,7 +852,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                warnings.warn(BodoLibFallbackWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoLibFallbackWarning(msg))
 
                 self_arg = self.execute_plan()
 
@@ -886,7 +898,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if kind is not None:
-            warnings.warn("sort_values() kind argument ignored")
+            if bodo.dataframe_library_warn:
+                warnings.warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
         na_position = [True if na_position == "first" else False]
@@ -1374,6 +1387,30 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def to_list(self):
         return super().to_list()
 
+    @check_args_fallback(supported="none")
+    def cumsum(self,
+               axis: Axis | None = None,
+               skipna: bool = True,
+               *args,
+               **kwargs):
+        # cumsum not supported for pyarrow boolean so convert to int
+        # Fix in pyarrow instead?
+        if  self.dtype == pd.ArrowDtype(pa.bool_()):
+            self = self.map({True: 1, False: 0})
+        msg = (
+            f"Series.cumsum is not implemented in Bodo DataFrames yet. "
+            "Falling back to Pandas (may be slow or run out of memory)."
+        )
+        if bodo.dataframe_library_warn:
+            warnings.warn(BodoLibFallbackWarning(msg))
+        with bodo.pandas.utils.FallbackContext():
+            py_res = super().cumsum(axis, skipna, *args, **kwargs)
+
+        # Convert objects to Bodo before returning them to the user.
+        if bodo.pandas.utils.FallbackContext.is_top_level():
+            return bodo.pandas.utils.convert_to_bodo(py_res)
+        return py_res
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -1406,7 +1443,8 @@ class BodoStringMethods:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                warnings.warn(BodoLibFallbackWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -2013,7 +2051,8 @@ class BodoDatetimeProperties:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                warnings.warn(BodoLibFallbackWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
     @check_args_fallback(unsupported="none")
@@ -2161,6 +2200,22 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def is_bool(other):
+    from bodo.pandas.scalar import BodoScalar
+
+    if type(other) is BodoScalar:
+        dtype = other.wrapped_series.dtype
+        return pd.api.types.is_bool_dtype(dtype)
+
+    is_bool_bodoseries = (
+        isinstance(other, BodoSeries)
+        and isinstance(other.dtype, pd.ArrowDtype)
+        and pd.api.types.is_bool_dtype(other.dtype)
+    )
+    is_bool_scalar = isinstance(other, bool)
+    return is_bool_bodoseries or is_bool_scalar
 
 
 def is_numeric(other):

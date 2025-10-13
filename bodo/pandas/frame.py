@@ -94,18 +94,20 @@ class BodoDataFrameLocIndexer(_LocIndexer):
             if row_sel == slice(None, None, None):
                 return self.df.__getitem__(col_sel)
             else:
-                warnings.warn(
-                    BodoLibFallbackWarning(
-                        "Selected variant of BodoDataFrame.loc[] not supported."
+                if bodo.dataframe_library_warn:
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            "Selected variant of BodoDataFrame.loc[] not supported."
+                        )
                     )
-                )
                 return super(self.df).loc.__getitem__(key)
 
-        warnings.warn(
-            BodoLibFallbackWarning(
-                "Selected variant of BodoDataFrame.loc[] not supported."
+        if bodo.dataframe_library_warn:
+            warnings.warn(
+                BodoLibFallbackWarning(
+                    "Selected variant of BodoDataFrame.loc[] not supported."
+                )
             )
-        )
         # Delegate to original behavior
         return super(self.df).loc.__getitem__(key)
 
@@ -953,7 +955,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                warnings.warn(BodoLibFallbackWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoLibFallbackWarning(msg))
 
                 df_arg = self.execute_plan()
 
@@ -1414,7 +1417,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                warnings.warn(BodoCompilationFailedWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoCompilationFailedWarning(msg))
             else:
                 if bodo.dataframe_library_run_parallel:
                     bodo.spawn.utils.import_compiler_on_workers()
@@ -1486,7 +1490,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
 
         if kind is not None:
-            warnings.warn("sort_values() kind argument ignored")
+            if bodo.dataframe_library_warn:
+                warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):
