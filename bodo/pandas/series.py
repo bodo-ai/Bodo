@@ -1388,9 +1388,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
-    def to_list(self):
-        return super().to_list()
-
     @check_args_fallback(supported="none")
     def cumsum(self, axis: Axis | None = None, skipna: bool = True, *args, **kwargs):
         # cumsum not supported for pyarrow boolean so convert to int
