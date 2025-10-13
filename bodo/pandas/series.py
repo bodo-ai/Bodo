@@ -334,7 +334,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         self_bool = is_bool(self)
         other_bool = is_bool(other)
-        if (is_numeric(self) or self_bool) and (is_numeric(other) or other_bool) and not (self_bool and other_bool):
+        if (
+            (is_numeric(self) or self_bool)
+            and (is_numeric(other) or other_bool)
+            and not (self_bool and other_bool)
+        ):
             if self_bool:
                 self = self.map({True: 1, False: 0})
 
@@ -1388,17 +1392,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return super().to_list()
 
     @check_args_fallback(supported="none")
-    def cumsum(self,
-               axis: Axis | None = None,
-               skipna: bool = True,
-               *args,
-               **kwargs):
+    def cumsum(self, axis: Axis | None = None, skipna: bool = True, *args, **kwargs):
         # cumsum not supported for pyarrow boolean so convert to int
         # Fix in pyarrow instead?
-        if  self.dtype == pd.ArrowDtype(pa.bool_()):
+        if self.dtype == pd.ArrowDtype(pa.bool_()):
             self = self.map({True: 1, False: 0})
         msg = (
-            f"Series.cumsum is not implemented in Bodo DataFrames yet. "
+            "Series.cumsum is not implemented in Bodo DataFrames yet. "
             "Falling back to Pandas (may be slow or run out of memory)."
         )
         if bodo.dataframe_library_warn:
