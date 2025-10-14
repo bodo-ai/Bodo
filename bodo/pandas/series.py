@@ -1576,10 +1576,7 @@ class BodoSeriesAiMethods:
         self,
         tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("tokenize")
 
         def per_row(tokenizer, row):
             return tokenizer.encode(row, add_special_tokens=True)
@@ -1603,10 +1600,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **generation_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("llm_generate")
 
         if backend == Backend.BEDROCK:
             if model is None:
@@ -1693,6 +1687,13 @@ class BodoSeriesAiMethods:
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
+    def _check_ai_input(self, func: str):
+        if self._series.dtype not in ("string[pyarrow]", "large_string[pyarrow]"):
+            raise TypeError(
+                f"Series.ai.{func}() got unsupported dtype: {self._series.dtype}, expected"
+                "large_string[pyarrow] or string[pyarrow]."
+            )
+
     def _llm_generate_bedrock(
         self,
         modelId: str,
@@ -1755,10 +1756,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **embedding_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("embed")
 
         if backend == Backend.BEDROCK:
             if model is None:
