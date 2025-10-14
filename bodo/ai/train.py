@@ -70,7 +70,6 @@ def _init_process_group():
         len(gpu_ranks) if device != torch.device("cpu") else MPI.COMM_WORLD.Get_size()
     )
 
-    backend = torch.distributed.get_default_backend_for_device(device)
     # Incase something binds to the port between getting the port and initializing
     # the process group, we retry a few times.
     for i in range(PROCESS_GROUP_INIT_RETRIES):
@@ -83,7 +82,6 @@ def _init_process_group():
 
             if pytorch_rank is not None:
                 dist.init_process_group(
-                    backend=backend,
                     init_method=tcp_conn_str,
                     rank=pytorch_rank,
                     world_size=npes,
