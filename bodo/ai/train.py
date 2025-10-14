@@ -107,7 +107,8 @@ def torch_train(
         import torch.distributed as dist
 
         train_loop_per_worker(*args, **kwargs)
-        dist.destroy_process_group()
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
     submit_func_to_workers(worker_func, [], args, kwargs)
 
