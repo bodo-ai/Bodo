@@ -131,7 +131,7 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
     model.train()
     rank = dist.get_rank()
     device = next(model.parameters()).device
-    total_ddp_acc_loss_train = torch.zeros(3)
+    total_ddp_acc_loss_train = torch.zeros(3).to(device)
 
     if rank==0:
         inner_pbar = tqdm.tqdm(

@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import importlib.util
 import socket
-import typing
 from typing import Any, Callable, Literal
 
 from bodo.mpi4py import MPI
-
-if typing.TYPE_CHECKING:
-    pass
 
 PROCESS_GROUP_INIT_RETRIES = 5
 
@@ -83,8 +79,8 @@ def _init_process_group():
 
             if pytorch_rank is not None:
                 dist.init_process_group(
-                    init_method=tcp_conn_str,
                     backend=backend,
+                    init_method=tcp_conn_str,
                     rank=pytorch_rank,
                     world_size=npes,
                 )
@@ -98,8 +94,6 @@ def torch_train(
     train_loop_per_worker: Callable[[], None] | Callable[[dict], None],
     *args,
     **kwargs,
-    # dataset: BodoDataFrame | BodoSeries,
-    # train_loop_config: dict | None = None,
 ):
     # We need the compiler on the spawner since the workers will import it
     # for get_gpu_ranks, if the workers have it and not the spawner it can
@@ -108,13 +102,20 @@ def torch_train(
     import bodo.decorators  # noqa: F401
     from bodo.spawn.spawner import submit_func_to_workers
 
-    submit_func_to_workers(train_loop_per_worker, [], *args, **kwargs)
+    def worker_func(args, kwargs):
+        torch_import_guard()
+        import torch.distributed as dist
+
+        train_loop_per_worker(*args, **kwargs)
+        dist.destroy_process_group()
+
+    submit_func_to_workers(worker_func, [], args, kwargs)
 
 
 def prepare_model(
     model,
     parallel_strategy: Literal["ddp", "fsdp"] | None = "ddp",
-    parallel_strategy_kwargs: dict[str, Any] | None = {},
+    parallel_strategy_kwargs: dict[str, Any] | None = None,
 ):
     torch_import_guard()
     import torch
