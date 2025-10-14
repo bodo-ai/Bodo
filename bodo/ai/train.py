@@ -126,6 +126,7 @@ def prepare_model(
     if pytorch_rank is None:
         return None
 
+    model.to(device)
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
             "parallel_strategy should be either 'ddp' or 'fsdp'"
@@ -140,5 +141,4 @@ def prepare_model(
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
             model = FSDP(model, **parallel_strategy_kwargs)
-    model.to(device)
     return model
