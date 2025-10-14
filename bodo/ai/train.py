@@ -86,13 +86,13 @@ def _init_process_group():
             tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
 
             if pytorch_rank is not None:
-                dist.init_process_group(
+                pg = dist.init_process_group(
                     init_method=tcp_conn_str,
                     backend=backend,
                     rank=pytorch_rank,
                     world_size=npes,
                 )
-            return pytorch_rank, npes, device
+            return pytorch_rank, npes, device, pg
         except Exception as e:
             if i == PROCESS_GROUP_INIT_RETRIES - 1:
                 raise e
@@ -126,7 +126,7 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    pytorch_rank, pytorch_world_size, device = _init_process_group()
+    pytorch_rank, pytorch_world_size, device, pg = _init_process_group()
     if pytorch_rank is None:
         return None
 
@@ -139,7 +139,7 @@ def prepare_model(
         if parallel_strategy == "ddp":
             from torch.nn.parallel import DistributedDataParallel as DDP
 
-            model = DDP(model, **parallel_strategy_kwargs)
+            model = DDP(model, process_group=pg, **parallel_strategy_kwargs)
         elif parallel_strategy == "fsdp":
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
