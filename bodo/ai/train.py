@@ -118,7 +118,7 @@ def torch_train(
 def prepare_model(
     model,
     parallel_strategy: Literal["ddp", "fsdp"] | None = "ddp",
-    parallel_strategy_kwargs: dict[str, Any] | None = None,
+    parallel_strategy_kwargs: dict[str, Any] | None = {},
 ):
     torch_import_guard()
     import torch
@@ -126,7 +126,7 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    pytorch_rank, pytorch_world_size, device, pg = _init_process_group()
+    pytorch_rank, pytorch_world_size, device = _init_process_group()
     if pytorch_rank is None:
         return None
 
@@ -139,7 +139,7 @@ def prepare_model(
         if parallel_strategy == "ddp":
             from torch.nn.parallel import DistributedDataParallel as DDP
 
-            model = DDP(model, process_group=pg, **parallel_strategy_kwargs)
+            model = DDP(model, **parallel_strategy_kwargs)
         elif parallel_strategy == "fsdp":
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 

@@ -474,7 +474,6 @@ def exec_func_handler(
             debug_worker_msg(logger, "Compiling and executing func")
             res = func(*args, **kwargs)
         except Exception as e:
-            print(e)
             debug_worker_msg(logger, f"Exception while trying to execute code: {e}")
             caught_exception = e
 
