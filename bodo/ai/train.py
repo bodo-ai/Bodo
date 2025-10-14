@@ -8,7 +8,7 @@ from typing import Any, Callable, Literal
 from bodo.mpi4py import MPI
 
 if typing.TYPE_CHECKING:
-    from bodo.pandas import BodoDataFrame, BodoSeries
+    pass
 
 PROCESS_GROUP_INIT_RETRIES = 5
 
@@ -96,8 +96,10 @@ def _init_process_group():
 
 def torch_train(
     train_loop_per_worker: Callable[[], None] | Callable[[dict], None],
-    dataset: BodoDataFrame | BodoSeries,
-    train_loop_config: dict | None = None,
+    *args,
+    **kwargs,
+    # dataset: BodoDataFrame | BodoSeries,
+    # train_loop_config: dict | None = None,
 ):
     # We need the compiler on the spawner since the workers will import it
     # for get_gpu_ranks, if the workers have it and not the spawner it can
@@ -106,12 +108,7 @@ def torch_train(
     import bodo.decorators  # noqa: F401
     from bodo.spawn.spawner import submit_func_to_workers
 
-    def worker_func(data):
-        train_loop_per_worker(
-            data, train_loop_config
-        ) if train_loop_config else train_loop_per_worker(data)
-
-    submit_func_to_workers(worker_func, [], dataset)
+    submit_func_to_workers(train_loop_per_worker, [], *args, **kwargs)
 
 
 def prepare_model(
