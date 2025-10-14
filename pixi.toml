@@ -7,8 +7,8 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 [environments]
 # Development
 default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-gpu =          { features = ["rcpp", "dev", "local-mpi", "gpu"], solve-group = "313" }
 azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
+gpu =          { features = ["rcpp", "dev", "local-mpi", "gpu"], solve-group = "313-gpu" }
 # Platform
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }

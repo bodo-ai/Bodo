@@ -86,13 +86,13 @@ def _init_process_group():
             tcp_conn_str = MPI.COMM_WORLD.bcast(tcp_conn_str, root=0)
 
             if pytorch_rank is not None:
-                pg = dist.init_process_group(
+                dist.init_process_group(
                     init_method=tcp_conn_str,
                     backend=backend,
                     rank=pytorch_rank,
                     world_size=npes,
                 )
-            return pytorch_rank, npes, device, pg
+            return pytorch_rank, npes, device
         except Exception as e:
             if i == PROCESS_GROUP_INIT_RETRIES - 1:
                 raise e
