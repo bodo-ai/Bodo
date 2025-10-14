@@ -127,6 +127,9 @@ def prepare_model(
         return None
 
     model.to(device)
+    # If we only have one rank, no need to wrap the model
+    if pytorch_world_size == 1:
+        return model
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
             "parallel_strategy should be either 'ddp' or 'fsdp'"
