@@ -1,5 +1,6 @@
 import pandas as pd
 import bodo.ai
+import bodo.spawn.spawner
 import torch
 import torch.distributed as dist
 import tqdm
@@ -121,7 +122,7 @@ def ddp_validation(model, val_loader, loss_fn):
     if rank == 0:
         inner_pbar.close()
         print(
-                f"Validation Loss: \t{avg_val_loss:.4f} Accuracy: \t{val_accuracy:.4f}"
+                f"Loss: \t{avg_val_loss:.4f} Accuracy: \t{val_accuracy:.4f}"
             )
 
     return val_accuracy, avg_val_loss
@@ -178,11 +179,15 @@ def train_main(train_df, val_df, test_df):
 
     train_dataset = PandasDataset(train_df)
     val_dataset = PandasDataset(val_df)
+    test_dataset = PandasDataset(test_df)
     train_sampler = DistributedSampler(train_dataset)
     val_sampler = DistributedSampler(val_dataset)
+    test_sampler = DistributedSampler(test_dataset)
 
     train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
     val_loader = DataLoader(val_dataset, batch_size=2, sampler=val_sampler)
+    test_loader = DataLoader(test_dataset, batch_size=2, sampler=test_sampler)
+
 
     loss_fn = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=LR)
@@ -192,14 +197,17 @@ def train_main(train_df, val_df, test_df):
         train_sampler.set_epoch(epoch)
         val_sampler.set_epoch(epoch)
         ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch)
+        print("Validation: ")
         ddp_validation(model, val_loader, loss_fn)
 
-    # TODO: Evaluate test dataset at the end of training
-    
+    print("Test: ")
+    ddp_validation(model, test_loader, loss_fn)
+
 
 
 if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     train_df, val_df, test_df = prepare_datasets(tokenizer)
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
+    bodo.spawn.spawner.destroy_spawner()
 
