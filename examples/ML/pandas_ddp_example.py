@@ -138,7 +138,7 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
 
     if rank==0:
         inner_pbar = tqdm.tqdm(
-            range(len(train_loader)), colour="blue", desc="r0 Training Epoch"
+            range(len(train_loader)), colour="blue"
         )
 
     for train_input, train_label in train_loader:
@@ -168,7 +168,7 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
     if rank == 0:
         inner_pbar.close()
         print(
-                f"Train Epoch: \t{epoch}, Loss: \t{avg_train_loss:.4f} Accuracy: \t{train_accuracy:.4f}"
+                f" Loss: \t{avg_train_loss:.4f} Accuracy: \t{train_accuracy:.4f}"
             )
 
     return train_accuracy, avg_train_loss
@@ -198,7 +198,11 @@ def train_main(train_df, val_df, test_df):
     for epoch in range(EPOCHS):
         train_sampler.set_epoch(epoch)
         val_sampler.set_epoch(epoch)
+
+        if rank == 0:
+            print(f"Train Epoch: \t{epoch}")
         ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch)
+
         if rank == 0:
             print("Validation: ")
         ddp_validation(model, val_loader, loss_fn)
