@@ -13,6 +13,7 @@ LR = 1e-6
 EPOCHS = 1
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
+CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
 
@@ -194,13 +195,20 @@ def train_main(train_df, val_df, test_df):
     optimizer = Adam(model.parameters(), lr=LR)
 
     for epoch in range(EPOCHS):
-        # TODO: checkpointing?
         train_sampler.set_epoch(epoch)
         val_sampler.set_epoch(epoch)
         ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch)
         if rank == 0:
             print("Validation: ")
         ddp_validation(model, val_loader, loss_fn)
+
+        # Create checkpoint
+        base_model = (model.module
+            if isinstance(model, DistributedDataParallel) else model)
+        torch.distributed.checkpoint.state_dict_saver.save(
+            {"model_state_dict": base_model.state_dict()},
+            checkpoint_id=CHECKPOINT_DIR
+        )
     
     if rank == 0:
         print("Test: ")
