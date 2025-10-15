@@ -1607,7 +1607,6 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     // set state batch input
     this->in_table = in_table;
     this->in_table_hashes = batch_hashes_groupby;
-    time_pt start = start_timer();
     // Reserve space in buffers for potential new groups.
     // Note that if any of the running values are strings, they always
     // go through the accumulate path.
@@ -1627,6 +1626,7 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     // so we need to cache it beforehand.
     int64_t shuffle_init_start_row = this->next_group;
 
+    time_pt start = start_timer();
     // Add new groups and get group mappings for input batch
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         update_groups_helper(*(this->table_buffer), this->groupby_hashes,
