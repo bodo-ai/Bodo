@@ -220,5 +220,4 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     train_df, val_df, test_df = prepare_datasets(tokenizer)
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
-    bodo.spawn.spawner.destroy_spawner()
 

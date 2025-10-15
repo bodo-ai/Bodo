@@ -108,9 +108,7 @@ def torch_train(
 
         train_loop_per_worker(*args, **kwargs)
         if dist.is_initialized():
-            print("Destroying existing process group")
             dist.destroy_process_group()
-            print("Destroyed existing process group")
 
     submit_func_to_workers(worker_func, [], args, kwargs)
 
