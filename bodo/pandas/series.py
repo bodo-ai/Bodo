@@ -5,6 +5,7 @@ import datetime
 import inspect
 import itertools
 import numbers
+import sys
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -83,6 +84,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_scalar_udf_result_type,
     insert_bodo_scalar,
+    wrap_module_functions_and_methods,
     wrap_plan,
 )
 
@@ -3490,3 +3492,5 @@ _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
 _install_str_partitions()
+
+wrap_module_functions_and_methods(sys.modules[__name__])

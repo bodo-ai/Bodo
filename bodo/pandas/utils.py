@@ -4,9 +4,12 @@ import atexit
 import functools
 import importlib
 import inspect
+import sys
 import time
+import types as pytypes
 import typing as pt
 import warnings
+
 
 import pandas as pd
 import pyarrow as pa
@@ -1514,3 +1517,58 @@ def insert_bodo_scalar(
         empty_data[col_name].to_frame(), new_plan, empty_data.shape[1] - 1
     )
     return new_plan, col_expr
+
+def log_wrapper(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Inspect the call stack: frame 0 = wrapper, 1 = func, 2 = caller
+        frame = inspect.currentframe()
+        caller_frame = frame.f_back.f_back
+        caller_module = caller_frame.f_globals.get("__name__", "")
+
+        # Only log if the caller is *not* in the bodo.* hierarchy
+        if not caller_module.startswith("bodo"):
+            def log_repr(x):
+                from bodo.pandas import BodoDataFrame, BodoSeries
+                if isinstance(x, (BodoDataFrame, BodoSeries)):
+                    return str(type(x))
+                else:
+                    return repr(x)
+            arg_str = ", ".join([
+                *[log_repr(a) for a in args],
+                *[f"{k}={log_repr(v)}" for k, v in kwargs.items()]
+            ])
+            with open("bodo.capture", "a") as _log_file:
+                _log_file.write(f"LOG {func.__module__}.{func.__qualname__}({arg_str})\n")
+                _log_file.flush()
+
+        return func(*args, **kwargs)
+    return wrapper
+
+def wrap_module_functions_and_methods(module):
+    if not bodo.dataframe_library_capture:
+        return
+    with open("bodo.capture", "a") as _log_file:
+        for name, obj in vars(module).items():
+            # Wrap top-level functions
+            if isinstance(obj, pytypes.FunctionType) and obj.__module__ == module.__name__:
+                #print("wrapping top-level function", module.__name__, name, file=_log_file)
+                setattr(module, name, log_wrapper(obj))
+
+            # Wrap methods in classes
+            if inspect.isclass(obj) and obj.__module__ == module.__name__:
+                for attr_name, attr in vars(obj).items():
+                    if isinstance(attr, (pytypes.FunctionType, classmethod, staticmethod)):
+                        #if module.__name__ == "bodo.pandas.frame" and name == "BodoDataFrameLocIndexer" and attr_name == "__init__":
+                            #breakpoint()
+                        #    pass
+                        #print("wrapping class function", module.__name__, name, attr_name, file=_log_file)
+                        original = attr
+                        if isinstance(attr, (classmethod, staticmethod)):
+                            original = attr.__func__
+                        wrapped = log_wrapper(original)
+                        if isinstance(attr, classmethod):
+                            wrapped = classmethod(wrapped)
+                        elif isinstance(attr, staticmethod):
+                            wrapped = staticmethod(wrapped)
+                        setattr(obj, attr_name, wrapped)
