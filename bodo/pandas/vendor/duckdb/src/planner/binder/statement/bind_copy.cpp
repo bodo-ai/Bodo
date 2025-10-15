@@ -5,7 +5,6 @@
 #include "duckdb/common/bind_helpers.hpp"
 #include "duckdb/common/filename_pattern.hpp"
 #include "duckdb/common/local_file_system.hpp"
-#include "duckdb/function/table/read_csv.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"

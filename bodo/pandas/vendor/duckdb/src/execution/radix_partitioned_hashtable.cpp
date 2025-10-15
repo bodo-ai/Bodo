@@ -7,7 +7,6 @@
 #include "duckdb/execution/aggregate_hashtable.hpp"
 #include "duckdb/execution/executor.hpp"
 #include "duckdb/execution/ht_entry.hpp"
-#include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
@@ -15,7 +14,7 @@ namespace duckdb {
 
 RadixPartitionedHashTable::RadixPartitionedHashTable(GroupingSet &grouping_set_p, const GroupedAggregateData &op_p)
     : grouping_set(grouping_set_p), op(op_p) {
-	auto groups_count = op.GroupCount();
+	idx_t groups_count = 1;
 	for (idx_t i = 0; i < groups_count; i++) {
 		if (grouping_set.find(i) == grouping_set.end()) {
 			null_groups.push_back(i);
@@ -37,22 +36,6 @@ RadixPartitionedHashTable::RadixPartitionedHashTable(GroupingSet &grouping_set_p
 }
 
 void RadixPartitionedHashTable::SetGroupingValues() {
-	// Compute the GROUPING values:
-	// For each parameter to the GROUPING clause, we check if the hash table groups on this particular group
-	// If it does, we return 0, otherwise we return 1
-	// We then use bitshifts to combine these values
-	auto &grouping_functions = op.GetGroupingFunctions();
-	for (auto &grouping : grouping_functions) {
-		int64_t grouping_value = 0;
-		D_ASSERT(grouping.size() < sizeof(int64_t) * 8);
-		for (idx_t i = 0; i < grouping.size(); i++) {
-			if (grouping_set.find(grouping[i]) == grouping_set.end()) {
-				// We don't group on this value!
-				grouping_value += 1LL << (grouping.size() - (i + 1));
-			}
-		}
-		grouping_values.push_back(Value::BIGINT(grouping_value));
-	}
 }
 
 const TupleDataLayout &RadixPartitionedHashTable::GetLayout() const {
@@ -847,14 +830,14 @@ void RadixHTLocalSourceState::Scan(RadixHTGlobalSinkState &sink, RadixHTGlobalSo
 		chunk.data[null_group].SetVectorType(VectorType::CONSTANT_VECTOR);
 		ConstantVector::SetNull(chunk.data[null_group], true);
 	}
-	D_ASSERT(radix_ht.grouping_set.size() + radix_ht.null_groups.size() == radix_ht.op.GroupCount());
+	D_ASSERT(radix_ht.grouping_set.size() + radix_ht.null_groups.size() == 0);
 	for (idx_t col_idx = 0; col_idx < radix_ht.op.aggregates.size(); col_idx++) {
-		chunk.data[radix_ht.op.GroupCount() + col_idx].Reference(
+		chunk.data[0 + col_idx].Reference(
 		    scan_chunk.data[radix_ht.group_types.size() + col_idx]);
 	}
 	D_ASSERT(radix_ht.op.grouping_functions.size() == radix_ht.grouping_values.size());
 	for (idx_t i = 0; i < radix_ht.op.grouping_functions.size(); i++) {
-		chunk.data[radix_ht.op.GroupCount() + radix_ht.op.aggregates.size() + i].Reference(radix_ht.grouping_values[i]);
+		chunk.data[0 + radix_ht.op.aggregates.size() + i].Reference(radix_ht.grouping_values[i]);
 	}
 	chunk.SetCardinality(scan_chunk);
 	D_ASSERT(chunk.size() != 0);

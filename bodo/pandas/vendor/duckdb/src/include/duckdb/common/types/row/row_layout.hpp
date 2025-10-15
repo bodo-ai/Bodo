@@ -10,7 +10,6 @@
 
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/types/validity_mask.hpp"
-#include "duckdb/execution/operator/aggregate/aggregate_object.hpp"
 #include "duckdb/planner/expression.hpp"
 
 namespace duckdb {

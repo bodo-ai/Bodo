@@ -37,10 +37,6 @@ public:
 	idx_t filter_count;
 
 public:
-	idx_t GroupCount() const;
-
-	const vector<vector<idx_t>> &GetGroupingFunctions() const;
-
 	void InitializeGroupby(vector<unique_ptr<Expression>> groups, vector<unique_ptr<Expression>> expressions,
 	                       vector<unsafe_vector<idx_t>> grouping_functions);
 
