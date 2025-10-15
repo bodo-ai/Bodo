@@ -176,6 +176,7 @@ def train_main(train_df, val_df, test_df):
     model = bodo.ai.prepare_model(BertClassifier())
     if model == None:
         return
+    rank = dist.get_rank()
 
     train_dataset = PandasDataset(train_df)
     val_dataset = PandasDataset(val_df)
@@ -197,10 +198,12 @@ def train_main(train_df, val_df, test_df):
         train_sampler.set_epoch(epoch)
         val_sampler.set_epoch(epoch)
         ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch)
-        print("Validation: ")
+        if rank == 0:
+            print("Validation: ")
         ddp_validation(model, val_loader, loss_fn)
-
-    print("Test: ")
+    
+    if rank == 0:
+        print("Test: ")
     ddp_validation(model, test_loader, loss_fn)
 
 
