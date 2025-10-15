@@ -3,6 +3,7 @@ import bodo.ai
 import bodo.spawn.spawner
 import torch
 import torch.distributed as dist
+import torch.distributed.checkpoint
 import tqdm
 from torch import nn
 from torch.optim import Adam
@@ -204,7 +205,7 @@ def train_main(train_df, val_df, test_df):
 
         # Create checkpoint
         base_model = (model.module
-            if isinstance(model, DistributedDataParallel) else model)
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model)
         torch.distributed.checkpoint.state_dict_saver.save(
             {"model_state_dict": base_model.state_dict()},
             checkpoint_id=CHECKPOINT_DIR
