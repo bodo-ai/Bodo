@@ -35,7 +35,13 @@ def _get_open_port():
         s.close()
 
 
+pytorch_rank, pytorch_world_size, device = None, None, None
+
+
 def _init_process_group():
+    # We don't want users to have to pass these around in the train loop
+    # so we set them as globals.
+    global pytorch_rank, pytorch_world_size, device
     import torch
     import torch.distributed as dist
 
@@ -88,7 +94,7 @@ def _init_process_group():
                     rank=pytorch_rank,
                     world_size=npes,
                 )
-            return pytorch_rank, npes, device
+            return
         except Exception as e:
             if i == PROCESS_GROUP_INIT_RETRIES - 1:
                 raise e
@@ -107,9 +113,24 @@ def torch_train(
     from bodo.spawn.spawner import submit_func_to_workers
 
     def worker_func(data):
-        train_loop_per_worker(
-            data, train_loop_config
-        ) if train_loop_config else train_loop_per_worker(data)
+        torch_import_guard()
+        import torch.distributed as dist
+
+        # Set up the process group for this worker
+        # Make these globals so that prepare_model and prepare_dataset
+        # can access them without needing to pass them around
+        # by the user in the train loop.
+        global pytorch_rank, pytorch_world_size, device
+        _init_process_group()
+        try:
+            train_loop_per_worker(
+                data, train_loop_config
+            ) if train_loop_config else train_loop_per_worker(data)
+        finally:
+            # Clean up the process group
+            if dist.is_initialized():
+                dist.destroy_process_group()
+            pytorch_rank, pytorch_world_size, device = None, None, None
 
     submit_func_to_workers(worker_func, [], dataset)
 
@@ -125,7 +146,6 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    pytorch_rank, pytorch_world_size, device = _init_process_group()
     if pytorch_rank is None:
         return None
 
@@ -145,3 +165,44 @@ def prepare_model(
             model = FSDP(model, **parallel_strategy_kwargs)
     model.to(device)
     return model
+
+
+def prepare_dataset(
+    data: BodoDataFrame | BodoSeries, batch_size: int, shuffle: bool = True
+):
+    torch_import_guard()
+    from pandas import DataFrame, Series
+    from torch.utils.data import DataLoader
+
+    import bodo
+
+    from .bodo_dist_sampler import BodoDistributedSampler
+    from .pandas_dataset import PandasDataset
+
+    gpu_ranks = bodo.get_gpu_ranks()
+
+    if device.type != "cpu" or pytorch_rank is None:
+        data = bodo.rebalance(data, dests=gpu_ranks)
+
+    assert isinstance(data, (DataFrame, Series)), (
+        "Dataset must be a DataFrame or Series"
+    )
+    if isinstance(data, Series):
+        data = data.to_frame()
+
+    dataset = PandasDataset(data, device=device)
+
+    sampler = BodoDistributedSampler(
+        dataset,
+        shuffle=shuffle,
+        worker_ranks=gpu_ranks
+        if device.type != "cpu"
+        else list(range(MPI.COMM_WORLD.Get_size())),
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=sampler,
+    )
+    return dataloader
