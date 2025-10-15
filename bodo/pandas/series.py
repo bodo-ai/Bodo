@@ -1690,7 +1690,7 @@ class BodoSeriesAiMethods:
     def _check_ai_input(self, func: str):
         if self._series.dtype not in ("string[pyarrow]", "large_string[pyarrow]"):
             raise TypeError(
-                f"Series.ai.{func}() got unsupported dtype: {self._series.dtype}, "
+                f"Series.ai.{func}() got unsupported dtype: {self._series.dtype},"
                 " expected either large_string[pyarrow] or string[pyarrow]."
             )
 
