@@ -95,7 +95,7 @@ def ddp_validation(model, val_loader, loss_fn):
 
     if rank == 0:
         inner_pbar = tqdm.tqdm(
-            range(len(val_loader)), colour="green", desc="Validation Epoch"
+            range(len(val_loader)), colour="green"
         )
     with torch.no_grad():
         for val_input, val_label in val_loader:
