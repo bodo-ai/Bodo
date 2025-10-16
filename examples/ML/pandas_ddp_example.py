@@ -59,10 +59,6 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
 
         # Shuffle the indices if required
         if self.shuffle:
-            shuffled_df = bodo.random_shuffle(
-                self.dataset.df, seed=self.seed, dests=self.worker_ranks, parallel=True
-            )
-            self.dataset = PandasDataset(shuffled_df, device=self.dataset.device)
             g = torch.Generator()
             g.manual_seed(self.seed)
             indices = torch.randperm(len(self.dataset), generator=g).tolist()
@@ -295,5 +291,4 @@ if __name__ == "__main__":
     val_df.execute_plan()
     test_df.execute_plan()
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
-    #train_main(train_df, val_df, test_df)
 
