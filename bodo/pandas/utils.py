@@ -1523,26 +1523,37 @@ def log_wrapper(func):
     def wrapper(*args, **kwargs):
         # Inspect the call stack: frame 0 = wrapper, 1 = func, 2 = caller
         frame = inspect.currentframe()
-        caller_frame = frame.f_back.f_back
+        caller_frame = frame.f_back
         caller_module = caller_frame.f_globals.get("__name__", "")
 
+        from bodo.pandas import BodoDataFrame, BodoSeries
+
+        log_entry = not caller_module.startswith("bodo") and not caller_module.startswith("pandas") and not caller_module.startswith("abc")
         # Only log if the caller is *not* in the bodo.* hierarchy
-        if not caller_module.startswith("bodo"):
+        if log_entry:
             def log_repr(x):
-                from bodo.pandas import BodoDataFrame, BodoSeries
-                if isinstance(x, (BodoDataFrame, BodoSeries)):
-                    return str(type(x))
+                if x.__class__.__name__ == "BodoDataFrame":
+                    return f"df{id(x)}"
+                elif x.__class__.__name__ == "BodoSeries":
+                    return f"s{id(x)}"
                 else:
-                    return repr(x)
+                    return f"{type(x).__name__}({repr(x)})"
             arg_str = ", ".join([
                 *[log_repr(a) for a in args],
                 *[f"{k}={log_repr(v)}" for k, v in kwargs.items()]
             ])
-            with open("bodo.capture", "a") as _log_file:
-                _log_file.write(f"LOG {func.__module__}.{func.__qualname__}({arg_str})\n")
-                _log_file.flush()
+            call_str = f"{func.__module__}.{func.__qualname__}({arg_str})\n"
 
-        return func(*args, **kwargs)
+        ret = func(*args, **kwargs)
+        if log_entry:
+            if isinstance(ret, BodoDataFrame):
+                call_str = f"df{id(ret)} = {call_str}"
+            elif isinstance(ret, BodoSeries):
+                call_str = f"s{id(ret)} = {call_str}"
+            with open("bodo.capture", "a") as _log_file:
+                _log_file.write(call_str)
+                _log_file.flush()
+        return ret
     return wrapper
 
 def wrap_module_functions_and_methods(module):
