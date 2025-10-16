@@ -60,7 +60,7 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
         # Shuffle the indices if required
         if self.shuffle:
             shuffled_df = bodo.random_shuffle(
-                self.dataset.df, seed=self.seed, dests=self.worker_ranks
+                self.dataset.df, seed=self.seed, dests=self.worker_ranks, parallel=True
             )
             self.dataset = PandasDataset(shuffled_df, device=self.dataset.device)
             g = torch.Generator()
@@ -226,9 +226,9 @@ def train_main(train_df, val_df, test_df):
     # acclerator ranks
     accelerators_used = len(gpu_ranks) != 0
     if accelerators_used:
-        train_df = bodo.rebalance(train_df, dests=gpu_ranks)
-        val_df = bodo.rebalance(val_df, dests=gpu_ranks)
-        test_df = bodo.rebalance(test_df, dests=gpu_ranks)
+        train_df = bodo.rebalance(train_df, dests=gpu_ranks, parallel=True)
+        val_df = bodo.rebalance(val_df, dests=gpu_ranks, parallel=True)
+        test_df = bodo.rebalance(test_df, dests=gpu_ranks, parallel=True)
 
 
     train_dataset = PandasDataset(train_df, device)
@@ -252,7 +252,6 @@ def train_main(train_df, val_df, test_df):
         if accelerators_used
         else list(range(MPI.COMM_WORLD.Get_size())),
     )
-    print('created samplers')
     if model == None:
         return
     pytorch_rank = dist.get_rank()
