@@ -1,4 +1,4 @@
-import pandas as pd
+import bodo.pandas as pd
 import bodo.ai
 import bodo.spawn.spawner
 import torch
@@ -17,20 +17,34 @@ SEQ_LENGTH = 512
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
-
-    def __init__(self, df):
-        self.labels : pd.Series = df["label"]
-        self.tokenized : pd.Series = df["tokenized"]
+    def __init__(self, df: pd.DataFrame, device: torch.device | None = None):
+        self.df = df
+        self.device = device
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.df)
 
     def __getitem__(self, idx):
-
-        batch_texts = self.labels.iloc[idx]
-        batch_y = self.tokenized.iloc[idx]
-
+        row = self.df.iloc[idx]
+        batch_texts = row["label"]
+        batch_texts = torch.tensor(batch_texts, device=self.device)
+        batch_y = row["tokenized"]
+        batch_y = {k: torch.tensor(v, device=self.device) for k, v in batch_y.items()}
         return batch_y, batch_texts
+
+    #def __getitems__(self, idxs):
+    #    rows = self.df.iloc[idxs]
+    #    batch_texts = rows["label"].to_numpy()
+    #    batch_texts = torch.tensor(batch_texts, device=self.device)
+    #    batch_y = rows["tokenized"].to_list()
+    #    batch_y = {k: torch.tensor([d[k] for d in batch_y], device=self.device) for k in batch_y[0]}
+    #    return batch_y, batch_texts
+
+    #def __getitems__(self, idxs):
+    #    rows = self.df.iloc[idxs]
+    #    tensor = torch.tensor(rows.to_numpy(dtype=self.dtype), device=self.device)
+    #    return [tensor.select(0, i) for i in range(tensor.shape[0])]
+
 
 
 class BertClassifier(nn.Module):
@@ -66,11 +80,11 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
     df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
-        tokenized = tokenizer(x, max_length=SEQ_LENGTH, truncation=True, padding='max_length', return_tensors="pt")
+        tokenized = tokenizer(x, max_length=SEQ_LENGTH, truncation=True, padding='max_length',) #return_tensors="pt")
         return {"input_ids": tokenized.input_ids, "attention_mask": tokenized.attention_mask}
 
     df["label"] = df.category.map(labels)
-    df["tokenized"] = df.text.map(map_tokenizer)
+    df["tokenized"] = df.text.map(map_tokenizer, engine='python')
     return df
 
 
@@ -84,7 +98,7 @@ def prepare_datasets(tokenizer):
     val_df = process_dataset(val_df, tokenizer)
 
     # remove test examples from train
-    train_df = train_df[~train_df.text.isin(test_df.text)]
+    #train_df = train_df[~train_df.text.isin(test_df.text)]
 
     return train_df, val_df, test_df
 
@@ -145,6 +159,7 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
         train_label = train_label.to(device)
         mask = train_input['attention_mask'].to(device)
         input_id = train_input['input_ids'].squeeze(1).to(device)
+        print('input_id shape:', input_id.shape)
 
         output = model(input_id, mask)
 
@@ -183,21 +198,19 @@ def train_main(train_df, val_df, test_df):
     train_dataset = PandasDataset(train_df)
     val_dataset = PandasDataset(val_df)
     test_dataset = PandasDataset(test_df)
-    train_sampler = DistributedSampler(train_dataset)
-    val_sampler = DistributedSampler(val_dataset)
-    test_sampler = DistributedSampler(test_dataset)
+    #train_sampler = DistributedSampler(train_dataset)
+    #val_sampler = DistributedSampler(val_dataset)
+    #test_sampler = DistributedSampler(test_dataset)
 
-    train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=2, sampler=val_sampler)
-    test_loader = DataLoader(test_dataset, batch_size=2, sampler=test_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=2,)# sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_size=2, )#sampler=val_sampler)
+    test_loader = DataLoader(test_dataset, batch_size=2,)# sampler=test_sampler)
 
 
     loss_fn = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=LR)
 
     for epoch in range(EPOCHS):
-        train_sampler.set_epoch(epoch)
-        val_sampler.set_epoch(epoch)
 
         if rank == 0:
             print(f"Train Epoch: \t{epoch}")
@@ -224,5 +237,9 @@ def train_main(train_df, val_df, test_df):
 if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     train_df, val_df, test_df = prepare_datasets(tokenizer)
+    train_df.execute_plan()
+    val_df.execute_plan()
+    test_df.execute_plan()
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
+    #train_main(train_df, val_df, test_df)
 
