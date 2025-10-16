@@ -19,7 +19,7 @@ important concepts briefly.
 
 Installation
 ------------
-[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
+[Install Bodo][install] to get started with Python development (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
 
 Data Transform Example with Bodo
 --------------------------------
@@ -362,7 +362,7 @@ like communication.
 
 <br>
 
-![parallel processes](../img/python_parallel_process.svg#center)
+![parallel processes](../../img/python_parallel_process.svg#center)
 
 Bodo JIT Requirements
 ---------------------
@@ -553,7 +553,7 @@ if __name__ == "__main__":
     create_list()
 ```
 
-Please refer to the [Unsupported Python Programs](../bodo_parallelism/not_supported.md#notsupported)
+Please refer to the [Unsupported Python Programs][notsupported]
 documentation for more details.
 
 
@@ -563,7 +563,7 @@ Here are high level steps for integrating Bodo into Python workloads:
 
 1. Installation and Import
 
-    a. [Install Bodo](../installation_and_setup/install.md) (e.g. `pip install -U bodo`).
+    a. [Install Bodo][install] (e.g. `pip install -U bodo`).
 
     b. In each file where parallelization is desired, add:
         ```python

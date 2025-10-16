@@ -18,7 +18,7 @@ This section provides guides to help you install and set up Bodo on your local m
 
 ---
 
-## [BodoDataFrames Developer Guide][df_devguide]
+## [Bodo DataFrames Developer Guide][df_devguide]
 
 This guide demonstrates how to use BodoDataFrames and will walk you through important concepts such as
 lazy evaluation, optimizations and execution triggers, fallback to Pandas and user defined functions.

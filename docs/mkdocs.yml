@@ -134,20 +134,20 @@ nav:
   - Guides:
       - guides/index.md
       - Installation and Setup:
-          - installation_and_setup/index.md
+          - guides/installation_and_setup/index.md
           - Local and On-Prem Cluster Installation:
             - Installing Bodo Engine: guides/installation_and_setup/install.md
             - Recommended MPI Settings: guides/installation_and_setup/recommended_mpi_settings.md
             - Recommended Cluster Configuration: guides/installation_and_setup/recommended_cluster_config.md
           - Bodo Cloud Platform:
-            - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
-            - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
+            - Bodo Platform on AWS: guides/installation_and_setup/bodo_platform_aws.md
+            - Bodo Platform on Azure: guides/installation_and_setup/bodo_platform_azure.md
       - Python BodoDataFrames Development: guides/dataframes/dataframes_intro.md
       - Iceberg:
-          - Introduction: iceberg/intro.md
-          - Reading and Writing: iceberg/read_write.md
-          - Supported Data Types: iceberg/data_types.md
-          - Puffin Files: iceberg/puffin_files.md
+          - Introduction: guides/iceberg/intro.md
+          - Reading and Writing: guides/iceberg/read_write.md
+          - Supported Data Types: guides/iceberg/data_types.md
+          - Puffin Files: guides/iceberg/puffin_files.md
       - Python JIT Development:
           - Bodo JIT Developer Guide: guides/jit_development/dev_guide.md
           - Understanding Parallelism with Bodo:
@@ -170,7 +170,7 @@ nav:
           - Creating a Cluster: guides/using_bodo_platform/clusters.md
           - Using Notebooks: guides/using_bodo_platform/notebooks.md
           - Running Jobs: guides/using_bodo_platform/bodo_jobs.md
-          - Native SQL with Catalogs: integrating_bodo/database_catalog.md
+          - Native SQL with Catalogs: guides/integrating_bodo/database_catalog.md
           - Platform SDK Guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
           - Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
           - Managing Packages Manually: guides/using_bodo_platform/packages.md
