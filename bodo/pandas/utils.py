@@ -1524,11 +1524,15 @@ def log_wrapper(func):
         # Inspect the call stack: frame 0 = wrapper, 1 = func, 2 = caller
         frame = inspect.currentframe()
         caller_frame = frame.f_back
-        caller_module = caller_frame.f_globals.get("__name__", "")
-
         from bodo.pandas import BodoDataFrame, BodoSeries
+        log_entry = True
+        while caller_frame:
+            caller_module = caller_frame.f_globals.get("__name__", "")
+            if caller_module.startswith("bodo"):
+                log_entry = False
+                break
+            caller_frame = caller_frame.f_back
 
-        log_entry = not caller_module.startswith("bodo") and not caller_module.startswith("pandas") and not caller_module.startswith("abc")
         # Only log if the caller is *not* in the bodo.* hierarchy
         if log_entry:
             def log_repr(x):
