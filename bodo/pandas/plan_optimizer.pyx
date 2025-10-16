@@ -326,6 +326,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
@@ -758,6 +759,8 @@ def python_arith_dunder_to_duckdb(str opstr):
         return "*"
     elif opstr == "__truediv__" or opstr == "__rtruediv__":
         return "/"
+    elif opstr == "__mod__" or opstr == "__rmod__":
+        return "%"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
 
@@ -782,7 +785,8 @@ cdef class ArithOpExpression(Expression):
                 rhs_expr,
                 "/".encode(),
                 self.out_schema)
-            self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode())
+            unaryop_expr = make_unaryop_expr(truediv_expression, "floor".encode())
+            self.c_expression = make_cast_expr(unaryop_expr, self.out_schema)
         else:
             duckdb_op = python_arith_dunder_to_duckdb(opstr)
             self.c_expression = make_arithop_expr(

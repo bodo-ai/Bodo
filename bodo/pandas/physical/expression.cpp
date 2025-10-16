@@ -736,3 +736,185 @@ void PhysicalExpression::join_expr_batch(
 }
 
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
+
+template <typename ArrowType, typename ModOp>
+arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
+                      const arrow::compute::ExecSpan& batch,
+                      arrow::compute::ExecResult* out) {
+    using CType = typename ArrowType::c_type;
+    using ScalarType = typename arrow::TypeTraits<ArrowType>::ScalarType;
+
+    // Extract left array (it has to be an array).
+    const arrow::ArraySpan& left = batch[0].array;
+    // Extract right element...could be scalar or array.
+    const arrow::compute::ExecValue& right_span = batch[1];
+
+    // Make sure it's an array.
+    if (!left.type) {
+        throw std::runtime_error("ModInt left.type not valid.");
+    }
+
+    arrow::Status status;
+    // Get raw pointers to values and null bits for left array.
+    const CType* left_values = left.GetValues<CType>(1);
+    const uint8_t* left_valid_bits = left.buffers[0].data;
+
+    auto is_valid_bit = [](const uint8_t* bits, int64_t offset,
+                           int64_t i) -> bool {
+        return !bits || arrow::bit_util::GetBit(bits, offset + i);
+    };
+
+    // Output array is preallocated and comes in as an ArraySpan in the
+    // out->value variant.
+    arrow::ArraySpan& out_span = std::get<arrow::ArraySpan>(out->value);
+    // Get raw pointers to values and null bits of the output array.
+    CType* out_values = out_span.GetValues<CType>(1);
+    uint8_t* out_valid_bits = out_span.buffers[0].data;
+    int64_t offset = out_span.offset;
+
+    auto set_valid = [](uint8_t* bits, int64_t i) {
+        if (bits)
+            arrow::bit_util::SetBit(bits, i);
+    };
+
+    auto clear_valid = [](uint8_t* bits, int64_t i) {
+        if (bits)
+            arrow::bit_util::ClearBit(bits, i);
+    };
+
+    if (right_span.is_scalar()) {
+        // Right side is a scalar
+        const arrow::Scalar* scalar = right_span.scalar;
+        if (!scalar || !scalar->is_valid) {
+            // If scalar is null, all outputs are null
+            for (int64_t i = 0; i < left.length; ++i) {
+                clear_valid(out_valid_bits, offset + i);
+            }
+        } else {
+            // Get right value as a scalar.
+            const ScalarType& sc = right_span.scalar_as<ScalarType>();
+            // Extract value from the scalar.
+            CType r = sc.value;
+            // For each element of the left array.
+            for (int64_t i = 0; i < left.length; ++i) {
+                if (!is_valid_bit(left_valid_bits, left.offset, i)) {
+                    clear_valid(out_valid_bits, offset + i);
+                } else {
+                    // Get ith element of left.
+                    CType l = left_values[i];
+                    // Calculate modulus operator.
+                    CType res = ModOp::apply(l, r);
+                    // Assign result.
+                    out_values[i] = res;
+                    // Indicate index has valid data.
+                    set_valid(out_valid_bits, offset + i);
+                }
+            }
+        }
+    } else {
+        // Right side is an array so extract it.
+        const arrow::ArraySpan& right = right_span.array;
+        // Get raw pointers to values and null bits for right array.
+        const CType* right_values = right.GetValues<CType>(1);
+        const uint8_t* right_valid_bits = right.buffers[0].data;
+        // For each element of the left array.
+        for (int64_t i = 0; i < left.length; ++i) {
+            if (!is_valid_bit(left_valid_bits, left.offset, i) ||
+                !is_valid_bit(right_valid_bits, right.offset, i)) {
+                clear_valid(out_valid_bits, offset + i);
+            } else {
+                // Get corresponding ith elements of left and right arrays.
+                CType l = left_values[i];
+                CType r = right_values[i];
+                // Calculate modulus operator.
+                CType res = ModOp::apply(l, r);
+                // Assign result.
+                out_values[i] = res;
+                // Indicate index has valid data.
+                set_valid(out_valid_bits, offset + i);
+            }
+        }
+    }
+
+    return arrow::Status::OK();
+}
+
+struct NativeMod {
+    template <typename T>
+    static T apply(T l, T r) {
+        return (r == 0 ? 0 : (l % r));
+    }
+};
+
+struct AltMod {
+    template <typename T>
+    static T apply(T l, T r) {
+        return (r == 0 ? 0 : (l - ((int64_t)(l / r) * r)));
+    }
+};
+
+void RegisterMod(arrow::compute::FunctionRegistry* registry) {
+    // Declare the binary arrow compute function named "bodo_mod".
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_mod", arrow::compute::Arity::Binary(),
+        arrow::compute::FunctionDoc{
+            "Modulo of two arrays", "Returns lhs % rhs", {"lhs", "rhs"}});
+
+    // Declare int32,int32->int32 mod kernel.
+    arrow::compute::ScalarKernel kernel32(
+        {arrow::compute::InputType(arrow::int32()),
+         arrow::compute::InputType(arrow::int32())},
+        arrow::compute::OutputType(arrow::int32()),
+        ModImpl<arrow::Int32Type, NativeMod>);
+    // Declare int64,int64->int64 mod kernel.
+    arrow::compute::ScalarKernel kernel64(
+        {arrow::compute::InputType(arrow::int64()),
+         arrow::compute::InputType(arrow::int64())},
+        arrow::compute::OutputType(arrow::int64()),
+        ModImpl<arrow::Int64Type, NativeMod>);
+    // Declare float,float->float mod kernel.
+    arrow::compute::ScalarKernel floatkernel32(
+        {arrow::compute::InputType(arrow::float32()),
+         arrow::compute::InputType(arrow::float32())},
+        arrow::compute::OutputType(arrow::float32()),
+        ModImpl<arrow::FloatType, AltMod>);
+    // Declare double,double->double mod kernel.
+    arrow::compute::ScalarKernel floatkernel64(
+        {arrow::compute::InputType(arrow::float64()),
+         arrow::compute::InputType(arrow::float64())},
+        arrow::compute::OutputType(arrow::float64()),
+        ModImpl<arrow::DoubleType, AltMod>);
+
+    arrow::Status status;
+    // Add all the above kernels to the function.
+    status = func->AddKernel(kernel32);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+    }
+    status = func->AddKernel(kernel64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+    }
+    status = func->AddKernel(floatkernel32);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+    }
+    status = func->AddKernel(floatkernel64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+    }
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod AddFunction failed.");
+    }
+}
+
+void EnsureModRegistered() {
+    static std::once_flag flag;
+    // Register the mod arrow compute function only once.
+    std::call_once(flag, [] {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterMod(registry);
+    });
+}
