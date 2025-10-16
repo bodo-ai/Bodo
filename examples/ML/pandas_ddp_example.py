@@ -14,7 +14,7 @@ LR = 1e-6
 EPOCHS = 1
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
-BATCH_SIZE = 100
+BATCH_SIZE = 50
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
