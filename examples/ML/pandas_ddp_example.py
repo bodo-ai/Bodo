@@ -14,6 +14,7 @@ LR = 1e-6
 EPOCHS = 1
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
+BATCH_SIZE = 100
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
@@ -118,7 +119,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
 
 def prepare_datasets(tokenizer):
     test_df = pd.read_parquet("test.parquet")
-    train_df = pd.read_parquet("train.parquet")[:10]
+    train_df = pd.read_parquet("train.parquet")
     val_df = pd.read_parquet("val.parquet")
 
     test_df = process_dataset(test_df, tokenizer)
@@ -255,9 +256,9 @@ def train_main(train_df, val_df, test_df):
         return
     pytorch_rank = dist.get_rank()
 
-    train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=2, sampler=val_sampler)
-    test_loader = DataLoader(test_dataset, batch_size=2, sampler=test_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=val_sampler)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, sampler=test_sampler)
 
 
     loss_fn = nn.CrossEntropyLoss()
