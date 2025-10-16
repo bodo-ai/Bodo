@@ -28,9 +28,11 @@ class PandasDataset(torch.utils.data.Dataset):
         row = self.df.iloc[idx]
         batch_texts = row["label"]
         batch_texts = torch.tensor(batch_texts, device=self.device)
+
         batch_y = row["tokenized"]
         input_ids = torch.tensor(batch_y["input_ids"], device=self.device)
         attention_mask = torch.tensor(batch_y["attention_mask"], device=self.device)
+
         return input_ids, attention_mask, batch_texts
 
 class BodoDistributedSampler(torch.utils.data.Sampler):
@@ -41,6 +43,7 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
         self.dataset = dataset
         self.worker_ranks = worker_ranks
         self.shuffle = shuffle
+        # Create a subcomm of worker ranks
         world_group = MPI.COMM_WORLD.Get_group()
         self.worker_group = world_group.Incl(worker_ranks)
         world_group.Free()
@@ -54,7 +57,6 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
             self.worker_subcomm.Free()
 
     def __iter__(self):
-        # Create a list of all indices
         indices = list(range(len(self.dataset)))
 
         # Shuffle the indices if required
@@ -101,11 +103,12 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
         'politics':4
         }
 
+    # Remove duplicates and extra whitespace
     df.drop_duplicates(subset=["text"])
     df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
-        tokenized = tokenizer(x, max_length=SEQ_LENGTH, truncation=True, padding='max_length',) #return_tensors="pt")
+        tokenized = tokenizer(x, max_length=SEQ_LENGTH, truncation=True, padding='max_length')
         return {"input_ids": tokenized.input_ids, "attention_mask": tokenized.attention_mask}
 
     df["label"] = df.category.map(labels)
@@ -115,7 +118,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
 
 def prepare_datasets(tokenizer):
     test_df = pd.read_parquet("test.parquet")
-    train_df = pd.read_parquet("train.parquet")
+    train_df = pd.read_parquet("train.parquet")[:10]
     val_df = pd.read_parquet("val.parquet")
 
     test_df = process_dataset(test_df, tokenizer)
@@ -123,12 +126,12 @@ def prepare_datasets(tokenizer):
     val_df = process_dataset(val_df, tokenizer)
 
     # remove test examples from train
-    #train_df = train_df[~train_df.text.isin(test_df.text)]
+    train_df = train_df[~train_df.text.isin(test_df.text)]
 
     return train_df, val_df, test_df
 
 
-def ddp_validation(model, val_loader, loss_fn):
+def validation(model, val_loader, loss_fn):
     model.eval()
     rank = dist.get_rank()
     device = next(model.parameters()).device
@@ -139,15 +142,12 @@ def ddp_validation(model, val_loader, loss_fn):
             range(len(val_loader)), colour="green"
         )
     with torch.no_grad():
-        for input_id, mask, train_label in train_loader:
-            val_label = val_label.to(device)
-            mask = val_input['attention_mask'].to(device)
-            input_id = val_input['input_ids'].squeeze(1).to(device)
-
+        for input_id, mask, val_label in val_loader:
             output = model(input_id, mask)
 
             batch_loss = loss_fn(output, val_label.long())
-
+            
+            # Track local loss and accuracy stats
             acc = (output.argmax(dim=1) == val_label).sum().item()
             total_ddp_acc_loss_train[0] += acc
             total_ddp_acc_loss_train[1] += batch_loss.item()
@@ -156,6 +156,7 @@ def ddp_validation(model, val_loader, loss_fn):
             if rank==0:
                 inner_pbar.update(1)
 
+    # Compute global loss and accuracy stats
     dist.all_reduce(total_ddp_acc_loss_train, op=dist.ReduceOp.SUM)
     val_accuracy = total_ddp_acc_loss_train[0] / total_ddp_acc_loss_train[2]
     avg_val_loss = total_ddp_acc_loss_train[1] / total_ddp_acc_loss_train[2]
@@ -169,7 +170,7 @@ def ddp_validation(model, val_loader, loss_fn):
     return val_accuracy, avg_val_loss
 
 
-def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
+def train_one_epoch(model, train_loader, loss_fn, optimizer):
     model.train()
     rank = dist.get_rank()
     device = next(model.parameters()).device
@@ -186,6 +187,7 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
 
         batch_loss = loss_fn(output, train_label.long())
 
+        # Track local loss and accuracy stats
         acc = (output.argmax(dim=1) == train_label).sum().item()
         total_ddp_acc_loss_train[0] += acc
         total_ddp_acc_loss_train[1] += batch_loss.item()
@@ -196,7 +198,8 @@ def ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch):
         optimizer.step()
         if rank==0:
             inner_pbar.update(1)
-
+    
+    # Compute global loss and accuracy stats
     dist.all_reduce(total_ddp_acc_loss_train, op=dist.ReduceOp.SUM)
     train_accuracy = total_ddp_acc_loss_train[0] / total_ddp_acc_loss_train[2]
     avg_train_loss = total_ddp_acc_loss_train[1] / total_ddp_acc_loss_train[2]
@@ -264,13 +267,13 @@ def train_main(train_df, val_df, test_df):
 
         if pytorch_rank == 0:
             print(f"Train Epoch: \t{epoch}")
-        ddp_train_one_epoch(model, train_loader, loss_fn, optimizer, epoch)
+        train_one_epoch(model, train_loader, loss_fn, optimizer)
 
         if pytorch_rank == 0:
             print("Validation: ")
-        ddp_validation(model, val_loader, loss_fn)
+        validation(model, val_loader, loss_fn)
 
-        # Create checkpoint
+        # Checkpoint every epoch
         base_model = (model.module
             if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model)
         torch.distributed.checkpoint.state_dict_saver.save(
@@ -280,7 +283,7 @@ def train_main(train_df, val_df, test_df):
     
     if pytorch_rank == 0:
         print("Test: ")
-    ddp_validation(model, test_loader, loss_fn)
+    validation(model, test_loader, loss_fn)
 
 
 
