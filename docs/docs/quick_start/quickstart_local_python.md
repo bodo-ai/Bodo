@@ -77,4 +77,4 @@ computation(df)
 ```
 
 All the code in JIT functions has to be compilable by Bodo JIT (will throw appropriate errors otherwise).
-See [JIT development guide][devguide] and [JIT API reference][pythonreference] for supported Python features and APIs.
+See [JIT development guide][jit_devguide] and [JIT API reference][pythonreference] for supported Python features and APIs.

@@ -11,7 +11,7 @@ tags:
 NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
  -->
 
-# Python JIT Development Guide {#devguide}
+# Python JIT Development Guide {#jit_devguide}
 
 
 This page provides an introduction to Python programming with Bodo JIT and explains its
