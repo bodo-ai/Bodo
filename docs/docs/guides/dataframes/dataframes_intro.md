@@ -1,13 +1,15 @@
 Bodo DataFrames Developer Guide {#df_devguide}
 =================
 
-[View this page as a notebook on GitHub](https://github.com/bodo-ai/Bodo/blob/main/examples/#Tutorials/dataframes_intro.ipynb)
+[GitHub](https://github.com/bodo-ai/Bodo/blob/main/examples/#Tutorials/dataframes_intro.ipynb)
+
+# Bodo DataFrames Developer Guide
 
 This guide provides an introduction to using Bodo DataFrames, explains some of the important concepts and gives tips on how to integrate Bodo DataFrames into existing Pandas workflows.
 
 ## Creating BodoDataFrames
 
-You can create a BodoDataFrame by reading data from a file or table using an I/O function. Currently supported IO functions include:
+You can create a BodoDataFrame by reading data from a file or table using an I/O function. Currently supported IO functions include: 
 
 * `pd.read_parquet`
 * `pd.read_iceberg`
@@ -19,7 +21,7 @@ You can also create BodoDataFrames from a Pandas DataFrame using the `from_panda
 
 ### Unsupported DataFrames
 
-Unlike Pandas, BodoDataFrames cannot support arbitrary Python types in columns. Each column in a BodoDataFrame should have a single, well defined type. Supported types include ints, floats, bool, decimal128, timestamps/datetime, dates, durations/timedelta, string, binary, list, map, and struct.
+Unlike Pandas, BodoDataFrames cannot support arbitrary Python types in columns. Each column in a BodoDataFrame should have a single, well defined type. Supported types include ints, floats, bool, decimal128, timestamps/datetime, dates, durations/timedelta, string, binary, list, map, and struct. 
 
 Some examples of unsupported DataFrames:
 
@@ -41,7 +43,7 @@ In Bodo, operations on DataFrames and Series are lazy, meaning that they return 
 
 Lazy evaluation allows Bodo to optimize the expression tree before execution, which can have a huge impact (e.g. 100x) on workload performance. Common optimizations include reordering joins, pushing filters to I/O, or eliminating dead columns.
 
-To see an example of lazy evaluation, let's create a DataFrame, representing a Parquet read over a billion row dataset (NYC taxi). Normally, this dataset would be too large to fit into memory on most laptops, however since the `read_parquet` API is lazy, no actual data is materialized at this point.
+To see an example of lazy evaluation, let's create a DataFrame, representing a Parquet read over a billion row dataset (NYC taxi). Normally, this dataset would be too large to fit into memory on most laptops, however since the `read_parquet` API is lazy, no actual data is materialized at this point. 
 
 
 ```python
@@ -52,55 +54,9 @@ from bodo.ext import plan_optimizer
 df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata")
 ```
 
+We can immediately inspect the metadata of our lazy DataFrame, such as the column names and data types. When `read_parquet` is called, Bodo opens the first couple parquet files in the dataset to infer the schema, which is typically pretty fast. 
 
-    ---------------------------------------------------------------------------
-
-    BodoError                                 Traceback (most recent call last)
-
-    Cell In[1], line 5
-          2 import bodo.pandas as pd
-          3 from bodo.ext import plan_optimizer
-    ----> 5 df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata")
-
-
-    File ~/Documents/Bodo/bodo/pandas/utils.py:430, in check_args_fallback.<locals>.decorator.<locals>.wrapper(*args, **kwargs)
-        428 try:
-        429     start_time = time.perf_counter()
-    --> 430     ret = func(*args, **kwargs)
-        431     global top_time
-        432     time_this_call = time.perf_counter() - start_time
-
-
-    File ~/Documents/Bodo/bodo/pandas/base.py:159, in read_parquet(path, engine, columns, storage_options, use_nullable_dtypes, dtype_backend, filesystem, filters, **kwargs)
-        157 # Read Parquet schema
-        158 use_hive = True
-    --> 159 pq_dataset = get_parquet_dataset(
-        160     path,
-        161     get_row_counts=False,
-        162     storage_options=storage_options,
-        163     partitioning="hive" if use_hive else None,
-        164 )
-        165 pq_dataset = parquet_dataset_unify_nulls(pq_dataset)
-        166 arrow_schema = pq_dataset.schema
-
-
-    File ~/Documents/Bodo/bodo/io/parquet_pio.py:859, in get_parquet_dataset(fpath, get_row_counts, filters, storage_options, read_categories, tot_rows_to_read, typing_pa_schema, partitioning)
-        857 if isinstance(dataset_or_err, Exception):  # pragma: no cover
-        858     error = dataset_or_err
-    --> 859     raise error
-        860 dataset = pt.cast(ParquetDataset, dataset_or_err)
-        862 # As mentioned above, we don't want to broadcast the filesystem because it
-        863 # adds time (so initially we didn't include it in the dataset). We add
-        864 # it to the dataset now that it's been broadcasted
-
-
-    BodoError: error from pyarrow: OSError: When getting information for key 'nyc-taxi/fhvhv_tripdata' in bucket 'bodo-example-data': AWS Error UNKNOWN (HTTP status 400) during HeadObject operation: No response body.
-
-
-
-We can immediately inspect the metadata of our lazy DataFrame, such as the column names and data types. When `read_parquet` is called, Bodo opens the first couple parquet files in the dataset to infer the schema, which is typically pretty fast.
-
-We can also look at the plan for this DataFrame. Bodo uses DuckDB plans as an intermediary representation to perform optimizations using the DuckDB optimizer.
+We can also look at the plan for this DataFrame. Bodo uses DuckDB plans as an intermediary representation to perform optimizations using the DuckDB optimizer. 
 
 Finally, we can get the length of the dataset, which executes a small plan which scans the entire dataset, getting the row count in each file without pulling any of the rows into memory.
 
@@ -152,7 +108,7 @@ print(len(df))
     │    ────────────────────   │
     │      ~1036465968 Rows     │
     └───────────────────────────┘
-
+    
     1036465968
 
 
@@ -182,7 +138,7 @@ print(plan_optimizer.py_optimize_plan(filt._plan.generate_duckdb()).toString())
     │    ────────────────────   │
     │      ~1036465968 Rows     │
     └───────────────────────────┘
-
+    
     After optimizing:
     ┌───────────────────────────┐
     │BODO_READ_PARQUET(HVFH...  │
@@ -193,7 +149,7 @@ print(plan_optimizer.py_optimize_plan(filt._plan.generate_duckdb()).toString())
     │                           │
     │      ~207293193 Rows      │
     └───────────────────────────┘
-
+    
 
 
 Another optimization that Bodo can do is join reordering. In this example, we want to inner join two dataframes on a key column where one dataframe is much larger than the other. The optimizer recognizes that it is better to swap the sides of the join to avoid materializing the larger result in memory.
@@ -238,7 +194,7 @@ print(plan_optimizer.py_optimize_plan(jn1._plan.generate_duckdb()).toString())
     │    ────────────────────   ││    ────────────────────   │
     │          ~5 Rows          ││         ~5000 Rows        │
     └───────────────────────────┘└───────────────────────────┘
-
+    
     After optimizing:
     ┌───────────────────────────┐
     │         PROJECTION        │
@@ -264,12 +220,12 @@ print(plan_optimizer.py_optimize_plan(jn1._plan.generate_duckdb()).toString())
     │    ────────────────────   ││    ────────────────────   │
     │         ~5000 Rows        ││          ~5 Rows          │
     └───────────────────────────┘└───────────────────────────┘
-
+    
 
 
 ### Plan execution
 
-Plan optimization happens right before execution. After the plan is optimized, it gets converted into a sequence of pipelines that are executed using parallel workers. Data is streamed through operators in these pipelines in batches.
+Plan optimization happens right before execution. After the plan is optimized, it gets converted into a sequence of pipelines that are executed using parallel workers. Data is streamed through operators in these pipelines in batches. 
 
 Plan execution is triggered by operations like writing to a Parquet file or Iceberg table, printing data, or when an unsupported operation is encountered. The cell below gives examples of operations that return lazy results as well as operations that require collection:
 
@@ -298,7 +254,7 @@ df.head(10000).to_parquet("taxi_data.pq")
 
 ### Fallback for unsupported methods
 
-While Bodo DataFrames supports most common compute intensive operations in Pandas, there are some operations, parameters, or combinations of operations that are not supported yet. [Refer to the DataFrames documentation page]() for the most up to date list of supported features. Note that while a function might say it is supported, there may be a subset of parameters that are not supported yet.
+While Bodo DataFrames supports most common compute intensive operations in Pandas, there are some operations, parameters, or combinations of operations that are not supported yet. [Refer to the DataFrames documentation page]() for the most up to date list of supported features. Note that while a function might say it is supported, there may be a subset of parameters that are not supported yet. 
 
 By default, Bodo automatically raises a warning when an unsupported operations are encountered and falls back to the Pandas implementation, which will typically collect the entire dataset in memory. After the Pandas operation finishes, if the result is a DataFrame or Series, it will be automatically cast back to Bodo so that subsequent operations continue to be lazily evaluated.
 
@@ -355,17 +311,21 @@ print(df.hour.map(get_time_bucket).head(5))
     3    other
     4    other
     Name: hour, dtype: large_string[pyarrow]
-    0    other
-    1    other
-    2    other
-    3    other
-    4    other
-    dtype: large_string[pyarrow]
 
+
+If compilation fails, a warning will be printed and the function will execute in Python mode, which will first run your custom function on a small sample of data to determine output types. In the example below, `get_time_bucket` is used as a helper function in a UDF, but the definition is not exposed to JIT, leading to typing errors:
+
+
+```python
+def apply_with_python_fallback(row):
+    return get_time_bucket(row.hour)
+
+print(df.apply(apply_with_python_fallback, axis=1).head(5))
+```
 
     /Users/scottroutledge/Documents/Bodo/bodo/pandas/frame.py:1417: BodoCompilationFailedWarning: DataFrame.apply(): Compiling user defined function failed or encountered an unsupported result type. Falling back to Python engine. Add engine='python' to ignore this warning. Original error: [1m[1m[1m[1m[1m[1mDataFrame.apply(): user-defined function not supported: [1mCannot call non-JIT function 'get_time_bucket' from JIT function (convert to JIT or use objmode).[0m
     [1m
-    File "../../../../var/folders/w_/z_0_fn150v36jdgzrrlcj8q00000gn/T/ipykernel_35430/316969206.py", line 33:[0m
+    File "../../../../var/folders/w_/z_0_fn150v36jdgzrrlcj8q00000gn/T/ipykernel_57032/4182062319.py", line 2:[0m
     [1m<source missing, REPL/exec in use?>[0m[0m
     [1m
     File "bodo/pandas/frame.py", line 1338:[0m
@@ -382,6 +342,15 @@ print(df.hour.map(get_time_bucket).head(5))
     3    other
     4    other
     dtype: string[pyarrow]
+
+
+If you wish to avoid JIT compilation and run directly in Python mode, you can pass the `engine="python"` argument: 
+
+
+```python
+print(df.apply(apply_with_python_fallback, axis=1, engine='python').head(5))
+```
+
     0    other
     1    other
     2    other
@@ -390,25 +359,8 @@ print(df.hour.map(get_time_bucket).head(5))
     dtype: string[pyarrow]
 
 
-If compilation fails, a warning will be printed and the function will execute in Python mode, which will first run your custom function on a small sample of data to determine output types. In the example below, `get_time_bucket` is used as a helper function in a UDF, but the definition is not exposed to JIT, leading to typing errors:
-
-
-```python
-def apply_with_python_fallback(row):
-    return get_time_bucket(row.hour)
-
-print(df.apply(apply_with_python_fallback, axis=1).head(5))
-```
-
-If you wish to avoid JIT compilation and run directly in Python mode, you can pass the `engine="python"` argument:
-
-
-```python
-print(df.apply(apply_with_python_fallback, axis=1, engine='python').head(5))
-```
-
 To avoid compilation issues, your function should be type stable, and any helper functions should be decorated with `bodo.jit(spawn=False, distributed=False)`. You can also use most Pandas and Numpy functions inside UDFs.
-For additional tips on JIT compilation and troubleshooting, refer to our [Python JIT development guide](https://docs.bodo.ai/latest/quick_start/dev_guide/).
+For additional tips on JIT compilation and troubleshooting, refer to our [Python JIT development guide](https://docs.bodo.ai/latest/quick_start/dev_guide/). 
 
 
 ```python
@@ -419,6 +371,14 @@ def apply_get_time_bucket(row):
 
 print(df.apply(apply_get_time_bucket, axis=1).head(5))
 ```
+
+    0    other
+    1    other
+    2    other
+    3    other
+    4    other
+    dtype: large_string[pyarrow]
+
 
 You can also apply custom transformations on groups of data via `groupby.agg` or `groupby.apply`, although currently this features does not support the `engine='python'` argument. If compilation fails, execution will fall back to Pandas.
 
@@ -436,17 +396,69 @@ agg = df.groupby(['PULocationID', 'DOLocationID']).agg(small_tip_fraction=('tips
 agg.head()
 ```
 
-                               small_tip_fraction
-    PULocationID DOLocationID
-    245          251                     0.956938
-    216          197                     0.986562
-    261          234                     0.876161
-    87           87                      0.943548
-                 198                     0.763636
-
-
     /Users/scottroutledge/Documents/Bodo/bodo/pandas/utils.py:1215: BodoLibFallbackWarning: items is not implemented in Bodo DataFrames yet. Falling back to Pandas (may be slow or run out of memory).
       warnings.warn(BodoLibFallbackWarning(msg))
+
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th></th>
+      <th>small_tip_fraction</th>
+    </tr>
+    <tr>
+      <th>PULocationID</th>
+      <th>DOLocationID</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>245</th>
+      <th>251</th>
+      <td>0.956938</td>
+    </tr>
+    <tr>
+      <th>216</th>
+      <th>197</th>
+      <td>0.986562</td>
+    </tr>
+    <tr>
+      <th>261</th>
+      <th>234</th>
+      <td>0.876161</td>
+    </tr>
+    <tr>
+      <th rowspan="2" valign="top">87</th>
+      <th>87</th>
+      <td>0.943548</td>
+    </tr>
+    <tr>
+      <th>198</th>
+      <td>0.763636</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
 
 
 ## Migrating Pandas Scripts to Bodo DataFrames
@@ -455,18 +467,18 @@ Some general tips for migrating Pandas scripts to Bodo DataFrames:
 
 * **Replace the import one file at a time.**
 
-   Examine individual workflows on a case by case basis to determine if Bodo DataFrames is the right fit.
-   If a script uses a lot of unsupported functions or only ever runs on small data sizes, it might be better to keep it in pure Pandas.
+    Examine individual workflows on a case by case basis to determine if Bodo DataFrames is the right fit.
+    If a script uses a lot of unsupported functions or only ever runs on small data sizes, it might be better to keep it in pure Pandas.
 
 * **Measure performance on sufficiently large data sizes.**
 
-  Spawning parallel workers or loading heavy JIT modules can add extra overheads to your program. To get a better feel for the kinds of speedups you can expect when comparing performance vs. Pandas, try running on larger data sizes (e.g. >10,000,000 rows).
+    Spawning parallel workers or loading heavy JIT modules can add extra overheads to your program. To get a better feel for the kinds of speedups you can expect when comparing performance vs. Pandas, try running on larger data sizes (e.g. >10,000,000 rows).
 
 * **Run on a sufficiently large machine.**
 
-    To see the benefits of Bodo's parallelism, make sure you are running on a sufficiently large instance with more than one core.
+    To see the benefits of Bodo's parallelism, make sure you are running on a sufficiently large instance with more than one core. 
     Try increasing the number of cores if you need better performance.
 
 * **Avoid loading JIT if possible.**
 
-  APIs like `map` and `apply` load JIT modules, which can add extra overheads the first time they are called. Consider if your custom function application can be rewritten using builtin functions.
+    APIs like `map` and `apply` load JIT modules, which can add extra overheads the first time they are called. Consider if your custom function application can be rewritten using builtin functions. 
