@@ -43,10 +43,7 @@ fi
 
 package_name=`basename $package`
 echo "Package Name: $package_name"
-curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/noarch/$package_name"
 if [[ ! -z "$label" ]]; then
     anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label --skip-existing
 fi
 
-# Reindex Conda
-curl -s -X POST "https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex?async=0"

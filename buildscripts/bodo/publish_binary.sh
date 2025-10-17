@@ -11,13 +11,17 @@ PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`
-    curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
+    if [[ "$CHANNEL_NAME" != "SKIP_ARTIFACTORY" ]]; then
+        curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
+    fi
     if [[ ! -z "$label" ]]; then
         anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label --skip-existing
     fi
 done
 
-curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
+if [[ "$CHANNEL_NAME" != "SKIP_ARTIFACTORY" ]]; then
+    curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
+fi
 
 # Block on checking if the reindex has failed.
 set +e
