@@ -1758,6 +1758,42 @@ def test_projection_expression_floordiv(datapath):
     )
 
 
+def test_projection_expression_mod(datapath):
+    """Test for mod."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1[(bodo_df1.A % 5) > 2]
+
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df2 = py_df1[(py_df1.A % 5) > 2]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_series_mod(datapath):
+    """Test for mod."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1["A"] % 5
+
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df2 = py_df1["A"] % 5
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_series_compound_expression(datapath):
     """Very simple test for projection expressions."""
     with assert_executed_plan_count(0):
@@ -3763,6 +3799,16 @@ def test_join_non_equi_key_not_in_output():
         reset_index=True,
         sort_output=True,
     )
+
+
+def test_series_to_list():
+    s1 = pd.Series(list(range(37)))
+    bs1 = bd.Series(s1)
+    s2 = s1 + 1
+    bs2 = bs1 + 1
+    l1 = s2.to_list()
+    bl1 = bs2.to_list()
+    assert l1 == bl1
 
 
 def test_series_str_match():
