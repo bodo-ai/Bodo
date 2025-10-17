@@ -16,6 +16,7 @@ from bodo.pandas.plan import (
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalFilter,
+    LogicalOrder,
     LogicalProjection,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -91,6 +92,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalAggregate" and not java_plan.usesGroupingSets():
         # TODO: support grouping sets
         return java_agg_to_python_agg(ctx, java_plan)
+
+    if java_class_name == "BodoPhysicalSort":
+        return java_sort_to_python_sort(ctx, java_plan)
 
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
@@ -317,3 +321,36 @@ def _agg_to_func_name(agg):
         return "sum"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
+
+
+def java_sort_to_python_sort(ctx, java_plan):
+    """Convert a BodoSQL Java sort plan to a Python sort plan."""
+
+    if java_plan.getFetch() is not None or java_plan.getOffset() is not None:
+        raise NotImplementedError("LIMIT/OFFSET in sort not supported yet")
+
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+
+    sort_collations = java_plan.getCollation().getFieldCollations()
+    key_col_inds = []
+    ascending = []
+    na_position = []
+    for collation in sort_collations:
+        field_index = collation.getFieldIndex()
+        descending = collation.getDirection().isDescending()
+        is_nulls_first = gateway.jvm.com.bodosql.calcite.adapter.bodo.BodoPhysicalSort.Companion.isNullsFirst(
+            collation
+        )
+        key_col_inds.append(field_index)
+        ascending.append(not descending)
+        na_position.append(is_nulls_first)
+
+    sorted_plan = LogicalOrder(
+        input_plan.empty_data,
+        input_plan,
+        ascending,
+        na_position,
+        key_col_inds,
+        input_plan.pa_schema,
+    )
+    return sorted_plan
