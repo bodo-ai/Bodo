@@ -141,6 +141,14 @@ def java_call_to_python_call(java_call, input_plan):
             expr = ArithOpExpression(left.empty_data, left, right, "__add__")
             return expr
 
+        if kind.equals(SqlKind.MINUS):
+            expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
+            return expr
+
+        if kind.equals(SqlKind.TIMES):
+            expr = ArithOpExpression(left.empty_data, left, right, "__mul__")
+            return expr
+
         # Comparison operators
         bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
         if kind.equals(SqlKind.EQUALS):
@@ -174,7 +182,10 @@ def java_call_to_python_call(java_call, input_plan):
             # Cast of int to DECIMAL is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
 
-    raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
+    raise NotImplementedError(
+        f"Call operator {operator_class_name} not supported yet: "
+        + java_call.toString()
+    )
 
 
 def java_join_to_python_join(ctx, java_join):
@@ -248,6 +259,12 @@ def java_literal_to_python_literal(java_literal, input_plan):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
+    if lit_type_name.equals(SqlTypeName.CHAR):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
@@ -281,14 +298,16 @@ def java_agg_to_python_agg(ctx, java_plan):
     for func in java_plan.getAggCallList():
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
-        agg = func.getAggregation()
-        func_name = _agg_to_func_name(agg)
+        func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
-        assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
-        in_type = input_plan.pa_schema.field(arg_cols[0]).type
-        out_type = _get_agg_output_type(
-            GroupbyAggFunc("dummy", func_name), in_type, "dummy"
-        )
+        if func_name == "size":
+            out_type = pa.int64()
+        else:
+            assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
+            in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            out_type = _get_agg_output_type(
+                GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+            )
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -313,12 +332,16 @@ def java_agg_to_python_agg(ctx, java_plan):
     return plan
 
 
-def _agg_to_func_name(agg):
+def _agg_to_func_name(func):
     """Map a Calcite aggregation to a groupby function name."""
+    agg = func.getAggregation()
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
     if kind.equals(SqlKind.SUM):
         return "sum"
+
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+        return "size"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 

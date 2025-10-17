@@ -102,7 +102,16 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                          agg_expr.function.name);
             }
 
-            if (!is_udf && agg_expr.children.size() != 1) {
+            if (!is_udf && agg_expr.function.name == "size" &&
+                agg_expr.children.size() != 0) {
+                throw std::runtime_error(
+                    "Aggregate expression for 'size' must have "
+                    "no child expressions " +
+                    expr->ToString());
+            }
+
+            if (!is_udf && agg_expr.children.size() != 1 &&
+                agg_expr.function.name != "size") {
                 throw std::runtime_error(
                     "Aggregate expression for builtin funcs must have exactly "
                     "one child expression" +
