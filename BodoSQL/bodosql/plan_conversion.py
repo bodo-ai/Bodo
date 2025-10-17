@@ -259,6 +259,12 @@ def java_literal_to_python_literal(java_literal, input_plan):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
+    if lit_type_name.equals(SqlTypeName.CHAR):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
