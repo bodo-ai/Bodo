@@ -294,9 +294,6 @@ def train_main(train_df, val_df, test_df):
 if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     train_df, val_df, test_df = prepare_datasets(tokenizer)
-    train_df.execute_plan()
-    val_df.execute_plan()
-    test_df.execute_plan()
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
     os._exit(0)
 

@@ -100,6 +100,7 @@ def torch_train(
     # cause a hang in gather/scatter operations since they will have
     # different implementations.
     import bodo.decorators  # noqa: F401
+    from bodo.pandas.lazy_wrapper import BodoLazyWrapper
     from bodo.spawn.spawner import submit_func_to_workers
 
     def worker_func(args, kwargs):
@@ -110,6 +111,12 @@ def torch_train(
         if dist.is_initialized():
             dist.destroy_process_group()
 
+    for arg in args:
+        if isinstance(arg, BodoLazyWrapper):
+            arg.execute_plan()
+    for _, kwarg in kwargs.items():
+        if isinstance(kwarg, BodoLazyWrapper):
+            kwarg.execute_plan()
     submit_func_to_workers(worker_func, [], args, kwargs)
 
 
