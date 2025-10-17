@@ -63,6 +63,7 @@ env_var_prefix = (
     "OPENBLAS",
     "NUMBA",
     "OPENAI",
+    "PYTORCH_",
 )
 
 
