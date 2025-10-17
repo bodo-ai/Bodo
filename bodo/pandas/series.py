@@ -71,6 +71,7 @@ from bodo.pandas.plan import (
     reset_index,
 )
 from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _fix_multi_index_names,
@@ -731,7 +732,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                fallback_warn(msg)
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoCompilationFailedWarning(msg))
 
         # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
@@ -900,7 +902,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if kind is not None:
-            fallback_warn("sort_values() kind argument ignored")
+            warnings.warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
         na_position = [True if na_position == "first" else False]
@@ -1396,8 +1398,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Falling back to Pandas (may be slow or run out of memory)."
         )
         fallback_warn(msg)
-        with bodo.pandas.utils.FallbackContext():
-            py_res = super().cumsum(axis, skipna, *args, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            with bodo.pandas.utils.FallbackContext():
+                py_res = super().cumsum(axis, skipna, *args, **kwargs)
 
         # Convert objects to Bodo before returning them to the user.
         if bodo.pandas.utils.FallbackContext.is_top_level():

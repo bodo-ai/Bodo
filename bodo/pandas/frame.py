@@ -69,6 +69,7 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _fix_multi_index_names,
@@ -1406,7 +1407,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                fallback_warn(msg)
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoCompilationFailedWarning(msg))
             else:
                 if bodo.dataframe_library_run_parallel:
                     bodo.spawn.utils.import_compiler_on_workers()
@@ -1478,7 +1480,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
 
         if kind is not None:
-            fallback_warn("sort_values() kind argument ignored")
+            warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):
