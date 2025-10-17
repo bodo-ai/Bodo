@@ -1,7 +1,7 @@
 #!/bin/bash
 set -exo pipefail
 
-CHANNEL_NAME=${1:-}
+CHANNEL_NAME=${1:-bodo-binary}
 OS_DIR=${2:-linux-64}
 BODO_VERSION=${3:-}
 
@@ -11,7 +11,7 @@ PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`
-    if [[ ! -z "$CHANNEL_NAME" ]]; then
+    if [[ "$CHANNEL_NAME" != "DO_NOT_PUBLISH" ]]; then
         curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
     fi
     if [[ ! -z "$label" ]]; then
@@ -19,7 +19,7 @@ for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     fi
 done
 
-if [[ ! -z "$CHANNEL_NAME" ]]; then
+if [[ "$CHANNEL_NAME" != "DO_NOT_PUBLISH" ]]; then
     curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
 fi
 
