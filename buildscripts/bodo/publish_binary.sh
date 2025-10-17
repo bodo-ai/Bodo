@@ -11,7 +11,7 @@ PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`
-    if [[ "$CHANNEL_NAME" != "DO_NOT_PUBLISH" ]]; then
+    if [[ "$CHANNEL_NAME" != "SKIP_ARTIFACTORY" ]]; then
         curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
     fi
     if [[ ! -z "$label" ]]; then
@@ -19,7 +19,7 @@ for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     fi
 done
 
-if [[ "$CHANNEL_NAME" != "DO_NOT_PUBLISH" ]]; then
+if [[ "$CHANNEL_NAME" != "SKIP_ARTIFACTORY" ]]; then
     curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
 fi
 
