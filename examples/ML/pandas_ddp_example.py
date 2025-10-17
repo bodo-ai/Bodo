@@ -9,12 +9,13 @@ from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from transformers import BertModel, BertTokenizer
+import os
 
 LR = 1e-6
-EPOCHS = 1
+EPOCHS = 5
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
-BATCH_SIZE = 25
+BATCH_SIZE = 2
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
@@ -295,4 +296,5 @@ if __name__ == "__main__":
     val_df.execute_plan()
     test_df.execute_plan()
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
+    os.exit(0)
 
