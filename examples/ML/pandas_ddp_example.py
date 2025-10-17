@@ -298,5 +298,5 @@ if __name__ == "__main__":
     val_df.execute_plan()
     test_df.execute_plan()
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
-    os.exit(0)
+    os._exit(0)
 
