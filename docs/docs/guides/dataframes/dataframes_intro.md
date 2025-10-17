@@ -1,7 +1,7 @@
 Bodo DataFrames Developer Guide {#df_devguide}
 =================
 
-[View Notebook on GitHub](https://github.com/bodo-ai/Bodo/blob/main/examples/#Tutorials/dataframes_intro.ipynb)
+[View Notebook on GitHub](https://github.com/bodo-ai/Bodo/blob/main/examples/_Tutorials/dataframes_intro.ipynb)
 
 
 This guide provides an introduction to using Bodo DataFrames, explains some of the important concepts and gives tips on how to integrate Bodo DataFrames into existing Pandas workflows.
@@ -40,7 +40,7 @@ DataFrame({"A": [MyObject()] * 4})
 
 In Bodo, operations on DataFrames and Series are lazy, meaning that they return a lazy result representing a DataFrame, Series or Scalar which contains some metadata i.e. a schema, but not the actual data itself. Instead, lazy results contain a "plan" attribute. A plan is an expression tree describing how to go from data sources to the current object using relational operators like join, aggregate, or project.
 
-Lazy evaluation allows Bodo to optimize the expression tree before execution, which can have a huge impact (e.g. 100x) on workload performance. Common optimizations include reordering joins, pushing filters to I/O, or eliminating dead columns.
+Lazy evaluation allows Bodo to optimize the plan before execution, which can have a huge impact (e.g. 100x) on workload performance. Common optimizations include reordering joins, pushing filters to I/O, or eliminating dead columns.
 
 To see an example of lazy evaluation, we will create a DataFrame, representing a Parquet read over a billion row dataset (NYC taxi). Normally, this dataset would be too large to fit into memory on most laptops, however since the `read_parquet` API is lazy, no actual data is materialized. 
 
@@ -224,7 +224,7 @@ print(plan_optimizer.py_optimize_plan(jn1._plan.generate_duckdb()).toString())
 
 ### Plan execution
 
-Plan optimization happens right before execution. The optimized plan is then converted into a sequence of pipelines that are executed in parallel on Bodo workers. Data is streamed through the operators in these pipelines in batches where it is ultimately collected either in a file or an in memory result. 
+Plan optimization happens right before execution. The optimized plan is then converted into a sequence of pipelines that are executed in parallel on Bodo workers. Data is streamed through the operators in these pipelines in batches where it is ultimately collected either in a file or an in-memory result. 
 
 Plan execution is triggered by operations like writing to a Parquet file or Iceberg table, printing data, or when an unsupported operation is encountered. The cell below gives examples of operations that return lazy results as well as operations that require collection:
 
@@ -253,9 +253,9 @@ df.head(10000).to_parquet("taxi_data.pq")
 
 ### Fallback for unsupported methods
 
-While Bodo DataFrames supports most common compute intensive operations in Pandas, there are some operations, parameters, or combinations of operations that are not supported yet. [Refer to the DataFrames documentation page]() for the most up to date list of supported features. Note that while a function may say "supported", there could be a subset of parameters that are not supported yet. 
+While Bodo DataFrames supports most common compute intensive operations in Pandas, there are some operations, parameters, or combinations of operations that are not supported yet. [Refer to the DataFrames documentation page](https://docs.bodo.ai/latest/api_docs/dataframe_lib/) for the most up to date list of supported features. Note that while a function may say "supported", there could be a subset of parameters that are not supported yet. 
 
-By default, Bodo automatically raises a warning when an unsupported operations are encountered and falls back to the Pandas implementation, which will typically collect the entire dataset in memory. After the Pandas operation finishes, if the result is a DataFrame or Series, it will be automatically cast back to Bodo so that subsequent operations continue lazily.
+By default, Bodo automatically raises a warning when an unsupported operation is encountered and falls back to the Pandas implementation, which will typically collect the entire dataset in memory. After the Pandas operation finishes, if the result is a DataFrame or Series, it will be automatically cast back to Bodo so that subsequent operations continue lazily.
 
 
 ```python
@@ -312,7 +312,7 @@ print(df.hour.map(get_time_bucket).head(5))
     Name: hour, dtype: large_string[pyarrow]
 
 
-If compilation fails, a warning will be printed and the function will execute in Python mode, which will first run your custom function on a small sample of data to determine output types. This fallback is different than the Pandas fallback because the UDF result is still lazy, and upon collection, data is processed in batches. In the example below, `get_time_bucket` is used as a helper function in a UDF, but the definition is not exposed to JIT, leading to typing errors:
+If compilation fails, a warning will be printed and the function will execute in Python mode, which will first run your custom function on a small sample of data to determine output types before continuing lazy evaluation. In the example below, `get_time_bucket` is used as a helper function in a UDF, but the definition is not exposed to JIT, leading to typing errors:
 
 
 ```python
