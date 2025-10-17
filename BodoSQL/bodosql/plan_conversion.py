@@ -281,14 +281,16 @@ def java_agg_to_python_agg(ctx, java_plan):
     for func in java_plan.getAggCallList():
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
-        agg = func.getAggregation()
-        func_name = _agg_to_func_name(agg)
+        func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
-        assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
-        in_type = input_plan.pa_schema.field(arg_cols[0]).type
-        out_type = _get_agg_output_type(
-            GroupbyAggFunc("dummy", func_name), in_type, "dummy"
-        )
+        if func_name == "size":
+            out_type = pa.int64()
+        else:
+            assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
+            in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            out_type = _get_agg_output_type(
+                GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+            )
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -313,12 +315,16 @@ def java_agg_to_python_agg(ctx, java_plan):
     return plan
 
 
-def _agg_to_func_name(agg):
+def _agg_to_func_name(func):
     """Map a Calcite aggregation to a groupby function name."""
+    agg = func.getAggregation()
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
     if kind.equals(SqlKind.SUM):
         return "sum"
+
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+        return "size"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
