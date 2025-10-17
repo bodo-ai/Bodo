@@ -71,13 +71,13 @@ from bodo.pandas.plan import (
     reset_index,
 )
 from bodo.pandas.utils import (
-    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _fix_multi_index_names,
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
+    fallback_warn,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -731,8 +731,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoCompilationFailedWarning(msg))
+                fallback_warn(msg)
 
         # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
@@ -856,8 +855,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
 
                 self_arg = self.execute_plan()
 
@@ -902,8 +900,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if kind is not None:
-            if bodo.dataframe_library_warn:
-                warnings.warn("sort_values() kind argument ignored")
+            fallback_warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
         na_position = [True if na_position == "first" else False]
@@ -1398,8 +1395,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Series.cumsum is not implemented in Bodo DataFrames yet. "
             "Falling back to Pandas (may be slow or run out of memory)."
         )
-        if bodo.dataframe_library_warn:
-            warnings.warn(BodoLibFallbackWarning(msg))
+        fallback_warn(msg)
         with bodo.pandas.utils.FallbackContext():
             py_res = super().cumsum(axis, skipna, *args, **kwargs)
 
@@ -1440,8 +1436,7 @@ class BodoStringMethods:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -2046,8 +2041,7 @@ class BodoDatetimeProperties:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
     @check_args_fallback(unsupported="none")
