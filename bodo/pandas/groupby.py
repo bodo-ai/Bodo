@@ -22,11 +22,11 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
-    BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _empty_pd_array,
     check_args_fallback,
     convert_to_pandas_types,
+    fallback_warn,
     wrap_plan,
 )
 
@@ -141,7 +141,7 @@ class DataFrameGroupBy:
                 )
                 if self._selection is not None:
                     gb = gb[self._selection]
-                warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
                 return object.__getattribute__(gb, name)
 
             if name in self._obj:
@@ -343,7 +343,7 @@ class SeriesGroupBy:
                 "implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            fallback_warn(msg)
             gb = pd.DataFrame(self._obj).groupby(self._keys)[self._selection[0]]
             return object.__getattribute__(gb, name)
 
