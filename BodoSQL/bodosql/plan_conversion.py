@@ -145,6 +145,10 @@ def java_call_to_python_call(java_call, input_plan):
             expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
             return expr
 
+        if kind.equals(SqlKind.TIMES):
+            expr = ArithOpExpression(left.empty_data, left, right, "__mul__")
+            return expr
+
         # Comparison operators
         bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
         if kind.equals(SqlKind.EQUALS):
@@ -178,7 +182,10 @@ def java_call_to_python_call(java_call, input_plan):
             # Cast of int to DECIMAL is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
 
-    raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
+    raise NotImplementedError(
+        f"Call operator {operator_class_name} not supported yet: "
+        + java_call.toString()
+    )
 
 
 def java_join_to_python_join(ctx, java_join):
