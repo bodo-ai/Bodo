@@ -112,7 +112,7 @@ jobs:
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
-          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
+          ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || '' }}
           OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || (inputs.os == 'windows-latest') && 'win-64' || 'linux-64') }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}

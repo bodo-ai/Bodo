@@ -34,16 +34,12 @@ fi
 
 package_name=`basename $package`
 echo "Package Name: $package_name"
-curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${BODOSQL_CHANNEL_NAME}/noarch/$package_name"
 if [[ ! -z "$label" ]]; then
     # `--skip-existing` skips the upload in case the package already exists.
     # Since the pipeline runs every night, we don't want to replace
     # the package on anaconda and accidentally break something.
     anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label --skip-existing
 fi
-
-# Reindex Conda
-curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$BODOSQL_CHANNEL_NAME/reindex
 
 # Block on checking if the reindex has failed.
 set +e
