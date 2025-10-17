@@ -246,12 +246,14 @@ def train_main(train_df, val_df, test_df):
         worker_ranks=gpu_ranks
         if accelerators_used
         else list(range(MPI.COMM_WORLD.Get_size())),
+        shuffle=False,
     )
     test_sampler = BodoDistributedSampler(
         test_dataset,
         worker_ranks=gpu_ranks
         if accelerators_used
         else list(range(MPI.COMM_WORLD.Get_size())),
+        shuffle=False,
     )
     if model == None:
         return
