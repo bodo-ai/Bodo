@@ -11,11 +11,11 @@ from torch.utils.data import DataLoader
 from transformers import BertModel, BertTokenizer
 import os
 
-LR = 1e-6
+LR = 16e-6
 EPOCHS = 5
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
-BATCH_SIZE = 2
+BATCH_SIZE = 32
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class PandasDataset(torch.utils.data.Dataset):
