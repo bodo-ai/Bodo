@@ -72,8 +72,8 @@ class PhysicalProjection : public PhysicalProcessBatch {
                         scalar_func_data.out_schema->field(0)->name());
                 } else {
                     if (func_expr.function.name == "floor") {
-                        this->output_schema->append_column(std::move(
-                            input_schema->column_types[expr_idx]->copy()));
+                        this->output_schema->append_column(
+                            input_schema->column_types[expr_idx]->copy());
                         col_names.emplace_back("floor");
                     } else {
                         // Will use types from LogicalProjection here
