@@ -6,7 +6,7 @@ a.  Subscribe through the [AWS Marketplace](https://aws.amazon.com/marketplace/p
 
 b.  After confirming your subscription, you should click **Set up your Account** in the top right corner of the page. Bodo Platform's registration page will open in a new tab.
 
-![Set up Account](../platform_onboarding_screenshots/set-up-account.png#center)
+![Set up Account](../../platform_onboarding_screenshots/set-up-account.png#center)
 
 
 c.  Fill out the fields with your information. If this is your
@@ -16,14 +16,14 @@ c.  Fill out the fields with your information. If this is your
 
 d.  Check the box for accepting terms and conditions and click on
     `SIGN UP`:
-    ![Signup-Page](../platform_onboarding_screenshots/signup.png#center)
+    ![Signup-Page](../../platform_onboarding_screenshots/signup.png#center)
 
 e.  A page confirming that an activation link was sent to your email
     will appear. Please open the email and click on the activation link:
-    ![Signup-Page-Confirmation](../platform_onboarding_screenshots/signup-conf.png#center)
+    ![Signup-Page-Confirmation](../../platform_onboarding_screenshots/signup-conf.png#center)
     Clicking on the confirmation link will take you to the bodo platform
     page where you can use your newly created credentials to sign in:
-    ![Login-Page](../platform_onboarding_screenshots/login.png#center)
+    ![Login-Page](../../platform_onboarding_screenshots/login.png#center)
 
 ## Setting AWS Credentials {#setting_aws_credentials}
 
@@ -32,7 +32,7 @@ platform.
 
 This can be done using the *Cloud Configuration* page in the left sidebar and followed by clicking on *Create Cloud Configuration* at the top right corner of the page as shown in the picture below:
 
-![Dashboard](../platform_onboarding_screenshots/dashboard.gif#center)
+![Dashboard](../../platform_onboarding_screenshots/dashboard.gif#center)
 
 To be able to use the Bodo Platform to launch clusters and notebooks,
 you must grant it permission to access your AWS account and provision
@@ -53,25 +53,25 @@ Once you have ensured that you have all permissions necessary to create the reso
     - **Cloud Configuration Name**: A name for your Cloud Configuration.
     - **CloudFormation Region**: Fill this with the region where you want to deploy the stack.
 
-   ![CloudFormation Form](../platform_onboarding_screenshots/cloudformation-form.png#center)
+   ![CloudFormation Form](../../platform_onboarding_screenshots/cloudformation-form.png#center)
 
 2. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
-    
+
 
     !!! note "Important"
          All values are pre-filled in the CloudFormation template. Please do not modify.
 
 3. Click on "Create Stack" to create the stack. This will create the necessary resources in your AWS account.
 
-   ![CloudFormation Page](../platform_onboarding_screenshots/cloudformation.png#center)
+   ![CloudFormation Page](../../platform_onboarding_screenshots/cloudformation.png#center)
 
 !!! note
 
-     The stack creation process may take a few minutes to complete. 
+     The stack creation process may take a few minutes to complete.
      Please wait until the stack is created successfully.
 
 4. You can check the status of the stack from Bodo Platform as shown below. Once the stack is created successfully, Cloud Configuration will be created.
-   ![CloudFormation Status](../platform_onboarding_screenshots/cloudformation-status.gif#center)
+   ![CloudFormation Status](../../platform_onboarding_screenshots/cloudformation-status.gif#center)
 
 
 
@@ -79,7 +79,7 @@ Once you have ensured that you have all permissions necessary to create the reso
 
 Open the *Cloud Configuration Form* and note down the `External ID`.
 
-We need to create an IAM Role the AWS Console and provide details about it in 
+We need to create an IAM Role the AWS Console and provide details about it in
 the *Cloud Configuration Form*.
 
 #### Setup IAM role {iam_role_setup}
@@ -97,12 +97,12 @@ the *Cloud Configuration Form*.
 
     5.  Check the `Require external ID` option.
 
-        ![Create Role Form Step 1](../create_role_screenshots/create_iam_role_manual_form_step1.png#center)
-        
+        ![Create Role Form Step 1](../../create_role_screenshots/create_iam_role_manual_form_step1.png#center)
+
         In the **External ID** field, copy over the External ID from the
         *Cloud Configuration* form on the Bodo Platform.
-        
-        ![External ID Platform](../create_role_screenshots/create_iam_role_manual_externalId.png#center)
+
+        ![External ID Platform](../../create_role_screenshots/create_iam_role_manual_externalId.png#center)
 
     6.  Click the `Next: Permissions` button.
 
@@ -113,7 +113,7 @@ the *Cloud Configuration Form*.
     9.  In the **Role name** field, enter a role name, e.g.
         `BodoPlatformUser`.
 
-        ![Create Role Form Review](../create_role_screenshots/create_iam_role_manual_review_step.png#center)
+        ![Create Role Form Review](../../create_role_screenshots/create_iam_role_manual_review_step.png#center)
 
     10. Click `Create Role`. You will be taken back to the list of IAM Roles
         in your account.
@@ -122,11 +122,11 @@ the *Cloud Configuration Form*.
 
     12. Under Permissions tab, Click on `Add Permissions` and select `Create inline policy` from the dropdown.
 
-        ![Create Role Summary Page](../create_role_screenshots/create_role_manual_summary_page.png#center)
+        ![Create Role Summary Page](../../create_role_screenshots/create_role_manual_summary_page.png#center)
 
     13. Click the `JSON` tab.
 
-        ![Create Role Manual Policy Editor](../create_role_screenshots/create_iam_role_manual_policy_editor.png#center)
+        ![Create Role Manual Policy Editor](../../create_role_screenshots/create_iam_role_manual_policy_editor.png#center)
 
     14. Bodo Cloud Platform requires a specific set of AWS permissions which
         are documented in [Bodo-Platform Policy](https://api.bodo.ai/platformPolicyDefinition.json){target="blank"}.
@@ -142,28 +142,28 @@ the *Cloud Configuration Form*.
         you will enter into the **Role ARN** field on the *Setting* Page on
         the Bodo Platform.
 
-        > ![Create Role Final Summary](../create_role_screenshots/create_iam_role_manual_final_summary.png#center)
+        > ![Create Role Final Summary](../../create_role_screenshots/create_iam_role_manual_final_summary.png#center)
 
 
-Once you have generated an IAM Role using the steps described above, 
+Once you have generated an IAM Role using the steps described above,
 you can fill the remaining fields in the **Cloud Configuration** form on the Bodo
 Platform.
 
-1.  Enter the **Name** of the configuration. 
+1.  Enter the **Name** of the configuration.
 2.  Enter the Role ARN in the **Role ARN** field.
 3.  Click on `Create`.
 
 !!! info "Important"
 
     Validation is not run during Cloud Configuration creation.
-    Some errors are detected only when you use the configuration to create a new workspace. 
+    Some errors are detected only when you use the configuration to create a new workspace.
     These errors can include an invalid IAM Role ARN or incorrect permissions for the role.
 
 
-![Create Cloud Configuration AWS Manual ](../platform_onboarding_screenshots/cloud_configuration_aws_manual.png#center)
+![Create Cloud Configuration AWS Manual ](../../platform_onboarding_screenshots/cloud_configuration_aws_manual.png#center)
 
 
-!!! info "Important" 
+!!! info "Important"
 
     We highly recommend that you ensure sufficient limits on
     your AWS account to launch resources. See
@@ -221,42 +221,42 @@ Platform charges.
 ### Billing Alarms
 You can set up AWS alarms to monitor usage using cloudwatch alarms on AWS.
 
-![Navigate-To-AWS-CloudWatch](../platform_onboarding_gifs/aws-alarms.gif#center)
+![Navigate-To-AWS-CloudWatch](../../platform_onboarding_gifs/aws-alarms.gif#center)
 
 #### Steps to create an alarm on your AWS account for all EC2 usage:
 ***Steps to create an alarm on your AWS account for all EC2 usage:***
 
-![Create-AWS-Alarm](../platform_onboarding_gifs/create-alarm.gif#center)
+![Create-AWS-Alarm](../../platform_onboarding_gifs/create-alarm.gif#center)
 
-1. Select the region from which you would like to create the alarm and click `Create Alarm`. 
+1. Select the region from which you would like to create the alarm and click `Create Alarm`.
 
-2. Click on the `Select metric` which would bring you to a search bar that allows you 
-to search and select the metric of your choice. Make sure to click on the check box of the 
-metric of your choice. In this example, we choose vCPU for monitoring EC2 usage. 
+2. Click on the `Select metric` which would bring you to a search bar that allows you
+to search and select the metric of your choice. Make sure to click on the check box of the
+metric of your choice. In this example, we choose vCPU for monitoring EC2 usage.
 
 3. Set a reasonable number for the threshold for an alarm to go off based on your usage expectations.
 If you do not have this you can use the history of the metric to get an estimate.
 The history can be viewed by clicking on the expand button on the graph.
 You can toggle the time range by clicking on the available options (e.g. `1w` for 1 week)
-on the top panel. You can use the graph to set the desired threshold for your alarm. The 
-default period for the alarm threshold is 5 minutes but can be altered based on your requirement. 
-In this example above we set the alarm to become active, if the vCPU count is greater than 1000 
-for 5 minutes as the highest value found from the last week was ~850. Click `Next` at the bottom 
-of the page after you have set the threshold and period. 
+on the top panel. You can use the graph to set the desired threshold for your alarm. The
+default period for the alarm threshold is 5 minutes but can be altered based on your requirement.
+In this example above we set the alarm to become active, if the vCPU count is greater than 1000
+for 5 minutes as the highest value found from the last week was ~850. Click `Next` at the bottom
+of the page after you have set the threshold and period.
 
-4. You will now be asked to select the Simple Notification Service (SNS) Topic for this alarm. 
+4. You will now be asked to select the Simple Notification Service (SNS) Topic for this alarm.
 
-    a. If you already have an existing SNS Topic you can choose it from the dropdown list 
-    by clicking on the `Select an Existing SNS Topic` radio button. 
+    a. If you already have an existing SNS Topic you can choose it from the dropdown list
+    by clicking on the `Select an Existing SNS Topic` radio button.
 
-    b. If you do not have an SNS Topic, then create a new SNS Topic by clicking on the 
-    `Create New Topic` radio button. Fill in the form with an appropriate `Topic Name` and 
-    provide the emails (Those who should be alerted by the alarm) in the 
+    b. If you do not have an SNS Topic, then create a new SNS Topic by clicking on the
+    `Create New Topic` radio button. Fill in the form with an appropriate `Topic Name` and
+    provide the emails (Those who should be alerted by the alarm) in the
     `Email endpoints that will receive the notification` tab.
 
     Once you have provided these details you can click on `Next` at the bottom of the page.
 
-5. You will now be required to fill out the details of the alarm itself, fill the fields with the 
-appropriate details and click `Next` at the bottom of the page. 
+5. You will now be required to fill out the details of the alarm itself, fill the fields with the
+appropriate details and click `Next` at the bottom of the page.
 
 6. Finally, preview your alarm before you click on `Create Alarm` at the bottom of the page to create the Alarm.

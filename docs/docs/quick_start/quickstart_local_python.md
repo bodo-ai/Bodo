@@ -8,7 +8,7 @@ This quickstart guide will walk you through the process of running a simple Pyth
 
 ## Installation
 
-[Install Bodo DataFrames](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
+[Install Bodo DataFrames][install] to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
 
 
 ## Drop-in Pandas Replacement with Bodo DataFrames
@@ -77,4 +77,4 @@ computation(df)
 ```
 
 All the code in JIT functions has to be compilable by Bodo JIT (will throw appropriate errors otherwise).
-See [JIT development guide][devguide] and [JIT API reference][pythonreference] for supported Python features and APIs.
+See [JIT development guide][jit_devguide] and [JIT API reference][pythonreference] for supported Python features and APIs.

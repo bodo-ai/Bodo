@@ -1,10 +1,10 @@
 # bodo.random_shuffle
-    
+
 `bodo.random_shuffle(data, seed=None, dests=None, parallel=False)`
 Manually shuffle data evenly across selected ranks.
 
 ### Arguments
-    
+
 - ``data``: data to shuffle.
 - ``seed``: number to initialze random number generator.
 - ``dests``: selected ranks to distribute shuffled data to. By default, distribution includes all ranks.
@@ -12,8 +12,8 @@ Manually shuffle data evenly across selected ranks.
 
 ### Example Usage
 
-Note that this example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
-    
+Note that this example uses [SPMD launch mode][spmd].
+
 ```py
 import bodo
 import pandas as pd

@@ -62,7 +62,7 @@ df3 = g(df)
 Generally, Bodo can handle distributions of most use cases automatically and
 we do not recommend setting distributions manually due to the possibility of human error.
 However, there are some advanced use cases where setting these flags may be desirable or necessary.
-For example, when a small dataframe is an input to a join, setting its distribution to replicated can improve parallel performance. In the example below, a small dataframe `df2` is an argument to a join on a large dataframe `df1`, and we specify `df2` as replicated for better parallel performance. 
+For example, when a small dataframe is an input to a join, setting its distribution to replicated can improve parallel performance. In the example below, a small dataframe `df2` is an argument to a join on a large dataframe `df1`, and we specify `df2` as replicated for better parallel performance.
 ```py
 @bodo.jit(distributed=["df1"], replicated=["df2"])
 def load_data():
@@ -150,18 +150,18 @@ data without code modification. Here are such cases that Bodo currently supports
     ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
 2.  Getting values using a slice, e.g. `B = A[::2]`. The output can be
-    distributed, but may be imbalanced 
+    distributed, but may be imbalanced
     ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
 3.  Getting a value using a scalar index, e.g. `a = A[m]`. The output
     can be replicated.
-    
+
 4.  Setting values using boolean array indexing, e.g. `A[A > 3] = a`.
     Only supports setting a scalar or lower-dimension value currently.
-    
+
 5.  Setting values using a slice, e.g. `A[::2] = a`. Only supports
     setting a scalar or lower-dimension value currently.
-    
+
 6.  Setting a value using a scalar index, e.g. `A[m] = a`.
 
 ## Concatenation Reduction
@@ -270,7 +270,7 @@ res = prange_test(10)
 print(res)
 ```
 
-Output: 
+Output:
 
 ```console
 [stdout:0]
@@ -322,7 +322,7 @@ res = prange_test(10)
 print(res)
 ```
 
-Output: 
+Output:
 
 ```console
 numba.core.errors.UnsupportedRewriteError: Failed in bodo mode pipeline (step: convert to parfors)
@@ -380,9 +380,9 @@ print(res)
 ```
 
 ```console
-[stdout:0] 6.555500504321469 
+[stdout:0] 6.555500504321469
 [stdout:1] 6.555500504321469
-[stdout:2] 6.555500504321469 
+[stdout:2] 6.555500504321469
 [stdout:3] 6.555500504321469
 ```
 
@@ -403,7 +403,7 @@ def f():
 f()
 ```
 
-![](../img/advanced_parallelism_dataframe.svg#center)
+![](../../../img/advanced_parallelism_dataframe.svg#center)
 
 ## Run code on a single rank {#run_on_single_rank}
 
@@ -432,7 +432,7 @@ def f():
 
 This is similar in SPMD launch mode (where the whole script is launched as parallel
 MPI processes), except you will need to ensure that code that must only run on a
-single rank is protected even outside of JIT functions: 
+single rank is protected even outside of JIT functions:
 
 ```py
 if bodo.get_rank() == 0:

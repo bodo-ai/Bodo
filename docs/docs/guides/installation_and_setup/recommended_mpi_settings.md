@@ -42,7 +42,7 @@ mapping* and *round-robin mapping* options below for your application to
 achieve the best performance.
 
 !!! info "Important"
-    These options are only supported in [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd).
+    These options are only supported in [SPMD launch mode][spmd].
 
 ### Block Mapping
 

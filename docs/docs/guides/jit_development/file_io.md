@@ -9,7 +9,7 @@ demonstrates how chunks of data are partitioned among parallel execution
 engines by Bodo.
 
 <br>
-![Bodo reads dataset chunks in parallel](img/file-read.svg#center)
+![Bodo reads dataset chunks in parallel](../../img/file-read.svg#center)
 <br>
 
 Bodo automatically parallelizes I/O for any number of cores and cluster
@@ -635,7 +635,7 @@ conda install -c conda-forge "s3fs>=2022.1.0"
 
 ### Azure Filesystems (ABFS or ADLS) {#Azure}
 
-Reading and writing [Parquet][parquet-section] files from and to Azure Filesystems is 
+Reading and writing [Parquet][parquet-section] files from and to Azure Filesystems is
 supported.
 
 The file path should start with `abfs://` or `abfss://`:
@@ -734,7 +734,7 @@ There are 3 supported methods for authenticating to HDFS:
 - core-site.xml
 
 ##### Azure Identities
-To authenticate with Azure Identites assign an identity to your Azure VM and ensure it has the 
+To authenticate with Azure Identites assign an identity to your Azure VM and ensure it has the
 Storage Blob Data Contributor role for the storage account to access. This is only supported on Bodo Platform.
 
 ##### core-site.xml

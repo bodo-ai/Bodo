@@ -6,7 +6,7 @@ To use Bodo on Azure, you need to link your Azure account to the Bodo
 platform. This can be done using the *Cloud Configuration* page in the left
 bar as shown in the picture below:
 
-![Dashboard](../platform_onboarding_screenshots/dashboard-az.gif#center)
+![Dashboard](../../platform_onboarding_screenshots/dashboard-az.gif#center)
 
 In order to use the Bodo Platform to launch clusters and notebooks, you
 must grant it permission to access your Azure account and provision the
@@ -27,13 +27,13 @@ az ad sp create --id APP_ID
 where `APP_ID` is the Application ID for Bodo-Platform which
 is displayed on the *Cloud Configuration Form*.
 
-![Create SP on Azure Portal](../platform_onboarding_screenshots/az-portal-create-sp.png#center)
+![Create SP on Azure Portal](../../platform_onboarding_screenshots/az-portal-create-sp.png#center)
 
 Once you have created a service principal, you need to assign a role to
 it. As shown below, go to the IAM section of your resource group and add a
 `Contributor` Role and `Storage Blob Data Contributor` Role to the service principal you created for the Bodo Platform Application.
 
-![Assign SP a Role](../platform_onboarding_screenshots/az-assign-sp-role.gif#center)
+![Assign SP a Role](../../platform_onboarding_screenshots/az-assign-sp-role.gif#center)
 
 !!! seealso "See Also"
     [Required Azure resource providers][required_az_resource_providers]
@@ -42,27 +42,27 @@ it. As shown below, go to the IAM section of your resource group and add a
 Once you have created the service principal and assigned a role to it,
 you are now ready to fill the *Cloud Configuration* Form on the Bodo Platform.
 
-![Cloud Configuration Page Azure](../platform_onboarding_screenshots/cloud-configuration-az.png#center)
+![Cloud Configuration Page Azure](../../platform_onboarding_screenshots/cloud-configuration-az.png#center)
 
 1.  Enter your Azure subscription ID in the **Subscription ID** field.
     You can find this in the *Subscription Overview*.
 
-      ![Azure subscription ID](../platform_onboarding_screenshots/az-subscription-id.png#center)
+      ![Azure subscription ID](../../platform_onboarding_screenshots/az-subscription-id.png#center)
 
 2.  Enter your Azure Tenant ID in the **Tenant ID** field. You can find
     this in *Azure AD*.
 
-    ![Azure Tenant ID](../platform_onboarding_screenshots/az-tenant-id.png#center)
+    ![Azure Tenant ID](../../platform_onboarding_screenshots/az-tenant-id.png#center)
 
 3. Enter the name of the resource group where the infrastructure should be deployed.
-   
-4.  Select a **region** from the dropdown list. This region refers to the region of 
+
+4.  Select a **region** from the dropdown list. This region refers to the region of
     the resource group mentioned in the previous step. We will also create a storage account and a blob container in this region to store metadata such as the state of the deployed infrastructure, logs, etc.
-   
+
 
 5.  Click on `CREATE`.
 
-!!! note 
+!!! note
     We highly recommend that you ensure sufficient limits on
     your Azure subscription to launch resources. See
     [here][resources_created_in_azure_env] for the
@@ -81,7 +81,7 @@ Azure subscription:
 -   Microsoft.Resources
 -   Microsoft.Storage
 
-![Azure Required Resource Providers](../platform_onboarding_screenshots/az-resource-providers.png#center)
+![Azure Required Resource Providers](../../platform_onboarding_screenshots/az-resource-providers.png#center)
 
 
 

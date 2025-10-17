@@ -7,7 +7,7 @@ NOTE: the examples in this file are covered by tests in bodo/tests/test_quicksta
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
 
 ## Installation
-[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo[iceberg]` or `conda install bodo pyiceberg -c conda-forge`).
+[Install Bodo][install] to get started (e.g., `pip install -U bodo[iceberg]` or `conda install bodo pyiceberg -c conda-forge`).
 
 
 ## Create a Local Iceberg Table with Bodo DataFrames
