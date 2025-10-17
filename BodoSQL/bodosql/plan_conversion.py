@@ -141,6 +141,10 @@ def java_call_to_python_call(java_call, input_plan):
             expr = ArithOpExpression(left.empty_data, left, right, "__add__")
             return expr
 
+        if kind.equals(SqlKind.MINUS):
+            expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
+            return expr
+
         # Comparison operators
         bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
         if kind.equals(SqlKind.EQUALS):
