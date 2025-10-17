@@ -227,9 +227,9 @@ def train_main(train_df, val_df, test_df):
     # acclerator ranks
     accelerators_used = len(gpu_ranks) != 0
     if accelerators_used:
-        train_df = bodo.rebalance(train_df, dests=gpu_ranks, parallel=True)
-        val_df = bodo.rebalance(val_df, dests=gpu_ranks, parallel=True)
-        test_df = bodo.rebalance(test_df, dests=gpu_ranks, parallel=True)
+        train_df = bodo.rebalance(train_df, dests=gpu_ranks, random=True, parallel=True)
+        val_df = bodo.rebalance(val_df, dests=gpu_ranks, random=True, parallel=True)
+        test_df = bodo.rebalance(test_df, dests=gpu_ranks, random=True, parallel=True)
 
 
     train_dataset = PandasDataset(train_df, device)
