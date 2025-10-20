@@ -55,7 +55,7 @@ jobs:
             rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
           shell: bash
         - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
+          uses: aws-actions/configure-aws-credentials@v5
           with:
             aws-region: us-east-2
             role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
