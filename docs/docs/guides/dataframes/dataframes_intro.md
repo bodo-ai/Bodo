@@ -23,7 +23,9 @@ You can create a BodoDataFrame by reading data from a file or table using an I/O
 
 `pd.read_parquet` and `pd.read_iceberg` are lazy APIs, meaning that no actual data is read until needed in a subsequent operation.
 
-You can also create BodoDataFrames from a Pandas DataFrame using the `from_pandas` function, which is useful when working with third party libraries that return Pandas DataFrames.
+You can also create BodoDataFrames from a Pandas DataFrame using the `from_pandas`, which is useful when working with third party libraries that return Pandas DataFrames. 
+
+Finally, you can use the `bodo.pandas.DataFrame` constructor, which takes similar arguments to `pandas.DataFrame` and returns a BodoDataFrame.
 
 ### Unsupported DataFrames
 
@@ -53,7 +55,6 @@ To see an example of lazy evaluation, we will create a DataFrame, representing a
 
 
 ```python
-import pandas
 import bodo.pandas as pd
 from bodo.ext import plan_optimizer
 
@@ -162,12 +163,12 @@ Another optimization that Bodo can do is join reordering. In this example, we wa
 
 
 ```python
-df1 = pd.from_pandas(
-    pandas.DataFrame({"A": [1,2,3,4,5]})
+df1 = pd.DataFrame(
+    {"A": [1,2,3,4,5]}
 )
 
-df2 = pd.from_pandas(pandas.DataFrame(
-    {"B": [1,2,3,4,5] * 1000})
+df2 = pd.DataFrame(
+    {"B": [1,2,3,4,5] * 1000}
 )
 
 jn1 = df1.merge(df2, left_on="A", right_on="B")
@@ -266,7 +267,7 @@ By default, Bodo automatically raises a warning when an unsupported operation is
 
 
 ```python
-df = pd.from_pandas(pandas.DataFrame({"A": range(4), "B": range(1,5)}))
+df = pd.DataFrame({"A": range(4), "B": range(1,5)})
 
 # Unsupported function: transform
 df = df.transform(lambda x: x + 1)
@@ -384,7 +385,7 @@ print(df.apply(apply_with_python_fallback, axis=1).head(5))
 
     /Users/scottroutledge/Documents/Bodo/bodo/pandas/frame.py:1417: BodoCompilationFailedWarning: DataFrame.apply(): Compiling user defined function failed or encountered an unsupported result type. Falling back to Python engine. Add engine='python' to ignore this warning. Original error: [1m[1m[1m[1m[1m[1mDataFrame.apply(): user-defined function not supported: [1mCannot call non-JIT function 'get_time_bucket' from JIT function (convert to JIT or use objmode).[0m
     [1m
-    File "../../../../var/folders/w_/z_0_fn150v36jdgzrrlcj8q00000gn/T/ipykernel_57032/4182062319.py", line 2:[0m
+    File "../../../../var/folders/w_/z_0_fn150v36jdgzrrlcj8q00000gn/T/ipykernel_9201/4182062319.py", line 2:[0m
     [1m<source missing, REPL/exec in use?>[0m[0m
     [1m
     File "bodo/pandas/frame.py", line 1338:[0m
@@ -493,28 +494,29 @@ agg.head()
   </thead>
   <tbody>
     <tr>
-      <th>245</th>
-      <th>251</th>
-      <td>0.956938</td>
-    </tr>
-    <tr>
-      <th>216</th>
-      <th>197</th>
-      <td>0.986562</td>
-    </tr>
-    <tr>
-      <th>261</th>
-      <th>234</th>
-      <td>0.876161</td>
-    </tr>
-    <tr>
-      <th rowspan="2" valign="top">87</th>
+      <th>87</th>
       <th>87</th>
       <td>0.943548</td>
     </tr>
     <tr>
       <th>198</th>
-      <td>0.763636</td>
+      <th>198</th>
+      <td>0.978206</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <th>223</th>
+      <td>0.968514</td>
+    </tr>
+    <tr>
+      <th>255</th>
+      <th>112</th>
+      <td>0.977278</td>
+    </tr>
+    <tr>
+      <th>161</th>
+      <th>262</th>
+      <td>0.955056</td>
     </tr>
   </tbody>
 </table>
