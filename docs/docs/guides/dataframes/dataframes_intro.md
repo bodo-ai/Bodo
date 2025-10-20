@@ -25,7 +25,7 @@ You can create a BodoDataFrame by reading data from a file or table using an I/O
 
 You can also create BodoDataFrames from a Pandas DataFrame using the `from_pandas`, which is useful when working with third party libraries that return Pandas DataFrames. 
 
-Finally, you can use the `bodo.pandas.DataFrame` constructor, which takes similar arguments to `pandas.DataFrame` and returns a BodoDataFrame.
+Finally, you create BodoDataFrames using the `bodo.pandas.DataFrame` constructor, which is similar to `pandas.DataFrame`.
 
 ### Unsupported DataFrames
 
