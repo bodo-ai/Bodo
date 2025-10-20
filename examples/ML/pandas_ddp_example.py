@@ -24,14 +24,14 @@ class BertDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        batch_texts = row["label"]
-        batch_texts = torch.tensor(batch_texts)
+        texts = row["label"]
+        texts = torch.tensor(batch_texts)
 
-        batch_y = row["tokenized"]
-        input_ids = torch.tensor(batch_y["input_ids"])
-        attention_mask = torch.tensor(batch_y["attention_mask"])
+        tokenized = row["tokenized"]
+        input_ids = torch.tensor(tokenized["input_ids"])
+        attention_mask = torch.tensor(tokenized["attention_mask"])
 
-        return input_ids, attention_mask, batch_texts
+        return input_ids, attention_mask, texts
 
 
 def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
@@ -95,7 +95,7 @@ def validation(model, val_loader):
             # Track local loss and accuracy stats
             acc = (output.logits.argmax(dim=1) == val_label).sum().item()
             total_ddp_acc_loss_train[0] += acc
-            total_ddp_acc_loss_train[1] += batch_loss.item()
+            total_ddp_acc_loss_train[1] += batch_loss.item() * BATCH_SIZE
             total_ddp_acc_loss_train[2] += val_label.size(0)
 
             if rank==0:
@@ -143,7 +143,7 @@ def train_one_epoch(model, train_loader, optimizer, scheduler):
         # Track local loss and accuracy stats
         acc = (output.logits.argmax(dim=1) == train_label).sum().item()
         total_ddp_acc_loss_train[0] += acc
-        total_ddp_acc_loss_train[1] += batch_loss.item()
+        total_ddp_acc_loss_train[1] += batch_loss.item() * BATCH_SIZE
         total_ddp_acc_loss_train[2] += train_label.size(0)
 
         batch_loss.backward()
@@ -193,9 +193,9 @@ def train_main(train_df, val_df, test_df):
         test_df = bodo.rebalance(test_df, dests=gpu_ranks, random=True, parallel=True)
 
 
-    train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=BertDataset)
-    val_loader = bodo.ai.prepare_dataset(val_df, BATCH_SIZE, dataset_func=BertDataset)
-    test_loader = bodo.ai.prepare_dataset(test_df, BATCH_SIZE, dataset_func=BertDataset)
+    train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=BertDataset, pin_memory=True)
+    val_loader = bodo.ai.prepare_dataset(val_df, BATCH_SIZE, dataset_func=BertDataset, pin_memory=True)
+    test_loader = bodo.ai.prepare_dataset(test_df, BATCH_SIZE, dataset_func=BertDataset, pin_memory=True)
 
 
     if model == None:

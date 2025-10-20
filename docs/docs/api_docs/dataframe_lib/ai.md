@@ -42,6 +42,9 @@ def prepare_dataset(
     batch_size: int,
     shuffle: bool = True,
     dataset_func: Callable | None = None,
+    collate_fn: Callable = None,
+    pin_memory: bool = False,
+    seed: int = 0,
 ) -> torch.utils.data.DataLoader:
 ```
 
@@ -52,6 +55,9 @@ Prepares a dataset for distributed training by converting a DataFrame or Series 
 : __batch_size: *int*__: The size of each batch to be created.
 : __shuffle: *bool*__: Whether to shuffle the data before creating batches. Default is True.
 : __dataset_func: *Callable | None*__: An optional function to customize the dataset creation process. If provided, this function should accept a DataFrame or Series and return a PyTorch Dataset. If None, a default dataset creation process is used that converts each row into a tensor.
+: __collate_fn: *Callable*__: An optional function to customize how batches are collated. Default is None, which uses the default collation behavior of PyTorch DataLoader.
+: __pin_memory: *bool*__: Whether to pin memory for faster data transfer to GPU. Default is False.
+: __seed: *int*__: A seed value for shuffling the data to ensure reproducibility. Default is 0.
 
 ## bodo.ai.torch_train
 

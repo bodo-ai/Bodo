@@ -180,6 +180,9 @@ def prepare_dataset(
     batch_size: int,
     shuffle: bool = True,
     dataset_func: Callable | None = None,
+    collate_fn: Callable = None,
+    pin_memory: bool = False,
+    seed: int = 0,
 ):
     """
     Prepares a Bodo DataFrame or Series as a PyTorch DataLoader for distributed training.
@@ -189,6 +192,8 @@ def prepare_dataset(
         shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
         dataset_func (Callable, optional): A function that takes in a DataFrame or Series
             and returns a PyTorch Dataset. If None, a default PandasDataset will be used.
+        collate_fn (Callable, optional): A function to merge a list of samples to form a mini-batch, passed through to DataLoader.
+        pin_memory (bool, optional): Whether to pin memory in the DataLoader. Defaults to False.
     Returns:
         DataLoader: A PyTorch DataLoader for the prepared dataset.
     """
@@ -231,12 +236,14 @@ def prepare_dataset(
         worker_ranks=gpu_ranks
         if len(gpu_ranks) != 0
         else list(range(MPI.COMM_WORLD.Get_size())),
+        seed=seed,
     )
 
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         sampler=sampler,
-        pin_memory=True,
+        pin_memory=pin_memory,
+        collate_fn=collate_fn,
     )
     return dataloader
