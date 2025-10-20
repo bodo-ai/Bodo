@@ -12,7 +12,7 @@ LR = 2e-5
 EPOCHS = 5
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
-BATCH_SIZE = 2
+BATCH_SIZE = 32
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class BertDataset(torch.utils.data.Dataset):
