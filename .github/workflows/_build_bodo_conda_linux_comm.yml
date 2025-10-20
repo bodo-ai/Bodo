@@ -89,7 +89,7 @@ jobs:
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $PLATFORM $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
-          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release == false) && '-dev' || '') }}
+          ARTIFACTORY_CHANNEL: SKIP_ARTIFACTORY
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
