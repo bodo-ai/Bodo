@@ -82,9 +82,9 @@ def validation(model, val_loader):
         )
     with torch.no_grad():
         for input_id, mask, val_label in val_loader:
-            input_id = input_id.to(device)
-            mask = mask.to(device)
-            val_label = val_label.to(device)
+            input_id = input_id.to(device, non_blocking=True)
+            mask = mask.to(device, non_blocking=True)
+            val_label = val_label.to(device, non_blocking=True)
 
             output = model(input_id, token_type_ids=None,
                                     attention_mask=mask,
@@ -129,9 +129,9 @@ def train_one_epoch(model, train_loader, optimizer, scheduler):
 
 
     for input_id, mask, train_label in train_loader:
-        input_id = input_id.to(device)
-        mask = mask.to(device)
-        train_label = train_label.to(device)
+        input_id = input_id.to(device, non_blocking=True)
+        mask = mask.to(device, non_blocking=True)
+        train_label = train_label.to(device, non_blocking=True)
         optimizer.zero_grad()
 
         output = model(input_id, token_type_ids=None, 
