@@ -337,7 +337,9 @@ def _agg_to_func_name(func):
     agg = func.getAggregation()
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
-    if kind.equals(SqlKind.SUM):
+
+    # TODO[]: support SUM0 initialization properly
+    if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
     if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
