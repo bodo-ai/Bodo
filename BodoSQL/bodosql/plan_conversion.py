@@ -12,6 +12,7 @@ from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
     ComparisonOpExpression,
+    ConjunctionOpExpression,
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
@@ -168,6 +169,12 @@ def java_call_to_python_call(java_call, input_plan):
 
         if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
             return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
+
+        if kind.equals(SqlKind.AND):
+            return ConjunctionOpExpression(bool_empty_data, left, right, "__and__")
+
+        if kind.equals(SqlKind.OR):
+            return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
 
     if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
         operand = java_call.getOperands()[0]
