@@ -429,11 +429,13 @@ def test_torch_train():
         if model is None:
             return
 
+        device = next(model.parameters()).device
         # train on data
         criterion = nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         for epoch in range(config.get("epochs", 5)):
             for batch in dataloader:
+                batch = batch.to(device, non_blocking=True)
                 inputs = batch[:, :2]
                 labels = batch[:, 2].unsqueeze(1)
                 optimizer.zero_grad()
@@ -447,7 +449,7 @@ def test_torch_train():
                 if isinstance(model, torch.nn.parallel.DistributedDataParallel)
                 else model
             )
-            torch.distributed.checkpoint.state_dict_saver.save(
+            torch.distributed.checkpoint.save(
                 {"model_state_dict": base_model.state_dict()},
                 checkpoint_id=config["checkpoint_dir"],
             )

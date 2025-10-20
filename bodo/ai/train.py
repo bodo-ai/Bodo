@@ -210,7 +210,7 @@ def prepare_dataset(
         def _dataset_func(data):
             if isinstance(data, Series):
                 data = data.to_frame()
-            return PandasDataset(data, device=device)
+            return PandasDataset(data)
 
         dataset_func = _dataset_func
 
@@ -241,5 +241,6 @@ def prepare_dataset(
         dataset,
         batch_size=batch_size,
         sampler=sampler,
+        pin_memory=True,
     )
     return dataloader

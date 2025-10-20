@@ -38,11 +38,11 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
         world_group.Free()
         self.worker_subcomm = MPI.COMM_WORLD.Create(self.worker_group)
         self.seed = seed
-
-    def __del__(self):
-        if hasattr(self, "worker_group") and self.worker_group != MPI.GROUP_NULL:
+        if self.worker_subcomm != MPI.COMM_NULL:
+            self.max_sample_len = self.worker_subcomm.allreduce(
+                len(self.dataset), op=MPI.MAX
+            )
             self.worker_group.Free()
-        if hasattr(self, "worker_subcomm") and self.worker_subcomm != MPI.COMM_NULL:
             self.worker_subcomm.Free()
 
     def __iter__(self):
@@ -57,9 +57,8 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
             self.seed += 1  # Change seed for next epoch
 
         # Ensure all ranks have the same number of samples
-        max_sample_len = self.worker_subcomm.allreduce(len(indices), op=MPI.MAX)
-        indices += indices[: (max_sample_len - len(indices))]
+        indices += indices[: (self.max_sample_len - len(indices))]
         return iter(indices)
 
     def __len__(self):
-        return len(self.dataset)
+        return self.max_sample_len

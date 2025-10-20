@@ -1,5 +1,4 @@
 import bodo.pandas as pd
-from bodo.mpi4py import MPI
 import bodo.ai
 import torch
 import torch.distributed as dist
@@ -7,7 +6,6 @@ import torch.distributed.checkpoint
 import tqdm
 from torch import nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader
 from transformers import BertModel, BertTokenizer
 import os
 
@@ -18,10 +16,9 @@ SEQ_LENGTH = 512
 BATCH_SIZE = 32
 CHECKPOINT_DIR = "./checkpoint_dir"
 
-class PandasDataset(torch.utils.data.Dataset):
-    def __init__(self, df: pd.DataFrame, device: torch.device | None = None):
+class BertDataset(torch.utils.data.Dataset):
+    def __init__(self, df: pd.DataFrame):
         self.df = df
-        self.device = device
 
     def __len__(self):
         return len(self.df)
@@ -29,52 +26,13 @@ class PandasDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         batch_texts = row["label"]
-        batch_texts = torch.tensor(batch_texts, device=self.device)
+        batch_texts = torch.tensor(batch_texts)
 
         batch_y = row["tokenized"]
-        input_ids = torch.tensor(batch_y["input_ids"], device=self.device)
-        attention_mask = torch.tensor(batch_y["attention_mask"], device=self.device)
+        input_ids = torch.tensor(batch_y["input_ids"])
+        attention_mask = torch.tensor(batch_y["attention_mask"])
 
         return input_ids, attention_mask, batch_texts
-
-class BodoDistributedSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PandasDataset, worker_ranks: list[int], shuffle=True):
-        assert isinstance(dataset, PandasDataset), (
-            "BodoDistributedSampler only works with PandasDataset"
-        )
-        self.dataset = dataset
-        self.worker_ranks = worker_ranks
-        self.shuffle = shuffle
-        # Create a subcomm of worker ranks
-        world_group = MPI.COMM_WORLD.Get_group()
-        self.worker_group = world_group.Incl(worker_ranks)
-        world_group.Free()
-        self.worker_subcomm = MPI.COMM_WORLD.Create(self.worker_group)
-        self.seed = 0
-
-    def __del__(self):
-        if hasattr(self, "worker_group") and self.worker_group != MPI.GROUP_NULL:
-            self.worker_group.Free()
-        if hasattr(self, "worker_subcomm") and self.worker_subcomm != MPI.COMM_NULL:
-            self.worker_subcomm.Free()
-
-    def __iter__(self):
-        indices = list(range(len(self.dataset)))
-
-        # Shuffle the indices if required
-        if self.shuffle:
-            g = torch.Generator()
-            g.manual_seed(self.seed)
-            indices = torch.randperm(len(self.dataset), generator=g).tolist()
-            self.seed += 1  # Change seed for next epoch
-
-        # Ensure all ranks have the same number of samples
-        max_sample_len = self.worker_subcomm.allreduce(len(indices), op=MPI.MAX)
-        indices += indices[: (max_sample_len - len(indices))]
-        return iter(indices)
-
-    def __len__(self):
-        return len(self.dataset)
 
 class BertClassifier(nn.Module):
 
@@ -118,7 +76,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
     return df
 
 
-def prepare_datasets(tokenizer):
+def preprocess_datasets(tokenizer):
     test_df = pd.read_parquet("test.parquet")
     train_df = pd.read_parquet("train.parquet")
     val_df = pd.read_parquet("val.parquet")
@@ -182,8 +140,13 @@ def train_one_epoch(model, train_loader, loss_fn, optimizer):
         inner_pbar = tqdm.tqdm(
             range(len(train_loader)), colour="blue"
         )
+        print(f"Training Steps: {len(train_loader)}")
+
 
     for input_id, mask, train_label in train_loader:
+        input_id = input_id.to(device, non_blocking=True)
+        mask = mask.to(device, non_blocking=True)
+        train_label = train_label.to(device, non_blocking=True)
 
         output = model(input_id, mask)
 
@@ -232,37 +195,14 @@ def train_main(train_df, val_df, test_df):
         test_df = bodo.rebalance(test_df, dests=gpu_ranks, random=True, parallel=True)
 
 
-    train_dataset = PandasDataset(train_df, device)
-    val_dataset = PandasDataset(val_df, device)
-    test_dataset = PandasDataset(test_df, device)
-    train_sampler = BodoDistributedSampler(
-        train_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
-    )
-    val_sampler = BodoDistributedSampler(
-        val_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
-        shuffle=False,
-    )
-    test_sampler = BodoDistributedSampler(
-        test_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
-        shuffle=False,
-    )
+    train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=BertDataset)
+    val_loader = bodo.ai.prepare_dataset(val_df, BATCH_SIZE, dataset_func=BertDataset)
+    test_loader = bodo.ai.prepare_dataset(test_df, BATCH_SIZE, dataset_func=BertDataset)
+
+
     if model == None:
         return
     pytorch_rank = dist.get_rank()
-
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=val_sampler)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, sampler=test_sampler)
-
 
     loss_fn = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=LR)
@@ -280,7 +220,7 @@ def train_main(train_df, val_df, test_df):
         # Checkpoint every epoch
         base_model = (model.module
             if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model)
-        torch.distributed.checkpoint.state_dict_saver.save(
+        torch.distributed.checkpoint.save(
             {"model_state_dict": base_model.state_dict()},
             checkpoint_id=CHECKPOINT_DIR
         )
@@ -293,7 +233,7 @@ def train_main(train_df, val_df, test_df):
 
 if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    train_df, val_df, test_df = prepare_datasets(tokenizer)
+    train_df, val_df, test_df = preprocess_datasets(tokenizer)
     bodo.ai.torch_train(train_main, train_df, val_df, test_df)
     os._exit(0)
 
