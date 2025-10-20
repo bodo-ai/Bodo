@@ -198,7 +198,7 @@ def prepare_dataset(
     """
     torch_import_guard()
     from pandas import DataFrame, Series
-    from torch.utils.data import DataLoader
+    from torch.utils.data import DataLoader, Dataset
 
     import bodo
 
@@ -225,6 +225,9 @@ def prepare_dataset(
     )
 
     dataset = dataset_func(data)
+    assert isinstance(dataset, Dataset), (
+        "dataset_func must return a torch.utils.data.Dataset"
+    )
 
     sampler = BodoDistributedSampler(
         dataset,
