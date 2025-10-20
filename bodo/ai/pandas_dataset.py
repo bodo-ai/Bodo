@@ -3,7 +3,17 @@ import torch
 
 
 class PandasDataset(torch.utils.data.Dataset):
+    """
+    A PyTorch Dataset for Bodo/Pandas DataFrames.
+    When rows are accessed, they are converted to a PyTorch tensor.
+    """
+
     def __init__(self, df: pd.DataFrame, device: torch.device | None = None):
+        """
+        Args:
+            df (pd.DataFrame): The Pandas DataFrame to wrap, all columns must have the same dtype so they can be converted to a single tensor.
+            device (torch.device | None): The device to place the tensors on.
+        """
         self.df = df
         self.device = device
         # Ensure all columns are the same dtype

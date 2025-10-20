@@ -4,16 +4,35 @@ import torch
 
 from bodo.mpi4py import MPI
 
-from .pandas_dataset import PandasDataset
-
 
 class BodoDistributedSampler(torch.utils.data.Sampler):
+    """
+    A distributed sampler that works with Bodo's torch_train.
+    It expects each worker to have it's own slice of the global dataset.
+    It ensures that all workers have the same number of samples by padding
+    the indices with duplicates if necessary.
+    """
+
     def __init__(
-        self, dataset: PandasDataset, worker_ranks: list[int], shuffle=True, seed=0
+        self,
+        dataset: torch.utils.data.Dataset,
+        worker_ranks: list[int],
+        shuffle=True,
+        seed=0,
     ):
+        """
+        Args:
+            dataset (torch.utils.data.Dataset): The dataset to sample from.
+            worker_ranks (list[int]): The ranks of the workers that will be sampling.
+            shuffle (bool, optional): Whether to shuffle the dataset. Defaults to True.
+            seed (int, optional): The seed for shuffling. Defaults to 0.
+        """
         self.dataset = dataset
         self.worker_ranks = worker_ranks
         self.shuffle = shuffle
+
+        # Setup a subcomm of worker ranks for communicating
+        # the number of samples on each worker rank
         world_group = MPI.COMM_WORLD.Get_group()
         self.worker_group = world_group.Incl(worker_ranks)
         world_group.Free()
