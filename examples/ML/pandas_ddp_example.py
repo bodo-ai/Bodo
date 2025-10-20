@@ -25,7 +25,7 @@ class BertDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         texts = row["label"]
-        texts = torch.tensor(batch_texts)
+        texts = torch.tensor(texts)
 
         tokenized = row["tokenized"]
         input_ids = torch.tensor(tokenized["input_ids"])
