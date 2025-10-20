@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import torch
 
-import bodo
 from bodo.mpi4py import MPI
 
 from .pandas_dataset import PandasDataset
@@ -10,9 +9,6 @@ from .pandas_dataset import PandasDataset
 
 class BodoDistributedSampler(torch.utils.data.Sampler):
     def __init__(self, dataset: PandasDataset, worker_ranks: list[int], shuffle=True):
-        assert isinstance(dataset, PandasDataset), (
-            "BodoDistributedSampler only works with PandasDataset"
-        )
         self.dataset = dataset
         self.worker_ranks = worker_ranks
         self.shuffle = shuffle
@@ -34,10 +30,6 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
 
         # Shuffle the indices if required
         if self.shuffle:
-            shuffled_df = bodo.random_shuffle(
-                self.dataset.df, seed=self.seed, dests=self.worker_ranks
-            )
-            self.dataset = PandasDataset(shuffled_df, device=self.dataset.device)
             g = torch.Generator()
             g.manual_seed(self.seed)
             indices = torch.randperm(len(self.dataset), generator=g).tolist()
