@@ -21,14 +21,15 @@ done
 
 if [[ "$CHANNEL_NAME" != "SKIP_ARTIFACTORY" ]]; then
     curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
-fi
 
-# Block on checking if the reindex has failed.
-set +e
-exit_status=1
-while [[ $exit_status != 0 ]]
-do
-    sleep 30
-    conda search bodo="${BODO_VERSION}" -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${CHANNEL_NAME}/${OS_DIR}
-    exit_status=$?
-done
+    # Block on checking if the reindex has failed.
+
+    set +e
+    exit_status=1
+    while [[ $exit_status != 0 ]]
+    do
+        sleep 30
+        conda search bodo="${BODO_VERSION}" -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${CHANNEL_NAME}/${OS_DIR}
+        exit_status=$?
+    done
+fi
