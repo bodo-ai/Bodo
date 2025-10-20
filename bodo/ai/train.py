@@ -6,7 +6,7 @@ import typing
 from typing import Any, Callable, Literal
 
 if typing.TYPE_CHECKING:
-    from bodo.pandas import BodoDataFrame, BodoSeries
+    from pandas import DataFrame, Series
 
 from bodo.mpi4py import MPI
 
@@ -180,11 +180,22 @@ def prepare_model(
 
 
 def prepare_dataset(
-    data: BodoDataFrame | BodoSeries,
+    data: DataFrame | Series,
     batch_size: int,
     shuffle: bool = True,
     dataset_func: Callable | None = None,
 ):
+    """
+    Prepares a Bodo DataFrame or Series as a PyTorch DataLoader for distributed training.
+    Args:
+        data (DataFrame | Series): The Bodo DataFrame or Series to prepare.
+        batch_size (int): The batch size for the DataLoader.
+        shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
+        dataset_func (Callable, optional): A function that takes in a DataFrame or Series
+            and returns a PyTorch Dataset. If None, a default PandasDataset will be used.
+    Returns:
+        DataLoader: A PyTorch DataLoader for the prepared dataset.
+    """
     torch_import_guard()
     from pandas import DataFrame, Series
     from torch.utils.data import DataLoader
@@ -205,7 +216,8 @@ def prepare_dataset(
 
     gpu_ranks = bodo.get_gpu_ranks()
 
-    if device.type != "cpu" or pytorch_rank is None:
+    # Move data to worker ranks
+    if len(gpu_ranks) != 0:
         data = bodo.rebalance(data, dests=gpu_ranks)
 
     assert isinstance(data, (DataFrame, Series)), (
@@ -218,7 +230,7 @@ def prepare_dataset(
         dataset,
         shuffle=shuffle,
         worker_ranks=gpu_ranks
-        if device.type != "cpu"
+        if len(gpu_ranks) != 0
         else list(range(MPI.COMM_WORLD.Get_size())),
     )
 
