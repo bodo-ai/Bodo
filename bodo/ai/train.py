@@ -131,10 +131,6 @@ def torch_train(
                 dist.destroy_process_group()
             pytorch_rank, pytorch_world_size, device = None, None, None
 
-        train_loop_per_worker(*args, **kwargs)
-        if dist.is_initialized():
-            dist.destroy_process_group()
-
     for arg in args:
         if isinstance(arg, BodoLazyWrapper):
             arg.execute_plan()
