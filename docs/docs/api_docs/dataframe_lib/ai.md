@@ -40,8 +40,8 @@ def torch_train(
     train_loop_per_worker: Callable[
         [], None] | 
         Callable[[dict], None],
-    dataset: BodoDataFrame | BodoSeries,
-    train_loop_config: dict | None = None,
+    *args,
+    **kwargs
 ) -> None:
 ```
 
@@ -49,8 +49,8 @@ Trains a PyTorch model in a distributed manner across multiple workers using the
 
 <p class="api-header">Parameters</p>
 : __train_loop_per_worker: *Callable[[], None] | Callable[[dict], None]*__: A user-defined function that contains the training logic to be executed on each worker. This function can optionally accept a dictionary of configuration parameters that will be passed to it.
-: __dataset: *BodoDataFrame | BodoSeries*__: The dataset to be used for training. This will be partitioned across the workers.
-: __train_loop_config: *dict | None*__: A dictionary of configuration parameters to be passed to the `train_loop_per_worker` function. This can include hyperparameters, model configurations, or any other settings needed for training.
+: __*args: *__: Positional arguments to be passed to the `train_loop_per_worker` function.
+: __**kwargs: *__: Keyword arguments to be passed to the `train_loop_per_worker` function.
 
 Example:
 The following example demonstrates how to use `bodo.ai.torch_train` to train a simple neural network on a dataset. The training loop is able to handle both CPU and GPU training based on the available hardware. If you know which you will be training on you can simplify the code by removing the irrelevant code.
