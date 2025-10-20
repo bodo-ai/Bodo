@@ -4,16 +4,15 @@ import torch
 import torch.distributed as dist
 import torch.distributed.checkpoint
 import tqdm
-from torch import nn
-from torch.optim import Adam
-from transformers import BertModel, BertTokenizer
+from torch.optim import AdamW
+from transformers import BertTokenizer, BertForSequenceClassification, get_cosine_schedule_with_warmup
 import os
 
-LR = 16e-6
+LR = 2e-5
 EPOCHS = 5
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
-BATCH_SIZE = 32
+BATCH_SIZE = 2
 CHECKPOINT_DIR = "./checkpoint_dir"
 
 class BertDataset(torch.utils.data.Dataset):
@@ -34,26 +33,6 @@ class BertDataset(torch.utils.data.Dataset):
 
         return input_ids, attention_mask, batch_texts
 
-class BertClassifier(nn.Module):
-
-    def __init__(self, dropout=0.5):
-
-        super().__init__()
-
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
-        self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(768, NUM_CLASSES)
-        self.relu = nn.ReLU()
-
-    def forward(self, input_id, mask):
-
-        _, pooled_output = self.bert(input_ids= input_id, attention_mask=mask,return_dict=False)
-        dropout_output = self.dropout(pooled_output)
-        linear_output = self.linear(dropout_output)
-        final_layer = self.relu(linear_output)
-
-        return final_layer
-
 
 def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
     labels = {'business':0,
@@ -64,7 +43,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
         }
 
     # Remove duplicates and extra whitespace
-    df.drop_duplicates(subset=["text"])
+    df = df.drop_duplicates()
     df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
@@ -78,7 +57,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
 
 def preprocess_datasets(tokenizer):
     test_df = pd.read_parquet("test.parquet")
-    train_df = pd.read_parquet("train.parquet")
+    train_df = pd.read_parquet("train.parquet")[:10]
     val_df = pd.read_parquet("val.parquet")
 
     test_df = process_dataset(test_df, tokenizer)
@@ -91,7 +70,7 @@ def preprocess_datasets(tokenizer):
     return train_df, val_df, test_df
 
 
-def validation(model, val_loader, loss_fn):
+def validation(model, val_loader):
     model.eval()
     rank = dist.get_rank()
     device = next(model.parameters()).device
@@ -103,12 +82,18 @@ def validation(model, val_loader, loss_fn):
         )
     with torch.no_grad():
         for input_id, mask, val_label in val_loader:
-            output = model(input_id, mask)
+            input_id = input_id.to(device)
+            mask = mask.to(device)
+            val_label = val_label.to(device)
 
-            batch_loss = loss_fn(output, val_label.long())
+            output = model(input_id, token_type_ids=None,
+                                    attention_mask=mask,
+                                    labels=val_label)
+
+            batch_loss = output.loss
             
             # Track local loss and accuracy stats
-            acc = (output.argmax(dim=1) == val_label).sum().item()
+            acc = (output.logits.argmax(dim=1) == val_label).sum().item()
             total_ddp_acc_loss_train[0] += acc
             total_ddp_acc_loss_train[1] += batch_loss.item()
             total_ddp_acc_loss_train[2] += val_label.size(0)
@@ -130,7 +115,7 @@ def validation(model, val_loader, loss_fn):
     return val_accuracy, avg_val_loss
 
 
-def train_one_epoch(model, train_loader, loss_fn, optimizer):
+def train_one_epoch(model, train_loader, optimizer, scheduler):
     model.train()
     rank = dist.get_rank()
     device = next(model.parameters()).device
@@ -144,23 +129,27 @@ def train_one_epoch(model, train_loader, loss_fn, optimizer):
 
 
     for input_id, mask, train_label in train_loader:
-        input_id = input_id.to(device, non_blocking=True)
-        mask = mask.to(device, non_blocking=True)
-        train_label = train_label.to(device, non_blocking=True)
+        input_id = input_id.to(device)
+        mask = mask.to(device)
+        train_label = train_label.to(device)
+        optimizer.zero_grad()
 
-        output = model(input_id, mask)
+        output = model(input_id, token_type_ids=None, 
+                                 attention_mask=mask,
+                                 labels=train_label)
 
-        batch_loss = loss_fn(output, train_label.long())
+        batch_loss = output.loss
 
         # Track local loss and accuracy stats
-        acc = (output.argmax(dim=1) == train_label).sum().item()
+        acc = (output.logits.argmax(dim=1) == train_label).sum().item()
         total_ddp_acc_loss_train[0] += acc
         total_ddp_acc_loss_train[1] += batch_loss.item()
         total_ddp_acc_loss_train[2] += train_label.size(0)
 
-        model.zero_grad()
         batch_loss.backward()
         optimizer.step()
+        scheduler.step()
+        scheduler.step()
         if rank==0:
             inner_pbar.update(1)
     
@@ -179,7 +168,17 @@ def train_one_epoch(model, train_loader, loss_fn, optimizer):
 
 
 def train_main(train_df, val_df, test_df):
-    model = bodo.ai.prepare_model(BertClassifier())
+
+    model = BertForSequenceClassification.from_pretrained(
+        "bert-base-uncased", # Use the 12-layer BERT model, with an uncased vocab.
+        num_labels = NUM_CLASSES, # The number of output labels--2 for binary classification.
+                        # You can increase this for multi-class tasks.   
+        output_attentions = False, # Whether the model returns attentions weights.
+        output_hidden_states = False, # Whether the model returns all hidden-states.
+    )
+
+    model = bodo.ai.prepare_model(model)
+
     if model:
         device = next(model.parameters()).device
     else:
@@ -203,19 +202,21 @@ def train_main(train_df, val_df, test_df):
     if model == None:
         return
     pytorch_rank = dist.get_rank()
-
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=LR)
+    total_steps = EPOCHS * len(train_loader)
+    optimizer = AdamW(model.parameters(), lr=LR)
+    scheduler = get_cosine_schedule_with_warmup(optimizer,
+                                            num_warmup_steps=10,
+                                            num_training_steps=total_steps)
 
     for epoch in range(EPOCHS):
 
         if pytorch_rank == 0:
             print(f"Train Epoch: \t{epoch}")
-        train_one_epoch(model, train_loader, loss_fn, optimizer)
+        train_one_epoch(model, train_loader, optimizer, scheduler)
 
         if pytorch_rank == 0:
             print("Validation: ")
-        validation(model, val_loader, loss_fn)
+        validation(model, val_loader)
 
         # Checkpoint every epoch
         base_model = (model.module
@@ -227,7 +228,7 @@ def train_main(train_df, val_df, test_df):
     
     if pytorch_rank == 0:
         print("Test: ")
-    validation(model, test_loader, loss_fn)
+    validation(model, test_loader)
 
 
 
