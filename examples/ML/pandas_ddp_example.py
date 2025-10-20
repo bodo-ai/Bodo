@@ -85,16 +85,14 @@ class BertClassifier(nn.Module):
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.dropout = nn.Dropout(dropout)
         self.linear = nn.Linear(768, NUM_CLASSES)
-        self.relu = nn.ReLU()
 
     def forward(self, input_id, mask):
 
         _, pooled_output = self.bert(input_ids= input_id, attention_mask=mask,return_dict=False)
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
-        final_layer = self.relu(linear_output)
 
-        return final_layer
+        return linear_output
 
 
 def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
@@ -106,7 +104,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
         }
 
     # Remove duplicates and extra whitespace
-    df.drop_duplicates(subset=["text"])
+    df = df.drop_duplicates(subset=["text"])
     df["text"] = df.text.str.lower().str.replace(r"\s+", " ", regex=True)
 
     def map_tokenizer(x):
@@ -148,7 +146,7 @@ def validation(model, val_loader, loss_fn):
             output = model(input_id, mask)
 
             batch_loss = loss_fn(output, val_label.long())
-            
+
             # Track local loss and accuracy stats
             acc = (output.argmax(dim=1) == val_label).sum().item()
             total_ddp_acc_loss_train[0] += acc
@@ -161,7 +159,7 @@ def validation(model, val_loader, loss_fn):
     # Compute global loss and accuracy stats
     dist.all_reduce(total_ddp_acc_loss_train, op=dist.ReduceOp.SUM)
     val_accuracy = total_ddp_acc_loss_train[0] / total_ddp_acc_loss_train[2]
-    avg_val_loss = total_ddp_acc_loss_train[1] / total_ddp_acc_loss_train[2]
+    avg_val_loss = total_ddp_acc_loss_train[1] * BATCH_SIZE / total_ddp_acc_loss_train[2]
 
     if rank == 0:
         inner_pbar.close()
@@ -200,11 +198,11 @@ def train_one_epoch(model, train_loader, loss_fn, optimizer):
         optimizer.step()
         if rank==0:
             inner_pbar.update(1)
-    
+
     # Compute global loss and accuracy stats
     dist.all_reduce(total_ddp_acc_loss_train, op=dist.ReduceOp.SUM)
     train_accuracy = total_ddp_acc_loss_train[0] / total_ddp_acc_loss_train[2]
-    avg_train_loss = total_ddp_acc_loss_train[1] / total_ddp_acc_loss_train[2]
+    avg_train_loss = total_ddp_acc_loss_train[1] * BATCH_SIZE / total_ddp_acc_loss_train[2]
 
     if rank == 0:
         inner_pbar.close()
@@ -223,7 +221,7 @@ def train_main(train_df, val_df, test_df):
         device = None
     gpu_ranks = bodo.get_gpu_ranks()
 
-    # Rebalance data if using accelerators onto 
+    # Rebalance data if using accelerators onto
     # acclerator ranks
     accelerators_used = len(gpu_ranks) != 0
     if accelerators_used:
@@ -235,24 +233,24 @@ def train_main(train_df, val_df, test_df):
     train_dataset = PandasDataset(train_df, device)
     val_dataset = PandasDataset(val_df, device)
     test_dataset = PandasDataset(test_df, device)
+
+    worker_ranks = (
+        gpu_ranks
+        if accelerators_used
+        else list(range(MPI.COMM_WORLD.Get_size()))
+    )
     train_sampler = BodoDistributedSampler(
         train_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
+        worker_ranks=worker_ranks,
     )
     val_sampler = BodoDistributedSampler(
         val_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
+        worker_ranks=worker_ranks,
         shuffle=False,
     )
     test_sampler = BodoDistributedSampler(
         test_dataset,
-        worker_ranks=gpu_ranks
-        if accelerators_used
-        else list(range(MPI.COMM_WORLD.Get_size())),
+        worker_ranks=worker_ranks,
         shuffle=False,
     )
     if model == None:
@@ -284,7 +282,7 @@ def train_main(train_df, val_df, test_df):
             {"model_state_dict": base_model.state_dict()},
             checkpoint_id=CHECKPOINT_DIR
         )
-    
+
     if pytorch_rank == 0:
         print("Test: ")
     validation(model, test_loader, loss_fn)
