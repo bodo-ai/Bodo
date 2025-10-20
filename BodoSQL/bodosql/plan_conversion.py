@@ -127,55 +127,12 @@ def java_call_to_python_call(java_call, input_plan):
     op = java_call.getOperator()
     operator_class_name = op.getClass().getSimpleName()
 
-    if (
-        operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator")
-        and len(java_call.getOperands()) == 2
-    ):
+    if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
         operands = java_call.getOperands()
-        left = java_expr_to_python_expr(operands[0], input_plan)
-        right = java_expr_to_python_expr(operands[1], input_plan)
+        # Calciate may add more than 2 operand for the same binary operator
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
-        if kind.equals(SqlKind.PLUS):
-            # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
-            # TODO: upcast output to avoid overflow?
-            expr = ArithOpExpression(left.empty_data, left, right, "__add__")
-            return expr
-
-        if kind.equals(SqlKind.MINUS):
-            expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
-            return expr
-
-        if kind.equals(SqlKind.TIMES):
-            expr = ArithOpExpression(left.empty_data, left, right, "__mul__")
-            return expr
-
-        # Comparison operators
-        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-        if kind.equals(SqlKind.EQUALS):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.eq)
-
-        if kind.equals(SqlKind.NOT_EQUALS):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.ne)
-
-        if kind.equals(SqlKind.LESS_THAN):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.lt)
-
-        if kind.equals(SqlKind.GREATER_THAN):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.gt)
-
-        if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.ge)
-
-        if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
-
-        if kind.equals(SqlKind.AND):
-            return ConjunctionOpExpression(bool_empty_data, left, right, "__and__")
-
-        if kind.equals(SqlKind.OR):
-            return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
+        return java_binop_to_python_expr(kind, op_exprs)
 
     if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
         operand = java_call.getOperands()[0]
@@ -207,6 +164,62 @@ def java_call_to_python_call(java_call, input_plan):
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
     )
+
+
+def java_binop_to_python_expr(kind, op_exprs):
+    """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
+
+    left = op_exprs[0]
+
+    # Calciate may add more than 2 operand for the same binary operator
+    if len(op_exprs) > 2:
+        right = java_binop_to_python_expr(kind, op_exprs[1:])
+    else:
+        right = op_exprs[1]
+
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    if kind.equals(SqlKind.PLUS):
+        # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
+        # TODO: upcast output to avoid overflow?
+        expr = ArithOpExpression(left.empty_data, left, right, "__add__")
+        return expr
+
+    if kind.equals(SqlKind.MINUS):
+        expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
+        return expr
+
+    if kind.equals(SqlKind.TIMES):
+        expr = ArithOpExpression(left.empty_data, left, right, "__mul__")
+        return expr
+
+    # Comparison operators
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    if kind.equals(SqlKind.EQUALS):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.eq)
+
+    if kind.equals(SqlKind.NOT_EQUALS):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.ne)
+
+    if kind.equals(SqlKind.LESS_THAN):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.lt)
+
+    if kind.equals(SqlKind.GREATER_THAN):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.gt)
+
+    if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.ge)
+
+    if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
+
+    if kind.equals(SqlKind.AND):
+        return ConjunctionOpExpression(bool_empty_data, left, right, "__and__")
+
+    if kind.equals(SqlKind.OR):
+        return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
+
+    raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
 def java_join_to_python_join(ctx, java_join):
