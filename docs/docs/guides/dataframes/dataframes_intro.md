@@ -1,3 +1,10 @@
+
+<!-- 
+To make changes to this page, first make your changes in the notebook: examples/_Tutorials/dataframes_intro.ipynb
+then run the script from the project directory: python docs/scripts/notebook_to_docs.py examples/_Tutorials/dataframes_intro.ipynb --outdir docs/docs/guides/dataframes --tag df_devguide
+-->
+
+
 Bodo DataFrames Developer Guide {#df_devguide}
 =================
 
@@ -55,7 +62,7 @@ df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_tripdata")
 
 We can immediately inspect the metadata of our lazy DataFrame such as the column names and data types. When `read_parquet` is called, Bodo opens the first couple parquet files in the dataset to infer the schema, which is typically pretty fast. 
 
-We can also look at the plan for this DataFrame. Bodo uses DuckDB plans as an intermediary representation to perform optimizations using the DuckDB optimizer. 
+We can also look at the plan for this DataFrame, which is just a single Parquet scan node.
 
 Finally, we can get the length of the dataset, which executes a small plan to scan the entire dataset and get the row count in each file without pulling any of the rows into memory.
 
@@ -111,7 +118,7 @@ print(len(df))
     1036465968
 
 
-Using the DuckDB optimizer, Bodo can automatically push filters down to IO, which is useful as it avoids materializing extra rows. When we run the optimizer in the example below, two plan nodes (a read into a filter) becomes a single node (a read with a filter).
+Bodo can automatically push filters down to IO, which is useful as it avoids materializing extra rows. When we run the optimizer in the example below, two plan nodes (a read into a filter) becomes a single node (a read with a filter).
 
 
 ```python
@@ -224,7 +231,7 @@ print(plan_optimizer.py_optimize_plan(jn1._plan.generate_duckdb()).toString())
 
 ### Plan execution
 
-Plan optimization happens right before execution. The optimized plan is then converted into a sequence of pipelines that are executed in parallel on Bodo workers. Data is streamed through the operators in these pipelines in batches where it is ultimately collected either in a file or an in-memory result. 
+Plan optimization typically happens right before execution. The optimized plan is then converted into a sequence of pipelines that are executed in parallel on Bodo workers. Data is streamed through the operators in these pipelines in batches where it is ultimately collected either in a file or an in-memory result. 
 
 Plan execution is triggered by operations like writing to a Parquet file or Iceberg table, printing data, or when an unsupported operation is encountered. The cell below gives examples of operations that return lazy results as well as operations that require collection:
 
@@ -337,8 +344,6 @@ Bodo supports custom transformations on DataFrames and Series using APIs like `S
 
 
 ```python
-import bodo
-
 df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq")
 
 df["hour"] = df.pickup_datetime.dt.hour
@@ -418,6 +423,8 @@ For additional tips on JIT compilation and troubleshooting, refer to our [Python
 
 
 ```python
+import bodo
+
 get_time_bucket_jit = bodo.jit(get_time_bucket, distributed=False, spawn=False)
 
 def apply_get_time_bucket(row):
@@ -533,6 +540,3 @@ Some general tips for migrating Pandas workflows to Bodo DataFrames:
     To see the benefits of Bodo's parallelism, make sure you are running on a sufficiently large machine or instance with more than one core. 
     Try increasing the number of cores if you need better performance.
 
-* **Avoid loading JIT if possible.**
-
-    APIs like `map` and `apply` load JIT modules, which can add extra overheads the first time they are called. Consider if your custom function application can be rewritten using builtin functions. 
