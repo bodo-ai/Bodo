@@ -8,7 +8,9 @@ from .pandas_dataset import PandasDataset
 
 
 class BodoDistributedSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PandasDataset, worker_ranks: list[int], shuffle=True):
+    def __init__(
+        self, dataset: PandasDataset, worker_ranks: list[int], shuffle=True, seed=0
+    ):
         self.dataset = dataset
         self.worker_ranks = worker_ranks
         self.shuffle = shuffle
@@ -16,7 +18,7 @@ class BodoDistributedSampler(torch.utils.data.Sampler):
         self.worker_group = world_group.Incl(worker_ranks)
         world_group.Free()
         self.worker_subcomm = MPI.COMM_WORLD.Create(self.worker_group)
-        self.seed = 0
+        self.seed = seed
 
     def __del__(self):
         if hasattr(self, "worker_group") and self.worker_group != MPI.GROUP_NULL:
