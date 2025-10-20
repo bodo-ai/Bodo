@@ -180,7 +180,10 @@ def prepare_model(
 
 
 def prepare_dataset(
-    data: BodoDataFrame | BodoSeries, batch_size: int, shuffle: bool = True
+    data: BodoDataFrame | BodoSeries,
+    batch_size: int,
+    shuffle: bool = True,
+    dataset_func: Callable | None = None,
 ):
     torch_import_guard()
     from pandas import DataFrame, Series
@@ -191,6 +194,15 @@ def prepare_dataset(
     from .bodo_dist_sampler import BodoDistributedSampler
     from .pandas_dataset import PandasDataset
 
+    if dataset_func is None:
+
+        def _dataset_func(data):
+            if isinstance(data, Series):
+                data = data.to_frame()
+            return PandasDataset(data, device=device)
+
+        dataset_func = _dataset_func
+
     gpu_ranks = bodo.get_gpu_ranks()
 
     if device.type != "cpu" or pytorch_rank is None:
@@ -199,10 +211,8 @@ def prepare_dataset(
     assert isinstance(data, (DataFrame, Series)), (
         "Dataset must be a DataFrame or Series"
     )
-    if isinstance(data, Series):
-        data = data.to_frame()
 
-    dataset = PandasDataset(data, device=device)
+    dataset = dataset_func(data)
 
     sampler = BodoDistributedSampler(
         dataset,
