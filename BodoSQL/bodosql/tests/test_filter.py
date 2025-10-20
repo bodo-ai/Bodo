@@ -4,7 +4,6 @@ Test correctness of SQL filter queries on BodoSQL
 
 import pytest
 
-import bodosql
 from bodosql.tests.utils import check_query
 
 
@@ -30,9 +29,6 @@ def test_filter_numeric(bodosql_numeric_types, memory_leak_check):
         "select A,C from table1 where A >= C or B >= 2.2",
     ]
     for query in queries:
-        # TODO[BSE-5157]: support and/or in C++ backend
-        if bodosql.use_cpp_backend and ("and" in query or "or" in query):
-            continue
         check_query(
             query, bodosql_numeric_types, None, check_dtype=False, use_duckdb=True
         )
