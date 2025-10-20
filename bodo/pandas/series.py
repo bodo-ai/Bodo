@@ -78,6 +78,7 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
+    fallback_warn,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -332,7 +333,21 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
 
-        if is_numeric(other):
+        self_bool = is_bool(self)
+        other_bool = is_bool(other)
+        if (
+            (is_numeric(self) or self_bool)
+            and (is_numeric(other) or other_bool)
+            and not (self_bool and other_bool)
+        ):
+            if self_bool:
+                self = self.map({True: 1, False: 0})
+
+            if other_bool:
+                if isinstance(other, BodoSeries):
+                    other = other.map({True: 1, False: 0})
+                else:
+                    other = 1 if other else 0
             return self._numeric_binop(other, op, reverse)
 
         return self._non_numeric_binop(other, op, reverse)
@@ -348,8 +363,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
         )
 
-        # Compute schema of new series.
-        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        if op in ("__mod__", "__rmod__"):
+            empty_data = zero_size_self
+        else:
+            # Compute schema of new series.
+            empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
             "_numeric_binop: empty_data is not a Series"
         )
@@ -436,6 +454,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
         return self._arith_binop(other, "__rfloordiv__", True)
+
+    @check_args_fallback("all")
+    def __mod__(self, other):
+        return self._arith_binop(other, "__mod__", False)
+
+    @check_args_fallback("all")
+    def __rmod__(self, other):
+        return self._arith_binop(other, "__rmod__", True)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
@@ -706,7 +732,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                warnings.warn(BodoCompilationFailedWarning(msg))
+                if bodo.dataframe_library_warn:
+                    warnings.warn(BodoCompilationFailedWarning(msg))
 
         # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
@@ -830,7 +857,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
 
                 self_arg = self.execute_plan()
 
@@ -1360,6 +1387,27 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = _create_series_binop_plan(lhs_plan, empty_data, expr)
         return wrap_plan(plan=plan)
 
+    @check_args_fallback(supported="none")
+    def cumsum(self, axis: Axis | None = None, skipna: bool = True, *args, **kwargs):
+        # cumsum not supported for pyarrow boolean so convert to int
+        # Fix in pyarrow instead?
+        if self.dtype == pd.ArrowDtype(pa.bool_()):
+            self = self.map({True: 1, False: 0})
+        msg = (
+            "Series.cumsum is not implemented in Bodo DataFrames yet. "
+            "Falling back to Pandas (may be slow or run out of memory)."
+        )
+        fallback_warn(msg)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            with bodo.pandas.utils.FallbackContext():
+                py_res = super().cumsum(axis, skipna, *args, **kwargs)
+
+        # Convert objects to Bodo before returning them to the user.
+        if bodo.pandas.utils.FallbackContext.is_top_level():
+            return bodo.pandas.utils.convert_to_bodo(py_res)
+        return py_res
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -1392,7 +1440,7 @@ class BodoStringMethods:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -1576,10 +1624,7 @@ class BodoSeriesAiMethods:
         self,
         tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("tokenize")
 
         def per_row(tokenizer, row):
             return tokenizer.encode(row, add_special_tokens=True)
@@ -1603,10 +1648,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **generation_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("llm_generate")
 
         if backend == Backend.BEDROCK:
             if model is None:
@@ -1693,6 +1735,13 @@ class BodoSeriesAiMethods:
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
+    def _check_ai_input(self, func: str):
+        if self._series.dtype not in ("string[pyarrow]", "large_string[pyarrow]"):
+            raise TypeError(
+                f"Series.ai.{func}() got unsupported dtype: {self._series.dtype},"
+                " expected either large_string[pyarrow] or string[pyarrow]."
+            )
+
     def _llm_generate_bedrock(
         self,
         modelId: str,
@@ -1755,10 +1804,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **embedding_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("embed")
 
         if backend == Backend.BEDROCK:
             if model is None:
@@ -1999,7 +2045,7 @@ class BodoDatetimeProperties:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
     @check_args_fallback(unsupported="none")
@@ -2147,6 +2193,22 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def is_bool(other):
+    from bodo.pandas.scalar import BodoScalar
+
+    if type(other) is BodoScalar:
+        dtype = other.wrapped_series.dtype
+        return pd.api.types.is_bool_dtype(dtype)
+
+    is_bool_bodoseries = (
+        isinstance(other, BodoSeries)
+        and isinstance(other.dtype, pd.ArrowDtype)
+        and pd.api.types.is_bool_dtype(other.dtype)
+    )
+    is_bool_scalar = isinstance(other, bool)
+    return is_bool_bodoseries or is_bool_scalar
 
 
 def is_numeric(other):
@@ -3374,9 +3436,6 @@ allowed_types_map = {
         datetime.datetime,
         numpy.datetime64,
         numpy.timedelta64,
-        numpy.int64,
-        numpy.float64,
-        numpy.bool_,
     ),
 }
 

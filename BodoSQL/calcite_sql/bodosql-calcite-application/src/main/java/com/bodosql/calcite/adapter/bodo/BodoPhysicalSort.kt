@@ -27,7 +27,6 @@ import org.apache.calcite.rel.RelFieldCollation
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.type.SqlTypeName
-import java.util.List
 import java.util.Locale
 
 class BodoPhysicalSort(
@@ -265,6 +264,12 @@ class BodoPhysicalSort(
         return ExpectedBatchingProperty.alwaysSingleBatchProperty()
     }
 
+    // Return fetch for py4j use in C++ backend code
+    fun getFetch(): RexNode? = fetch
+
+    // Return offset for py4j use in C++ backend code
+    fun getOffset(): RexNode? = offset
+
     companion object {
         fun create(
             child: RelNode,
@@ -276,6 +281,9 @@ class BodoPhysicalSort(
             val traitSet = cluster.traitSet().replace(collation)
             return BodoPhysicalSort(cluster, traitSet, child, collation, offset, fetch)
         }
+
+        // Return nullDirection for py4j use in C++ backend code
+        fun isNullsFirst(collation: RelFieldCollation): Boolean = (collation.nullDirection == RelFieldCollation.NullDirection.FIRST)
 
         // Start with a static budget. Sort then expands its budget dynamically during the Finalize step.
         const val SORT_MEMORY_ESTIMATE = 256 * 1024 * 1024

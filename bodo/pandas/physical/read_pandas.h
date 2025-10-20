@@ -136,6 +136,8 @@ class PhysicalReadPandas : public PhysicalSource {
             // might return different types.
             out_table = alloc_table(output_schema);
         } else {
+            // arrow_table_to_bodo expects a single chunk table.
+            table = table->CombineChunks().ValueOrDie();
             // Convert Arrow arrays to Bodo arrays
             // (passing nullptr for pool since not allocated through Bodo so
             // can't support spilling etc,

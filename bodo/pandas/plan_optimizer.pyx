@@ -12,6 +12,7 @@ import operator
 from libc.stdint cimport int64_t, uint64_t
 import pandas as pd
 import pyarrow.parquet as pq
+import numpy as np
 
 import bodo
 
@@ -326,6 +327,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
@@ -695,7 +697,7 @@ cdef unique_ptr[CExpression] make_const_expr(val):
     # See pandas scalars in pd.api.types.is_scalar
     cdef c_string val_cstr
 
-    if isinstance(val, int):
+    if isinstance(val, (int, np.int64)):
         return move(make_const_int_expr(val))
     elif isinstance(val, float):
         return move(make_const_double_expr(val))
@@ -758,6 +760,8 @@ def python_arith_dunder_to_duckdb(str opstr):
         return "*"
     elif opstr == "__truediv__" or opstr == "__rtruediv__":
         return "/"
+    elif opstr == "__mod__" or opstr == "__rmod__":
+        return "%"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
 
@@ -782,7 +786,8 @@ cdef class ArithOpExpression(Expression):
                 rhs_expr,
                 "/".encode(),
                 self.out_schema)
-            self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode())
+            unaryop_expr = make_unaryop_expr(truediv_expression, "floor".encode())
+            self.c_expression = make_cast_expr(unaryop_expr, self.out_schema)
         else:
             duckdb_op = python_arith_dunder_to_duckdb(opstr)
             self.c_expression = make_arithop_expr(

@@ -5,10 +5,10 @@ import socket
 import typing
 from typing import Any, Callable, Literal
 
-from bodo.mpi4py import MPI
-
 if typing.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
+
+from bodo.mpi4py import MPI
 
 PROCESS_GROUP_INIT_RETRIES = 5
 
@@ -72,7 +72,7 @@ def _init_process_group():
                 device = torch.device(f"cuda:{pytorch_rank % num_local_gpus}")
         else:
             pytorch_rank = None
-    npes = (
+    pytorch_world_size = (
         len(gpu_ranks) if device != torch.device("cpu") else MPI.COMM_WORLD.Get_size()
     )
 
@@ -92,7 +92,7 @@ def _init_process_group():
                     backend=backend,
                     init_method=tcp_conn_str,
                     rank=pytorch_rank,
-                    world_size=npes,
+                    world_size=pytorch_world_size,
                 )
             return
         except Exception as e:
@@ -102,17 +102,18 @@ def _init_process_group():
 
 def torch_train(
     train_loop_per_worker: Callable[[], None] | Callable[[dict], None],
-    dataset: BodoDataFrame | BodoSeries,
-    train_loop_config: dict | None = None,
+    *args,
+    **kwargs,
 ):
     # We need the compiler on the spawner since the workers will import it
     # for get_gpu_ranks, if the workers have it and not the spawner it can
     # cause a hang in gather/scatter operations since they will have
     # different implementations.
     import bodo.decorators  # noqa: F401
+    from bodo.pandas.lazy_wrapper import BodoLazyWrapper
     from bodo.spawn.spawner import submit_func_to_workers
 
-    def worker_func(data):
+    def worker_func(args, kwargs):
         torch_import_guard()
         import torch.distributed as dist
 
@@ -123,16 +124,24 @@ def torch_train(
         global pytorch_rank, pytorch_world_size, device
         _init_process_group()
         try:
-            train_loop_per_worker(
-                data, train_loop_config
-            ) if train_loop_config else train_loop_per_worker(data)
+            train_loop_per_worker(*args, **kwargs)
         finally:
             # Clean up the process group
             if dist.is_initialized():
                 dist.destroy_process_group()
             pytorch_rank, pytorch_world_size, device = None, None, None
 
-    submit_func_to_workers(worker_func, [], dataset)
+        train_loop_per_worker(*args, **kwargs)
+        if dist.is_initialized():
+            dist.destroy_process_group()
+
+    for arg in args:
+        if isinstance(arg, BodoLazyWrapper):
+            arg.execute_plan()
+    for _, kwarg in kwargs.items():
+        if isinstance(kwarg, BodoLazyWrapper):
+            kwarg.execute_plan()
+    submit_func_to_workers(worker_func, [], args, kwargs)
 
 
 def prepare_model(
@@ -149,6 +158,10 @@ def prepare_model(
     if pytorch_rank is None:
         return None
 
+    model.to(device)
+    # If we only have one rank, no need to wrap the model
+    if pytorch_world_size == 1:
+        return model
     if parallel_strategy is not None:
         assert parallel_strategy in ["ddp", "fsdp"], (
             "parallel_strategy should be either 'ddp' or 'fsdp'"
@@ -163,7 +176,6 @@ def prepare_model(
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
             model = FSDP(model, **parallel_strategy_kwargs)
-    model.to(device)
     return model
 
 

@@ -39,21 +39,24 @@ def col_a_identical_tables(request):
 
 
 @pytest.mark.slow
-def test_orderby_numeric_scalar(bodosql_numeric_types, spark_info, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_orderby_numeric_scalar(bodosql_numeric_types, memory_leak_check):
     """tests that orderby works with scalar values in the Select statement"""
     query = "SELECT A, 1, 2, 3, 4 as Y FROM table1 ORDER BY Y, A"
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_orderby_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_orderby_numeric(bodosql_numeric_types, memory_leak_check):
     """
     Tests orderby works in the simple case for numeric types
     """
@@ -74,10 +77,20 @@ def test_orderby_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
             A DESC
         """
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, sort_output=False
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        use_duckdb=True,
     )
     check_query(
-        query2, bodosql_numeric_types, spark_info, check_dtype=False, sort_output=False
+        query2,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        use_duckdb=True,
     )
 
 

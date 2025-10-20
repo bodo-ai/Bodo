@@ -451,7 +451,7 @@ def check_args_fallback(
                     )
                     if except_msg:
                         msg += f"\nException: {except_msg}"
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                    fallback_warn(msg)
                     py_res = getattr(py_pkg, func.__name__)(*args, **kwargs)
                     return convert_to_bodo(py_res)
             else:
@@ -1172,6 +1172,11 @@ def ensure_datetime64ns(df):
     return df
 
 
+def fallback_warn(msg):
+    if bodo.dataframe_library_warn:
+        warnings.warn(BodoLibFallbackWarning(msg))
+
+
 class FallbackContext:
     """Context manager for tracking nested fallback calls."""
 
@@ -1212,7 +1217,7 @@ def fallback_wrapper(self, attr, name, msg):
                 pass
 
             nonlocal msg
-            warnings.warn(BodoLibFallbackWarning(msg))
+            fallback_warn(msg)
             msg = ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
@@ -1237,10 +1242,8 @@ def fallback_wrapper(self, attr, name, msg):
                 if isinstance(self.dtype, pd.ArrowDtype) and pa.types.is_timestamp(
                     self.dtype.pyarrow_dtype
                 ):
-                    warnings.warn(
-                        BodoLibFallbackWarning(
-                            "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
-                        )
+                    fallback_warn(
+                        "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
                     )
                     converted = pd_self.array._pa_array.to_pandas()
                     return convert_to_bodo(

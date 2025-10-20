@@ -39,7 +39,8 @@ class PhysicalProjection : public PhysicalProcessBatch {
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
-        for (auto& expr : exprs) {
+        for (size_t expr_idx = 0; expr_idx < exprs.size(); ++expr_idx) {
+            auto& expr = exprs[expr_idx];
             physical_exprs.emplace_back(
                 buildPhysicalExprTree(expr, col_ref_map, true));
 
@@ -70,10 +71,17 @@ class PhysicalProjection : public PhysicalProcessBatch {
                     col_names.emplace_back(
                         scalar_func_data.out_schema->field(0)->name());
                 } else {
-                    // Will use types from LogicalProjection here eventually.
-                    throw std::runtime_error(
-                        "Unsupported bound_function in projection " +
-                        expr->ToString());
+                    if (func_expr.function.name == "floor") {
+                        this->output_schema->append_column(
+                            input_schema->column_types[expr_idx]->copy());
+                        col_names.emplace_back("floor");
+                    } else {
+                        // Will use types from LogicalProjection here
+                        // eventually.
+                        throw std::runtime_error(
+                            "Unsupported bound_function in projection " +
+                            expr->ToString());
+                    }
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
                 auto& const_expr =
@@ -130,6 +138,30 @@ class PhysicalProjection : public PhysicalProcessBatch {
                     col_names.emplace_back(input_schema->column_names[0]);
                 } else {
                     col_names.emplace_back("Case");
+                }
+            } else if (expr->type == duckdb::ExpressionType::OPERATOR_CAST) {
+                auto& bce = expr->Cast<duckdb::BoundCastExpression>();
+
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        duckdbTypeToArrow(bce.return_type))
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("Cast");
+                }
+            } else if (expr->type == duckdb::ExpressionType::OPERATOR_NOT) {
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        duckdbTypeToArrow(duckdb::LogicalType::BOOLEAN))
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("Not");
                 }
             } else {
                 throw std::runtime_error(
