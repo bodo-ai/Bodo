@@ -149,7 +149,6 @@ def train_one_epoch(model, train_loader, optimizer, scheduler):
         batch_loss.backward()
         optimizer.step()
         scheduler.step()
-        scheduler.step()
         if rank==0:
             inner_pbar.update(1)
     
