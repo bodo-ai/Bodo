@@ -57,7 +57,7 @@ def process_dataset(df: pd.DataFrame, tokenizer) -> pd.DataFrame:
 
 def preprocess_datasets(tokenizer):
     test_df = pd.read_parquet("test.parquet")
-    train_df = pd.read_parquet("train.parquet")[:10]
+    train_df = pd.read_parquet("train.parquet")
     val_df = pd.read_parquet("val.parquet")
 
     test_df = process_dataset(test_df, tokenizer)
