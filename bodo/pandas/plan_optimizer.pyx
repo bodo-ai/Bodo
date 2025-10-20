@@ -9,10 +9,11 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
-from libc.stdint cimport int64_t, uint64_t
+from libc.stdint cimport int64_t, uint64_t, int32_t
 import pandas as pd
 import pyarrow.parquet as pq
 
+import pyarrow as pa
 import bodo
 
 from cpython.ref cimport PyObject
@@ -337,6 +338,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
@@ -711,6 +713,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, pa.Date32Scalar):
+        return move(make_const_date32_expr(val.value))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
         return move(make_const_expr(val.get_value()))
     else:

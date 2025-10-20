@@ -117,6 +117,11 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::DATE(duckdb::date_t(val)));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
