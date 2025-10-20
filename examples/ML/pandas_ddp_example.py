@@ -9,7 +9,7 @@ from transformers import BertTokenizer, BertForSequenceClassification, get_cosin
 import os
 
 LR = 2e-5
-EPOCHS = 5
+EPOCHS = 2
 NUM_CLASSES = 5
 SEQ_LENGTH = 512
 BATCH_SIZE = 32
