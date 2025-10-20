@@ -19,6 +19,7 @@ from bodo.pandas.plan import (
     LogicalFilter,
     LogicalOrder,
     LogicalProjection,
+    UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
@@ -188,6 +189,19 @@ def java_call_to_python_call(java_call, input_plan):
         ):
             # Cast of int to DECIMAL is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
+
+    if (
+        operator_class_name == "SqlPostfixOperator"
+        and len(java_call.getOperands()) == 1
+    ):
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.IS_NOT_NULL):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "notnull")
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "

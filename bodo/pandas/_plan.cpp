@@ -374,6 +374,12 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
             ret->children.push_back(std::move(lhs_duck));
             return ret;
         } break;
+        case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
+            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
+                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
+            ret->children.push_back(std::move(lhs_duck));
+            return ret;
+        } break;
         default:
             throw std::runtime_error("make_unary_expr unsupported etype " +
                                      std::to_string(static_cast<int>(etype)));

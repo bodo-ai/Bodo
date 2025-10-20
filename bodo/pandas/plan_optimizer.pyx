@@ -169,6 +169,8 @@ def str_to_expr_type(val):
         return CExpressionType.CONJUNCTION_OR
     elif val == "__invert__":
         return CExpressionType.OPERATOR_NOT
+    elif val == "notnull":
+        return CExpressionType.OPERATOR_IS_NOT_NULL
     else:
         raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 

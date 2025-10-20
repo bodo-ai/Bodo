@@ -187,6 +187,29 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
             "do_arrow_compute left is neither array nor scalar.");
     }
 
+    // Special handling for is_not_null since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_not_null") {
+        arrow::Result<arrow::Datum> is_null_res =
+            arrow::compute::CallFunction("is_null", {src1}, func_options);
+        if (!is_null_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute: " +
+                is_null_res.status().message());
+        }
+
+        // Invert the boolean array
+        arrow::Result<arrow::Datum> invert_res =
+            arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
+        if (!invert_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute Invert: " +
+                invert_res.status().message());
+        }
+        return arrow_array_to_bodo(invert_res.ValueOrDie().make_array(),
+                                   bodo::BufferPool::DefaultPtr());
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
