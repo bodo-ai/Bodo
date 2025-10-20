@@ -33,6 +33,26 @@ Prepares a PyTorch model for distributed training using the specified parallel s
     If None, no parallel strategy is applied and the model is returned as-is.
 : __parallel_strategy_kwargs: *dict[str, Any] | None*__: Additional keyword arguments to pass to the parallel strategy constructor (e.g., `torch.nn.parallel.DistributedDataParallel` or `torch.distributed.fsdp.FullyShardedDataParallel`).
 
+## bodo.ai.prepare_dataset
+
+``` py
+
+def prepare_dataset(
+    data: DataFrame | Series,
+    batch_size: int,
+    shuffle: bool = True,
+    dataset_func: Callable | None = None,
+) -> torch.utils.data.DataLoader:
+```
+
+Prepares a dataset for distributed training by converting a DataFrame or Series into a DataLoader. This function partitions the data among workers, applies optional shuffling, and creates batches for training.
+
+<p class="api-header">Parameters</p>
+: __data: *DataFrame | Series*__: The DataFrame or Series to be converted into a dataset.
+: __batch_size: *int*__: The size of each batch to be created.
+: __shuffle: *bool*__: Whether to shuffle the data before creating batches. Default is True.
+: __dataset_func: *Callable | None*__: An optional function to customize the dataset creation process. If provided, this function should accept a DataFrame or Series and return a PyTorch Dataset. If None, a default dataset creation process is used that converts each row into a tensor.
+
 ## bodo.ai.torch_train
 
 ``` py
@@ -56,23 +76,24 @@ Example:
 The following example demonstrates how to use `bodo.ai.torch_train` to train a simple neural network on a dataset. The training loop is able to handle both CPU and GPU training based on the available hardware. If you know which you will be training on you can simplify the code by removing the irrelevant code.
 
 ```py
-
 import bodo.pandas as pd
+import bodo.ai.train
 import tempfile
 
 df = bd.DataFrame(
     {
-        "feature1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        "feature2": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
-        "label": [3.0, 5.0, 7.0, 9.0, 11.0, 13.0],
+        "feature1": pd.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], dtype="float32"),
+        "feature2": pd.array([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], dtype="float32"),
+        "label": pd.array([3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0], dtype="float32"),
     }
 )
 
 def train_loop(data, config):
     import torch
-    import torch.nn as nn
     import torch.distributed.checkpoint
+    import torch.nn as nn
 
+    # Simple linear regression model
     class SimpleModel(nn.Module):
         def __init__(self):
             super().__init__()
@@ -84,44 +105,36 @@ def train_loop(data, config):
             return self.linear2(self.relu(self.linear1(x)))
 
     model = SimpleModel()
-    model = bodo.ai.train.prepare_model(model)
-    gpu_ranks = bodo.get_gpu_ranks()
+    model = bodo.ai.train.prepare_model(model, parallel_strategy="ddp")
+    dataloader = bodo.ai.train.prepare_dataset(
+        data, batch_size=config.get("batch_size", 2)
+    )
     if model is None:
-        # Not a worker process so send the data to the GPU workers
-        bodo.rebalance(data, dests=gpu_ranks)
         return
 
-    model_device = next(model.parameters()).device
-    if model_device.type != "cpu":
-        # If we're using an accelerator, rebalance data to match GPU ranks
-        data = bodo.rebalance(data, dests=gpu_ranks)
-
-    # Train on data
+    # train on data
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     for epoch in range(config.get("epochs", 5)):
-        batch_size = config.get("batch_size", 2)
-        for i in range(0, len(data), batch_size):
-            batch = data[i : i + batch_size]
-            batch_tensor = torch.tensor(batch.to_numpy("float32")).to(model_device)
-            inputs = batch_tensor[:, :2]
-            labels = batch_tensor[:, 2].unsqueeze(1)
+        for batch in dataloader:
+            inputs = batch[:, :2]
+            labels = batch[:, 2].unsqueeze(1)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-
-        # Create checkpoint
-        base_model = (model.module
-            if isinstance(model, DistributedDataParallel) else model)
+        # Create checkpoint.
+        base_model = (
+            model.module
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel)
+            else model
+        )
         torch.distributed.checkpoint.state_dict_saver.save(
             {"model_state_dict": base_model.state_dict()},
             checkpoint_id=config["checkpoint_dir"],
         )
-
-        print(f"Epoch {epoch}, Loss: {loss.item()}")
-
+    print(f"Epoch {epoch}, Loss: {loss.item()}")
 
 bodo.ai.train.torch_train(
     train_loop,
