@@ -381,7 +381,7 @@ def _agg_to_func_name(func):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
 
-    # TODO[]: support SUM0 initialization properly
+    # TODO[BSE-5163]: support SUM0 initialization properly
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
