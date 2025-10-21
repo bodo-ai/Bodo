@@ -101,7 +101,7 @@ def test_tpch_q07():
 
 
 def test_tpch_q08():
-    run_tpch_query_test(tpch.tpch_q08)
+    run_tpch_query_test(tpch.tpch_q08, ctes_created=1)
 
 
 def test_tpch_q09():
