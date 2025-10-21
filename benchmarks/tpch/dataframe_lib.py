@@ -975,6 +975,7 @@ def main():
     data_set = args.folder
     scale_factor = args.scale_factor
     backend = args.backend
+    assert backend in ["bodo", "pandas", "pd"]
 
     queries = list(range(1, 23))
     if args.queries is not None:
