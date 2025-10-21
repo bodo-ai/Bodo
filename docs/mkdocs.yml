@@ -188,6 +188,7 @@ nav:
           - Input/Output: api_docs/dataframe_lib/io.md
           - Series : api_docs/dataframe_lib/series
           - GroupBy : api_docs/dataframe_lib/groupby
+          - AI Integration: api_docs/dataframe_lib/ai.md
       - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
       - Bodo JIT Compiler Python Support API Reference:
         - api_docs/python/index.md

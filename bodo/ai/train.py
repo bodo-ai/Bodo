@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import socket
+import typing
 from typing import Any, Callable, Literal
+
+if typing.TYPE_CHECKING:
+    from pandas import DataFrame, Series
 
 from bodo.mpi4py import MPI
 
@@ -31,7 +35,13 @@ def _get_open_port():
         s.close()
 
 
+pytorch_rank, pytorch_world_size, device = None, None, None
+
+
 def _init_process_group():
+    # We don't want users to have to pass these around in the train loop
+    # so we set them as globals.
+    global pytorch_rank, pytorch_world_size, device
     import torch
     import torch.distributed as dist
 
@@ -62,7 +72,7 @@ def _init_process_group():
                 device = torch.device(f"cuda:{pytorch_rank % num_local_gpus}")
         else:
             pytorch_rank = None
-    npes = (
+    pytorch_world_size = (
         len(gpu_ranks) if device != torch.device("cpu") else MPI.COMM_WORLD.Get_size()
     )
 
@@ -82,9 +92,9 @@ def _init_process_group():
                     backend=backend,
                     init_method=tcp_conn_str,
                     rank=pytorch_rank,
-                    world_size=npes,
+                    world_size=pytorch_world_size,
                 )
-            return pytorch_rank, npes, device
+            return
         except Exception as e:
             if i == PROCESS_GROUP_INIT_RETRIES - 1:
                 raise e
@@ -107,9 +117,19 @@ def torch_train(
         torch_import_guard()
         import torch.distributed as dist
 
-        train_loop_per_worker(*args, **kwargs)
-        if dist.is_initialized():
-            dist.destroy_process_group()
+        # Set up the process group for this worker
+        # Make these globals so that prepare_model and prepare_dataset
+        # can access them without needing to pass them around
+        # by the user in the train loop.
+        global pytorch_rank, pytorch_world_size, device
+        _init_process_group()
+        try:
+            train_loop_per_worker(*args, **kwargs)
+        finally:
+            # Clean up the process group
+            if dist.is_initialized():
+                dist.destroy_process_group()
+            pytorch_rank, pytorch_world_size, device = None, None, None
 
     for arg in args:
         if isinstance(arg, BodoLazyWrapper):
@@ -131,7 +151,6 @@ def prepare_model(
     assert isinstance(model, torch.nn.Module), (
         "Model should be an instance of torch.nn.Module"
     )
-    pytorch_rank, pytorch_world_size, device = _init_process_group()
     if pytorch_rank is None:
         return None
 
@@ -154,3 +173,77 @@ def prepare_model(
 
             model = FSDP(model, **parallel_strategy_kwargs)
     return model
+
+
+def prepare_dataset(
+    data: DataFrame | Series,
+    batch_size: int,
+    shuffle: bool = True,
+    dataset_func: Callable | None = None,
+    collate_fn: Callable = None,
+    pin_memory: bool = False,
+    seed: int = 0,
+):
+    """
+    Prepares a Bodo DataFrame or Series as a PyTorch DataLoader for distributed training.
+    Args:
+        data (DataFrame | Series): The Bodo DataFrame or Series to prepare.
+        batch_size (int): The batch size for the DataLoader.
+        shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
+        dataset_func (Callable, optional): A function that takes in a DataFrame or Series
+            and returns a PyTorch Dataset. If None, a default PandasDataset will be used.
+        collate_fn (Callable, optional): A function to merge a list of samples to form a mini-batch, passed through to DataLoader.
+        pin_memory (bool, optional): Whether to pin memory in the DataLoader. Defaults to False.
+    Returns:
+        DataLoader: A PyTorch DataLoader for the prepared dataset.
+    """
+    torch_import_guard()
+    from pandas import DataFrame, Series
+    from torch.utils.data import DataLoader, Dataset
+
+    import bodo
+
+    from .bodo_dist_sampler import BodoDistributedSampler
+    from .pandas_dataset import PandasDataset
+
+    if dataset_func is None:
+
+        def _dataset_func(data):
+            if isinstance(data, Series):
+                data = data.to_frame()
+            return PandasDataset(data)
+
+        dataset_func = _dataset_func
+
+    gpu_ranks = bodo.get_gpu_ranks()
+
+    # Move data to worker ranks
+    if len(gpu_ranks) != 0:
+        data = bodo.rebalance(data, dests=gpu_ranks)
+
+    assert isinstance(data, (DataFrame, Series)), (
+        "Dataset must be a DataFrame or Series"
+    )
+
+    dataset = dataset_func(data)
+    assert isinstance(dataset, Dataset), (
+        "dataset_func must return a torch.utils.data.Dataset"
+    )
+
+    sampler = BodoDistributedSampler(
+        dataset,
+        shuffle=shuffle,
+        worker_ranks=gpu_ranks
+        if len(gpu_ranks) != 0
+        else list(range(MPI.COMM_WORLD.Get_size())),
+        seed=seed,
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=sampler,
+        pin_memory=pin_memory,
+        collate_fn=collate_fn,
+    )
+    return dataloader
