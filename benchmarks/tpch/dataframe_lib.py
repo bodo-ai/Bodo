@@ -347,16 +347,27 @@ def tpch_q08(
     jn7["VOLUME"] = jn7["L_EXTENDEDPRICE"] * (1.0 - jn7["L_DISCOUNT"])
     jn7 = jn7.rename(columns={"N_NAME": "NATION"})
 
-    def udf(df):
-        demonimator = df["VOLUME"].sum()
-        df = df[df["NATION"] == var1]
-        numerator = df["VOLUME"].sum()
-        return round(numerator / demonimator, 2)
+    # denominator: total volume per year
+    denom = (
+        jn7.groupby("O_YEAR", as_index=False)["VOLUME"]
+        .sum()
+        .rename(columns={"VOLUME": "TOTAL_VOLUME"})
+    )
 
-    gb = jn7.groupby("O_YEAR", as_index=False)
-    agg = gb.apply(udf, include_groups=False)
-    agg.columns = ["O_YEAR", "MKT_SHARE"]
+    # numerator: Brazil volume per year
+    num = (
+        jn7[jn7["NATION"] == var1]
+        .groupby("O_YEAR", as_index=False)["VOLUME"]
+        .sum()
+        .rename(columns={"VOLUME": "BRAZIL_VOLUME"})
+    )
+
+    # join and compute ratio
+    agg = denom.merge(num, on="O_YEAR", how="left").fillna({"BRAZIL_VOLUME": 0})
+    agg["MKT_SHARE"] = (agg["BRAZIL_VOLUME"] / agg["TOTAL_VOLUME"]).round(2)
+
     result_df = agg.sort_values("O_YEAR")
+    result_df = result_df[["O_YEAR", "MKT_SHARE"]]
 
     return result_df
 
@@ -778,137 +789,137 @@ def tpch_q22(customer, orders, pd=bodo.pandas):
 
 @timethis
 @collect_datasets
-def q01(lineitem):
-    print(tpch_q01(lineitem))
+def q01(lineitem, pd):
+    print(tpch_q01(lineitem, pd))
 
 
 @timethis
 @collect_datasets
-def q02(part, partsupp, supplier, nation, region):
-    print(tpch_q02(part, partsupp, supplier, nation, region))
+def q02(part, partsupp, supplier, nation, region, pd):
+    print(tpch_q02(part, partsupp, supplier, nation, region, pd))
 
 
 @timethis
 @collect_datasets
-def q03(lineitem, orders, customer):
-    print(tpch_q03(lineitem, orders, customer))
+def q03(lineitem, orders, customer, pd):
+    print(tpch_q03(lineitem, orders, customer, pd))
 
 
 @timethis
 @collect_datasets
-def q04(lineitem, orders):
-    print(tpch_q04(lineitem, orders))
+def q04(lineitem, orders, pd):
+    print(tpch_q04(lineitem, orders, pd))
 
 
 @timethis
 @collect_datasets
-def q05(lineitem, orders, customer, nation, region, supplier):
-    print(tpch_q05(lineitem, orders, customer, nation, region, supplier))
+def q05(lineitem, orders, customer, nation, region, supplier, pd):
+    print(tpch_q05(lineitem, orders, customer, nation, region, supplier, pd))
 
 
 @timethis
 @collect_datasets
-def q06(lineitem):
-    print(tpch_q06(lineitem))
+def q06(lineitem, pd):
+    print(tpch_q06(lineitem, pd))
 
 
 @timethis
 @collect_datasets
-def q07(lineitem, supplier, orders, customer, nation):
-    print(tpch_q07(lineitem, supplier, orders, customer, nation))
+def q07(lineitem, supplier, orders, customer, nation, pd):
+    print(tpch_q07(lineitem, supplier, orders, customer, nation, pd))
 
 
 @timethis
 @collect_datasets
-def q08(part, lineitem, supplier, orders, customer, nation, region):
-    print(tpch_q08(part, lineitem, supplier, orders, customer, nation, region))
+def q08(part, lineitem, supplier, orders, customer, nation, region, pd):
+    print(tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd))
 
 
 @timethis
 @collect_datasets
-def q09(lineitem, orders, part, nation, partsupp, supplier):
-    print(tpch_q09(lineitem, orders, part, nation, partsupp, supplier))
+def q09(lineitem, orders, part, nation, partsupp, supplier, pd):
+    print(tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
-def q10(lineitem, orders, customer, nation):
-    print(tpch_q10(lineitem, orders, customer, nation))
+def q10(lineitem, orders, customer, nation, pd):
+    print(tpch_q10(lineitem, orders, customer, nation, pd))
 
 
 @timethis
 @collect_datasets
-def q11(partsupp, supplier, nation, scale_factor):
-    print(tpch_q11(partsupp, supplier, nation, scale_factor))
+def q11(partsupp, supplier, nation, scale_factor, pd):
+    print(tpch_q11(partsupp, supplier, nation, scale_factor, pd))
 
 
 @timethis
 @collect_datasets
-def q12(lineitem, orders):
-    print(tpch_q12(lineitem, orders))
+def q12(lineitem, orders, pd):
+    print(tpch_q12(lineitem, orders, pd))
 
 
 @timethis
 @collect_datasets
-def q13(customer, orders):
-    print(tpch_q13(customer, orders))
+def q13(customer, orders, pd):
+    print(tpch_q13(customer, orders, pd))
 
 
 @timethis
 @collect_datasets
-def q14(lineitem, part):
-    print(tpch_q14(lineitem, part))
+def q14(lineitem, part, pd):
+    print(tpch_q14(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
-def q15(lineitem, supplier):
-    print(tpch_q15(lineitem, supplier))
+def q15(lineitem, supplier, pd):
+    print(tpch_q15(lineitem, supplier, pd))
 
 
 @timethis
 @collect_datasets
-def q16(part, partsupp, supplier):
-    print(tpch_q16(part, partsupp, supplier))
+def q16(part, partsupp, supplier, pd):
+    print(tpch_q16(part, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
-def q17(lineitem, part):
-    print(tpch_q17(lineitem, part))
+def q17(lineitem, part, pd):
+    print(tpch_q17(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
-def q18(lineitem, orders, customer):
-    print(tpch_q18(lineitem, orders, customer))
+def q18(lineitem, orders, customer, pd):
+    print(tpch_q18(lineitem, orders, customer, pd))
 
 
 @timethis
 @collect_datasets
-def q19(lineitem, part):
-    print(tpch_q19(lineitem, part))
+def q19(lineitem, part, pd):
+    print(tpch_q19(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
-def q20(lineitem, part, nation, partsupp, supplier):
-    print(tpch_q20(lineitem, part, nation, partsupp, supplier))
+def q20(lineitem, part, nation, partsupp, supplier, pd):
+    print(tpch_q20(lineitem, part, nation, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
-def q21(lineitem, orders, supplier, nation):
-    print(tpch_q21(lineitem, orders, supplier, nation))
+def q21(lineitem, orders, supplier, nation, pd):
+    print(tpch_q21(lineitem, orders, supplier, nation, pd))
 
 
 @timethis
 @collect_datasets
-def q22(customer, orders):
-    print(tpch_q22(customer, orders))
+def q22(customer, orders, pd):
+    print(tpch_q22(customer, orders, pd))
 
 
-def run_queries(root: str, queries: list[int], scale_factor: float):
+def run_queries(root: str, queries: list[int], scale_factor: float, backend):
     total_start = time.time()
     print("Start data loading")
     queries_to_args = {}
@@ -917,8 +928,10 @@ def run_queries(root: str, queries: list[int], scale_factor: float):
         for arg in _query_to_args[query]:
             if arg == "scale_factor":
                 args.append(scale_factor)
+            elif arg == "pd":
+                args.append(backend)
             else:
-                args.append(globals()[f"load_{arg}"](root))
+                args.append(globals()[f"load_{arg}"](root, pd=backend))
         queries_to_args[query] = args
     print(f"Data loading time (s): {time.time() - total_start}")
 
@@ -950,17 +963,28 @@ def main():
         default=1.0,
         help="Scale factor (used in query 11).",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        required=False,
+        default="bodo",
+        help="Which backend to use, bodo or pandas.",
+    )
 
     args = parser.parse_args()
     data_set = args.folder
     scale_factor = args.scale_factor
+    backend = args.backend
 
     queries = list(range(1, 23))
     if args.queries is not None:
         queries = args.queries
     print(f"Queries to run: {queries}")
 
-    run_queries(data_set, queries=queries, scale_factor=scale_factor)
+    backend_module = bodo.pandas if backend == "bodo" else pd
+    run_queries(
+        data_set, queries=queries, scale_factor=scale_factor, backend=backend_module
+    )
 
 
 if __name__ == "__main__":
