@@ -363,7 +363,7 @@ def tpch_q08(
     )
 
     # join and compute ratio
-    agg = denom.merge(num, on="O_YEAR", how="left").fillna({"BRAZIL_VOLUME": 0})
+    agg = denom.merge(num, on="O_YEAR", how="left")
     agg["MKT_SHARE"] = (agg["BRAZIL_VOLUME"] / agg["TOTAL_VOLUME"]).round(2)
 
     result_df = agg.sort_values("O_YEAR")
