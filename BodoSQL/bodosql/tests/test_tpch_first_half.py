@@ -391,6 +391,7 @@ def test_tpch_q4(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q5(tpch_data, memory_leak_check):
     tpch_query = """select
                       n_name,

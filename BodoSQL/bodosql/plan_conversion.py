@@ -182,15 +182,18 @@ def java_binop_to_python_expr(kind, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
-        expr = ArithOpExpression(left.empty_data, left, right, "__add__")
+        out_empty = left.empty_data.iloc[:, 0] + right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
 
     if kind.equals(SqlKind.MINUS):
-        expr = ArithOpExpression(left.empty_data, left, right, "__sub__")
+        out_empty = left.empty_data.iloc[:, 0] - right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
-        expr = ArithOpExpression(left.empty_data, left, right, "__mul__")
+        out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__mul__")
         return expr
 
     # Comparison operators
