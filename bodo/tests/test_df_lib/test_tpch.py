@@ -27,7 +27,17 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
     pd_args = [
         getattr(tpch, f"load_{key}")(datapath, **pd_kwargs)
         for key in tpch._query_to_args[int(query_func.__name__[-2:])]
-        if key != "scale_factor"
+        if key
+        in [
+            "lineitem",
+            "part",
+            "orders",
+            "customer",
+            "nation",
+            "region",
+            "supplier",
+            "partsupp",
+        ]
     ]
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
