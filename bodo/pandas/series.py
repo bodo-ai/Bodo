@@ -1008,9 +1008,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         elif ddof == 0:
             df = _compute_series_reduce(self, ["std_pop"])
         else:
-            raise NotImplementedError(
-                "Series std currently only supports ddof of 1 or 0"
-            )
+            n = self.count()
+            smean = self.mean()
+            squared_diffs = (self - smean) ** 2
+            variance = squared_diffs.sum() / (n - ddof)
+            return numpy.sqrt(float(variance))
         if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
