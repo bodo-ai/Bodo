@@ -19,7 +19,7 @@ Currently, Bodo automatically supports the following plotting APIs.
 -   `matplotlib.pyplot.contour`
 -   `matplotlib.pyplot.contourf`
 -   `matplotlib.pyplot.quiver`
--   `matplotlib.pyplot.pie` 
+-   `matplotlib.pyplot.pie`
     (`autopct` must be a constant boolean or omitted)
 -   `matplotlib.pyplot.fill`
 -   `matplotlib.pyplot.fill_between`
@@ -81,7 +81,7 @@ dist_plot(100)
 [output:0]
 ```
 
-![image](../bodo_tutorial_files/bodo_tutorial_83_1.png)
+![image](../../bodo_tutorial_files/bodo_tutorial_83_1.png)
 
 ## Formatting APIs
 
@@ -97,7 +97,7 @@ modify your figures.
 -   `matplotlib.pyplot.tight_layout`
 -   `matplotlib.pyplot.savefig`
 -   `matplotlib.pyplot.draw`
--   `matplotlib.pyplot.show` 
+-   `matplotlib.pyplot.show`
     (Output is only displayed on rank 0)
 -   `matplotlib.figure.Figure.suptitle`
 -   `matplotlib.figure.Figure.tight_layout`

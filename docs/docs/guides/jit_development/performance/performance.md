@@ -106,7 +106,7 @@ And the time it takes can be compared with Python performance. Here, we
 have a `5.06/0.57 ~= 9x` speedup (from parallelism and sequential
 optimizations).
 
-In addition, [SPMD launch mode](../bodo_parallelism/bodo_parallelism_basics.md#spmd) is recommended
+In addition, [SPMD launch mode][spmd] is recommended
 for performance measurements since it has lower overheads.
 
 

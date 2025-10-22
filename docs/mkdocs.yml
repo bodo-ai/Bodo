@@ -6,7 +6,7 @@ site_description: >-
   Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.
 
 # Copyright
-copyright: Copyright &copy; 2019 - 2024 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
+copyright: Copyright &copy; 2019 - 2025 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
 
 # Configuration
 theme:
@@ -132,24 +132,45 @@ nav:
     - Platform SDK Quick Start: quick_start/quickstart_platform_sdk.md
 
   - Guides:
-      - integrating_bodo/index.md
+      - guides/index.md
       - Installation and Setup:
-          - installation_and_setup/index.md
+          - guides/installation_and_setup/index.md
           - Local and On-Prem Cluster Installation:
-            - Installing Bodo Engine: installation_and_setup/install.md
-            - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
-            - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
+            - Installing Bodo Engine: guides/installation_and_setup/install.md
+            - Recommended MPI Settings: guides/installation_and_setup/recommended_mpi_settings.md
+            - Recommended Cluster Configuration: guides/installation_and_setup/recommended_cluster_config.md
           - Bodo Cloud Platform:
-            - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
-            - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
-      - Python JIT Development: quick_start/dev_guide.md
+            - Bodo Platform on AWS: guides/installation_and_setup/bodo_platform_aws.md
+            - Bodo Platform on Azure: guides/installation_and_setup/bodo_platform_azure.md
+      - Python BodoDataFrames: guides/dataframes/dataframes_intro.md
+      - Iceberg:
+          - Introduction: guides/iceberg/intro.md
+          - Reading and Writing: guides/iceberg/read_write.md
+          - Supported Data Types: guides/iceberg/data_types.md
+          - Puffin Files: guides/iceberg/puffin_files.md
+      - Python JIT Development:
+          - Bodo JIT Developer Guide: guides/jit_development/dev_guide.md
+          - Understanding Parallelism with Bodo:
+              - Basics of Bodo Parallelism: guides/jit_development/bodo_parallelism/bodo_parallelism_basics.md
+              - Advanced Parallelism Topics: guides/jit_development/bodo_parallelism/advanced.md
+              - Typing Considerations: guides/jit_development/bodo_parallelism/typing_considerations.md
+              - Unsupported Programs: guides/jit_development/bodo_parallelism/not_supported.md
+          - Scalable Data I/O with Bodo: guides/jit_development/file_io.md
+          - Using Regular Python inside JIT with @bodo.wrap_python: guides/jit_development/objmode.md
+          - Measuring Performance: guides/jit_development/performance/performance.md
+          - Caching: guides/jit_development/performance/caching.md
+          - Inlining: guides/jit_development/performance/inlining.md
+          - Bodo Errors: guides/jit_development/diagnostics_and_troubleshooting/Bodoerrors.md
+          - Compilation Tips: guides/jit_development/diagnostics_and_troubleshooting/compilation.md
+          - Verbose Mode: guides/jit_development/diagnostics_and_troubleshooting/verbose_mode.md
+      - Deploying Bodo with Kubernetes: guides/integrating_bodo/kubernetes.md
       - Bodo Cloud Platform:
           - guides/using_bodo_platform/index.md
           - Organization Basics: guides/using_bodo_platform/organization.md
           - Creating a Cluster: guides/using_bodo_platform/clusters.md
           - Using Notebooks: guides/using_bodo_platform/notebooks.md
           - Running Jobs: guides/using_bodo_platform/bodo_jobs.md
-          - Native SQL with Catalogs: integrating_bodo/database_catalog.md
+          - Native SQL with Catalogs: guides/integrating_bodo/database_catalog.md
           - Platform SDK Guide : guides/using_bodo_platform/bodo_platform_sdk_guide.md
           - Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
           - Managing Packages Manually: guides/using_bodo_platform/packages.md
@@ -158,25 +179,6 @@ nav:
           - Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
           - AWS PrivateLink: guides/using_bodo_platform/aws_private_link.md
           - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
-      - Using Regular Python inside JIT with @bodo.wrap_python: objmode.md
-      - Understanding Parallelism with Bodo:
-          - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
-          - Advanced Parallelism Topics: bodo_parallelism/advanced.md
-          - Typing Considerations: bodo_parallelism/typing_considerations.md
-          - Unsupported Programs: bodo_parallelism/not_supported.md
-      - Scalable Data I/O with Bodo: file_io.md
-      - Iceberg:
-          - Introduction: iceberg/intro.md
-          - Reading and Writing: iceberg/read_write.md
-          - Supported Data Types: iceberg/data_types.md
-          - Puffin Files: iceberg/puffin_files.md
-      - Measuring Performance: performance/performance.md
-      - Caching: performance/caching.md
-      - Inlining: performance/inlining.md
-      - Bodo Errors: diagnostics_and_troubleshooting/Bodoerrors.md
-      - Compilation Tips: diagnostics_and_troubleshooting/compilation.md
-      - Verbose Mode: diagnostics_and_troubleshooting/verbose_mode.md
-      - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
   - API Reference:
       - api_docs/index.md
       - Bodo DataFrames API:
@@ -186,6 +188,7 @@ nav:
           - Input/Output: api_docs/dataframe_lib/io.md
           - Series : api_docs/dataframe_lib/series
           - GroupBy : api_docs/dataframe_lib/groupby
+          - AI Integration: api_docs/dataframe_lib/ai.md
       - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
       - Bodo JIT Compiler Python Support API Reference:
         - api_docs/python/index.md
