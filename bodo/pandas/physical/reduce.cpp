@@ -177,7 +177,10 @@ OperatorResult PhysicalReduce::ConsumeBatch(
                     std::make_unique<ReductionFunctionMean>());
             } else if (func_name == "std") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionStd>());
+                    std::make_unique<ReductionFunctionStd>(1));
+            } else if (func_name == "std_pop") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionStd>(0));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
@@ -299,9 +302,9 @@ void ReductionFunctionStd::Finalize() {
     CHECK_ARROW(numerator_res.status(), "Error in Arrow compute 'subtract'");
     arrow::Datum numerator_datum = numerator_res.ValueUnsafe();
 
-    // --- Calculate the denominator: count - 1 ---
+    // --- Calculate the denominator: count - ddof ---
     arrow::Result<arrow::Datum> denominator_res = arrow::compute::CallFunction(
-        "subtract", {count_datum, arrow::Datum(1)});
+        "subtract", {count_datum, arrow::Datum(ddof)});
     CHECK_ARROW(denominator_res.status(), "Error in Arrow compute 'subtract'");
     arrow::Datum denominator_datum = denominator_res.ValueUnsafe();
 
