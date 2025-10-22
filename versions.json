@@ -115,42 +115,5 @@
     "version": "2024.1",
     "title": "2024.1",
     "aliases": []
-  },
-  {
-    "version": "2023.12",
-    "title": "2023.12",
-    "aliases": []
-  },
-  {
-    "version": "2023.11",
-    "title": "2023.11",
-    "aliases": []
-  },
-  {
-    "version": "2023.10",
-    "title": "2023.10",
-    "aliases": []
-  },
-  {
-    "version": "2023.9",
-    "title": "2023.9",
-    "aliases": []
-  },
-  {
-    "version": "2023.7",
-    "title": "2023.7",
-    "aliases": []
-  },
-  {
-    "version": "2023.6",
-    "title": "2023.6",
-    "aliases": []
-  },
-  {
-    "version": "2023.1",
-    "title": "2023.1",
-    "aliases": [
-      "push"
-    ]
   }
 ]
