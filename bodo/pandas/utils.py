@@ -4,12 +4,10 @@ import atexit
 import functools
 import importlib
 import inspect
-import sys
 import time
 import types as pytypes
 import typing as pt
 import warnings
-
 
 import pandas as pd
 import pyarrow as pa
@@ -454,8 +452,7 @@ def check_args_fallback(
                     )
                     if except_msg:
                         msg += f"\nException: {except_msg}"
-                    if bodo.dataframe_library_warn:
-                        warnings.warn(BodoLibFallbackWarning(msg))
+                    fallback_warn(msg)
                     py_res = getattr(py_pkg, func.__name__)(*args, **kwargs)
                     return convert_to_bodo(py_res)
             else:
@@ -1176,6 +1173,11 @@ def ensure_datetime64ns(df):
     return df
 
 
+def fallback_warn(msg):
+    if bodo.dataframe_library_warn:
+        warnings.warn(BodoLibFallbackWarning(msg))
+
+
 class FallbackContext:
     """Context manager for tracking nested fallback calls."""
 
@@ -1216,8 +1218,7 @@ def fallback_wrapper(self, attr, name, msg):
                 pass
 
             nonlocal msg
-            if bodo.dataframe_library_warn:
-                warnings.warn(BodoLibFallbackWarning(msg))
+            fallback_warn(msg)
             msg = ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
@@ -1242,12 +1243,9 @@ def fallback_wrapper(self, attr, name, msg):
                 if isinstance(self.dtype, pd.ArrowDtype) and pa.types.is_timestamp(
                     self.dtype.pyarrow_dtype
                 ):
-                    if bodo.dataframe_library_warn:
-                        warnings.warn(
-                            BodoLibFallbackWarning(
-                                "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
-                            )
-                        )
+                    fallback_warn(
+                        "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
+                    )
                     converted = pd_self.array._pa_array.to_pandas()
                     return convert_to_bodo(
                         getattr(converted, attr.__name__)(*args[1:], **kwargs)
@@ -1518,6 +1516,7 @@ def insert_bodo_scalar(
     )
     return new_plan, col_expr
 
+
 def log_wrapper(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -1525,6 +1524,7 @@ def log_wrapper(func):
         frame = inspect.currentframe()
         caller_frame = frame.f_back
         from bodo.pandas import BodoDataFrame, BodoSeries
+
         log_entry = True
         while caller_frame:
             caller_module = caller_frame.f_globals.get("__name__", "")
@@ -1535,6 +1535,7 @@ def log_wrapper(func):
 
         # Only log if the caller is *not* in the bodo.* hierarchy
         if log_entry:
+
             def log_repr(x):
                 if x.__class__.__name__ == "BodoDataFrame":
                     return f"df{id(x)}"
@@ -1542,10 +1543,13 @@ def log_wrapper(func):
                     return f"s{id(x)}"
                 else:
                     return f"{type(x).__name__}({repr(x)})"
-            arg_str = ", ".join([
-                *[log_repr(a) for a in args],
-                *[f"{k}={log_repr(v)}" for k, v in kwargs.items()]
-            ])
+
+            arg_str = ", ".join(
+                [
+                    *[log_repr(a) for a in args],
+                    *[f"{k}={log_repr(v)}" for k, v in kwargs.items()],
+                ]
+            )
             call_str = f"{func.__module__}.{func.__qualname__}({arg_str})\n"
 
         ret = func(*args, **kwargs)
@@ -1558,7 +1562,9 @@ def log_wrapper(func):
                 _log_file.write(call_str)
                 _log_file.flush()
         return ret
+
     return wrapper
+
 
 def wrap_module_functions_and_methods(module):
     if not bodo.dataframe_library_capture:
@@ -1566,18 +1572,23 @@ def wrap_module_functions_and_methods(module):
     with open("bodo.capture", "a") as _log_file:
         for name, obj in vars(module).items():
             # Wrap top-level functions
-            if isinstance(obj, pytypes.FunctionType) and obj.__module__ == module.__name__:
-                #print("wrapping top-level function", module.__name__, name, file=_log_file)
+            if (
+                isinstance(obj, pytypes.FunctionType)
+                and obj.__module__ == module.__name__
+            ):
+                # print("wrapping top-level function", module.__name__, name, file=_log_file)
                 setattr(module, name, log_wrapper(obj))
 
             # Wrap methods in classes
             if inspect.isclass(obj) and obj.__module__ == module.__name__:
                 for attr_name, attr in vars(obj).items():
-                    if isinstance(attr, (pytypes.FunctionType, classmethod, staticmethod)):
-                        #if module.__name__ == "bodo.pandas.frame" and name == "BodoDataFrameLocIndexer" and attr_name == "__init__":
-                            #breakpoint()
+                    if isinstance(
+                        attr, (pytypes.FunctionType, classmethod, staticmethod)
+                    ):
+                        # if module.__name__ == "bodo.pandas.frame" and name == "BodoDataFrameLocIndexer" and attr_name == "__init__":
+                        # breakpoint()
                         #    pass
-                        #print("wrapping class function", module.__name__, name, attr_name, file=_log_file)
+                        # print("wrapping class function", module.__name__, name, attr_name, file=_log_file)
                         original = attr
                         if isinstance(attr, (classmethod, staticmethod)):
                             original = attr.__func__

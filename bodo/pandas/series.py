@@ -79,6 +79,7 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
+    fallback_warn,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -858,8 +859,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
 
                 self_arg = self.execute_plan()
 
@@ -1400,10 +1400,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Series.cumsum is not implemented in Bodo DataFrames yet. "
             "Falling back to Pandas (may be slow or run out of memory)."
         )
-        if bodo.dataframe_library_warn:
-            warnings.warn(BodoLibFallbackWarning(msg))
-        with bodo.pandas.utils.FallbackContext():
-            py_res = super().cumsum(axis, skipna, *args, **kwargs)
+        fallback_warn(msg)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            with bodo.pandas.utils.FallbackContext():
+                py_res = super().cumsum(axis, skipna, *args, **kwargs)
 
         # Convert objects to Bodo before returning them to the user.
         if bodo.pandas.utils.FallbackContext.is_top_level():
@@ -1442,8 +1443,7 @@ class BodoStringMethods:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -1627,10 +1627,7 @@ class BodoSeriesAiMethods:
         self,
         tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("tokenize")
 
         def per_row(tokenizer, row):
             return tokenizer.encode(row, add_special_tokens=True)
@@ -1654,10 +1651,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **generation_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("llm_generate")
 
         if backend == Backend.BEDROCK:
             if model is None:
@@ -1744,6 +1738,13 @@ class BodoSeriesAiMethods:
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
+    def _check_ai_input(self, func: str):
+        if self._series.dtype not in ("string[pyarrow]", "large_string[pyarrow]"):
+            raise TypeError(
+                f"Series.ai.{func}() got unsupported dtype: {self._series.dtype},"
+                " expected either large_string[pyarrow] or string[pyarrow]."
+            )
+
     def _llm_generate_bedrock(
         self,
         modelId: str,
@@ -1806,10 +1807,7 @@ class BodoSeriesAiMethods:
         backend: Backend = Backend.OPENAI,
         **embedding_kwargs,
     ) -> BodoSeries:
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
+        self._check_ai_input("embed")
 
         if backend == Backend.BEDROCK:
             if model is None:
@@ -2050,8 +2048,7 @@ class BodoDatetimeProperties:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
     @check_args_fallback(unsupported="none")

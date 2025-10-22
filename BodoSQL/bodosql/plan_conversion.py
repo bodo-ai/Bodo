@@ -9,11 +9,14 @@ import bodo
 import bodo.pandas as bd
 import bodosql
 from bodo.pandas.plan import (
+    AggregateExpression,
     ArithOpExpression,
     ComparisonOpExpression,
     ConstantExpression,
+    LogicalAggregate,
     LogicalComparisonJoin,
     LogicalFilter,
+    LogicalOrder,
     LogicalProjection,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -85,6 +88,13 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
+
+    if java_class_name == "BodoPhysicalAggregate" and not java_plan.usesGroupingSets():
+        # TODO: support grouping sets
+        return java_agg_to_python_agg(ctx, java_plan)
+
+    if java_class_name == "BodoPhysicalSort":
+        return java_sort_to_python_sort(ctx, java_plan)
 
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
@@ -253,3 +263,94 @@ def is_int_type(java_type):
         or type_name.equals(SqlTypeName.INTEGER)
         or type_name.equals(SqlTypeName.BIGINT)
     )
+
+
+def java_agg_to_python_agg(ctx, java_plan):
+    """Convert a BodoSQL Java aggregation plan to a Python aggregation plan."""
+    from bodo.pandas.groupby import GroupbyAggFunc, _get_agg_output_type
+
+    keys = list(java_plan.getGroupSet().toList())
+
+    if len(keys) == 0:
+        raise NotImplementedError("Aggregations without group by not supported yet")
+
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+
+    exprs = []
+    out_types = [input_plan.pa_schema.field(k).type for k in keys]
+    for func in java_plan.getAggCallList():
+        if func.hasFilter():
+            raise NotImplementedError("Filtered aggregations are not supported yet")
+        agg = func.getAggregation()
+        func_name = _agg_to_func_name(agg)
+        arg_cols = list(func.getArgList())
+        assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
+        in_type = input_plan.pa_schema.field(arg_cols[0]).type
+        out_type = _get_agg_output_type(
+            GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+        )
+        out_types.append(out_type)
+        exprs.append(
+            AggregateExpression(
+                pd.Series([], dtype=pd.ArrowDtype(out_type)),
+                input_plan,
+                func_name,
+                None,
+                arg_cols,
+                False,
+            )
+        )
+
+    names = list(java_plan.getRowType().getFieldNames())
+    new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
+    empty_out_data = arrow_to_empty_df(new_schema)
+    plan = LogicalAggregate(
+        empty_out_data,
+        input_plan,
+        keys,
+        exprs,
+    )
+    return plan
+
+
+def _agg_to_func_name(agg):
+    """Map a Calcite aggregation to a groupby function name."""
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+    kind = agg.getKind()
+    if kind.equals(SqlKind.SUM):
+        return "sum"
+
+    raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
+
+
+def java_sort_to_python_sort(ctx, java_plan):
+    """Convert a BodoSQL Java sort plan to a Python sort plan."""
+
+    if java_plan.getFetch() is not None or java_plan.getOffset() is not None:
+        raise NotImplementedError("LIMIT/OFFSET in sort not supported yet")
+
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+
+    sort_collations = java_plan.getCollation().getFieldCollations()
+    key_col_inds = []
+    ascending = []
+    na_position = []
+    for collation in sort_collations:
+        field_index = collation.getFieldIndex()
+        descending = collation.getDirection().isDescending()
+        is_nulls_first = gateway.jvm.com.bodosql.calcite.adapter.bodo.BodoPhysicalSort.Companion.isNullsFirst(
+            collation
+        )
+        key_col_inds.append(field_index)
+        ascending.append(not descending)
+        na_position.append(is_nulls_first)
+
+    sorted_plan = LogicalOrder(
+        input_plan.empty_data,
+        input_plan,
+        ascending,
+        na_position,
+        key_col_inds,
+        input_plan.pa_schema,
+    )
+    return sorted_plan

@@ -76,6 +76,7 @@ from bodo.pandas.utils import (
     _fix_multi_index_names,
     _get_empty_series_arrow,
     check_args_fallback,
+    fallback_warn,
     fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -96,22 +97,12 @@ class BodoDataFrameLocIndexer(_LocIndexer):
             if row_sel == slice(None, None, None):
                 return self.df.__getitem__(col_sel)
             else:
-                if bodo.dataframe_library_warn:
-                    warnings.warn(
-                        BodoLibFallbackWarning(
-                            "Selected variant of BodoDataFrame.loc[] not supported."
-                        )
-                    )
-                return super(self.df).loc.__getitem__(key)
+                fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
+                return super(pd.DataFrame, self.df).loc.__getitem__(key)
 
-        if bodo.dataframe_library_warn:
-            warnings.warn(
-                BodoLibFallbackWarning(
-                    "Selected variant of BodoDataFrame.loc[] not supported."
-                )
-            )
+        fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
         # Delegate to original behavior
-        return super(BodoDataFrame, self.df).loc.__getitem__(key)
+        return super(pd.DataFrame, self.df).loc.__getitem__(key)
 
 
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
@@ -957,8 +948,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
-                if bodo.dataframe_library_warn:
-                    warnings.warn(BodoLibFallbackWarning(msg))
+                fallback_warn(msg)
 
                 df_arg = self.execute_plan()
 
@@ -1916,5 +1906,6 @@ def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
         return plan_optimizer.CJoinType.INNER
     else:
         raise ValueError(f"Invalid join type: {how}")
+
 
 wrap_module_functions_and_methods(sys.modules[__name__])
