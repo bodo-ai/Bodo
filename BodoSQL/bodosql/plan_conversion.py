@@ -34,6 +34,7 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name in (
         "PandasToBodoPhysicalConverter",
+        "IcebergToBodoPhysicalConverter",
         "CombineStreamsExchange",
         "SeparateStreamExchange",
     ):
@@ -62,6 +63,30 @@ def java_plan_to_python_plan(ctx, java_plan):
             raise NotImplementedError(
                 f"Table type {type(table)} not supported in C++ backend yet"
             )
+
+    if java_class_name == "IcebergTableScan":
+        catalog_table = java_plan.getCatalogTable()
+        catalog = catalog_table.getCatalog()
+        # TODO: support other catalog types
+        if catalog.getClass().getSimpleName() != "FileSystemCatalog":
+            raise NotImplementedError(
+                "Only FileSystemCatalog is supported in IcebergTableScan in C++ backend"
+            )
+
+        # Get table info
+        full_table_path = catalog_table.getFullPath()
+        schema_path = catalog_table.getParentFullPath()
+        field_names = java_plan.deriveRowType().getFieldNames()
+
+        # Get file system path
+        file_path = catalog.schemaPathToFilePath(schema_path)
+        uri = file_path.toUri()
+        path_str = uri.getRawPath()
+
+        df = bd.read_iceberg(
+            full_table_path[-1], location=path_str, selected_fields=field_names
+        )
+        return df._plan
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
