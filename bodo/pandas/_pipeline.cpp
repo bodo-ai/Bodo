@@ -127,8 +127,8 @@
                   << op->ToString() << std::endl;                              \
     } while (0)
 #else
-#define DEBUG_PIPELINE_SOURCE_FINISHED(rank, op) \
-    do {                                         \
+#define DEBUG_PIPELINE_FINALIZE(rank, op) \
+    do {                                  \
     } while (0)
 #endif
 
