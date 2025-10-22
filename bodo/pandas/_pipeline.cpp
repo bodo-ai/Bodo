@@ -120,6 +120,18 @@
     } while (0)
 #endif
 
+#ifdef DEBUG_PIPELINE
+#define DEBUG_PIPELINE_FINALIZE(rank, op)                                      \
+    do {                                                                       \
+        std::cout << "Rank " << rank << " Pipeline::Execute calling Finalize " \
+                  << op->ToString() << std::endl;                              \
+    } while (0)
+#else
+#define DEBUG_PIPELINE_SOURCE_FINISHED(rank, op) \
+    do {                                         \
+    } while (0)
+#endif
+
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
  * say that it HAVE_MORE_OUTPUT in which case we need to call it again for the
@@ -239,12 +251,15 @@ uint64_t Pipeline::Execute() {
         finished = midPipelineExecute(0, batch, OperatorResult::FINISHED, rank);
     }
 
+    DEBUG_PIPELINE_FINALIZE(rank, source);
     // Finalize
     source->FinalizeSource();
 
     for (auto& op : between_ops) {
+        DEBUG_PIPELINE_FINALIZE(rank, op);
         op->FinalizeProcessBatch();
     }
+    DEBUG_PIPELINE_FINALIZE(rank, sink);
     sink->FinalizeSink();
 
     executed = true;
