@@ -1576,7 +1576,6 @@ def wrap_module_functions_and_methods(module):
                 isinstance(obj, pytypes.FunctionType)
                 and obj.__module__ == module.__name__
             ):
-                # print("wrapping top-level function", module.__name__, name, file=_log_file)
                 setattr(module, name, log_wrapper(obj))
 
             # Wrap methods in classes
