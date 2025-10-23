@@ -1587,7 +1587,6 @@ def wrap_module_functions_and_methods(module):
                         # if module.__name__ == "bodo.pandas.frame" and name == "BodoDataFrameLocIndexer" and attr_name == "__init__":
                         # breakpoint()
                         #    pass
-                        # print("wrapping class function", module.__name__, name, attr_name, file=_log_file)
                         original = attr
                         if isinstance(attr, (classmethod, staticmethod)):
                             original = attr.__func__
