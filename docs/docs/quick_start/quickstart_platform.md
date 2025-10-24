@@ -72,10 +72,10 @@ Once you have ensured that you have all permissions necessary to create the reso
 3. Fill in the following values :
     - **Cloud Configuration Name**: A name for your Cloud Configuration.
     - **CloudFormation Stack Region**: Fill this with the region where you want to deploy the stack.
-   
+
 4. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
 
-    
+
     !!! note "Important"
         All the values are pre-filled in the CloudFormation template. Please do not change any values.
 

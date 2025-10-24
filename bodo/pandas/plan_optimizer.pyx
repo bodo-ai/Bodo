@@ -12,6 +12,7 @@ import operator
 from libc.stdint cimport int64_t, uint64_t, int32_t
 import pandas as pd
 import pyarrow.parquet as pq
+import numpy as np
 
 import pyarrow as pa
 import bodo
@@ -700,7 +701,7 @@ cdef unique_ptr[CExpression] make_const_expr(val):
     # See pandas scalars in pd.api.types.is_scalar
     cdef c_string val_cstr
 
-    if isinstance(val, int):
+    if isinstance(val, (int, np.int64)):
         return move(make_const_int_expr(val))
     elif isinstance(val, float):
         return move(make_const_double_expr(val))

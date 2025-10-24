@@ -52,6 +52,7 @@ When this happens, the current query plan of the DataFrame is immediately execut
 - [Input/Output][inout]
 - [Series API][series]
 - [GroupBy][groupby]
+- [AI Integration][ai]
 
 </div>
 
@@ -61,3 +62,4 @@ When this happens, the current query plan of the DataFrame is immediately execut
 [series]: ../dataframe_lib/series/index.md
 [inout]: ../dataframe_lib/io.md
 [groupby]: ../dataframe_lib/groupby/index.md
+[ai]: ../dataframe_lib/ai.md
