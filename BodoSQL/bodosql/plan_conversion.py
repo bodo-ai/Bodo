@@ -34,6 +34,7 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name in (
         "PandasToBodoPhysicalConverter",
+        "IcebergToBodoPhysicalConverter",
         "CombineStreamsExchange",
         "SeparateStreamExchange",
     ):
@@ -62,6 +63,31 @@ def java_plan_to_python_plan(ctx, java_plan):
             raise NotImplementedError(
                 f"Table type {type(table)} not supported in C++ backend yet"
             )
+
+    if java_class_name == "IcebergTableScan":
+        catalog_table = java_plan.getCatalogTable()
+        catalog = catalog_table.getCatalog()
+        # TODO: support other catalog types
+        if catalog.getClass().getSimpleName() != "FileSystemCatalog":
+            raise NotImplementedError(
+                "Only FileSystemCatalog is supported in IcebergTableScan in C++ backend"
+            )
+
+        # Get table info
+        full_table_path = catalog_table.getFullPath()
+        schema_path = catalog_table.getParentFullPath()
+        field_names = java_plan.deriveRowType().getFieldNames()
+
+        # Get file system path
+        file_path = catalog.schemaPathToFilePath(schema_path)
+        uri = file_path.toUri()
+        path_str = uri.getRawPath()
+
+        # TODO: pass filters and limits
+        df = bd.read_iceberg(
+            full_table_path[-1], location=path_str, selected_fields=field_names
+        )
+        return df._plan
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
@@ -129,7 +155,7 @@ def java_call_to_python_call(java_call, input_plan):
 
     if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
         operands = java_call.getOperands()
-        # Calciate may add more than 2 operand for the same binary operator
+        # Calcite may add more than 2 operand for the same binary operator
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         kind = op.getKind()
         return java_binop_to_python_expr(kind, op_exprs)
@@ -171,7 +197,7 @@ def java_binop_to_python_expr(kind, op_exprs):
 
     left = op_exprs[0]
 
-    # Calciate may add more than 2 operand for the same binary operator
+    # Calcite may add more than 2 operand for the same binary operator
     if len(op_exprs) > 2:
         right = java_binop_to_python_expr(kind, op_exprs[1:])
     else:
