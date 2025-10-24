@@ -12,12 +12,14 @@ from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
     ComparisonOpExpression,
+    ConjunctionOpExpression,
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalFilter,
     LogicalOrder,
     LogicalProjection,
+    UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
@@ -125,41 +127,12 @@ def java_call_to_python_call(java_call, input_plan):
     op = java_call.getOperator()
     operator_class_name = op.getClass().getSimpleName()
 
-    if (
-        operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator")
-        and len(java_call.getOperands()) == 2
-    ):
+    if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
         operands = java_call.getOperands()
-        left = java_expr_to_python_expr(operands[0], input_plan)
-        right = java_expr_to_python_expr(operands[1], input_plan)
+        # Calciate may add more than 2 operand for the same binary operator
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
-        if kind.equals(SqlKind.PLUS):
-            # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
-            # TODO: upcast output to avoid overflow?
-            expr = ArithOpExpression(left.empty_data, left, right, "__add__")
-            return expr
-
-        # Comparison operators
-        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-        if kind.equals(SqlKind.EQUALS):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.eq)
-
-        if kind.equals(SqlKind.NOT_EQUALS):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.ne)
-
-        if kind.equals(SqlKind.LESS_THAN):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.lt)
-
-        if kind.equals(SqlKind.GREATER_THAN):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.gt)
-
-        if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.ge)
-
-        if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
-            return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
+        return java_binop_to_python_expr(kind, op_exprs)
 
     if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
         operand = java_call.getOperands()[0]
@@ -174,7 +147,82 @@ def java_call_to_python_call(java_call, input_plan):
             # Cast of int to DECIMAL is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
 
-    raise NotImplementedError(f"Call operator {operator_class_name} not supported yet")
+    if (
+        operator_class_name == "SqlPostfixOperator"
+        and len(java_call.getOperands()) == 1
+    ):
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.IS_NOT_NULL):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "notnull")
+
+    raise NotImplementedError(
+        f"Call operator {operator_class_name} not supported yet: "
+        + java_call.toString()
+    )
+
+
+def java_binop_to_python_expr(kind, op_exprs):
+    """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
+
+    left = op_exprs[0]
+
+    # Calciate may add more than 2 operand for the same binary operator
+    if len(op_exprs) > 2:
+        right = java_binop_to_python_expr(kind, op_exprs[1:])
+    else:
+        right = op_exprs[1]
+
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    if kind.equals(SqlKind.PLUS):
+        # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
+        # TODO: upcast output to avoid overflow?
+        out_empty = left.empty_data.iloc[:, 0] + right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__add__")
+        return expr
+
+    if kind.equals(SqlKind.MINUS):
+        out_empty = left.empty_data.iloc[:, 0] - right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__sub__")
+        return expr
+
+    if kind.equals(SqlKind.TIMES):
+        out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__mul__")
+        return expr
+
+    # Comparison operators
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    if kind.equals(SqlKind.EQUALS):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.eq)
+
+    if kind.equals(SqlKind.NOT_EQUALS):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.ne)
+
+    if kind.equals(SqlKind.LESS_THAN):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.lt)
+
+    if kind.equals(SqlKind.GREATER_THAN):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.gt)
+
+    if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.ge)
+
+    if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
+        return ComparisonOpExpression(bool_empty_data, left, right, operator.le)
+
+    if kind.equals(SqlKind.AND):
+        return ConjunctionOpExpression(bool_empty_data, left, right, "__and__")
+
+    if kind.equals(SqlKind.OR):
+        return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
+
+    raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
 def java_join_to_python_join(ctx, java_join):
@@ -248,6 +296,18 @@ def java_literal_to_python_literal(java_literal, input_plan):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
+    if lit_type_name.equals(SqlTypeName.CHAR):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
+
+    if lit_type_name.equals(SqlTypeName.DATE):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+        # getValue2() returns an integer representing days since epoch
+        val = pa.scalar(java_literal.getValue2(), pa.date32())
+        return ConstantExpression(dummy_empty_data, input_plan, val)
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
@@ -281,14 +341,16 @@ def java_agg_to_python_agg(ctx, java_plan):
     for func in java_plan.getAggCallList():
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
-        agg = func.getAggregation()
-        func_name = _agg_to_func_name(agg)
+        func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
-        assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
-        in_type = input_plan.pa_schema.field(arg_cols[0]).type
-        out_type = _get_agg_output_type(
-            GroupbyAggFunc("dummy", func_name), in_type, "dummy"
-        )
+        if func_name == "size":
+            out_type = pa.int64()
+        else:
+            assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
+            in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            out_type = _get_agg_output_type(
+                GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+            )
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -313,12 +375,18 @@ def java_agg_to_python_agg(ctx, java_plan):
     return plan
 
 
-def _agg_to_func_name(agg):
+def _agg_to_func_name(func):
     """Map a Calcite aggregation to a groupby function name."""
+    agg = func.getAggregation()
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
-    if kind.equals(SqlKind.SUM):
+
+    # TODO[BSE-5163]: support SUM0 initialization properly
+    if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
+
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+        return "size"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 

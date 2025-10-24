@@ -235,6 +235,14 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val);
 
 /**
+ * @brief Create an expression from a constant date32.
+ *
+ * @param val - the constant date for the expression in days since epoch
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const date expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val);
+
+/**
  * @brief Create an expression that references a specified column.
  *
  * @param field_py - the data type of the specified column

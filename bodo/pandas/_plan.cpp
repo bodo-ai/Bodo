@@ -117,6 +117,11 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::DATE(duckdb::date_t(val)));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
@@ -369,6 +374,12 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
 
     switch (etype) {
         case duckdb::ExpressionType::OPERATOR_NOT: {
+            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
+                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
+            ret->children.push_back(std::move(lhs_duck));
+            return ret;
+        } break;
+        case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
                 etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
             ret->children.push_back(std::move(lhs_duck));
