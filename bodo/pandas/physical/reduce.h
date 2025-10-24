@@ -100,13 +100,16 @@ struct ReductionFunctionMean : public ReductionFunction {
 };
 
 struct ReductionFunctionStd : public ReductionFunction {
-    ReductionFunctionStd()
+    ReductionFunctionStd(int _ddof)
         : ReductionFunction(
               {"sum", "count", "sum_of_squares"}, {"add", "add", "add"},
               {ReductionType::AGGREGATION, ReductionType::AGGREGATION,
                ReductionType::AGGREGATION},
-              {nullptr, nullptr, nullptr}) {}
+              {nullptr, nullptr, nullptr}),
+          ddof(_ddof) {}
     void Finalize() override;
+
+    int ddof;
 };
 
 /**

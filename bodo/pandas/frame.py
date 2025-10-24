@@ -100,7 +100,7 @@ class BodoDataFrameLocIndexer(_LocIndexer):
 
         fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
         # Delegate to original behavior
-        return super(self.df).loc.__getitem__(key)
+        return super(pd.DataFrame, self.df).loc.__getitem__(key)
 
 
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
