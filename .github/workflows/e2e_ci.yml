@@ -102,6 +102,7 @@ jobs:
         llm_inference_speedtest.py
         pleias_ocr_correction_inference.py
         pleias_ocr_correction_tokenization.py
+        pandas_ddp_example.py
         #Tutorials/*.py
         #Getting-Started/dataframes.py
     steps:
