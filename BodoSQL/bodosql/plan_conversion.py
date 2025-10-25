@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from dataclasses import dataclass
 
 import pandas as pd
 import pyarrow as pa
@@ -26,6 +27,14 @@ from bodo.pandas.plan import (
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 
+@dataclass
+class IcebergReadInfo:
+    """Information extracted from Iceberg read plan nodes."""
+
+    scan_node: object = None
+    filters: list[object] = None
+
+
 def java_plan_to_python_plan(ctx, java_plan):
     """Convert a BodoSQL Java plan (RelNode) to a DataFrame library plan
     (bodo.pandas.plan.LazyPlan) for execution in the C++ runtime backend.
@@ -34,7 +43,6 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name in (
         "PandasToBodoPhysicalConverter",
-        "IcebergToBodoPhysicalConverter",
         "CombineStreamsExchange",
         "SeparateStreamExchange",
     ):
@@ -64,30 +72,13 @@ def java_plan_to_python_plan(ctx, java_plan):
                 f"Table type {type(table)} not supported in C++ backend yet"
             )
 
-    if java_class_name == "IcebergTableScan":
-        catalog_table = java_plan.getCatalogTable()
-        catalog = catalog_table.getCatalog()
-        # TODO: support other catalog types
-        if catalog.getClass().getSimpleName() != "FileSystemCatalog":
-            raise NotImplementedError(
-                "Only FileSystemCatalog is supported in IcebergTableScan in C++ backend"
-            )
-
-        # Get table info
-        full_table_path = catalog_table.getFullPath()
-        schema_path = catalog_table.getParentFullPath()
-        field_names = java_plan.deriveRowType().getFieldNames()
-
-        # Get file system path
-        file_path = catalog.schemaPathToFilePath(schema_path)
-        uri = file_path.toUri()
-        path_str = uri.getRawPath()
-
-        # TODO: pass filters and limits
-        df = bd.read_iceberg(
-            full_table_path[-1], location=path_str, selected_fields=field_names
-        )
-        return df._plan
+    # Traverse Iceberg plan nodes to extract read information similar to BodoSQL
+    # (see flattenIcebergTree in BodoSQL Java code)
+    if java_class_name == "IcebergToBodoPhysicalConverter":
+        input = java_plan.getInput()
+        read_info = IcebergReadInfo()
+        visit_iceberg_node(input, read_info)
+        return generate_iceberg_read(read_info)
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
@@ -448,3 +439,58 @@ def java_sort_to_python_sort(ctx, java_plan):
         input_plan.pa_schema,
     )
     return sorted_plan
+
+
+def visit_iceberg_node(java_plan, read_info):
+    """Visit Iceberg-related plan nodes to extract read information like filters.
+    For example:
+    CombineStreamsExchange
+        IcebergToBodoPhysicalConverter
+            IcebergFilter(condition=[>($3, 3.1E0)])
+                IcebergTableScan(...)
+    """
+    java_class_name = java_plan.getClass().getSimpleName()
+
+    if java_class_name == "IcebergTableScan":
+        read_info.scan_node = java_plan
+        return
+
+    if java_class_name == "IcebergFilter":
+        input = java_plan.getInput()
+        if read_info.filters is None:
+            read_info.filters = []
+        read_info.filters.append(java_plan.getCondition())
+        visit_iceberg_node(input, read_info)
+        return
+
+    raise NotImplementedError(
+        f"Iceberg plan node {java_class_name} not supported yet in visit_iceberg_node"
+    )
+
+
+def generate_iceberg_read(read_info):
+    """Generate a Python plan for reading Iceberg table with the given read info."""
+    scan_node = read_info.scan_node
+    catalog_table = scan_node.getCatalogTable()
+    catalog = catalog_table.getCatalog()
+    # TODO: support other catalog types
+    if catalog.getClass().getSimpleName() != "FileSystemCatalog":
+        raise NotImplementedError(
+            "Only FileSystemCatalog is supported in IcebergTableScan in C++ backend"
+        )
+
+    # Get table info
+    full_table_path = catalog_table.getFullPath()
+    schema_path = catalog_table.getParentFullPath()
+    field_names = scan_node.deriveRowType().getFieldNames()
+
+    # Get file system path
+    file_path = catalog.schemaPathToFilePath(schema_path)
+    uri = file_path.toUri()
+    path_str = uri.getRawPath()
+
+    # TODO: pass filters and limits
+    df = bd.read_iceberg(
+        full_table_path[-1], location=path_str, selected_fields=field_names
+    )
+    return df._plan
