@@ -484,6 +484,8 @@ def generate_iceberg_read(read_info):
     schema_path = catalog_table.getParentFullPath()
     field_names = scan_node.deriveRowType().getFieldNames()
 
+    row_filter = get_pyiceberg_row_filter(read_info.filters, field_names)
+
     # Get file system path
     file_path = catalog.schemaPathToFilePath(schema_path)
     uri = file_path.toUri()
@@ -491,6 +493,168 @@ def generate_iceberg_read(read_info):
 
     # TODO: pass filters and limits
     df = bd.read_iceberg(
-        full_table_path[-1], location=path_str, selected_fields=field_names
+        full_table_path[-1],
+        location=path_str,
+        row_filter=row_filter,
+        selected_fields=field_names,
     )
     return df._plan
+
+
+def get_pyiceberg_row_filter(filters, field_names):
+    """Convert SQL filters to a PyIceberg filter expression for
+    bodo.pandas.read_iceberg()
+    """
+    if filters is None or len(filters) == 0:
+        return None
+
+    op_exprs = [java_expr_to_pyiceberg_expr(o, field_names) for o in filters]
+
+    if len(op_exprs) == 1:
+        return op_exprs[0]
+
+    # AND all filters
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+    return java_binop_to_pyiceberg_expr(SqlKind.AND, op_exprs)
+
+
+def java_expr_to_pyiceberg_expr(java_expr, field_names):
+    """Convert a BodoSQL Java expression to a PyIceberg expression"""
+    java_class_name = java_expr.getClass().getSimpleName()
+
+    if java_class_name == "RexInputRef":
+        col_index = java_expr.getIndex()
+        return field_names[col_index]
+
+    if java_class_name == "RexCall":
+        return java_call_to_pyiceberg_call(java_expr, field_names)
+
+    if java_class_name == "RexLiteral":
+        return java_literal_to_pyiceberg_literal(java_expr)
+
+    raise NotImplementedError(
+        f"Expression {java_class_name} not supported yet in java_expr_to_pyiceberg_expr"
+    )
+
+
+def java_call_to_pyiceberg_call(java_call, field_names):
+    """Convert a BodoSQL Java call expression to a PyIceberg expression"""
+    import pyiceberg.expressions as pie
+
+    op = java_call.getOperator()
+    operator_class_name = op.getClass().getSimpleName()
+
+    if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
+        operands = java_call.getOperands()
+        # Calcite may add more than 2 operand for the same binary operator
+        op_exprs = [java_expr_to_pyiceberg_expr(o, field_names) for o in operands]
+        kind = op.getKind()
+        return java_binop_to_pyiceberg_expr(kind, op_exprs)
+
+    if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
+        operand = java_call.getOperands()[0]
+        operand_type = operand.getType()
+        target_type = java_call.getType()
+        SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+        # TODO[BSE-5154]: support all Calcite casts
+
+        if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
+            operand_type
+        ):
+            # Cast of int to DECIMAL is unnecessary in C++ backend
+            return java_expr_to_pyiceberg_expr(operand, field_names)
+
+    if (
+        operator_class_name == "SqlPostfixOperator"
+        and len(java_call.getOperands()) == 1
+    ):
+        operands = java_call.getOperands()
+        input = java_expr_to_pyiceberg_expr(operands[0], field_names)
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.IS_NOT_NULL):
+            return pie.NotNull(input)
+
+    raise NotImplementedError(
+        f"Call operator {operator_class_name} not supported yet: "
+        + java_call.toString()
+    )
+
+
+def java_binop_to_pyiceberg_expr(kind, op_exprs):
+    """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
+    import pyiceberg.expressions as pie
+
+    left = op_exprs[0]
+
+    # Calcite may add more than 2 operand for the same binary operator
+    if len(op_exprs) > 2:
+        right = java_binop_to_pyiceberg_expr(kind, op_exprs[1:])
+    else:
+        right = op_exprs[1]
+
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    # Comparison operators
+    if kind.equals(SqlKind.EQUALS):
+        return pie.EqualTo(left, right)
+
+    if kind.equals(SqlKind.NOT_EQUALS):
+        return pie.NotEqualTo(left, right)
+
+    if kind.equals(SqlKind.LESS_THAN):
+        return pie.LessThan(left, right)
+
+    if kind.equals(SqlKind.GREATER_THAN):
+        return pie.GreaterThan(left, right)
+
+    if kind.equals(SqlKind.GREATER_THAN_OR_EQUAL):
+        return pie.GreaterThanOrEqual(left, right)
+
+    if kind.equals(SqlKind.LESS_THAN_OR_EQUAL):
+        return pie.LessThanOrEqual(left, right)
+
+    if kind.equals(SqlKind.AND):
+        return pie.And(left, right)
+
+    if kind.equals(SqlKind.OR):
+        return pie.Or(left, right)
+
+    raise NotImplementedError(
+        f"Binary operator {kind.toString()} not supported yet in java_binop_to_pyiceberg_expr"
+    )
+
+
+def java_literal_to_pyiceberg_literal(java_literal):
+    """Convert a BodoSQL Java literal expression to a constant to use in PyIceberg
+    expressions.
+    """
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    lit_type_name = java_literal.getTypeName()
+    lit_type = java_literal.getType()
+
+    # TODO[BSE-5156]: support all Calcite literal types
+
+    if lit_type_name.equals(SqlTypeName.DECIMAL):
+        lit_type_scale = lit_type.getScale()
+        val = java_literal.getValue()
+        if lit_type_scale == 0:
+            return int(val)
+        else:
+            return val
+
+    if lit_type_name.equals(SqlTypeName.DOUBLE):
+        return java_literal.getValue()
+
+    if lit_type_name.equals(SqlTypeName.CHAR):
+        return java_literal.getValue2()
+
+    if lit_type_name.equals(SqlTypeName.DATE):
+        # getValue2() returns an integer representing days since epoch
+        val = pa.scalar(java_literal.getValue2(), pa.date32())
+        return val
+
+    raise NotImplementedError(
+        f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"
+    )
