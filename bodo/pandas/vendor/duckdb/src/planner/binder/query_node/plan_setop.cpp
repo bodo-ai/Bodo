@@ -4,7 +4,6 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_set_operation.hpp"
 #include "duckdb/planner/query_node/bound_set_operation_node.hpp"
-#include "duckdb/function/table/read_csv.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
 namespace duckdb {
