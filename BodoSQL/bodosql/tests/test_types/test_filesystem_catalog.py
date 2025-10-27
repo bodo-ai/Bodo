@@ -18,7 +18,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import check_func
 from bodo.utils.testing import ensure_clean2
-from bodosql.tests.utils import _test_equal_guard
+from bodosql.tests.utils import _check_query_equal
 
 
 @pytest.fixture(
@@ -236,4 +236,20 @@ def test_basic_iceberg_read(iceberg_database):
 
     query = f'SELECT B, C FROM "{db_schema}"."{table_name}"'
     out = bc1.sql(query)
-    _test_equal_guard(out, input_df[["B", "C"]], False, False)
+    _check_query_equal(out, input_df[["B", "C"]])
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" WHERE A > 5'
+    out = bc1.sql(query)
+    expected = input_df[input_df.A > 5][["B", "C"]].reset_index(drop=True)
+    _check_query_equal(out, expected)
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" WHERE A > 5 and C = \'a11\''
+    out = bc1.sql(query)
+    expected = input_df[(input_df.A > 5) & (input_df.C == "a11")][
+        ["B", "C"]
+    ].reset_index(drop=True)
+    _check_query_equal(out, expected)
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" limit 2'
+    out = bc1.sql(query)
+    assert len(out) == 2, "Expected only 2 rows from limit 2"
