@@ -520,11 +520,13 @@ def get_pyiceberg_row_filter(filters, field_names):
 
 def java_expr_to_pyiceberg_expr(java_expr, field_names):
     """Convert a BodoSQL Java expression to a PyIceberg expression"""
+    import pyiceberg.expressions as pie
+
     java_class_name = java_expr.getClass().getSimpleName()
 
     if java_class_name == "RexInputRef":
         col_index = java_expr.getIndex()
-        return field_names[col_index]
+        return pie.Reference(field_names[col_index])
 
     if java_class_name == "RexCall":
         return java_call_to_pyiceberg_call(java_expr, field_names)
@@ -616,14 +618,32 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
         return pie.LessThanOrEqual(left, right)
 
     if kind.equals(SqlKind.AND):
+        left = _ensure_pyiceberg_non_ref_expr(left)
+        right = _ensure_pyiceberg_non_ref_expr(right)
         return pie.And(left, right)
 
     if kind.equals(SqlKind.OR):
+        left = _ensure_pyiceberg_non_ref_expr(left)
+        right = _ensure_pyiceberg_non_ref_expr(right)
         return pie.Or(left, right)
 
     raise NotImplementedError(
         f"Binary operator {kind.toString()} not supported yet in java_binop_to_pyiceberg_expr"
     )
+
+
+def _ensure_pyiceberg_non_ref_expr(expr):
+    """PyIceberg cannot handle "loose" References in AND/OR expressions so this function
+    converts them to EqualTo(expr, True) expressions.
+    Example query:
+    select * from \"my_schema\".\"sss\".\"table1\" where \"four\" > 3.1 and \"three\"
+    """
+    import pyiceberg.expressions as pie
+
+    if isinstance(expr, pie.Reference):
+        return pie.EqualTo(expr, True)
+
+    return expr
 
 
 def java_literal_to_pyiceberg_literal(java_literal):
