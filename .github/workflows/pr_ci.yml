@@ -199,7 +199,7 @@ jobs:
     if: success() || failure()
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.13
       # Get all source code for mapping coverage to LOC
@@ -209,7 +209,7 @@ jobs:
           fetch-depth: 0
       # Download timing and coverage info
       - name: Download Timings
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           merge-multiple: true
 
@@ -235,7 +235,7 @@ jobs:
           cp coverage.xml outputs/coverage.xml
           cp .coverage outputs/.coverage
       - name: Upload Combined
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-durations
           path: outputs/
