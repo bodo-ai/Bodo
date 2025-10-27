@@ -33,6 +33,8 @@ class IcebergReadInfo:
 
     scan_node: object = None
     filters: list[object] = None
+    # Columns to read from the table, in the order they should appear in output.
+    colmap: list[int] = None
 
 
 def java_plan_to_python_plan(ctx, java_plan):
@@ -77,6 +79,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "IcebergToBodoPhysicalConverter":
         input = java_plan.getInput()
         read_info = IcebergReadInfo()
+        # Initialize all columns to be in the original location (updated top-down based
+        # on IcebergProject nodes)
+        read_info.colmap = list(range(input.getRowType().getFieldCount()))
         visit_iceberg_node(input, read_info)
         return generate_iceberg_read(read_info)
 
@@ -162,6 +167,13 @@ def java_call_to_python_call(java_call, input_plan):
             operand_type
         ):
             # Cast of int to DECIMAL is unnecessary in C++ backend
+            return java_expr_to_python_expr(operand, input_plan)
+
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
+            # No-op cast of VARCHAR (could be different lengths but sometimes equal
+            # which seems like a Calcite gap)
             return java_expr_to_python_expr(operand, input_plan)
 
     if (
@@ -463,6 +475,24 @@ def visit_iceberg_node(java_plan, read_info):
         visit_iceberg_node(input, read_info)
         return
 
+    if java_class_name == "IcebergProject":
+        # Projects may reorder columns, so we need to update the column mapping.
+        # See IcebergToBodoPhysicalConverter.kt
+        new_colmap = []
+        projs = java_plan.getProjects()
+        for ind in read_info.colmap:
+            proj = projs[ind]
+            if proj.getClass().getSimpleName() != "RexInputRef":
+                raise NotImplementedError(
+                    "IcebergProject with expressions not supported yet"
+                )
+            new_colmap.append(proj.getIndex())
+
+        read_info.colmap = new_colmap
+        input = java_plan.getInput()
+        visit_iceberg_node(input, read_info)
+        return
+
     raise NotImplementedError(
         f"Iceberg plan node {java_class_name} not supported yet in visit_iceberg_node"
     )
@@ -485,6 +515,7 @@ def generate_iceberg_read(read_info):
     field_names = scan_node.deriveRowType().getFieldNames()
 
     row_filter = get_pyiceberg_row_filter(read_info.filters, field_names)
+    read_fields = [field_names[i] for i in read_info.colmap]
 
     # Get file system path
     file_path = catalog.schemaPathToFilePath(schema_path)
@@ -496,7 +527,7 @@ def generate_iceberg_read(read_info):
         full_table_path[-1],
         location=path_str,
         row_filter=row_filter,
-        selected_fields=field_names,
+        selected_fields=read_fields,
     )
     return df._plan
 
@@ -564,6 +595,13 @@ def java_call_to_pyiceberg_call(java_call, field_names):
             operand_type
         ):
             # Cast of int to DECIMAL is unnecessary in C++ backend
+            return java_expr_to_pyiceberg_expr(operand, field_names)
+
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
+            # No-op cast of VARCHAR (could be different lengths but sometimes equal
+            # which seems like a Calcite gap)
             return java_expr_to_pyiceberg_expr(operand, field_names)
 
     if (
