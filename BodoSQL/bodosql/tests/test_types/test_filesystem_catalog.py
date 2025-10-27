@@ -16,7 +16,7 @@ from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
 )
-from bodo.tests.utils import check_func, pytest_mark_spawn_mode
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
 from bodosql.tests.utils import _check_query_equal
 
@@ -203,7 +203,7 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest_mark_spawn_mode
+@pytest_mark_one_rank
 @pytest.mark.bodosql_cpp
 def test_basic_iceberg_read(iceberg_database):
     """
