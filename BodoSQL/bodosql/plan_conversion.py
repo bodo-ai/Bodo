@@ -35,6 +35,7 @@ class IcebergReadInfo:
     filters: list[object] = None
     # Columns to read from the table, in the order they should appear in output.
     colmap: list[int] = None
+    limit: int = None
 
 
 def java_plan_to_python_plan(ctx, java_plan):
@@ -493,6 +494,20 @@ def visit_iceberg_node(java_plan, read_info):
         visit_iceberg_node(input, read_info)
         return
 
+    if java_class_name == "IcebergSort":
+        limit = java_plan.getFetch()
+        if limit is not None:
+            assert limit.getClass().getSimpleName() == "RexLiteral", (
+                "Only literal LIMITs are supported in IcebergSort"
+            )
+            limit = java_expr_to_pyiceberg_expr(limit, [])
+            read_info.limit = (
+                limit if read_info.limit is None else min(read_info.limit, limit)
+            )
+        input = java_plan.getInput()
+        visit_iceberg_node(input, read_info)
+        return
+
     raise NotImplementedError(
         f"Iceberg plan node {java_class_name} not supported yet in visit_iceberg_node"
     )
@@ -528,6 +543,7 @@ def generate_iceberg_read(read_info):
         location=path_str,
         row_filter=row_filter,
         selected_fields=read_fields,
+        limit=read_info.limit,
     )
     return df._plan
 
