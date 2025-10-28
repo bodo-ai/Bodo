@@ -40,6 +40,9 @@ class IcebergSort private constructor(
         return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }
 
+    // Return fetch for py4j use in C++ backend code
+    fun getFetch(): RexNode? = fetch
+
     companion object {
         @JvmStatic
         fun create(
