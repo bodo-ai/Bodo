@@ -1003,7 +1003,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Returns sample standard deviation."""
         from bodo.pandas.scalar import BodoScalar
 
-        df = _compute_series_reduce(self, ["std"])
+        if ddof == 1:
+            df = _compute_series_reduce(self, ["std"])
+        elif ddof == 0:
+            df = _compute_series_reduce(self, ["std_pop"])
+        else:
+            n = self.count()
+            smean = self.mean()
+            squared_diffs = (self - smean) ** 2
+            variance = squared_diffs.sum() / (n - ddof)
+            return numpy.sqrt(float(variance))
         if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
@@ -2283,7 +2292,7 @@ def _create_series_binop_plan(lhs_plan, empty_data, expr):
 
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
-    if func_name in ("min", "max", "sum", "product", "count", "mean", "std"):
+    if func_name in ("min", "max", "sum", "product", "count", "mean", "std", "std_pop"):
         return func_name
     raise BodoLibNotImplementedException(
         f"{func_name}() not supported for BodoSeries reduction."
@@ -2333,7 +2342,7 @@ def validate_reduce(func_name, pa_type):
 
     elif func_name in ("count",):
         return pa.int64()
-    elif func_name in ("mean", "std"):
+    elif func_name in ("mean", "std", "std_pop"):
         if pd.api.types.is_numeric_dtype(pd.ArrowDtype(pa_type)):
             return pa.float64()
         else:
