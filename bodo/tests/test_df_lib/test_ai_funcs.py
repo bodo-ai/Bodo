@@ -148,7 +148,8 @@ def test_query_s3_vectors_error_checking():
         )
 
 
-def test_tokenize():
+@pytest.mark.parametrize("init_func", [True, False])
+def test_tokenize(init_func):
     from transformers import AutoTokenizer
 
     a = pd.Series(
@@ -160,14 +161,14 @@ def test_tokenize():
         ]
     )
     ba = bd.Series(a)
+    if init_func:
+        tokenizer = lambda: AutoTokenizer.from_pretrained("bert-base-uncased")
+    else:
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-    def ret_tokenizer():
-        # Load a pretrained tokenizer (e.g., BERT)
-        return AutoTokenizer.from_pretrained("bert-base-uncased")
-
-    pd_tokenizer = ret_tokenizer()
+    pd_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
-    bb = ba.ai.tokenize(ret_tokenizer)
+    bb = ba.ai.tokenize(tokenizer)
 
     _test_equal(
         bb,
