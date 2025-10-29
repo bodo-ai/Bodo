@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable, Iterable, Sequence
@@ -80,6 +81,7 @@ from bodo.pandas.utils import (
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    wrap_module_functions_and_methods,
     wrap_plan,
 )
 
@@ -96,7 +98,7 @@ class BodoDataFrameLocIndexer(_LocIndexer):
                 return self.df.__getitem__(col_sel)
             else:
                 fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
-                return super(self.df).loc.__getitem__(key)
+                return super(pd.DataFrame, self.df).loc.__getitem__(key)
 
         fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
         # Delegate to original behavior
@@ -1480,7 +1482,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
 
         if kind is not None:
-            warnings.warn("sort_values() kind argument ignored")
+            if bodo.dataframe_library_warn:
+                warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):
@@ -1903,3 +1906,6 @@ def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
         return plan_optimizer.CJoinType.INNER
     else:
         raise ValueError(f"Invalid join type: {how}")
+
+
+wrap_module_functions_and_methods(sys.modules[__name__])
