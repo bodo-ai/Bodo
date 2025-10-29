@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=21.0,<21.1",
+    "pyarrow>=22.0,<22.1",
     "mpi4py>=4.0,<4.1",
     "pip"
 ]
@@ -37,7 +37,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pyarrow>=21.0,<21.1",
+    "pyarrow>=22.0,<22.1",
     # TODO upgrade to numba 0.62.0
     "numba>=0.60,<0.62",
     "pandas>=2.2",
