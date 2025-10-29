@@ -114,8 +114,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==21.0.0", channel = "bodo.ai" }
-libarrow = { version = "==21.0.0", channel = "bodo.ai" }
+pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
