@@ -2042,7 +2042,9 @@ class BodoDatetimeProperties:
                 series.dtype in allowed_types or _is_pd_pa_timestamp_no_tz(series.dtype)
             )
         ):
-            raise AttributeError("Can only use .dt accessor with datetimelike values")
+            raise AttributeError(
+                f"Can only use .dt accessor with datetimelike values, got {series.dtype} {type(series.dtype)} instead"
+            )
         self._series = series
         self._dtype = series.dtype
 
@@ -3431,6 +3433,7 @@ allowed_types_map = {
     "dt_default": (
         pd.ArrowDtype(pa.timestamp("ns")),
         pd.ArrowDtype(pa.date64()),
+        pd.ArrowDtype(pa.date32()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
     ),
