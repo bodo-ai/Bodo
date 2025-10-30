@@ -26,11 +26,13 @@ class PhysicalPlanBuilder {
     std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
 
     PhysicalPlanBuilder(
-        std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& _ctes)
+        std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& _ctes,
+        std::shared_ptr<std::unordered_map<int, JoinState*>>
+            _join_filter_states =
+                std::make_shared<std::unordered_map<int, JoinState*>>())
         : active_pipeline(nullptr),
           ctes(_ctes),
-          join_filter_states(
-              std::make_shared<std::unordered_map<int, JoinState*>>()) {}
+          join_filter_states(_join_filter_states) {}
 
     /**
      * @brief Move finshed_pipelines into locked category
