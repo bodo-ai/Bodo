@@ -36,7 +36,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         for (size_t i = 0; i < input_schema->ncols(); i++) {
             std::unique_ptr<bodo::DataType> col_type =
                 input_schema->column_types[i]->copy();
-            // TODO: Handle DICT column casting for bloom filters
+            // TODO[BSE-5176]: Handle DICT column casting for bloom filters
             // See
             // https://github.com/bodo-ai/Bodo/blob/4b6e5830cc9f16bba5fc40ba495f11955bbf15af/bodo/libs/streaming/join.py#L1477
             if (col_type->array_type == bodo_array_type::DICT) {
@@ -69,7 +69,8 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
             this->can_apply_bloom_filters.push_back(can_apply);
         }
 
-        // TODO: support column level filters (only on DICT columns currently)
+        // TODO[BSE-5176]: support column level filters (only on DICT columns
+        // currently)
     }
 
     virtual ~PhysicalJoinFilter() = default;
