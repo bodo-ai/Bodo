@@ -461,7 +461,7 @@ cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id=-1):
         self.out_schema = out_schema
         cdef vector[int_pair] cond_vec
         for cond in conditions:
