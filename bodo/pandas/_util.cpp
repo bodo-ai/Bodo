@@ -7,6 +7,7 @@
 #include <arrow/scalar.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
+#include "duckdb/common/types.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
@@ -41,6 +42,33 @@ extractValue(const duckdb::Value &value) {
             return value.GetValue<bool>();
         case duckdb::LogicalTypeId::VARCHAR:
             return value.GetValue<std::string>();
+        case duckdb::LogicalTypeId::TIMESTAMP: {
+            // Define a timestamp type with microsecond precision
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+            duckdb::timestamp_t extracted =
+                value.GetValue<duckdb::timestamp_t>();
+            // Create a TimestampScalar with microsecond value
+            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+                                                            timestamp_type);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_MS: {
+            // Define a timestamp type with millisecond precision
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MILLI);
+            duckdb::timestamp_ms_t extracted =
+                value.GetValue<duckdb::timestamp_ms_t>();
+            // Create a TimestampScalar with millisecond value
+            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+                                                            timestamp_type);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_SEC: {
+            // Define a timestamp type with second precision
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::SECOND);
+            duckdb::timestamp_sec_t extracted =
+                value.GetValue<duckdb::timestamp_sec_t>();
+            // Create a TimestampScalar with second value
+            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+                                                            timestamp_type);
+        } break;
         case duckdb::LogicalTypeId::TIMESTAMP_NS: {
             // Define a timestamp type with nanosecond precision
             auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);

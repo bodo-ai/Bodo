@@ -206,6 +206,9 @@ dataframe_library_dump_plans = os.environ.get("BODO_DATAFRAME_LIBRARY_DUMP_PLANS
 # If enabled (non-zero), profiles the dataframe library.
 dataframe_library_profile = os.environ.get("BODO_DATAFRAME_LIBRARY_PROFILE", "0") != "0"
 
+# If enabled (non-zero), captures the dataframe library API usage.
+dataframe_library_capture = os.environ.get("BODO_DATAFRAME_LIBRARY_CAPTURE", "0") != "0"
+
 # If enabled (non-zero), generate no fallback warnings.
 dataframe_library_warn = os.environ.get("BODO_DATAFRAME_LIBRARY_WARN", "1") != "0"
 

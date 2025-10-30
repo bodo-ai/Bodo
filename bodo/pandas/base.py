@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import csv
 import importlib
+import sys
 import typing as pt
 import warnings
 from collections.abc import (
@@ -60,6 +61,7 @@ from bodo.pandas.utils import (
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
+    wrap_module_functions_and_methods,
     wrap_plan,
 )
 
@@ -723,3 +725,5 @@ def _install_top_level_redirect():
 
 
 _install_top_level_redirect()
+
+wrap_module_functions_and_methods(sys.modules[__name__])

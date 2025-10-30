@@ -5,6 +5,7 @@ import datetime
 import inspect
 import itertools
 import numbers
+import sys
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -84,6 +85,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_scalar_udf_result_type,
     insert_bodo_scalar,
+    wrap_module_functions_and_methods,
     wrap_plan,
 )
 
@@ -902,7 +904,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if kind is not None:
-            warnings.warn("sort_values() kind argument ignored")
+            if bodo.dataframe_library_warn:
+                warnings.warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
         na_position = [True if na_position == "first" else False]
@@ -1003,7 +1006,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Returns sample standard deviation."""
         from bodo.pandas.scalar import BodoScalar
 
-        df = _compute_series_reduce(self, ["std"])
+        if ddof == 1:
+            df = _compute_series_reduce(self, ["std"])
+        elif ddof == 0:
+            df = _compute_series_reduce(self, ["std_pop"])
+        else:
+            n = self.count()
+            smean = self.mean()
+            squared_diffs = (self - smean) ** 2
+            variance = squared_diffs.sum() / (n - ddof)
+            return numpy.sqrt(float(variance))
         if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
@@ -1622,16 +1634,29 @@ class BodoSeriesAiMethods:
 
     def tokenize(
         self,
-        tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
+        tokenizer: Callable[[], transformers.PreTrainedTokenizerBase]  # noqa: F821
+        | transformers.PreTrainedTokenizerBase,  # noqa: F821
     ) -> BodoSeries:
         self._check_ai_input("tokenize")
+
+        try:
+            import transformers
+        except ImportError:
+            raise ImportError(
+                "Series.ai.tokenize() requires the 'transformers' package to be installed. "
+                "Please install it using 'pip install transformers'."
+            )
+        if isinstance(tokenizer, transformers.PreTrainedTokenizerBase):
+            tokenizer_func = lambda: tokenizer
+        else:
+            tokenizer_func = tokenizer
 
         def per_row(tokenizer, row):
             return tokenizer.encode(row, add_special_tokens=True)
 
         list_of_int64 = pa.list_(pa.int64())
         return self._series.map_with_state(
-            tokenizer,
+            tokenizer_func,
             per_row,
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
         )
@@ -2283,7 +2308,7 @@ def _create_series_binop_plan(lhs_plan, empty_data, expr):
 
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
-    if func_name in ("min", "max", "sum", "product", "count", "mean", "std"):
+    if func_name in ("min", "max", "sum", "product", "count", "mean", "std", "std_pop"):
         return func_name
     raise BodoLibNotImplementedException(
         f"{func_name}() not supported for BodoSeries reduction."
@@ -2333,7 +2358,7 @@ def validate_reduce(func_name, pa_type):
 
     elif func_name in ("count",):
         return pa.int64()
-    elif func_name in ("mean", "std"):
+    elif func_name in ("mean", "std", "std_pop"):
         if pd.api.types.is_numeric_dtype(pd.ArrowDtype(pa_type)):
             return pa.float64()
         else:
@@ -3486,3 +3511,5 @@ _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
 _install_str_partitions()
+
+wrap_module_functions_and_methods(sys.modules[__name__])

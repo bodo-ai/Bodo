@@ -130,12 +130,6 @@ lint.ignore = [
     # Permanently Disabled Rules
     "E501", # Line too long. Black should manage this only
     "E741", # Ambiguous variable name: {name}
-    # Use X | Y instead of (X, Y) in isinstance
-    # Disabled because:
-    # - X | Y is slower than (X, Y), could be problematic in hot code paths
-    # - (X, Y) is more readable and formattable
-    # - Numba doesn't support X | Y
-    "UP038",
 
     # TODO: Gradually Enable in Next PR
     # Flake8 Rules

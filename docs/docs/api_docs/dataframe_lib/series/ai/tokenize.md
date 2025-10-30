@@ -7,7 +7,7 @@ Tokenize a series of string dtype into a series of lists of int64.
 
 <p class="api-header">Parameters</p>
 
-: __tokenizer: *function*:__ A function returning a Transformers.PreTrainedTokenizer.
+: __tokenizer: *function | Transformers.PretrainedTokenizer*:__ A function returning a Transformers.PreTrainedTokenizer or a Transformers.PreTrainedTokenizer.
 
 <p class="api-header">Returns</p>
 
