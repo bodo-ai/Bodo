@@ -1634,16 +1634,29 @@ class BodoSeriesAiMethods:
 
     def tokenize(
         self,
-        tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
+        tokenizer: Callable[[], transformers.PreTrainedTokenizerBase]  # noqa: F821
+        | transformers.PreTrainedTokenizerBase,  # noqa: F821
     ) -> BodoSeries:
         self._check_ai_input("tokenize")
+
+        try:
+            import transformers
+        except ImportError:
+            raise ImportError(
+                "Series.ai.tokenize() requires the 'transformers' package to be installed. "
+                "Please install it using 'pip install transformers'."
+            )
+        if isinstance(tokenizer, transformers.PreTrainedTokenizerBase):
+            tokenizer_func = lambda: tokenizer
+        else:
+            tokenizer_func = tokenizer
 
         def per_row(tokenizer, row):
             return tokenizer.encode(row, add_special_tokens=True)
 
         list_of_int64 = pa.list_(pa.int64())
         return self._series.map_with_state(
-            tokenizer,
+            tokenizer_func,
             per_row,
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
         )
