@@ -3059,11 +3059,19 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
         ("axis", inspect.Parameter.KEYWORD_ONLY, (None,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
     ],
-    "str.replace": [
+    "replace": [
         ("to_replace", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("value", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("regex", inspect.Parameter.KEYWORD_ONLY, (False,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
+    ],
+    "str.replace": [
+        ("pat", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
+        ("repl", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
+        ("n", inspect.Parameter.POSITIONAL_OR_KEYWORD, (-1,)),
+        ("case", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("flags", inspect.Parameter.POSITIONAL_OR_KEYWORD, (0,)),
+        ("regex", inspect.Parameter.POSITIONAL_OR_KEYWORD, (False,)),
     ],
     "str.wrap": [
         ("width", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
