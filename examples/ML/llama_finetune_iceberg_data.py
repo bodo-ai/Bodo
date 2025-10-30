@@ -21,7 +21,7 @@ from peft import (
 )
 
 # --- Configuration for the filter ---
-RECENT_DAYS = 1
+CUTOFF_DATE = pd.Timestamp("2025-10-29 00:00:00")
 
 # --- Configuration for data loading ---
 USER_TABLE = "chat_analytics.user_messages"
@@ -39,18 +39,15 @@ CHECKPOINT_DIR = "./llama3_lora_checkpoint_dir"
 def load_data():
     # Load Data from the iceberg table in S3
     print(f"--- Loading data from {S3_LOCATION} ---")
-    print(f"Filtering for 'liked' messages in the last {RECENT_DAYS} day(s)...")
+    print(f"Filtering for 'liked' messages since {CUTOFF_DATE}...")
     
     user_df = pd.read_iceberg(USER_TABLE, location=S3_LOCATION)
     bot_df = pd.read_iceberg(BOT_TABLE, location=S3_LOCATION)
-    
-    # Define the "recent" cutoff time
-    cutoff_date = pandas.Timestamp.now() - pandas.Timedelta(days=RECENT_DAYS)
-    
+
     # Filter bot messages for "liked" feedback and recent timestamps
     liked_bot_messages_df = bot_df[
         (bot_df["feedback_status"] == "liked")
-        & (bot_df["response_timestamp"] >= cutoff_date)
+        & (bot_df["response_timestamp"] >= CUTOFF_DATE)
     ]
     
     # Use pd.merge() to join the two dataframes
@@ -65,55 +62,63 @@ def load_data():
 
 
 class LlamaDataset(torch.utils.data.Dataset):
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, tokenizer):
         self.df = df
+        self.tokenizer = tokenizer
+        tokenizer.pad_token = tokenizer.eos_token
+        self.template = "User: {user_message}\nBot: {bot_response}"
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        input_ids = torch.tensor(row["input_tokenized"])
-        output_ids = torch.tensor(row["output_tokenized"])
-        example = torch.cat([input_ids, output_ids])
-        labels = torch.cat([torch.full_like(input_ids, -100), output_ids])
-        attention_mask = torch.ones_like(example)
+        user_message = row["message_text"]
+        bot_response = row["response_text"]
+        # Create the prompt for the model
+        prompt = self.template.format(
+            user_message=user_message, bot_response=bot_response
+        )
+        # Tokenize the prompt
+        encoding = self.tokenizer(
+            prompt,
+            truncation=True,
+            padding="longest",
+            return_tensors="pt",
+        )
+        example = encoding["input_ids"].squeeze(0)
+        attention_mask = encoding["attention_mask"].squeeze(0)
+        # For causal LM, labels are the same as input_ids
+        labels = example.clone()
 
         return example, labels, attention_mask
 
     def __getitems__(self, idxs):
-        input_ids = []
-        labels = []
-        attention_masks = []
-        max_len = 0
+        prompts = []
         for idx in idxs:
             row = self.df.iloc[idx]
-            input_id = torch.tensor(row["input_tokenized"])
-            output_id = torch.tensor(row["output_tokenized"])
-            example_len = input_id.size(0) + output_id.size(0)
-            if example_len > max_len:
-                max_len = example_len
-        for idx in idxs:
-            row = self.df.iloc[idx]
-            input_id = torch.tensor(row["input_tokenized"])
-            output_id = torch.tensor(row["output_tokenized"])
-            example = torch.cat([input_id, output_id])
-            pad_len = max_len - example.size(0)
-            label = torch.cat([torch.full_like(input_id, -100), output_id])
-            attention_mask = torch.ones_like(example)
-            if pad_len > 0:
-                pad_tensor = torch.full((pad_len,), fill_value=0, dtype=torch.long)
-                example = torch.cat([example, pad_tensor])
-                label = torch.cat([label, torch.full_like(pad_tensor, -100)])
-                attention_mask = torch.cat([attention_mask, pad_tensor])
+            user_message = row["message_text"]
+            bot_response = row["response_text"]
+            prompt = self.template.format(
+                user_message=user_message, bot_response=bot_response
+            )
+            prompts.append(prompt)
+        encoding = self.tokenizer(
+            prompts,
+            truncation=True,
+            padding="longest",
+            return_tensors="pt",
+        )
+        input_ids = encoding["input_ids"]
+        attention_mask = encoding["attention_mask"]
+        labels = input_ids.clone()
+        return input_ids, labels, attention_mask
 
-            input_ids.append(example)
-            labels.append(label)
-            attention_masks.append(attention_mask)
-        return torch.stack(input_ids), torch.stack(labels), torch.stack(attention_masks)
 
 def train_one_epoch(model, train_loader, optimizer, scheduler):
     model.train()
+    prev_cache = model.config.use_cache
+    model.config.use_cache = False
     rank = dist.get_rank()
     device = next(model.parameters()).device
     total_ddp_acc_loss_train = torch.zeros(2).to(device)
@@ -128,17 +133,21 @@ def train_one_epoch(model, train_loader, optimizer, scheduler):
     for input_ids, labels, mask in train_loader:
         input_ids = input_ids.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
-        optimizer.zero_grad()
+        mask = mask.to(device, non_blocking=True)
 
         output = model(input_ids, labels=labels, attention_mask=mask)
 
         batch_loss = output.loss
 
         # Track local loss and accuracy stats
-        total_ddp_acc_loss_train[0] += batch_loss.item() * BATCH_SIZE
-        total_ddp_acc_loss_train[1] += BATCH_SIZE
+        total_ddp_acc_loss_train[0] += batch_loss.item() * input_ids.size(0)
+        total_ddp_acc_loss_train[1] += input_ids.size(0)
 
+        optimizer.zero_grad()
         batch_loss.backward()
+        
+        torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
+
         optimizer.step()
         scheduler.step()
         if rank==0:
@@ -153,6 +162,7 @@ def train_one_epoch(model, train_loader, optimizer, scheduler):
         print(
                 f" Loss: \t{avg_train_loss:.4f}"
             )
+    model.config.use_cache = prev_cache
 
     return avg_train_loss
 
@@ -171,19 +181,17 @@ def train_main(train_df):
         pad_token_id=tokenizer.pad_token_id, # Set pad token ID in model config
     )
 
-    # --- ADDED: LoRA Configuration ---
     print("Applying LoRA configuration...")
     peft_config = LoraConfig(
         task_type="CAUSAL_LM", # Specify task type for classification
         r=16,                # Rank of the LoRA matrices (default 8 or 16)
         lora_alpha=32,       # Alpha scaling factor (often 2x rank)
         lora_dropout=0.1,    # Dropout
-        target_modules=["q_proj", "k_proj", "v_proj", "up_proj", "down_proj", "o_proj", "gate_proj"]
+        target_modules=["q_proj", "k_proj", "v_proj"]
     )
     model = get_peft_model(model, peft_config)
     if bodo.get_rank() == 0: 
         model.print_trainable_parameters()
-    # --- END ADDED ---
 
     model = bodo.ai.prepare_model(model)
 
@@ -198,7 +206,9 @@ def train_main(train_df):
     if accelerators_used:
         train_df = bodo.rebalance(train_df, dests=gpu_ranks, random=True, parallel=True)
 
-    train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=LlamaDataset, pin_memory=True)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    dataset_func = lambda df: LlamaDataset(df, tokenizer)
+    train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=dataset_func, pin_memory=True)
 
 
     if model == None:
@@ -217,7 +227,7 @@ def train_main(train_df):
         train_one_epoch(model, train_loader, optimizer, scheduler)
 
 
-        # --- CHANGED: Checkpoint only the LoRA adapter weights ---
+        # Checkpoint only the LoRA adapter weights
         base_model = (model.module
             if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model)
         
@@ -238,9 +248,6 @@ def train_main(train_df):
 
 if __name__ == "__main__":
     # --- CHANGED: Load Llama 3.1 Tokenizer ---
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-    data_df = load_data()
-    train_df = pd.DataFrame({"input_tokenized": data_df["message_text"].ai.tokenize(tokenizer), "output_tokenized": data_df["response_text"].ai.tokenize(tokenizer)})
-
+    train_df = load_data()
     bodo.ai.torch_train(train_main, train_df)
