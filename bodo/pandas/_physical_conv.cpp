@@ -4,12 +4,14 @@
 #include "_bodo_scan_function.h"
 
 #include "_bodo_write_function.h"
+#include "_plan.h"
 #include "_util.h"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "physical/aggregate.h"
 #include "physical/cte.h"
 #include "physical/filter.h"
 #include "physical/join.h"
+#include "physical/join_filter.h"
 #include "physical/limit.h"
 #include "physical/project.h"
 #include "physical/quantile.h"
@@ -243,6 +245,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     auto physical_join = std::make_shared<PhysicalJoin>(
         op, op.conditions, build_table_schema, probe_table_schema);
 
+    (*this->join_filter_states)[physical_join->getJoinId()] =
+        physical_join->getJoinStatePtr();
+
     build_pipelines.push_back(
         rhs_builder.active_pipeline->Build(physical_join));
     // Build pipelines need to execute before probe pipeline (recursively
@@ -252,6 +257,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
                                     build_pipelines.end());
 
     this->active_pipeline->AddOperator(physical_join);
+}
+
+void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
+    // Process the source of this join filter.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    std::shared_ptr<PhysicalJoinFilter> physical_op =
+        std::make_shared<PhysicalJoinFilter>(op, in_table_schema,
+                                             this->join_filter_states);
+    this->active_pipeline->AddOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
+#include "_plan.h"
 #include "duckdb/common/enums/logical_operator_type.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/list.hpp"
@@ -18,9 +20,17 @@ class PhysicalPlanBuilder {
     std::shared_ptr<PipelineBuilder> active_pipeline;
     std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& ctes;
 
+    // Mapping of join ids to their JoinState pointers for join filter operators
+    // (filled during physical plan construction). Using loose pointers since
+    // PhysicalJoinFilter only needs to access the JoinState during execution
+    std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
+
     PhysicalPlanBuilder(
         std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& _ctes)
-        : active_pipeline(nullptr), ctes(_ctes) {}
+        : active_pipeline(nullptr),
+          ctes(_ctes),
+          join_filter_states(
+              std::make_shared<std::unordered_map<int, JoinState*>>()) {}
 
     /**
      * @brief Move finshed_pipelines into locked category
@@ -49,6 +59,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalDistinct& op);
     void Visit(duckdb::LogicalMaterializedCTE& op);
     void Visit(duckdb::LogicalCTERef& op);
+    void Visit(bodo::LogicalJoinFilter& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -86,6 +97,11 @@ class PhysicalPlanBuilder {
             Visit(op.Cast<duckdb::LogicalMaterializedCTE>());
         } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_CTE_REF) {
             Visit(op.Cast<duckdb::LogicalCTERef>());
+        } else if (op.type ==
+                   duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR) {
+            // TODO: add join filter to DuckDB operator types to allow more
+            // extension types
+            Visit(op.Cast<bodo::LogicalJoinFilter>());
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit unsupported logical operator "
