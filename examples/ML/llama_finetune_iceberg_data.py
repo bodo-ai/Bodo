@@ -174,7 +174,6 @@ def train_main(train_df):
     # Llama models don't have a default pad token. Set it to EOS.
     tokenizer.pad_token = tokenizer.eos_token
 
-    # --- CHANGED: Load Llama 3.1 for Sequence Classification ---
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         dtype=torch.bfloat16, # Use bfloat16 for memory efficiency
@@ -227,7 +226,8 @@ def train_main(train_df):
         train_one_epoch(model, train_loader, optimizer, scheduler)
 
 
-        # Checkpoint only the LoRA adapter weights
+        # Checkpoint only the LoRA adapter weights using a distributed checkpoint
+        # for each epoch
         base_model = (model.module
             if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model)
         
@@ -239,7 +239,7 @@ def train_main(train_df):
             checkpoint_id=CHECKPOINT_DIR
         )
         
-    # Save in peft-preferred format on rank 0
+    # Save in peft-preferred format on rank 0 to allow easy loading later
     if pytorch_rank == 0:
        base_model.save_pretrained(CHECKPOINT_DIR) # Saves adapter_config.json etc.
     
@@ -247,7 +247,6 @@ def train_main(train_df):
 
 
 if __name__ == "__main__":
-    # --- CHANGED: Load Llama 3.1 Tokenizer ---
 
-    train_df = load_data()
+    train_df = load_data()[:2]
     bodo.ai.torch_train(train_main, train_df)
