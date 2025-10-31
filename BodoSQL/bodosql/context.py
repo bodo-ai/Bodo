@@ -1288,6 +1288,9 @@ class BodoSQLContext:
             java_plan = JavaEntryPoint.getOptimizedPlan(
                 generator, sql, java_params_array, java_named_params_map
             )
+            # Keeps track of join ids and their join filter key locations for join
+            # filter translation during conversion to Python plan.
+            self.join_filter_info = {}
             plan = java_plan_to_python_plan(self, java_plan)
             out = bodo.pandas.plan.execute_plan(plan, optimize=False)
         except Exception as e:
@@ -1299,6 +1302,8 @@ class BodoSQLContext:
                     f"C++ backend execution failed with error:\n{message}"
                 ) from e
             out = CPP_BACKEND_EXECUTION_FAILED
+        finally:
+            self.join_filter_info = None
 
         return out
 

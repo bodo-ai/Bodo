@@ -19,6 +19,48 @@
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
 
+namespace bodo {
+
+/**
+ * @brief Logical join filter operator (extension of DuckDB logical operator).
+ *
+ */
+class LogicalJoinFilter : public duckdb::LogicalOperator {
+   public:
+    // TODO: add join filter to DuckDB operator types to allow more extension
+    // types
+    static constexpr const duckdb::LogicalOperatorType TYPE =
+        duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR;
+
+    LogicalJoinFilter(duckdb::unique_ptr<duckdb::LogicalOperator> source,
+                      const std::vector<int> filter_ids,
+                      const std::vector<std::vector<int64_t>> filter_columns,
+                      const std::vector<std::vector<bool>> is_first_locations)
+        : duckdb::LogicalOperator(
+              duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR),
+          filter_ids(std::move(filter_ids)),
+          filter_columns(std::move(filter_columns)),
+          is_first_locations(std::move(is_first_locations)) {
+        this->children.push_back(std::move(source));
+    }
+
+    duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
+        return children[0]->GetColumnBindings();
+    }
+
+    // IDs of joins creating each filter
+    const std::vector<int> filter_ids;
+    // Mapping columns of the join to the columns in the current table
+    const std::vector<std::vector<int64_t>> filter_columns;
+    // Indicating for which of the columns is it the first filtering site
+    const std::vector<std::vector<bool>> is_first_locations;
+
+   protected:
+    void ResolveTypes() override { types = children[0]->types; }
+};
+
+}  // namespace bodo
+
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
  *
@@ -81,7 +123,24 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec);
+    std::vector<std::pair<int, int>> &cond_vec, int join_id);
+
+/**
+ * @brief Creates a LogicalJoinFilter node.
+ *
+ * @param source - input table
+ * @param filter_ids - IDs of joins creating each filter
+ * @param filter_columns - Mapping columns of the join to the columns in the
+ * current table
+ * @param is_first_locations - Indicating for which of the columns is it the
+ * first filtering site
+ * @return duckdb::unique_ptr<bodo::LogicalJoinFilter> output node
+ */
+duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> filter_ids,
+    std::vector<std::vector<int64_t>> filter_columns,
+    std::vector<std::vector<bool>> is_first_locations);
 
 /**
  * @brief Creates a LogicalSetOperation node.

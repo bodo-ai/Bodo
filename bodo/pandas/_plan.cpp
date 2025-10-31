@@ -1146,7 +1146,7 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec) {
+    std::vector<std::pair<int, int>> &cond_vec, int join_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -1182,7 +1182,17 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
         comp_join->mark_index = mark_index;
     }
 
+    comp_join->join_id = join_id;
     return comp_join;
+}
+
+duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> filter_ids,
+    std::vector<std::vector<int64_t>> filter_columns,
+    std::vector<std::vector<bool>> is_first_locations) {
+    return duckdb::make_uniq<bodo::LogicalJoinFilter>(
+        to_duckdb(source), filter_ids, filter_columns, is_first_locations);
 }
 
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(

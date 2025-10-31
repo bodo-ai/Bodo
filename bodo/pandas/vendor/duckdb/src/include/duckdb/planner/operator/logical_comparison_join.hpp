@@ -39,6 +39,9 @@ public:
 	//! Scans where we should push generated filters into (if any)
 	unique_ptr<JoinFilterPushdownInfo> filter_pushdown;
 
+	// Bodo change: keep track of join id for join filters (only used in BodoSQL C++ backend and doesn't go through DuckDB optimizer)
+	int join_id = -1;
+
 public:
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
 
