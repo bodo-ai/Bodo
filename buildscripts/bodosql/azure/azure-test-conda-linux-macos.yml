@@ -45,9 +45,6 @@ jobs:
       set -exo pipefail
 
       unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        export USE_BODO_ARROW_FORK=1
-      fi
 
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-bodosql

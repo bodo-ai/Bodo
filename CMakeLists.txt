@@ -827,11 +827,6 @@ endif()
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
 
-# Build with our fork of Arrow
-if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})
-  target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
-endif()
-
 if (BUILD_WITH_V8)
   message(STATUS "Building with V8")
   target_link_libraries(ext PRIVATE

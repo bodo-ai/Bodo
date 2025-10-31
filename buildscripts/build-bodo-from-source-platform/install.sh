@@ -20,7 +20,7 @@ source ~/.bashrc
 cd ~/Bodo
 psh pixi install -e platform-dev
 # Remove conda install mpi to prefer intel MPI on the platform
-psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pixi run build -e platform-dev
+psh env BODO_SKIP_CPP_TESTS=1 pixi run build -e platform-dev
 
 pixi shell -e platform-dev
 cd bodo-platform-image/bodo-platform-utils/
