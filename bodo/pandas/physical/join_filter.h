@@ -24,11 +24,12 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
    public:
     explicit PhysicalJoinFilter(
         bodo::LogicalJoinFilter& logical_filter,
-        std::shared_ptr<bodo::Schema> input_schema,
-        std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states)
-        : filter_ids(logical_filter.filter_ids),
-          filter_columns(logical_filter.filter_columns),
-          is_first_locations(logical_filter.is_first_locations),
+        std::shared_ptr<bodo::Schema>& input_schema,
+        std::shared_ptr<std::unordered_map<int, JoinState*>>&
+            join_filter_states)
+        : filter_ids(std::move(logical_filter.filter_ids)),
+          filter_columns(std::move(logical_filter.filter_columns)),
+          is_first_locations(std::move(logical_filter.is_first_locations)),
           join_filter_states(join_filter_states) {
         this->output_schema = std::make_shared<bodo::Schema>();
 
@@ -137,11 +138,15 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
 
             if (this->materialize_after_each_filter && applied_any_filter) {
                 input_batch = RetrieveTable(input_batch, row_bitmask);
-                // Reset row_bitmask for next filter
-                memset(
-                    row_bitmask
-                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
-                    0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
+                // Reset row_bitmask for next filter if not last iteration
+                if (i < this->filter_ids.size() - 1) {
+                    memset(
+                        row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                           uint8_t*>(),
+                        0xff,
+                        arrow::bit_util::BytesForBits(input_batch->nrows()));
+                }
+
                 applied_any_filter = false;
             }
         }
@@ -174,11 +179,11 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     std::shared_ptr<bodo::Schema> output_schema;
 
     // IDs of joins creating each filter
-    std::vector<int> filter_ids;
+    const std::vector<int> filter_ids;
     // Mapping columns of the join to the columns in the current table
-    std::vector<std::vector<int64_t>> filter_columns;
+    const std::vector<std::vector<int64_t>> filter_columns;
     // Indicating for which of the columns is it the first filtering site
-    std::vector<std::vector<bool>> is_first_locations;
+    const std::vector<std::vector<bool>> is_first_locations;
 
     std::vector<bool> can_apply_bloom_filters;
 

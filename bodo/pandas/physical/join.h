@@ -626,7 +626,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     /**
      * @brief Get pointer to JoinState used in join filters
      */
-    JoinState* getJoinStatePtr() { return join_state_.get(); }
+    JoinState* getJoinStatePtr() const { return join_state_.get(); }
 
    private:
     /**

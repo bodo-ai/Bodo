@@ -33,15 +33,15 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
         duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR;
 
     LogicalJoinFilter(duckdb::unique_ptr<duckdb::LogicalOperator> source,
-                      std::vector<int> filter_ids,
-                      std::vector<std::vector<int64_t>> filter_columns,
-                      std::vector<std::vector<bool>> is_first_locations)
+                      const std::vector<int> filter_ids,
+                      const std::vector<std::vector<int64_t>> filter_columns,
+                      const std::vector<std::vector<bool>> is_first_locations)
         : duckdb::LogicalOperator(
-              duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR) {
+              duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR),
+          filter_ids(std::move(filter_ids)),
+          filter_columns(std::move(filter_columns)),
+          is_first_locations(std::move(is_first_locations)) {
         this->children.push_back(std::move(source));
-        this->filter_ids = filter_ids;
-        this->filter_columns = filter_columns;
-        this->is_first_locations = is_first_locations;
     }
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
@@ -49,11 +49,11 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
     }
 
     // IDs of joins creating each filter
-    std::vector<int> filter_ids;
+    const std::vector<int> filter_ids;
     // Mapping columns of the join to the columns in the current table
-    std::vector<std::vector<int64_t>> filter_columns;
+    const std::vector<std::vector<int64_t>> filter_columns;
     // Indicating for which of the columns is it the first filtering site
-    std::vector<std::vector<bool>> is_first_locations;
+    const std::vector<std::vector<bool>> is_first_locations;
 
    protected:
     void ResolveTypes() override { types = children[0]->types; }
