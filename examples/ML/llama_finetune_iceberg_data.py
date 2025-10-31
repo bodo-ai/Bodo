@@ -1,7 +1,5 @@
 import bodo.pandas as pd
 
-# Use pandas for timestamp manipulations
-import pandas
 import bodo.pandas as pd
 import bodo.ai
 import torch
