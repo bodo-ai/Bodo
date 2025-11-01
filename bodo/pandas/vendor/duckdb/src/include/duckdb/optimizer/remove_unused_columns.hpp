@@ -49,22 +49,40 @@ protected:
 	                                  vector<idx_t> &indexes);
 };
 
+class RemoveUnusedColumns;
+
+class RemoveUnusedColumnsPass {
+public:
+	RemoveUnusedColumnsPass(Binder &binder, ClientContext &context)
+	    : binder(binder), context(context) {}
+
+	void VisitOperator(LogicalOperator &op);
+
+    friend class RemoveUnusedColumns;
+private:
+	Binder &binder;
+	ClientContext &context;
+
+    unordered_map<idx_t, unordered_set<idx_t>> cte_required_cols;
+};
+
 //! The RemoveUnusedColumns optimizer traverses the logical operator tree and removes any columns that are not required
 class RemoveUnusedColumns : public BaseColumnPruner {
 public:
-	RemoveUnusedColumns(Binder &binder, ClientContext &context, bool is_root = false)
-	    : binder(binder), context(context), everything_referenced(is_root) {
+	RemoveUnusedColumns(Binder &binder, ClientContext &context, RemoveUnusedColumnsPass &ruc_pass, bool is_root = false)
+	    : binder(binder), context(context), pass(ruc_pass), everything_referenced(is_root) {
 	}
 
 	void VisitOperator(LogicalOperator &op) override;
+	void CTERefVisitOperator(LogicalOperator &op);
 
 private:
 	Binder &binder;
 	ClientContext &context;
+    RemoveUnusedColumnsPass &pass;
 	//! Whether or not all the columns are referenced. This happens in the case of the root expression (because the
 	//! output implicitly refers all the columns below it)
 	bool everything_referenced;
-
 private:
 	template <class T>
 	void ClearUnusedExpressions(vector<T> &list, idx_t table_idx, bool replace = true);

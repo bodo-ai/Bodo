@@ -52,6 +52,69 @@ void RemoveUnusedColumns::ClearUnusedExpressions(vector<T> &list, idx_t table_id
 	}
 }
 
+void RemoveUnusedColumnsPass::VisitOperator(LogicalOperator &op) {
+    RemoveUnusedColumns ruc(binder, context, *this, true);
+    ruc.VisitOperator(op);
+    ruc.CTERefVisitOperator(op);
+}
+
+void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
+    for (auto &child : op.children) {
+        CTERefVisitOperator(*child);
+    }
+    switch (op.type) {
+	case LogicalOperatorType::LOGICAL_CTE_REF: {
+		auto &cteref = op.Cast<LogicalCTERef>();
+        const idx_t cte_id = cteref.cte_index;
+        auto &bucket = pass.cte_required_cols[cte_id];
+        vector<LogicalType> new_chunk_types;
+        vector<string> new_names;
+        for (idx_t i = 0; i < cteref.chunk_types.size(); ++i) {
+            if (bucket.count(i) > 0) {
+                new_chunk_types.push_back(cteref.chunk_types[i]);
+                new_names.push_back(cteref.bound_columns[i]);
+            }
+        }
+        if (!new_chunk_types.empty()) {
+            cteref.chunk_types = std::move(new_chunk_types);
+            cteref.bound_columns = std::move(new_names);
+        }
+    }
+    default: {
+        for (size_t i = 0; i < op.children.size(); ++i) {
+            LogicalOperator &child = *op.children[i];
+            if (child.type == LogicalOperatorType::LOGICAL_CTE_REF) {
+		        auto &cteref = child.Cast<LogicalCTERef>();
+                const idx_t cte_id = cteref.cte_index;
+                auto &bucket = pass.cte_required_cols[cte_id];
+                // This CTERef instance uses less than than union of all columns
+                // for all the CTERefs for the given CTE.
+                // So, we put a projection between op (the parent) and the child CTERef that
+                // projects only the columns actually needed.
+                if (cteref.bound_columns.size() < bucket.size()) {
+                    const idx_t cte_table_index = cteref.table_index;
+                    idx_t new_table_index = binder.GenerateTableIndex();
+                    auto bindings = child.GetColumnBindings();
+                    vector<unique_ptr<Expression>> exprs;
+                    exprs.reserve(cteref.bound_columns.size());
+                    for (idx_t j = 0; j < cteref.bound_columns.size(); ++j) {
+                        exprs.push_back(make_uniq<BoundColumnRefExpression>(cteref.chunk_types[j], bindings[j]));
+                    }
+                    auto proj = make_uniq<LogicalProjection>(cte_table_index, std::move(exprs));
+                    if (child.has_estimated_cardinality) {
+                        proj->SetEstimatedCardinality(child.estimated_cardinality);
+                    }
+                    proj->children.push_back(std::move(op.children[i]));
+
+                    cteref.table_index = new_table_index;
+                    op.children[i] = std::move(proj);
+                }
+            }
+        }
+    }
+    }
+}
+
 void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
@@ -70,7 +133,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		}
 
 		// then recurse into the children of the aggregate
-		RemoveUnusedColumns remove(binder, context);
+		RemoveUnusedColumns remove(binder, context, pass);
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -134,7 +197,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				setop.column_count = entries.size();
 
 				for (idx_t child_idx = 0; child_idx < op.children.size(); child_idx++) {
-					RemoveUnusedColumns remove(binder, context, true);
+					RemoveUnusedColumns remove(binder, context, pass, true);
 					auto &child = op.children[child_idx];
 
 					// we push a projection under this child that references the required columns of the union
@@ -160,7 +223,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 			}
 		}
 		for (auto &child : op.children) {
-			RemoveUnusedColumns remove(binder, context, true);
+			RemoveUnusedColumns remove(binder, context, pass, true);
 			remove.VisitOperator(*child);
 		}
 		return;
@@ -169,7 +232,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	case LogicalOperatorType::LOGICAL_INTERSECT: {
 		// for INTERSECT/EXCEPT operations we can't remove anything, just recursively visit the children
 		for (auto &child : op.children) {
-			RemoveUnusedColumns remove(binder, context, true);
+			RemoveUnusedColumns remove(binder, context, pass, true);
 			remove.VisitOperator(*child);
 		}
 		return;
@@ -187,7 +250,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 			}
 		}
 		// then recurse into the children of this projection
-		RemoveUnusedColumns remove(binder, context);
+		RemoveUnusedColumns remove(binder, context, pass);
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -200,7 +263,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		//! on top of them can select from only the table values being inserted.
 		//! TODO: Push down the projections from the returning statement
 		//! TODO: Be careful because you might be adding expressions when a user returns *
-		RemoveUnusedColumns remove(binder, context, true);
+		RemoveUnusedColumns remove(binder, context, pass, true);
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -305,11 +368,59 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE: {
-		everything_referenced = true;
+		auto &cte = op.Cast<LogicalMaterializedCTE>();
+        const idx_t cte_id = cte.table_index;
+
+        VisitOperator(*cte.children[1]);
+        auto cte_it = pass.cte_required_cols.find(cte_id);
+        if (cte_it == pass.cte_required_cols.end()) {
+	        throw InternalException("Should always find CTERef info!");
+        }
+        RemoveUnusedColumns cte_side(binder, context, pass);
+        vector<idx_t> cte_root_table_indices = cte.children[0]->GetTableIndex();
+        if (cte_root_table_indices.size() != 1) {
+	        throw InternalException("Don't yet know how to handle to case where CTE root node has multiple table indices!");
+        }
+        idx_t cte_root_table_index = cte_root_table_indices[0];
+        // Dereference cte_it and set cte_side column_references equal to it.
+        for (auto col_idx : cte_it->second) {
+            ColumnBinding binding(cte_root_table_index, col_idx);
+            // ColumnBinding binding(cte.table_index, col_idx);
+            ReferencedColumn rc;
+            // no actual BoundColumnRefExpression to attach here, but we can leave bindings empty
+            // and just mark the column index as required
+            rc.child_columns.emplace_back(ColumnIndex(col_idx));
+            cte_side.column_references.insert({binding, std::move(rc)});
+        }
+        cte_side.VisitOperator(*cte.children[0]);
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_CTE_REF: {
-		everything_referenced = true;
+		auto &cteref = op.Cast<LogicalCTERef>();
+        const idx_t cte_id = cteref.cte_index;          // stable identifier for the CTE
+
+        // Look through column_references for bindings that belong to this CTERef
+        unordered_set<idx_t> required_here;
+        if (cteref.types.size() != cteref.bound_columns.size()) {
+	        throw InternalException("Size of types and colnames don't match.");
+        }
+        for (idx_t i = 0; i < cteref.bound_columns.size(); i++) {
+            ColumnBinding binding(cteref.table_index, i);
+            if (column_references.find(binding) != column_references.end()) {
+                required_here.insert(i);
+            }
+        }
+
+        // If nothing matched, conservatively keep all
+        if (required_here.empty()) {
+            for (idx_t i = 0; i < cteref.types.size(); i++) {
+                required_here.insert(i);
+            }
+        }
+
+        // Union into global per-CTE requirement
+        auto &bucket = pass.cte_required_cols[cte_id];
+        bucket.insert(required_here.begin(), required_here.end());
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_PIVOT: {
@@ -446,7 +557,9 @@ void BaseColumnPruner::AddBinding(BoundColumnRefExpression &col) {
 	auto entry = column_references.find(col.binding);
 	if (entry == column_references.end()) {
 		// column not referenced yet - add a binding to it entirely
-		column_references[col.binding].bindings.push_back(col);
+		ReferencedColumn column;
+		column.bindings.push_back(col);
+		column_references.insert(make_pair(col.binding, std::move(column)));
 	} else {
 		// column reference already exists - add the binding and clear any sub-references
 		auto &column = entry->second;
