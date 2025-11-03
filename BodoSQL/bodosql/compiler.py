@@ -12,8 +12,7 @@ import bodosql
 # Import BodoSQL types
 from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.table_path_ext import TablePathType
-from bodosql.bodosql_types.filesystem_catalog import (
-    FileSystemCatalog,
+from bodosql.bodosql_types.filesystem_catalog_ext import (
     FileSystemCatalogType,
 )
 from bodosql.bodosql_types.snowflake_catalog import (
@@ -59,3 +58,4 @@ import bodosql.kernels.crypto_funcs
 # Set top-level type aliases
 bodosql.TablePathType = TablePathType
 bodosql.DatabaseCatalogType = DatabaseCatalogType
+bodosql.FileSystemCatalogType = FileSystemCatalogType
