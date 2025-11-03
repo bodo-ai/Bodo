@@ -168,10 +168,12 @@ make_attribute_wrapper(DataFrameGroupByType, "obj", "obj")
 def validate_udf(func_name, func):
     if not isinstance(
         func,
-        types.functions.MakeFunctionLiteral
-        | bodo.utils.typing.FunctionLiteral
-        | types.Dispatcher
-        | CPUDispatcher,
+        (
+            types.functions.MakeFunctionLiteral,
+            bodo.utils.typing.FunctionLiteral,
+            types.Dispatcher,
+            CPUDispatcher,
+        ),
     ):
         raise_bodo_error(f"Groupby.{func_name}: 'func' must be user defined function")
 
@@ -273,7 +275,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
         # df.groupby('A')['B', 'C']
         if isinstance(grpby, DataFrameGroupByType):
             series_select = False
-            if isinstance(idx, tuple | list):
+            if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
                     raise_bodo_error(
                         f"groupby: selected column {set(idx).difference(set(grpby.df_type.columns))} not found in dataframe"
@@ -342,7 +344,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             f"column type of {in_dtype} is not supported in groupby built-in function {func_name}.\n{dt_err}"
         )
     if func_name == "median" and not isinstance(
-        in_dtype, Decimal128Type | types.Float | types.Integer
+        in_dtype, (Decimal128Type, types.Float, types.Integer)
     ):
         return (
             None,
@@ -352,7 +354,9 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
     # [BE-433] Support with tuples
     elif (
         func_name in {"last", "sum", "prod", "min", "max", "nunique", "head"}
-    ) and isinstance(arr_type, ArrayItemArrayType | TupleArrayType):  # pragma: no cover
+    ) and isinstance(
+        arr_type, (ArrayItemArrayType, TupleArrayType)
+    ):  # pragma: no cover
         return (
             None,
             f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
@@ -422,12 +426,12 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             "percentile_cont",
             "percentile_disc",
         }
-    ) and isinstance(in_dtype, Decimal128Type | types.Integer | types.Float):
+    ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
         # TODO: Only make the output nullable if the input is nullable?
         return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
     elif func_name in {"boolor_agg", "booland_agg", "boolxor_agg"}:
         if isinstance(
-            in_dtype, Decimal128Type | types.Integer | types.Float | types.Boolean
+            in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
             return bodo.types.boolean_array_type, "ok"
         return (
@@ -477,7 +481,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             )
         return bodo.types.MapArrayType(key_arr_type, arr_type), "ok"
 
-    if not isinstance(in_dtype, types.Integer | types.Float | types.Boolean):
+    if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if (
             is_list_string
             or in_dtype == types.unicode_type
@@ -680,8 +684,8 @@ def get_agg_typ(
                 data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
             if isinstance(
-                data, types.Array | IntegerArrayType | FloatingArrayType
-            ) and isinstance(data.dtype, types.Integer | types.Float):
+                data, (types.Array, IntegerArrayType, FloatingArrayType)
+            ) and isinstance(data.dtype, (types.Integer, types.Float)):
                 e_column_type = ColumnType.NumericalColumn.value
 
             if func_name == "agg":
@@ -1205,7 +1209,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
 
         # if a list/tuple of functions is applied to any column, have to use
         # MultiLevel for every column (even if list/tuple length is one)
-        multi_level_names = any(isinstance(f_val, tuple | list) for f_val in f_vals)
+        multi_level_names = any(isinstance(f_val, (tuple, list)) for f_val in f_vals)
 
         # NamedAgg case in Pandas doesn't support multiple functions
         if relabeling and multi_level_names:
@@ -1232,7 +1236,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         for col_name, f_val, additional_args in zip(
             in_col_names, f_vals, additional_args_list
         ):
-            if isinstance(f_val, tuple | list):
+            if isinstance(f_val, (tuple, list)):
                 lambda_count = 0
                 for f in f_val:
                     f_name, out_tp = get_agg_funcname_and_outtyp(
@@ -1466,13 +1470,13 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         if operation in ("sum", "cumsum"):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
-            if not isinstance(data.dtype, types.Integer | types.Float):
+            if not isinstance(data.dtype, (types.Integer, types.Float)):
                 raise BodoError(msg)
         if name_operation == "cumsum":
             if (
                 data.dtype != types.unicode_type
                 and data != ArrayItemArrayType(string_array_type)
-                and not isinstance(data.dtype, types.Integer | types.Float)
+                and not isinstance(data.dtype, (types.Integer, types.Float))
             ):
                 raise BodoError(msg)
         if name_operation in ("cummin", "cummax"):
@@ -1481,7 +1485,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
             ):
                 raise BodoError(msg)
         if name_operation == "shift":
-            if isinstance(data, TupleArrayType | ArrayItemArrayType):
+            if isinstance(data, (TupleArrayType, ArrayItemArrayType)):
                 raise BodoError(msg)
             if isinstance(
                 data.dtype,
@@ -2119,9 +2123,9 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
 
         # whether UDF returns a single row of output
         single_row_output = (
-            isinstance(f_return_type, SeriesType | HeterogeneousSeriesType)
+            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
             and f_return_type.const_info is not None
-        ) or not isinstance(f_return_type, SeriesType | DataFrameType)
+        ) or not isinstance(f_return_type, (SeriesType, DataFrameType))
 
         # get Index type
         if single_row_output:

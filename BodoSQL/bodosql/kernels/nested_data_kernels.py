@@ -1183,20 +1183,24 @@ def overload_to_object(data):  # pragma: no cover
     if (
         isinstance(
             data,
-            bodo.types.StructArrayType
-            | bodo.types.StructType
-            | bodo.types.MapArrayType
-            | bodo.libs.map_arr_ext.MapScalarType
-            | types.DictType,
+            (
+                bodo.types.StructArrayType,
+                bodo.types.StructType,
+                bodo.types.MapArrayType,
+                bodo.libs.map_arr_ext.MapScalarType,
+                types.DictType,
+            ),
         )
         or (data in (bodo.types.none, bodo.types.null_array_type))
         or (
             isinstance(data, types.optional)
             and isinstance(
                 data.type,
-                bodo.types.StructType
-                | bodo.libs.map_arr_ext.MapScalarType
-                | types.DictType,
+                (
+                    bodo.types.StructType,
+                    bodo.libs.map_arr_ext.MapScalarType,
+                    types.DictType,
+                ),
             )
         )
     ):

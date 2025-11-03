@@ -1065,7 +1065,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             by = [by]
 
         # Only list of string column names for keys is supported for now.
-        if not isinstance(by, list | tuple) or not all(isinstance(b, str) for b in by):
+        if not isinstance(by, (list, tuple)) or not all(isinstance(b, str) for b in by):
             raise BodoLibNotImplementedException(
                 "groupby: only string keys are supported"
             )
@@ -1445,7 +1445,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Validate by argument.
         if isinstance(by, str):
             by = [by]
-        elif not isinstance(by, list | tuple):
+        elif not isinstance(by, (list, tuple)):
             raise ValueError(
                 "DataFrame.sort_values(): argument by not a string, list or tuple"
             )
@@ -1458,7 +1458,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Validate ascending argument.
         if isinstance(ascending, bool):
             ascending = [ascending]
-        elif not isinstance(ascending, list | tuple):
+        elif not isinstance(ascending, (list, tuple)):
             raise ValueError(
                 "DataFrame.sort_values(): argument ascending not a bool, list or tuple"
             )
@@ -1471,7 +1471,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Validate na_position argument.
         if isinstance(na_position, str):
             na_position = [na_position]
-        elif not isinstance(na_position, list | tuple):
+        elif not isinstance(na_position, (list, tuple)):
             raise ValueError(
                 "DataFrame.sort_values(): argument na_position not a string, list or tuple"
             )
@@ -1821,7 +1821,7 @@ def validate_on(val):
     if val is not None:
         if not (
             isinstance(val, str)
-            or (isinstance(val, list | tuple) and all(isinstance(k, str) for k in val))
+            or (isinstance(val, (list, tuple)) and all(isinstance(k, str) for k in val))
         ):
             raise ValueError(
                 "only str, str list, str tuple, or None are supported for on, left_on and right_on values"

@@ -2824,7 +2824,7 @@ def test_interval_multiply(interval_input, memory_leak_check):
 
     scalar_integer_impl = impl
     # If we have a scalar interval then the scalar integer outputs a scalar.
-    if isinstance(interval_input, pd.Timedelta | pd.DateOffset):
+    if isinstance(interval_input, (pd.Timedelta, pd.DateOffset)):
         scalar_integer_impl = (
             lambda interval, integer: bodosql.kernels.interval_multiply(
                 interval, integer
@@ -2892,7 +2892,7 @@ def test_interval_add_interval(interval_input, memory_leak_check):
     def impl(arr0, arr1):
         return pd.Series(bodosql.kernels.interval_add_interval(arr0, arr1))
 
-    is_scalar = isinstance(interval_input, pd.Timedelta | pd.DateOffset)
+    is_scalar = isinstance(interval_input, (pd.Timedelta, pd.DateOffset))
 
     # If we have a scalar interval then the scalar integer outputs a scalar.
     if is_scalar:
@@ -2966,7 +2966,7 @@ def test_create_timestamp(arg, memory_leak_check):
         return pd.Series(bodosql.kernels.create_timestamp(arg))
 
     # Scalar isn't wrapped in a series.
-    if isinstance(arg, pd.Timestamp | str):
+    if isinstance(arg, (pd.Timestamp, str)):
         impl = lambda arg: bodosql.kernels.create_timestamp(arg)
 
     def days_scalar_fn(arg):
@@ -3920,7 +3920,7 @@ def test_date_format(expr, format_str, answer, memory_leak_check):
     def impl(expr, format_str):
         return pd.Series(bodosql.kernels.date_format(expr, format_str))
 
-    if isinstance(expr, datetime.date | pd.Timestamp):
+    if isinstance(expr, (datetime.date, pd.Timestamp)):
         impl = lambda expr, format: bodosql.kernels.date_format(expr, format_str)
 
     check_func(

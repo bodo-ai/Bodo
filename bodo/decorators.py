@@ -573,7 +573,7 @@ def _check_return_type(return_type):
         )
 
     # list/set reflection is irrelevant in wrap_python
-    if isinstance(return_type, types.List | types.Set):
+    if isinstance(return_type, (types.List, types.Set)):
         return_type = return_type.copy(reflected=False)
 
     return return_type

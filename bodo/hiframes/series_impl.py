@@ -202,7 +202,7 @@ def overload_series_name(s):
 
 @overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_series_len(S):
-    if isinstance(S, SeriesType | HeterogeneousSeriesType):
+    if isinstance(S, (SeriesType, HeterogeneousSeriesType)):
         return lambda S: len(
             bodo.hiframes.pd_series_ext.get_series_data(S)
         )  # pragma: no cover
@@ -1406,15 +1406,17 @@ def overload_series_idxmin(S, axis=0, skipna=True):
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
                 S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(S.dtype, types.Number | types.Boolean)
+                or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
         or isinstance(
             S.data,
-            bodo.types.IntegerArrayType
-            | bodo.types.FloatingArrayType
-            | bodo.types.CategoricalArrayType
-            | bodo.types.DatetimeArrayType,
+            (
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.CategoricalArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
         )
         or S.data
         in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
@@ -1465,15 +1467,17 @@ def overload_series_idxmax(S, axis=0, skipna=True):
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
                 S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(S.dtype, types.Number | types.Boolean)
+                or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
         or isinstance(
             S.data,
-            bodo.types.IntegerArrayType
-            | bodo.types.FloatingArrayType
-            | bodo.types.CategoricalArrayType
-            | bodo.types.DatetimeArrayType,
+            (
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.CategoricalArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
         )
         or S.data
         in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
@@ -1517,16 +1521,18 @@ def check_argmax_min_args(func_name, S):
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
                 S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(S.dtype, types.Number | types.Boolean)
+                or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
         or isinstance(
             S.data,
-            bodo.types.IntegerArrayType
-            | bodo.types.FloatingArrayType
-            | bodo.types.CategoricalArrayType
-            | bodo.types.DecimalArrayType
-            | bodo.types.DatetimeArrayType,
+            (
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.CategoricalArrayType,
+                bodo.types.DecimalArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
         )
         or S.data
         in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
@@ -1738,27 +1744,30 @@ def overload_series_clip(
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
                 S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(S.dtype, types.Number | types.Boolean)
+                or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
         or S.data == bodo.types.dict_str_arr_type
         or isinstance(
             S.data,
-            IntegerArrayType
-            | FloatingArrayType
-            | DecimalArrayType
-            | DatetimeDateArrayType
-            | bodo.types.DatetimeArrayType
-            | BooleanArrayType
-            | StringArrayType
-            | BinaryArrayType,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                DatetimeDateArrayType,
+                bodo.types.DatetimeArrayType,
+                BooleanArrayType,
+                StringArrayType,
+                BinaryArrayType,
+            ),
         )
     ):
         raise BodoError(f"Series.clip() does not support series type: {S.data}.")
 
     def coercible(l, r):
         return l == r or (
-            isinstance(l, types.Integer) and isinstance(r, types.Float | Decimal128Type)
+            isinstance(l, types.Integer)
+            and isinstance(r, (types.Float, Decimal128Type))
         )
 
     def element_type_check(S, bound):
@@ -3135,7 +3144,7 @@ def overload_series_isin(S, values):
         return impl_arr
 
     # 'values' should be a set or list, TODO: support other list-likes such as Array
-    if not isinstance(values, types.Set | types.List):
+    if not isinstance(values, (types.Set, types.List)):
         raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
 
     def impl(S, values):  # pragma: no cover
@@ -3180,7 +3189,7 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return impl_list
-    elif isinstance(q, float | types.Number) or is_overload_constant_int(q):
+    elif isinstance(q, (float, types.Number)) or is_overload_constant_int(q):
 
         def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -3264,7 +3273,7 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.types.datetime64ns
         )
-    ) and not isinstance(S.data, IntegerArrayType | FloatingArrayType):
+    ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
     # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
@@ -3685,7 +3694,7 @@ def overload_series_fillna(
                 bodo.types.timedelta64ns,
             )
             if (
-                not isinstance(series_type, types.Integer | types.Float)
+                not isinstance(series_type, (types.Integer, types.Float))
                 and series_type not in valid_obj_types
             ):
                 raise BodoError(
@@ -3766,7 +3775,7 @@ def create_fillna_specific_method_overload(overload_name):
             bodo.types.timedelta64ns,
         )
         if (
-            not isinstance(series_type, types.Integer | types.Float)
+            not isinstance(series_type, (types.Integer, types.Float))
             and series_type not in valid_obj_types
         ):
             raise BodoError(
@@ -3818,7 +3827,7 @@ def check_unsupported_types(S, to_replace, value):
         )
         raise BodoError(message)
     elif any(
-        isinstance(x, PandasTimestampType | PDTimeDeltaType)
+        isinstance(x, (PandasTimestampType, PDTimeDeltaType))
         for x in [to_replace, value]
     ):
         message = f"Series.replace(): Not supported for types {to_replace} and {value}"
@@ -3908,7 +3917,7 @@ def overload_series_replace(
         # (i.e. unicode_type) we don't provide a dtype because there isn't a runtime impl.
         # See [BE-539] on Jira
         if (
-            isinstance(series_type, types.Float | types.Integer)
+            isinstance(series_type, (types.Float, types.Integer))
             or series_type == np.bool_
         ):
             dtype_conversion = series_type
@@ -4000,11 +4009,11 @@ def build_replace_dict(to_replace, value, key_dtype_conv):
 def _build_replace_dict(to_replace, value, key_dtype_conv):
     # TODO: replace with something that captures all scalars
     is_scalar_replace = isinstance(
-        to_replace, types.Number | Decimal128Type
+        to_replace, (types.Number, Decimal128Type)
     ) or to_replace in [bodo.types.string_type, types.boolean, bodo.types.bytes_type]
     is_iterable_replace = is_iterable_type(to_replace)
 
-    is_scalar_value = isinstance(value, types.Number | Decimal128Type) or value in [
+    is_scalar_value = isinstance(value, (types.Number, Decimal128Type)) or value in [
         bodo.types.string_type,
         bodo.types.bytes_type,
         types.boolean,
@@ -4097,7 +4106,7 @@ def overload_series_diff(S, periods=1):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     if not (
-        isinstance(S.data, types.Array | IntegerArrayType | FloatingArrayType)
+        isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
         and (
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.types.datetime64ns
@@ -4507,7 +4516,7 @@ def _validate_arguments_mask_where(
     # Validating cond:
     # Check that cond is a supported array of booleans
     if not (
-        isinstance(cond, SeriesType | types.Array | BooleanArrayType)
+        isinstance(cond, (SeriesType, types.Array, BooleanArrayType))
         and cond.ndim == 1
         and cond.dtype == types.bool_
     ):
@@ -4566,7 +4575,7 @@ def _validate_self_other_mask_where(
         or (
             isinstance(
                 other,
-                types.Array | IntegerArrayType | FloatingArrayType | BooleanArrayType,
+                (types.Array, IntegerArrayType, FloatingArrayType, BooleanArrayType),
             )
             and other.ndim >= 1
             and other.ndim <= max_ndim
@@ -4601,7 +4610,7 @@ def _validate_self_other_mask_where(
                 # need this check here, in the case that someone passes in series.mask(_, bad_str/bin_arr_val),
                 # as str/bin_arr.data.dtype gives a pretty unintelligble error from the user perspective
                 not (
-                    isinstance(other, StringArrayType | BinaryArrayType)
+                    isinstance(other, (StringArrayType, BinaryArrayType))
                     or other == bodo.types.dict_str_arr_type
                 )
                 and (
@@ -4610,11 +4619,11 @@ def _validate_self_other_mask_where(
                     and (
                         (
                             bodo.utils.utils.is_array_typ(other)
-                            and isinstance(other.dtype, types.Integer | types.Float)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                         or (
                             is_series_type(other)
-                            and isinstance(other.dtype, types.Integer | types.Float)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                     )
                 )
@@ -4624,7 +4633,7 @@ def _validate_self_other_mask_where(
                 )
             )
             and (
-                isinstance(arr, BooleanArrayType | IntegerArrayType | FloatingArrayType)
+                isinstance(arr, (BooleanArrayType, IntegerArrayType, FloatingArrayType))
             )
         )
     ):
@@ -4713,7 +4722,7 @@ def create_explicit_binary_op_overload(op):
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
             # Pandas 1.0 returns nullable bool array for nullable array
             if isinstance(
-                S.data, IntegerArrayType | FloatingArrayType
+                S.data, (IntegerArrayType, FloatingArrayType)
             ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array_type
 
@@ -4746,7 +4755,7 @@ def create_explicit_binary_op_overload(op):
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
         # Pandas 1.0 returns nullable bool array for nullable array
         if isinstance(
-            S.data, IntegerArrayType | FloatingArrayType
+            S.data, (IntegerArrayType, FloatingArrayType)
         ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array_type
 
@@ -4808,7 +4817,7 @@ def create_explicit_binary_reverse_op_overload(op):
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
             # Pandas 1.0 returns nullable bool array for nullable array
             if isinstance(
-                S.data, IntegerArrayType | FloatingArrayType
+                S.data, (IntegerArrayType, FloatingArrayType)
             ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array_type
 
@@ -4840,7 +4849,7 @@ def create_explicit_binary_reverse_op_overload(op):
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
         # Pandas 1.0 returns nullable bool array for nullable array
         if isinstance(
-            S.data, IntegerArrayType | FloatingArrayType
+            S.data, (IntegerArrayType, FloatingArrayType)
         ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array_type
 
@@ -5302,7 +5311,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             assert downcast_str == "float"
     # just return numeric array
     # TODO: handle dt64/td64 to int64 conversion
-    if isinstance(arg_a, types.Array | IntegerArrayType):
+    if isinstance(arg_a, (types.Array, IntegerArrayType)):
         return lambda arg_a, errors="raise", downcast=None: arg_a.astype(out_dtype)
 
     # Series case
@@ -5410,7 +5419,7 @@ def where_impl(c, x, y):
 @overload(where_impl, no_unliteral=True, jit_options={"cache": True})
 def overload_where_unsupported(condition, x, y):
     if (
-        not isinstance(condition, SeriesType | types.Array | BooleanArrayType)
+        not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
         or condition.ndim != 1
     ):
         return lambda condition, x, y: np.where(condition, x, y)  # pragma: no cover
@@ -5425,7 +5434,7 @@ def overload_np_where(condition, x, y):
     """
     # this overload only supports 1D arrays
     if (
-        not isinstance(condition, SeriesType | types.Array | BooleanArrayType)
+        not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
         or condition.ndim != 1
     ):
         return
@@ -5581,7 +5590,7 @@ def overload_np_where(condition, x, y):
 
 def _verify_np_select_arg_typs(condlist, choicelist, default):
     # Check condlist
-    if isinstance(condlist, types.List | types.UniTuple):
+    if isinstance(condlist, (types.List, types.UniTuple)):
         if not (
             bodo.utils.utils.is_np_array_typ(condlist.dtype)
             and condlist.dtype.dtype == types.bool_
@@ -5597,11 +5606,11 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
 
     # Check choicelist
     if not isinstance(
-        choicelist, types.List | types.UniTuple | types.BaseTuple
+        choicelist, (types.List, types.UniTuple, types.BaseTuple)
     ):  # pragma: no cover
         raise BodoError("np.select(): 'choicelist' argument must be list or tuple type")
 
-    if isinstance(choicelist, types.List | types.UniTuple):
+    if isinstance(choicelist, (types.List, types.UniTuple)):
         typ = choicelist.dtype
         if not bodo.utils.utils.is_array_typ(typ, True):  # pragma: no cover
             raise BodoError(
@@ -5694,10 +5703,10 @@ def overload_np_select(condlist, choicelist, default=0):
     # check if both condlist/choicelist are uni-type. If not, we will need to manually do loop unrolling
     # when generating the functext. See BE-1523
     cond_and_choice_list_uni_type = isinstance(
-        choicelist, types.List | types.UniTuple
-    ) and isinstance(condlist, types.List | types.UniTuple)
+        choicelist, (types.List, types.UniTuple)
+    ) and isinstance(condlist, (types.List, types.UniTuple))
 
-    if isinstance(choicelist, types.List | types.UniTuple):
+    if isinstance(choicelist, (types.List, types.UniTuple)):
         alloc_typ = choicelist.dtype
     else:
         # check if any of the underlying arrays are nullable, and find common element type

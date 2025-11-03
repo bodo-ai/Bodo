@@ -223,7 +223,7 @@ class SeriesPass:
                         out_nodes = self.dataframe_pass._run_assign(inst)
                         if out_nodes is None:
                             out_nodes = self._run_assign(inst)
-                    elif isinstance(inst, ir.SetItem | ir.StaticSetItem):
+                    elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                         out_nodes = self.dataframe_pass._run_setitem(inst)
                         if out_nodes is None:
                             out_nodes = self._run_setitem(inst)
@@ -272,7 +272,7 @@ class SeriesPass:
                     )
                     # replace "target" of Setitem nodes since inline_closure_call
                     # assumes an assignment and sets "target" to return value
-                    if isinstance(inst, ir.SetItem | ir.StaticSetItem):
+                    if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                         dummy_varname = mk_unique_var("dummy")
                         inst.target = ir.Var(block.scope, dummy_varname, inst.loc)
                         # Append the dummy var to the typemap for correctness.
@@ -446,7 +446,7 @@ class SeriesPass:
         # simplify getitem on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
-            isinstance(target_typ, SeriesType | HeterogeneousSeriesType)
+            isinstance(target_typ, (SeriesType, HeterogeneousSeriesType))
             and isinstance(target_typ.index, HeterogeneousIndexType)
             and is_overload_constant_tuple(target_typ.index.data)
         ):
@@ -582,7 +582,7 @@ class SeriesPass:
         # for example: r = Row(a, b); c = r["R1"] -> c = a
         # used for df.apply() UDF optimization
         if isinstance(target_typ, types.BaseNamedTuple) and isinstance(
-            idx_typ, types.StringLiteral | types.IntegerLiteral
+            idx_typ, (types.StringLiteral, types.IntegerLiteral)
         ):
             named_tup_def = guard(get_definition, self.func_ir, rhs.value)
             # TODO: support kws
@@ -713,9 +713,11 @@ class SeriesPass:
         if (
             isinstance(
                 rhs_type,
-                SeriesStrMethodType
-                | SeriesCatMethodType
-                | SeriesDatetimePropertiesType,
+                (
+                    SeriesStrMethodType,
+                    SeriesCatMethodType,
+                    SeriesDatetimePropertiesType,
+                ),
             )
             and rhs.attr == "_obj"
         ):
@@ -734,7 +736,7 @@ class SeriesPass:
             return [assign]
 
         if (
-            isinstance(rhs_type, SeriesIlocType | SeriesLocType | SeriesIatType)
+            isinstance(rhs_type, (SeriesIlocType, SeriesLocType, SeriesIatType))
             and rhs.attr == "_obj"
         ):
             arg = guard(get_definition, self.func_ir, rhs.value)
@@ -750,7 +752,7 @@ class SeriesPass:
         # simplify getattr access on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
-            isinstance(rhs_type, SeriesType | HeterogeneousSeriesType)
+            isinstance(rhs_type, (SeriesType, HeterogeneousSeriesType))
             and isinstance(rhs_type.index, HeterogeneousIndexType)
             and is_overload_constant_tuple(rhs_type.index.data)
         ):
@@ -817,7 +819,7 @@ class SeriesPass:
         if (
             rhs.attr == "dtype"
             and (is_series_type(rhs_type) or isinstance(rhs_type, types.Array))
-            and isinstance(rhs_type.dtype, types.NPDatetime | types.NPTimedelta)
+            and isinstance(rhs_type.dtype, (types.NPDatetime, types.NPTimedelta))
         ):
             assign.value = ir.Global("numpy.datetime64", rhs_type.dtype, rhs.loc)
             return [assign]
@@ -862,13 +864,15 @@ class SeriesPass:
         if (
             isinstance(
                 rhs_type,
-                NumericIndexType
-                | StringIndexType
-                | BinaryIndexType
-                | PeriodIndexType
-                | CategoricalIndexType
-                | DatetimeIndexType
-                | TimedeltaIndexType,
+                (
+                    NumericIndexType,
+                    StringIndexType,
+                    BinaryIndexType,
+                    PeriodIndexType,
+                    CategoricalIndexType,
+                    DatetimeIndexType,
+                    TimedeltaIndexType,
+                ),
             )
             and rhs.attr == "values"
         ):
@@ -1521,7 +1525,7 @@ class SeriesPass:
             and len(rhs.args) == 1
             and isinstance(
                 self.typemap[rhs.args[0].name],
-                IntegerArrayType | FloatingArrayType | BooleanArrayType,
+                (IntegerArrayType, FloatingArrayType, BooleanArrayType),
             )
         ):
             impl = getattr(bodo.libs.array_kernels, "overload_array_" + func_name)(
@@ -4230,7 +4234,7 @@ class SeriesPass:
                         and isinstance(fdef[1], ir.Var)
                         and isinstance(
                             self.typemap[fdef[1].name],
-                            DataFrameType | SeriesType | DataFrameGroupByType,
+                            (DataFrameType, SeriesType, DataFrameGroupByType),
                         )
                     ):
                         for arg in rhs.args + list(dict(rhs.kws).values()):
@@ -4318,21 +4322,23 @@ class SeriesPass:
 
 
 def _fix_typ_undefs(new_typ, old_typ):
-    if isinstance(old_typ, types.Array | SeriesType):
+    if isinstance(old_typ, (types.Array, SeriesType)):
         assert (
             isinstance(
                 new_typ,
-                types.Array
-                | IntegerArrayType
-                | FloatingArrayType
-                | SeriesType
-                | StringArrayType
-                | ArrayItemArrayType
-                | StructArrayType
-                | TupleArrayType
-                | bodo.hiframes.pd_categorical_ext.CategoricalArrayType
-                | types.List
-                | StringArraySplitViewType,
+                (
+                    types.Array,
+                    IntegerArrayType,
+                    FloatingArrayType,
+                    SeriesType,
+                    StringArrayType,
+                    ArrayItemArrayType,
+                    StructArrayType,
+                    TupleArrayType,
+                    bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
+                    types.List,
+                    StringArraySplitViewType,
+                ),
             )
             or new_typ == bodo.types.dict_str_arr_type
         )

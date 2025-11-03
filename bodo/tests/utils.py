@@ -623,7 +623,7 @@ def _convert_float_to_nullable_float(arg):
         return pd.array(arg)
 
     # Series/Index with float data
-    if isinstance(arg, pd.Series | pd.Index) and arg.dtype in (np.float32, np.float64):
+    if isinstance(arg, (pd.Series, pd.Index)) and arg.dtype in (np.float32, np.float64):
         return arg.astype("Float32" if arg.dtype == np.float32 else "Float64")
 
     # DataFrame float columns
@@ -1088,7 +1088,7 @@ def _get_dist_arg(
         if bodo.get_rank() == 1:
             start -= 1
 
-    if isinstance(a, pd.Series | pd.DataFrame):
+    if isinstance(a, (pd.Series, pd.DataFrame)):
         out_val = a.iloc[start:end]
     else:
         out_val = a[start:end]
@@ -1175,7 +1175,7 @@ def sort_series_values_index(S):
 def _is_nested_arrow_dtype(dtype):
     """return True if Pandas dtype is a nested Arrow dtype (map/struct/list)"""
     return isinstance(dtype, pd.ArrowDtype) and isinstance(
-        dtype.pyarrow_dtype, pa.MapType | pa.StructType | pa.ListType | pa.LargeListType
+        dtype.pyarrow_dtype, (pa.MapType, pa.StructType, pa.ListType, pa.LargeListType)
     )
 
 
@@ -1209,7 +1209,7 @@ def sort_dataframe_values_index(df):
     df = df.map(
         lambda x: (
             tuple(x)
-            if isinstance(x, list | np.ndarray | pd.core.arrays.ExtensionArray)
+            if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
             else x
         )
     )
@@ -1448,15 +1448,17 @@ def _test_equal(
             bodo_out.dtype == np.dtype("O")
             or isinstance(
                 bodo_out.dtype,
-                pd.BooleanDtype
-                | pd.Int8Dtype
-                | pd.Int16Dtype
-                | pd.Int32Dtype
-                | pd.Int64Dtype
-                | pd.UInt8Dtype
-                | pd.UInt16Dtype
-                | pd.UInt32Dtype
-                | pd.UInt64Dtype,
+                (
+                    pd.BooleanDtype,
+                    pd.Int8Dtype,
+                    pd.Int16Dtype,
+                    pd.Int32Dtype,
+                    pd.Int64Dtype,
+                    pd.UInt8Dtype,
+                    pd.UInt16Dtype,
+                    pd.UInt32Dtype,
+                    pd.UInt64Dtype,
+                ),
             )
         ):
             # struct array needs special handling in nested case
@@ -1540,7 +1542,7 @@ def _test_equal(
             atol=atol,
             rtol=rtol,
         )
-    elif isinstance(py_out, float | np.floating | np.complex128 | np.complex64):
+    elif isinstance(py_out, (float, np.floating, np.complex128, np.complex64)):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, rtol=rtol, atol=atol)
     elif isinstance(py_out, tuple) or (
@@ -1657,7 +1659,7 @@ def _gather_output(bodo_output):
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:
             if isinstance(
-                bodo_output_list[0], np.ndarray | pd.arrays.NumpyExtensionArray
+                bodo_output_list[0], (np.ndarray, pd.arrays.NumpyExtensionArray)
             ):
                 bodo_output = np.concatenate(bodo_output_list)
             elif isinstance(bodo_output_list[0], pd.arrays.ArrowExtensionArray):
@@ -1714,7 +1716,7 @@ def _typeof(val):
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
-    elif isinstance(val, pytypes.FunctionType | SpawnDispatcher):
+    elif isinstance(val, (pytypes.FunctionType, SpawnDispatcher)):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)
@@ -1771,7 +1773,7 @@ def check_timing_func(func, args):
 
 def string_list_ent(x):
     if isinstance(
-        x, int | np.int64 | float | pd.Timestamp | datetime.date | datetime.time
+        x, (int, np.int64, float, pd.Timestamp, datetime.date, datetime.time)
     ):
         return str(x)
     if isinstance(x, dict):
@@ -1782,11 +1784,13 @@ def string_list_ent(x):
         return "{" + ", ".join(l_str) + "}"
     if isinstance(
         x,
-        list
-        | np.ndarray
-        | pd.arrays.IntegerArray
-        | pd.arrays.FloatingArray
-        | pd.arrays.ArrowStringArray,
+        (
+            list,
+            np.ndarray,
+            pd.arrays.IntegerArray,
+            pd.arrays.FloatingArray,
+            pd.arrays.ArrowStringArray,
+        ),
     ):
         l_str = []
         if all(isinstance(elem, tuple) for elem in x):
@@ -1857,33 +1861,37 @@ def convert_non_pandas_columns(df):
             e_ent = e_col.iat[i_row]
             if isinstance(
                 e_ent,
-                list
-                | np.ndarray
-                | pd.arrays.BooleanArray
-                | pd.arrays.IntegerArray
-                | pd.arrays.FloatingArray
-                | pd.arrays.StringArray
-                | pd.arrays.ArrowStringArray,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
+                    pd.arrays.StringArray,
+                    pd.arrays.ArrowStringArray,
+                ),
             ):
                 if len(e_ent) > 0:
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
                     if isinstance(
                         e_ent[0],
-                        int | float | np.integer | np.floating,
+                        (int, float, np.integer, np.floating),
                     ):
                         nb_array_item += 1
                     for e_val in e_ent:
                         if isinstance(
                             e_val,
-                            list
-                            | dict
-                            | tuple
-                            | Decimal
-                            | datetime.time
-                            | np.ndarray
-                            | pd.arrays.IntegerArray
-                            | pd.arrays.FloatingArray,
+                            (
+                                list,
+                                dict,
+                                tuple,
+                                Decimal,
+                                datetime.time,
+                                np.ndarray,
+                                pd.arrays.IntegerArray,
+                                pd.arrays.FloatingArray,
+                            ),
                         ):
                             nb_arrow_array_item += 1
                 else:
@@ -1912,7 +1920,7 @@ def convert_non_pandas_columns(df):
             e_ent = e_col.iat[i_row]
             if isinstance(
                 e_ent,
-                list | np.ndarray | pd.arrays.StringArray | pd.arrays.ArrowStringArray,
+                (list, np.ndarray, pd.arrays.StringArray, pd.arrays.ArrowStringArray),
             ):
                 f_ent = [x if not pd.isna(x) else "None" for x in e_ent]
                 e_str = ",".join(f_ent) + ","
@@ -1927,13 +1935,15 @@ def convert_non_pandas_columns(df):
             e_ent = e_col.iat[i_row]
             if isinstance(
                 e_ent,
-                list
-                | np.ndarray
-                | pd.arrays.BooleanArray
-                | pd.arrays.IntegerArray
-                | pd.arrays.FloatingArray
-                | pd.arrays.StringArray
-                | pd.arrays.ArrowStringArray,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
+                    pd.arrays.StringArray,
+                    pd.arrays.ArrowStringArray,
+                ),
             ):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)

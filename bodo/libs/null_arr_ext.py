@@ -195,7 +195,7 @@ def overload_null_astype(A, dtype, copy=True):
     if (
         isinstance(
             nb_dtype,
-            bodo.libs.int_arr_ext.IntDtype | bodo.libs.float_arr_ext.FloatDtype,
+            (bodo.libs.int_arr_ext.IntDtype, bodo.libs.float_arr_ext.FloatDtype),
         )
         or nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype
     ):

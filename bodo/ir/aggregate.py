@@ -768,7 +768,7 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
             bodo.utils.typing.get_builtin_function_name(f_val)
         )
         return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
-    if isinstance(f_val, tuple | list):
+    if isinstance(f_val, (tuple, list)):
         lambda_count = 0
         out = []
         for f in f_val:
@@ -780,7 +780,7 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
         return out
     else:
         assert is_expr(f_val, "make_function") or isinstance(
-            f_val, numba.core.registry.CPUDispatcher | types.Dispatcher
+            f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
         )
         assert typemap is not None, "typemap is required for agg UDF handling"
         func = _get_const_agg_func(f_val, func_ir)
@@ -828,7 +828,7 @@ def handle_listagg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(additional_args_values[0], ir.Global | ir.FreeVar | ir.Const), (
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
         "Internal error in handle_listagg_additional_args: listagg_sep should be a constant value"
     )
     listagg_sep = additional_args_values[0].value
@@ -877,7 +877,7 @@ def handle_percentile_additional_args(func_ir, outcol_and_namedagg):  # pragma: 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(additional_args_values[0], ir.Global | ir.FreeVar | ir.Const), (
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
         "Internal error in handle_percentile_additional_args: percentile should be a constant value"
     )
     return additional_args_values[0].value
@@ -897,7 +897,7 @@ def handle_object_agg_additional_args(func_ir, outcol_and_namedagg):  # pragma: 
         func_ir, outcol_and_namedagg
     )
 
-    assert isinstance(additional_args_values[0], ir.Global | ir.FreeVar | ir.Const), (
+    assert isinstance(additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)), (
         "Internal error in handle_object_agg_additional_args: key column should be a constant value"
     )
     return additional_args_values[0].value
@@ -930,7 +930,9 @@ def extract_extendedagg_additional_args_tuple(func_ir, outcol_and_namedagg):
 class TypeDt64(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        if len(args) == 1 and isinstance(args[0], types.NPDatetime | types.NPTimedelta):
+        if len(args) == 1 and isinstance(
+            args[0], (types.NPDatetime, types.NPTimedelta)
+        ):
             classty = types.DType(args[0])
             return signature(classty, *args)
 
@@ -2903,7 +2905,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
         for stmt in block.body:
             if (
                 is_assign(stmt)
-                and isinstance(stmt.value, ir.Arg | ir.Var)
+                and isinstance(stmt.value, (ir.Arg, ir.Var))
                 and isinstance(typemap[stmt.target.name], SeriesType)
             ):
                 typ = typemap.pop(stmt.target.name)

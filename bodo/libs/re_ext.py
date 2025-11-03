@@ -468,7 +468,7 @@ def overload_match_group(m, *args):
     # instead of the argument types, Numba passes a tuple with a StarArgTuple type at
     # some point during lowering
     if len(args) == 1 and isinstance(
-        args[0], types.StarArgTuple | types.StarArgUniTuple
+        args[0], (types.StarArgTuple, types.StarArgUniTuple)
     ):
         args = args[0].types
 

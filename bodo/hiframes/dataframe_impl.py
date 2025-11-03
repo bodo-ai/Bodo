@@ -146,7 +146,7 @@ def generate_col_to_index_func_text(col_names: tuple):
     ):
         bin_str_arr = f"bodo.utils.conversion.coerce_to_array({col_names})"
         return f"bodo.hiframes.pd_index_ext.init_binary_str_index({bin_str_arr})\n"
-    elif all(isinstance(a, int | float) for a in col_names):  # pragma: no cover
+    elif all(isinstance(a, (int, float)) for a in col_names):  # pragma: no cover
         # TODO(ehsan): test
         arr = f"bodo.utils.conversion.coerce_to_array({col_names})"
         return f"bodo.hiframes.pd_index_ext.init_numeric_index({arr})\n"
@@ -186,7 +186,7 @@ def overload_dataframe_values(df):
     nullable_arr_cols = {
         i
         for i in range(n_cols)
-        if isinstance(df.data[i], IntegerArrayType | FloatingArrayType)
+        if isinstance(df.data[i], (IntegerArrayType, FloatingArrayType))
     }
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
@@ -1322,7 +1322,7 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
             ".astype(np.float64)"
             if (
                 isinstance(
-                    df.data[df.column_index[c]], IntegerArrayType | FloatingArrayType
+                    df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
                 )
                 or df.data[df.column_index[c]] == boolean_array_type
             )
@@ -1390,7 +1390,7 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
             ".astype(np.float64)"
             if (
                 isinstance(
-                    df.data[df.column_index[c]], IntegerArrayType | FloatingArrayType
+                    df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
                 )
                 or df.data[df.column_index[c]] == boolean_array_type
             )
@@ -1669,13 +1669,15 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(coltype.dtype, types.Number | types.Boolean)
+                or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
                 coltype,
-                bodo.types.IntegerArrayType
-                | bodo.types.FloatingArrayType
-                | bodo.types.CategoricalArrayType,
+                (
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                    bodo.types.CategoricalArrayType,
+                ),
             )
             or coltype
             in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
@@ -1715,13 +1717,15 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
-                or isinstance(coltype.dtype, types.Number | types.Boolean)
+                or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
                 coltype,
-                bodo.types.IntegerArrayType
-                | bodo.types.FloatingArrayType
-                | bodo.types.CategoricalArrayType,
+                (
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                    bodo.types.CategoricalArrayType,
+                ),
             )
             or coltype
             in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
@@ -2033,7 +2037,7 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 def _is_describe_type(data):
     """Check if df.data has supported datatype for describe"""
     return (
-        isinstance(data, IntegerArrayType | FloatingArrayType)
+        isinstance(data, (IntegerArrayType, FloatingArrayType))
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
         or data.dtype == bodo.types.datetime64ns
     )
@@ -2210,7 +2214,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     # Currently only float, int, and dt64 are supported
     for column_type in df.data:
         if not (
-            isinstance(column_type, types.Array | IntegerArrayType | FloatingArrayType)
+            isinstance(column_type, (types.Array, IntegerArrayType, FloatingArrayType))
             and (
                 isinstance(column_type.dtype, (types.Number))
                 or column_type.dtype == bodo.types.datetime64ns
@@ -2365,7 +2369,7 @@ def overload_dataframe_query(df, expr, inplace=False):
     )
 
     # check expr is of type string
-    if not isinstance(expr, types.StringLiteral | types.UnicodeType):
+    if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
         raise BodoError("query(): expr argument should be a string")
 
     # TODO: support df.loc for normal case and getitem for multi-dim case similar to
@@ -2682,7 +2686,7 @@ def _validate_arguments_mask_where(
         raise_bodo_error(f"{func_name}(): axis argument not supported")
 
     if not (
-        isinstance(cond, SeriesType | types.Array | BooleanArrayType)
+        isinstance(cond, (SeriesType, types.Array, BooleanArrayType))
         and (cond.ndim == 1 or cond.ndim == 2)
         and cond.dtype == types.bool_
     ) and not (
@@ -2698,7 +2702,7 @@ def _validate_arguments_mask_where(
 
     if hasattr(other, "ndim") and (other.ndim != 1 or other.ndim != 2):
         if other.ndim == 2:
-            if not isinstance(other, DataFrameType | types.Array):
+            if not isinstance(other, (DataFrameType, types.Array)):
                 raise BodoError(
                     f"{func_name}(): 'other', if 2-dimensional, must be a DataFrame or array."
                 )
@@ -3046,7 +3050,7 @@ def overload_isna(obj):
     check_runtime_cols_unsupported(obj, "pd.isna()")
     # DataFrame, Series, Index
     if isinstance(
-        obj, DataFrameType | SeriesType
+        obj, (DataFrameType, SeriesType)
     ) or bodo.hiframes.pd_index_ext.is_pd_index_type(obj):
         return lambda obj: obj.isna()  # pragma: no cover
 
@@ -3080,14 +3084,14 @@ overload(bd.isnull, inline="always")(overload_isna)
 def overload_isna_scalar(obj):
     # ignore cases handled above
     if (
-        isinstance(obj, DataFrameType | SeriesType)
+        isinstance(obj, (DataFrameType, SeriesType))
         or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
         or is_array_typ(obj)
     ):
         return
 
     # array-like: list, tuple
-    if isinstance(obj, types.List | types.UniTuple):
+    if isinstance(obj, (types.List, types.UniTuple)):
         # no reuse of array implementation to avoid prange (unexpected threading etc.)
         def impl(obj):  # pragma: no cover
             n = len(obj)
@@ -3108,7 +3112,7 @@ def overload_isna_scalar(obj):
         return lambda obj: unliteral_val(False)  # pragma: no cover
     if isinstance(obj, types.Float):
         return lambda obj: np.isnan(obj)  # pragma: no cover
-    if isinstance(obj, types.NPDatetime | types.NPTimedelta):
+    if isinstance(obj, (types.NPDatetime, types.NPTimedelta)):
         return lambda obj: np.isnat(obj)  # pragma: no cover
     if obj == types.none:
         return lambda obj: unliteral_val(True)
@@ -3144,10 +3148,10 @@ def overload_notna(obj):
     # TODO: ~pd.isna(obj) implementation fails for some reason in
     # test_dataframe.py::test_pd_notna[na_test_obj7] with 1D_Var input
     check_runtime_cols_unsupported(obj, "pd.notna()")
-    if isinstance(obj, DataFrameType | SeriesType):
+    if isinstance(obj, (DataFrameType, SeriesType)):
         return lambda obj: obj.notna()  # pragma: no cover
 
-    if isinstance(obj, types.List | types.UniTuple) or is_array_typ(
+    if isinstance(obj, (types.List, types.UniTuple)) or is_array_typ(
         obj, include_index_series=True
     ):
         return lambda obj: ~pd.isna(obj)  # pragma: no cover
@@ -4232,7 +4236,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
 
     columns_lit = get_literal_value(columns)
     # Only lists/tuples with 1 element are supported.
-    if isinstance(columns_lit, list | tuple):
+    if isinstance(columns_lit, (list, tuple)):
         if len(columns_lit) > 1:
             raise BodoError(
                 f"{func_name}(): 'columns' argument must be a constant column label not a {columns_lit}"
@@ -4255,7 +4259,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
         index_lit = []
     else:
         index_lit = get_literal_value(index)
-        if not isinstance(index_lit, list | tuple):
+        if not isinstance(index_lit, (list, tuple)):
             index_lit = [index_lit]
         index_idxs = []
         for index in index_lit:
@@ -4289,7 +4293,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
                 values_lit.append(c)
     else:
         values_lit = get_literal_value(values)
-        if not isinstance(values_lit, list | tuple):
+        if not isinstance(values_lit, (list, tuple)):
             values_lit = [values_lit]
         values_idxs = []
         for val in values_lit:
@@ -4310,11 +4314,13 @@ def pivot_error_checking(df, index, columns, values, func_name):
     def check_valid_index_typ(index_column):
         if isinstance(
             index_column,
-            bodo.types.ArrayItemArrayType
-            | bodo.types.MapArrayType
-            | bodo.types.StructArrayType
-            | bodo.types.TupleArrayType
-            | bodo.types.IntervalArrayType,
+            (
+                bodo.types.ArrayItemArrayType,
+                bodo.types.MapArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.TupleArrayType,
+                bodo.types.IntervalArrayType,
+            ),
         ):
             raise BodoError(
                 f"{func_name}(): 'index' DataFrame column must have scalar rows"
@@ -4348,11 +4354,13 @@ def pivot_error_checking(df, index, columns, values, func_name):
     columns_column = df.data[columns_idx]
     if isinstance(
         columns_column,
-        bodo.types.ArrayItemArrayType
-        | bodo.types.MapArrayType
-        | bodo.types.StructArrayType
-        | bodo.types.TupleArrayType
-        | bodo.types.IntervalArrayType,
+        (
+            bodo.types.ArrayItemArrayType,
+            bodo.types.MapArrayType,
+            bodo.types.StructArrayType,
+            bodo.types.TupleArrayType,
+            bodo.types.IntervalArrayType,
+        ),
     ):
         raise BodoError(
             f"{func_name}(): 'columns' DataFrame column must have scalar rows"
@@ -4372,10 +4380,12 @@ def pivot_error_checking(df, index, columns, values, func_name):
         if (
             isinstance(
                 values_column,
-                bodo.types.ArrayItemArrayType
-                | bodo.types.MapArrayType
-                | bodo.types.StructArrayType
-                | bodo.types.TupleArrayType,
+                (
+                    bodo.types.ArrayItemArrayType,
+                    bodo.types.MapArrayType,
+                    bodo.types.StructArrayType,
+                    bodo.types.TupleArrayType,
+                ),
             )
             or values_column == bodo.types.binary_array_type
         ):
@@ -4701,7 +4711,7 @@ def overload_dataframe_melt(
     value_name = get_literal_value(value_name) if value_name != "value" else "value"
 
     id_lit = get_literal_value(id_vars) if not is_overload_none(id_vars) else []
-    if not isinstance(id_lit, list | tuple):
+    if not isinstance(id_lit, (list, tuple)):
         id_lit = [id_lit]
 
     for c in id_lit:
@@ -4723,7 +4733,7 @@ def overload_dataframe_melt(
                 value_lit.append(c)
     else:
         value_lit = get_literal_value(value_vars)
-        if not isinstance(value_lit, list | tuple):
+        if not isinstance(value_lit, (list, tuple)):
             value_lit = [value_lit]
         # In case value_lit has items from id_lit, matches pandas,
         # TODO: support value_lit=[]
@@ -5947,8 +5957,8 @@ def overload_dataframe_plot(
         if is_overload_none(x) and is_overload_none(y):
             for i in range(len(df.columns)):
                 if isinstance(
-                    df.data[i], types.Array | IntegerArrayType | FloatingArrayType
-                ) and isinstance(df.data[i].dtype, types.Integer | types.Float):
+                    df.data[i], (types.Array, IntegerArrayType, FloatingArrayType)
+                ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
                     func_text += f"   ax.plot(df.iloc[:, {i}], label=df.columns[{i}])\n"
         elif is_overload_none(x):
             func_text += "   ax.plot(df[y], label=y)\n"
@@ -5957,8 +5967,8 @@ def overload_dataframe_plot(
             x_idx = df.columns.index(x_val)
             for i in range(len(df.columns)):
                 if isinstance(
-                    df.data[i], types.Array | IntegerArrayType | FloatingArrayType
-                ) and isinstance(df.data[i].dtype, types.Integer | types.Float):
+                    df.data[i], (types.Array, IntegerArrayType, FloatingArrayType)
+                ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
                     if x_idx != i:
                         func_text += f"   ax.plot(df[x], df.iloc[:, {i}], label=df.columns[{i}])\n"
         else:
@@ -5993,7 +6003,7 @@ def is_df_values_numpy_supported_dftyp(df_typ):
     """helper function that checks if the dataframe type contains only numeric/boolean/dt64/td64 values"""
     for col_typ in df_typ.data:
         if not (
-            isinstance(col_typ, IntegerArrayType | FloatingArrayType)
+            isinstance(col_typ, (IntegerArrayType, FloatingArrayType))
             or isinstance(col_typ.dtype, types.Number)
             or col_typ.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns)
         ):
@@ -6006,7 +6016,7 @@ def typeref_to_type(v):
     if isinstance(v, types.BaseTuple):
         return types.BaseTuple.from_types(tuple(typeref_to_type(a) for a in v))
 
-    return v.instance_type if isinstance(v, types.TypeRef | types.NumberClass) else v
+    return v.instance_type if isinstance(v, (types.TypeRef, types.NumberClass)) else v
 
 
 def _install_typer_for_type(type_name, typ):

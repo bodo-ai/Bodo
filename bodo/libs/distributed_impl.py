@@ -935,11 +935,13 @@ def scatterv_impl_jit(
 
     if isinstance(
         data,
-        IntegerArrayType
-        | FloatingArrayType
-        | DecimalArrayType
-        | DatetimeArrayType
-        | TimeArrayType,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            DatetimeArrayType,
+            TimeArrayType,
+        ),
     ) or data in (datetime_date_array_type, timedelta_array_type):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -1680,11 +1682,13 @@ def irecv_impl(arr, size, pe, tag, cond):
     if (
         isinstance(
             arr,
-            IntegerArrayType
-            | FloatingArrayType
-            | DecimalArrayType
-            | TimeArrayType
-            | DatetimeArrayType,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                TimeArrayType,
+                DatetimeArrayType,
+            ),
         )
         or arr == datetime_date_array_type
     ):

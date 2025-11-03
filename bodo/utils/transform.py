@@ -647,7 +647,7 @@ def get_const_value_inner(
         return get_literal_value(typ)
 
     # constant value
-    if isinstance(var_def, ir.Const | ir.Global | ir.FreeVar):
+    if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
         val = var_def.value
         return val
 
@@ -1200,7 +1200,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
                     if isinstance(func_mod, ir.Var):
                         typ = typemap[func_mod.name]
                         if isinstance(
-                            typ, DataFrameType | SeriesType
+                            typ, (DataFrameType, SeriesType)
                         ) and func_name in (
                             "to_csv",
                             "to_excel",
@@ -1334,7 +1334,7 @@ def get_const_func_output_type(
             )
 
     # add length/index info for constant Series output (required for output typing)
-    if is_udf and isinstance(f_return_type, SeriesType | HeterogeneousSeriesType):
+    if is_udf and isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType)):
         # run SeriesPass to simplify Series calls (e.g. pd.Series)
         typingctx = numba.core.registry.cpu_target.typing_context
         targetctx = numba.core.registry.cpu_target.target_context
@@ -1558,7 +1558,7 @@ def gen_const_val_str(c):
     if isinstance(c, str):
         return f"'{c}'"
     # TODO: Support actual timestamp, timedelta, float values
-    if isinstance(c, pd.Timestamp | pd.Timedelta | float):
+    if isinstance(c, (pd.Timestamp, pd.Timedelta, float)):
         # Timestamp has a space
         return f"'{c}'"
     return str(c)
@@ -1773,7 +1773,7 @@ def avoid_udf_inline(py_func, arg_types, kw_types):
     for block in f_ir.blocks.values():
         # assertions
         # TODO(ehsan): add TryRaise/StaticTryRaise/DynamicTryRaise?
-        if isinstance(block.body[-1], ir.Raise | ir.StaticRaise | ir.DynamicRaise):
+        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise, ir.DynamicRaise)):
             return True
         # has context manager
         for stmt in block.body:
@@ -1912,7 +1912,7 @@ def get_type_alloc_counts(t):
     """get the number of counts needed for upfront allocation of array of type 't'.
     For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 3.
     """
-    if isinstance(t, StructArrayType | TupleArrayType):
+    if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
     if t == string_array_type or t == bodo.types.binary_array_type:
@@ -2135,7 +2135,7 @@ def _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc):
     except GuardException:
         raise BodoError(err_msg, loc)
 
-    if not all(isinstance(c, str | int) for c in keys):
+    if not all(isinstance(c, (str, int)) for c in keys):
         raise BodoError(err_msg, loc)
 
     return keys

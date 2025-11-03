@@ -1427,9 +1427,11 @@ def convert_nullable_object(df):
     if any(
         isinstance(
             x,
-            pd.core.arrays.integer.IntegerDtype
-            | pd.core.arrays.boolean.BooleanDtype
-            | pd.StringDtype,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.core.arrays.boolean.BooleanDtype,
+                pd.StringDtype,
+            ),
         )
         for x in df.dtypes
     ):
@@ -1437,9 +1439,11 @@ def convert_nullable_object(df):
         for i, x in enumerate(df.dtypes):
             if isinstance(
                 x,
-                pd.core.arrays.integer.IntegerDtype
-                | pd.core.arrays.boolean.BooleanDtype
-                | pd.StringDtype,
+                (
+                    pd.core.arrays.integer.IntegerDtype,
+                    pd.core.arrays.boolean.BooleanDtype,
+                    pd.StringDtype,
+                ),
             ):
                 S = df.iloc[:, i]
                 df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
@@ -1542,7 +1546,7 @@ def get_pyspark_literal(value, use_interval):
     Takes a scalar value which is Python, Numpy, or Pandas type and returns
     a string that contains a literal value that can be used by SparkSQL.
     """
-    if isinstance(value, int | float | np.integer | np.floating):
+    if isinstance(value, (int, float, np.integer, np.floating)):
         return str(value)
     elif isinstance(value, str):
         return f"'{value}'"
@@ -1621,9 +1625,11 @@ def create_pyspark_schema_from_dataframe(df):
         if (
             isinstance(
                 arr_type,
-                types.Array
-                | bodo.types.IntegerArrayType
-                | bodo.types.FloatingArrayType,
+                (
+                    types.Array,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                ),
             )
             or arr_type == bodo.types.boolean_array_type
         ):

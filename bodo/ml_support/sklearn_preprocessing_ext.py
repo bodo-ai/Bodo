@@ -407,10 +407,12 @@ def overload_preprocessing_one_hot_encoder_transform(
             # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
             if X.ndim == 1 and isinstance(
                 X[0],
-                np.ndarray
-                | pd.arrays.ArrowStringArray
-                | pd.arrays.ArrowExtensionArray
-                | list,
+                (
+                    np.ndarray,
+                    pd.arrays.ArrowStringArray,
+                    pd.arrays.ArrowExtensionArray,
+                    list,
+                ),
             ):
                 X = np.vstack(X).astype(object)
 
@@ -1459,7 +1461,7 @@ def _pa_arr_to_numpy(a):
     """Convert Arrow arrays to Numpy arrays to workaround Scikit-learn issues
     as of 1.7.0. See test_label_encoder.
     """
-    if isinstance(a, pd.arrays.ArrowStringArray | pd.arrays.ArrowExtensionArray):
+    if isinstance(a, (pd.arrays.ArrowStringArray, pd.arrays.ArrowExtensionArray)):
         return a.to_numpy()
     return a
 

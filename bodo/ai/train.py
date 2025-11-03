@@ -3,8 +3,7 @@ from __future__ import annotations
 import importlib.util
 import socket
 import typing
-from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 if typing.TYPE_CHECKING:
     from pandas import DataFrame, Series
@@ -222,7 +221,9 @@ def prepare_dataset(
     if len(gpu_ranks) != 0:
         data = bodo.rebalance(data, dests=gpu_ranks)
 
-    assert isinstance(data, DataFrame | Series), "Dataset must be a DataFrame or Series"
+    assert isinstance(data, (DataFrame, Series)), (
+        "Dataset must be a DataFrame or Series"
+    )
 
     dataset = dataset_func(data)
     assert isinstance(dataset, Dataset), (

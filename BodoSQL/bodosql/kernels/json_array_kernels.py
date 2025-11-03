@@ -771,11 +771,11 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
     struct_mode = False
     map_mode = False
     if isinstance(
-        json_type, bodo.types.StructArrayType | bodo.libs.struct_arr_ext.StructType
+        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         struct_mode = True
     elif isinstance(
-        json_type, bodo.types.MapArrayType | bodo.libs.map_arr_ext.MapScalarType
+        json_type, (bodo.types.MapArrayType, bodo.libs.map_arr_ext.MapScalarType)
     ):
         map_mode = True
 
@@ -945,7 +945,7 @@ def overload_object_insert_util(
     ]
 
     if isinstance(
-        json_type, bodo.types.StructArrayType | bodo.libs.struct_arr_ext.StructType
+        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         # Codepath for calling OBJECT_INSERT on a STRUCT.
         if bodo.hiframes.pd_series_ext.is_series_type(new_field_value):
@@ -1053,7 +1053,7 @@ def overload_object_insert_util(
         scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(values)},), null_vector, names)"
         out_dtype = bodo.types.StructArrayType(tuple(dtypes), tuple(names))
 
-    elif isinstance(json_type, bodo.types.MapArrayType | bodo.types.MapScalarType):
+    elif isinstance(json_type, (bodo.types.MapArrayType, bodo.types.MapScalarType)):
         # Codepath for calling OBJECT_INSERT on a MAP.
         key_type = json_type.key_arr_type
         val_type = json_type.value_arr_type
