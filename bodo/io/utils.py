@@ -5,6 +5,7 @@ This file should import JIT lazily to avoid slowing down non-JIT code paths.
 
 from __future__ import annotations
 
+from pathlib import PureWindowsPath
 from urllib.parse import urlparse
 
 
@@ -39,3 +40,20 @@ def parse_dbtype(con_str) -> tuple[str, str]:
         # Standardize iceberg to always use "iceberg"
         return "iceberg", con_paswd
     return db_type, con_paswd
+
+
+def is_windows_path(path: str) -> bool:
+    """
+    Check if the given path is a Windows path (e.g. C:\\user\\data).
+    """
+    p = PureWindowsPath(path)
+
+    # True if a typical Windows drive like "C:" or a UNC drive like "\\server\share"
+    if p.drive:
+        if len(p.drive) == 2 and p.drive[1] == ":":
+            return True
+
+        if p.drive.startswith("\\"):
+            return True
+
+    return False

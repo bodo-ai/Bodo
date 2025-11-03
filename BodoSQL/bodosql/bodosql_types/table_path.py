@@ -108,7 +108,7 @@ def _get_path_protocol(path: str) -> str:
     """
     Get protocol of a path (e.g. s3://, or "" for file).
     """
-    if bodo.io.iceberg.file_io._is_windows_path(path):
+    if bodo.io.utils.is_windows_path(path):
         return ""
 
     parsed_url: ParseResult = urlparse(path)
