@@ -8,7 +8,6 @@ import traceback
 import warnings
 from typing import Any
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -162,6 +161,8 @@ class BodoSQLContext:
 
     def _compile(self, sql, params_dict=None, dynamic_params_list=None):
         """compiles the query in Bodo."""
+        import numba
+
         import bodosql
 
         if params_dict is None:
@@ -372,6 +373,8 @@ class BodoSQLContext:
         Returns:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
+        import numba
+
         from bodo.mpi4py import MPI
         from bodo.utils.typing import BodoError
 
@@ -477,6 +480,8 @@ class BodoSQLContext:
         ):
             return output
         else:
+            import numba
+
             func_text, lowered_globals = self._convert_to_pandas(
                 sql,
                 dynamic_params_list,
