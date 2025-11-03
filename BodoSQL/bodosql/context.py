@@ -31,15 +31,6 @@ DYNAMIC_PARAM_ARG_PREFIX = "_DYNAMIC_PARAM_"
 NAMED_PARAM_ARG_PREFIX = "_NAMED_PARAM_"
 
 
-class _CPPBackendExecutionFailed:
-    """Sentinel class to indicate C++ backend execution failed and we should fall back to JIT"""
-
-    pass
-
-
-CPP_BACKEND_EXECUTION_FAILED = _CPPBackendExecutionFailed()
-
-
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
 class SqlTypeEnum(Enum):
     Null = 0
@@ -77,6 +68,15 @@ class SqlTypeEnum(Enum):
     Fixed_Size_String = 27
     Fixed_Size_Binary = 28
     Unsupported = 29
+
+
+class _CPPBackendExecutionFailed:
+    """Sentinel class to indicate C++ backend execution failed and we should fall back to JIT"""
+
+    pass
+
+
+CPP_BACKEND_EXECUTION_FAILED = _CPPBackendExecutionFailed()
 
 
 def _get_estimated_row_count(table: pd.DataFrame | TablePath) -> int | None:
