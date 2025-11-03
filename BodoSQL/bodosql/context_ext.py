@@ -7,7 +7,6 @@ import datetime
 import re
 import time
 import warnings
-from enum import Enum
 from typing import Any
 
 import numba
@@ -54,6 +53,7 @@ from bodosql.context import (
     NAMED_PARAM_ARG_PREFIX,
     TABLE_ARG_PREFIX,
     BodoSQLContext,
+    SqlTypeEnum,
     initialize_schema,
 )
 from bodosql.imported_java_classes import (
@@ -696,45 +696,6 @@ def overload_convert_to_pandas(
     bodo.utils.typing.raise_bodo_error(
         "Invalid BodoSQLContext.convert_to_pandas() call"
     )
-
-
-# NOTE: These are defined in BodoSQLColumnDataType and must match here
-class SqlTypeEnum(Enum):
-    Null = 0
-    Int8 = 1
-    Int16 = 2
-    Int32 = 3
-    Int64 = 4
-    UInt8 = 5
-    UInt16 = 6
-    UInt32 = 7
-    UInt64 = 8
-    Float32 = 9
-    Float64 = 10
-    Decimal = 11
-    Bool = 12
-    Date = 13
-    Time = 14
-    Timestamp_Ntz = 15
-    Timestamp_Ltz = 16
-    Timestamp_Tz = 17
-    Timedelta = 18
-    DateOffset = 19
-    String = 20
-    Binary = 21
-    Categorical = 22
-    # Note Array, Object, Struct, and Variant are currently unused
-    # on the Python side but this enum is updated to be consistent.
-    Array = 23
-    Json_Object = 24
-    Struct = 25
-    Variant = 26
-    # Fixed Size columns are for columns with a compile time known size.
-    # These are only used for special Iceberg types but are added here for
-    # consistency.
-    Fixed_Size_String = 27
-    Fixed_Size_Binary = 28
-    Unsupported = 29
 
 
 # Scalar dtypes for supported Bodo Arrays
