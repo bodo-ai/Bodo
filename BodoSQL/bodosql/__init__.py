@@ -8,7 +8,6 @@ from bodosql.bodosql_types.filesystem_catalog import FileSystemCatalog
 from bodosql.bodosql_types.snowflake_catalog import SnowflakeCatalog
 from bodosql.bodosql_types.rest_catalog import (
     RESTCatalog,
-    get_REST_connection,
 )
 from bodosql.bodosql_types.glue_catalog import (
     GlueCatalog,
