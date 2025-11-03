@@ -103,6 +103,7 @@ jobs:
         pleias_ocr_correction_inference.py
         pleias_ocr_correction_tokenization.py
         pandas_ddp_example.py
+        llama_finetune_iceberg_data.py
         #Tutorials/*.py
         #Getting-Started/dataframes.py
     steps:
