@@ -39,7 +39,7 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
-from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,

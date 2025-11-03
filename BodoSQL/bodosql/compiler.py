@@ -10,7 +10,7 @@ import bodo.decorators
 import bodosql
 
 # Import BodoSQL types
-from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.table_path_ext import TablePathType
 from bodosql.bodosql_types.filesystem_catalog import (
     FileSystemCatalog,
@@ -58,3 +58,4 @@ import bodosql.kernels.crypto_funcs
 
 # Set top-level type aliases
 bodosql.TablePathType = TablePathType
+bodosql.DatabaseCatalogType = DatabaseCatalogType
