@@ -138,6 +138,7 @@ lint.ignore = [
     "E711", # Comparison to `None` should be `cond is not None`
     "E712", # Comparison to `...` should be `cond is False` or `if not cond:`
     "E731", # Do not assign a `lambda` expression, use a `def`
+    "UP007"
 ]
 exclude = [
     ".git/",
