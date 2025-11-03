@@ -5,6 +5,7 @@ from bodosql.context import BodoSQLContext
 from bodosql.bodosql_types.table_path import TablePath
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.filesystem_catalog import FileSystemCatalog
+from bodosql.bodosql_types.snowflake_catalog import SnowflakeCatalog
     
 
 use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "0") != "0"
