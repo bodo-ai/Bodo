@@ -2,6 +2,8 @@ import os
 
 from bodosql.context import BodoSQLContext
 
+from bodosql.bodosql_types.table_path import TablePath
+
 use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "0") != "0"
 verbose_cpp_backend = os.environ.get("BODOSQL_VERBOSE_CPP_BACKEND", "0") != "0"
 # Used for testing purposes to disable fallback to JIT backend

@@ -9,7 +9,7 @@ import bodo.decorators
 
 # Import BodoSQL types
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
-from bodosql.bodosql_types.table_path import TablePath, TablePathType
+from bodosql.bodosql_types.table_path_ext import TablePathType
 from bodosql.bodosql_types.filesystem_catalog import (
     FileSystemCatalog,
     FileSystemCatalogType,
