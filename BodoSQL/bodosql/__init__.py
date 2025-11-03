@@ -14,6 +14,11 @@ from bodosql.bodosql_types.glue_catalog import (
     GlueCatalog,
     get_glue_connection,
 )
+from bodosql.bodosql_types.s3_tables_catalog import (
+    S3TablesCatalog,
+    get_s3_tables_connection,
+)
+
 
 
 use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "0") != "0"
