@@ -22,7 +22,7 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
-from bodosql import DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.snowflake_catalog import (
     SnowflakeCatalog,
     _create_java_snowflake_catalog,

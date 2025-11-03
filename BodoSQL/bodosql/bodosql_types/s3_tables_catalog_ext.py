@@ -18,7 +18,7 @@ from numba.extending import (
 
 from bodo.ir.iceberg_ext import IcebergConnectionType
 from bodo.utils.typing import get_literal_value, raise_bodo_error
-from bodosql import DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.s3_tables_catalog import (
     S3TablesCatalog,
     _create_java_s3_tables_catalog,

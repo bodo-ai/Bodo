@@ -13,7 +13,6 @@ import pandas as pd
 import pyarrow as pa
 
 import bodo
-import bodosql
 from bodo.mpi4py import MPI
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath
@@ -311,6 +310,7 @@ class BodoSQLContext:
 
     def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
         from bodo.mpi4py import MPI
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import compute_df_types, update_schema
 
         comm = MPI.COMM_WORLD
@@ -551,6 +551,7 @@ class BodoSQLContext:
         Return the optimized plan for the SQL code as
         as a Python string.
         """
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import (
             create_java_dynamic_parameter_type_list,
             create_java_named_parameter_type_map,
@@ -612,6 +613,7 @@ class BodoSQLContext:
         Returns:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import (
             create_java_dynamic_parameter_type_list,
             create_java_named_parameter_type_map,
@@ -658,6 +660,7 @@ class BodoSQLContext:
         Returns:
             pd.DataFrame | None | _CPPBackendExecutionFailed: The result of the query execution or a failure indicator.
         """
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import (
             create_java_dynamic_parameter_type_list,
             create_java_named_parameter_type_map,

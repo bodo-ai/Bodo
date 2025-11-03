@@ -20,7 +20,7 @@ from numba.extending import (
 import bodo
 from bodo.ir.iceberg_ext import IcebergConnectionType
 from bodo.utils.typing import get_literal_value, raise_bodo_error
-from bodosql import DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.rest_catalog import (
     RESTCatalog,
     _create_java_REST_catalog,

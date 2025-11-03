@@ -48,16 +48,13 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
-from bodosql.bodosql_types.table_path import TablePathType
+from bodosql.bodosql_types.table_path_ext import TablePathType
 from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,
     NAMED_PARAM_ARG_PREFIX,
     TABLE_ARG_PREFIX,
     BodoSQLContext,
-    create_java_dynamic_parameter_type_list,
-    create_java_named_parameter_type_map,
     initialize_schema,
-    update_schema,
 )
 from bodosql.imported_java_classes import (
     JavaEntryPoint,

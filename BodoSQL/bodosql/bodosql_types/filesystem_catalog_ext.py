@@ -12,7 +12,7 @@ from numba.extending import (
     unbox,
 )
 
-from bodosql import DatabaseCatalogType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
 from bodosql.bodosql_types.filesystem_catalog import (
     FileSystemCatalog,
     _create_java_filesystem_catalog,
