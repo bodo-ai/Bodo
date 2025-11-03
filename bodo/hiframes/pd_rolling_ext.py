@@ -288,7 +288,7 @@ def _gen_df_rolling_out_data(rolling):
             out_cols.append(c)
         else:
             # skip non-numeric data columns
-            if not isinstance(data_types[c_ind].dtype, types.Boolean | types.Number):
+            if not isinstance(data_types[c_ind].dtype, (types.Boolean, types.Number)):
                 continue
             out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, minp, center, func, raw)"
             out_cols.append(c)
@@ -611,7 +611,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 else rolling.obj_type.columns
             )
             series_select = False
-            if isinstance(idx, tuple | list):
+            if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
                     raise_bodo_error(
                         f"rolling: selected column {set(idx).difference(set(columns))} not found in dataframe"
@@ -670,7 +670,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
     # similar to argument validation in Pandas:
     # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L196
     # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L1393
-    assert isinstance(obj, SeriesType | DataFrameType | DataFrameGroupByType), (
+    assert isinstance(obj, (SeriesType, DataFrameType, DataFrameGroupByType)), (
         "invalid rolling obj"
     )
     func_name = (
@@ -746,5 +746,5 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
             )
 
     # input should have numeric data types
-    if not any(isinstance(A.dtype, types.Boolean | types.Number) for A in data_types):
+    if not any(isinstance(A.dtype, (types.Boolean, types.Number)) for A in data_types):
         raise BodoError(f"{func_name}.rolling(): No numeric types to aggregate")

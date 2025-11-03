@@ -55,7 +55,10 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
 
     if isinstance(
         pd_result,
-        pd.DataFrame | pd.Series,
+        (
+            pd.DataFrame,
+            pd.Series,
+        ),
     ):
         _test_equal(
             bd_result,

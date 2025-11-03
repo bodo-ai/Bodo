@@ -397,7 +397,7 @@ def cast_float_to_nullable(df, df_type):
     col_map = defaultdict(list)
     for i, coltype in enumerate(df_type.data):
         if isinstance(
-            coltype, bodo.types.IntegerArrayType | bodo.types.FloatingArrayType
+            coltype, (bodo.types.IntegerArrayType, bodo.types.FloatingArrayType)
         ):
             dtype = coltype.get_pandas_scalar_type_instance
             col_map[dtype].append(df.columns[i])
@@ -405,7 +405,7 @@ def cast_float_to_nullable(df, df_type):
         # Pandas (as of 1.4) may create an object array for nullable float types with
         # nulls as 'NaN' string values. Converting to Numpy first avoids failure in
         # astype(). See test_s3_read_json
-        if isinstance(typ, pd.Float32Dtype | pd.Float64Dtype):
+        if isinstance(typ, (pd.Float32Dtype, pd.Float64Dtype)):
             df[cols] = df[cols].astype(typ.numpy_dtype).astype(typ)
         else:
             df[cols] = df[cols].astype(typ)
@@ -447,7 +447,7 @@ def base_connector_remove_dead_columns(
     table_key = (table_var_name, None)
 
     # Arrow reader is equivalent to tables for column elimination purposes
-    assert isinstance(typemap[table_var_name], TableType | ArrowReaderType), (
+    assert isinstance(typemap[table_var_name], (TableType, ArrowReaderType)), (
         f"{nodename} Node Table must be a TableType or ArrowReaderMetaType"
     )
 
@@ -821,7 +821,7 @@ def determine_filter_cast(
     col_cast = ""
 
     # If we do series isin, then rhs_typ will be a list or set
-    if isinstance(rhs_typ, types.List | types.Set):
+    if isinstance(rhs_typ, (types.List, types.Set)):
         rhs_scalar_typ = rhs_typ.dtype
     # If we do isin via the bodosql array kernel, then rhs_typ will be an array
     # We enforce that this array is replicated, so it's safe to do pushdown
@@ -859,7 +859,7 @@ def determine_filter_cast(
             bodo.types.datetime64ns,
             bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
-            if isinstance(rhs_typ, types.List | types.Set):  # pragma: no cover
+            if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
                 # This path should never be reached because we checked that
                 # list/set doesn't contain Timestamp or datetime64 in typing pass.
                 type_name = "list" if isinstance(rhs_typ, types.List) else "tuple"

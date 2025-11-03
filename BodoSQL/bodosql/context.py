@@ -270,7 +270,7 @@ def get_sql_data_type(arr_type):
         )
     elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
         return construct_array_item_array_type(arr_type)
-    elif isinstance(arr_type, bodo.types.StructArrayType | bodo.types.MapArrayType):
+    elif isinstance(arr_type, (bodo.types.StructArrayType, bodo.types.MapArrayType)):
         return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
@@ -720,7 +720,7 @@ class BodoSQLContext:
         if any(not isinstance(key, str) for key in self.tables.keys()):
             raise BodoError("BodoSQLContext(): 'table' keys must be strings")
         if any(
-            not isinstance(value, pd.DataFrame | TablePath)
+            not isinstance(value, (pd.DataFrame, TablePath))
             for value in self.tables.values()
         ):
             raise BodoError(
@@ -1143,13 +1143,13 @@ class BodoSQLContext:
             # Add table argument name prefix to user provided distributed flags to match
             # stored names
             if "distributed" in jit_options and isinstance(
-                jit_options["distributed"], list | set
+                jit_options["distributed"], (list, set)
             ):
                 jit_options["distributed"] = [
                     TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
                 ]
             if "replicated" in jit_options and isinstance(
-                jit_options["replicated"], list | set
+                jit_options["replicated"], (list, set)
             ):
                 jit_options["replicated"] = [
                     TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
@@ -1363,7 +1363,7 @@ class BodoSQLContext:
             raise BodoError(
                 "BodoSQLContext.add_or_replace_view(): 'name' must be a string"
             )
-        if not isinstance(table, pd.DataFrame | TablePath):
+        if not isinstance(table, (pd.DataFrame, TablePath)):
             raise BodoError(
                 "BodoSQLContext.add_or_replace_view(): 'table' must be a Pandas DataFrame or BodoSQL TablePath"
             )

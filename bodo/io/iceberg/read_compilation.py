@@ -205,7 +205,7 @@ def _determine_str_as_dict_columns(
                         )
             num_rows = metadata.num_rows
         except Exception as e:
-            if isinstance(e, OSError | FileNotFoundError):
+            if isinstance(e, (OSError, FileNotFoundError)):
                 # Skip the path that produced the error (error will be reported at runtime)
                 num_rows = 0
             else:

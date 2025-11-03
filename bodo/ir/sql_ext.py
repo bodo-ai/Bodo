@@ -1226,7 +1226,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         # TODO: Handle strings with $$ inside
         return lambda filter_value: f"$${filter_value}$$"  # pragma: no cover
     elif (
-        isinstance(filter_type, types.Integer | types.Float)
+        isinstance(filter_type, (types.Integer, types.Float))
         or filter_type == types.bool_
     ):
         # Numeric and boolean values can just return the string representation
@@ -1292,11 +1292,13 @@ def _get_snowflake_sql_literal(filter_value):
     if (
         isinstance(
             filter_type,
-            types.List
-            | types.Array
-            | bodo.types.IntegerArrayType
-            | bodo.types.FloatingArrayType
-            | bodo.types.DatetimeArrayType,
+            (
+                types.List,
+                types.Array,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
         )
         or filter_type
         in (

@@ -256,7 +256,9 @@ def numba_to_c_types(
     """
     c_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, bodo.types.StructArrayType | bodo.types.TupleArrayType):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_types.append(CTypeEnum.STRUCT.value)
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
@@ -301,11 +303,13 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         bodo.types.boolean_array_type,
     ) or isinstance(
         arr_type,
-        bodo.types.IntegerArrayType
-        | bodo.types.FloatingArrayType
-        | bodo.types.TimeArrayType
-        | bodo.types.DecimalArrayType
-        | bodo.types.DatetimeArrayType,
+        (
+            bodo.types.IntegerArrayType,
+            bodo.types.FloatingArrayType,
+            bodo.types.TimeArrayType,
+            bodo.types.DecimalArrayType,
+            bodo.types.DatetimeArrayType,
+        ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
     elif isinstance(arr_type, bodo.types.CategoricalArrayType):
@@ -334,7 +338,9 @@ def numba_to_c_array_types(
     """
     c_arr_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, bodo.types.StructArrayType | bodo.types.TupleArrayType):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_arr_types.append(CArrayTypeEnum.STRUCT.value)
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
@@ -371,7 +377,7 @@ def find_build_tuple(func_ir, var, handle_const_tuple=False):
     caller).
     """
     # variable or variable name
-    require(isinstance(var, ir.Var | str))
+    require(isinstance(var, (ir.Var, str)))
     var_def = get_definition(func_ir, var)
     if isinstance(var_def, ir.Expr):
         require(var_def.op == "build_tuple")
@@ -516,8 +522,10 @@ def is_array_typ(
         and (
             isinstance(
                 var_typ,
-                bodo.hiframes.pd_series_ext.SeriesType
-                | bodo.hiframes.pd_multi_index_ext.MultiIndexType,
+                (
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                    bodo.hiframes.pd_multi_index_ext.MultiIndexType,
+                ),
             )
             or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         )
@@ -1130,7 +1138,10 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
 
     if isinstance(typ, bodo.types.DatetimeArrayType) or isinstance(
         type,
-        PandasTimestampType | PandasDatetimeTZDtype,
+        (
+            PandasTimestampType,
+            PandasDatetimeTZDtype,
+        ),
     ):
         tz_literal = typ.tz
         return (
@@ -1209,7 +1220,7 @@ def overload_astype(A, t):
         return lambda A, t: A  # pragma: no cover
 
     # numpy or nullable int/float array can convert to numpy directly
-    if isinstance(A, types.Array | IntegerArrayType | FloatingArrayType) and isinstance(
+    if isinstance(A, (types.Array, IntegerArrayType, FloatingArrayType)) and isinstance(
         typ, types.Array
     ):
         return lambda A, t: A.astype(dtype)  # pragma: no cover
@@ -1444,7 +1455,7 @@ def is_expr(val, op) -> pt.TypeGuard[ir.Expr]:
 
 def sanitize_varname(varname):
     """convert variable name to be identifier compatible (e.g. remove whitespace)"""
-    if isinstance(varname, tuple | list):
+    if isinstance(varname, (tuple, list)):
         varname = "_".join(sanitize_varname(v) for v in varname)
     varname = str(varname)
     new_name = re.sub(r"\W+", "_", varname)
@@ -1814,7 +1825,7 @@ def synchronize_error_njit(exception_str, error_message):
 def get_const_or_build_tuple_of_consts(var):
     if is_expr(var, "build_tuple"):
         return tuple([item.value for item in var.items])
-    elif isinstance(var, ir.Global | ir.FreeVar | ir.Const):
+    elif isinstance(var, (ir.Global, ir.FreeVar, ir.Const)):
         return var.value
     else:
         raise BodoError(

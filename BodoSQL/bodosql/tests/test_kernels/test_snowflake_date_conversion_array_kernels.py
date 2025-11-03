@@ -412,7 +412,7 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
                 return tmp_val
             else:
                 return None
-    elif isinstance(val, int | np.integer | float):
+    elif isinstance(val, (int, np.integer, float)):
         return pd.Timestamp(val * (10 ** (9 - scale))).floor(freq="D")
     else:
         tmp_val = pd.to_datetime(val).floor(freq="D")

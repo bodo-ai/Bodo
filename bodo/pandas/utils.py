@@ -1582,10 +1582,10 @@ def wrap_module_functions_and_methods(module):
             if inspect.isclass(obj) and obj.__module__ == module.__name__:
                 for attr_name, attr in vars(obj).items():
                     if isinstance(
-                        attr, pytypes.FunctionType | classmethod | staticmethod
+                        attr, (pytypes.FunctionType, classmethod, staticmethod)
                     ):
                         original = attr
-                        if isinstance(attr, classmethod | staticmethod):
+                        if isinstance(attr, (classmethod, staticmethod)):
                             original = attr.__func__
                         wrapped = log_wrapper(original)
                         if isinstance(attr, classmethod):

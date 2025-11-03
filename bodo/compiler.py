@@ -254,7 +254,7 @@ def _convert_bodo_dispatcher_to_udf(rhs, func_ir):
     # find the actual function value, could be in current global names (e.g. "myfunc()")
     # or called from another module (e.g. "mymod.myfunc()")
     func_def = guard(get_definition, func_ir, rhs.func)
-    if isinstance(func_def, ir.Global | ir.FreeVar | ir.Const):
+    if isinstance(func_def, (ir.Global, ir.FreeVar, ir.Const)):
         func_val = func_def.value
     else:
         # match "mymod.myfunc()" call pattern and get the global function value
@@ -769,8 +769,10 @@ class LowerBodoIRExtSeq(FunctionPass):
                     f = distributed_run_extensions[type(inst)]
                     if isinstance(
                         inst,
-                        bodo.ir.parquet_ext.ParquetReader
-                        | bodo.ir.iceberg_ext.IcebergReader,
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
                     ) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
                         and inst.db_type == "snowflake"
@@ -907,7 +909,7 @@ def inline_calls(
                     func_def = guard(get_definition, func_ir, expr.func)
 
                     if (
-                        isinstance(func_def, ir.Global | ir.FreeVar)
+                        isinstance(func_def, (ir.Global, ir.FreeVar))
                         and isinstance(func_def.value, CPUDispatcher)
                         and issubclass(
                             func_def.value._compiler.pipeline_class, BodoCompiler

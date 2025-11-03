@@ -2287,7 +2287,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
     # TODO: support other dtypes if any
     # TODO: error checking
-    if not isinstance(nb_dtype, types.Float | types.Integer) and nb_dtype not in (
+    if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
         types.bool_,
         bodo.libs.bool_arr_ext.boolean_dtype,
         bodo.types.dict_str_arr_type,

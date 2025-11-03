@@ -132,7 +132,7 @@ def _build_index_data(
     """
     from bodo.pandas.utils import BODO_NONE_DUMMY
 
-    if isinstance(res, pd.DataFrame | pd.Series):
+    if isinstance(res, (pd.DataFrame, pd.Series)):
         if isinstance(res.index, pd.MultiIndex):
             res.index.names = [
                 name if name is not None else BODO_NONE_DUMMY
@@ -151,7 +151,7 @@ def _build_index_data(
                 ),
             )
         elif isinstance(
-            res.index, pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex
+            res.index, (pd.CategoricalIndex, pd.DatetimeIndex, pd.TimedeltaIndex)
         ):
             return bodo.gatherv(res.index._data)
         elif isinstance(res.index, pd.PeriodIndex):
@@ -180,7 +180,7 @@ def _build_distributed_return_metadata(
 
     if isinstance(res, list):
         return [_build_distributed_return_metadata(val, logger) for val in res]
-    if isinstance(res, dict | typed.typeddict.Dict):
+    if isinstance(res, (dict, typed.typeddict.Dict)):
         return {
             key: _build_distributed_return_metadata(val, logger)
             for key, val in res.items()
@@ -198,7 +198,7 @@ def _build_distributed_return_metadata(
     return LazyMetadata(
         result_id=res_id,
         head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)
-        if isinstance(res, pd.DataFrame | pd.Series)
+        if isinstance(res, (pd.DataFrame, pd.Series))
         else res[:DISTRIBUTED_RETURN_HEAD_SIZE],
         nrows=total_res_len,
         index_data=index_data,
@@ -221,7 +221,7 @@ def _send_output(
     """
     # Tuple elements can have different distributions (tuples without distrubuted data
     # are treated like scalars)
-    if isinstance(res, tuple) and isinstance(is_distributed, tuple | list):
+    if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         for val, dist in zip(res, is_distributed):
             _send_output(val, dist, spawner_intercomm, logger)
         return
@@ -262,7 +262,7 @@ def _gather_res(
 
     from bodo import BodoWarning
 
-    if isinstance(res, tuple) and isinstance(is_distributed, tuple | list):
+    if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         all_updated_is_distributed = []
         all_updated_res = []
         for val, dist in zip(res, is_distributed):
@@ -391,7 +391,7 @@ def _is_distributable_result(res):
     import bodo
 
     if isinstance(
-        res, pd.DataFrame | pd.Series | pd.Index | np.ndarray | ArrowExtensionArray
+        res, (pd.DataFrame, pd.Series, pd.Index, np.ndarray, ArrowExtensionArray)
     ):
         return True
 

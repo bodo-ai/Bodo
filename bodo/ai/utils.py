@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from typing import Callable
 
 
 def get_default_bedrock_request_formatter(modelId: str) -> Callable[[str], str]:
