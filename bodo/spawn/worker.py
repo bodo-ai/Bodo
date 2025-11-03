@@ -56,7 +56,7 @@ spawnerpid = None
 
 
 _recv_arg_return_t = pt.Union[
-    tuple[pt.Any, pt.Union[ArgMetadata, None]], tuple["_recv_arg_return_t", ...]
+    tuple[pt.Any, ArgMetadata | None], tuple["_recv_arg_return_t", ...]
 ]
 
 
