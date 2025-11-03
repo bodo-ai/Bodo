@@ -14,7 +14,6 @@ from bodosql.bodosql_types.glue_catalog import (
 )
 from bodosql.bodosql_types.s3_tables_catalog import (
     S3TablesCatalog,
-    get_s3_tables_connection,
 )
 
 
