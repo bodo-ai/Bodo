@@ -141,12 +141,12 @@ def check_node_typing(node, typemap):
         elif (
             not isinstance(skiprows_typ, types.Integer)
             and not (
-                isinstance(skiprows_typ, (types.List, types.Tuple))
+                isinstance(skiprows_typ, types.List | types.Tuple)
                 and isinstance(skiprows_typ.dtype, types.Integer)
             )
             and not (
                 isinstance(
-                    skiprows_typ, (types.LiteralList, bodo.utils.typing.ListLiteral)
+                    skiprows_typ, types.LiteralList | bodo.utils.typing.ListLiteral
                 )
             )
         ):
@@ -155,7 +155,7 @@ def check_node_typing(node, typemap):
                 loc=node.skiprows.loc,
             )
         # Set flag for lists that are variables.
-        elif isinstance(skiprows_typ, (types.List, types.Tuple)):
+        elif isinstance(skiprows_typ, types.List | types.Tuple):
             node.is_skiprows_list = True
     # nrows must be an integer
     # If the value is an IR constant, then it is the default value so we don't need to check.
@@ -625,7 +625,7 @@ def _get_dtype_str(t):
         return "datetime_date_array_type"
 
     if isinstance(t, ArrayItemArrayType) and isinstance(
-        dtype, (StringArrayType, ArrayItemArrayType)
+        dtype, StringArrayType | ArrayItemArrayType
     ):
         # HACK add list of string and nested list type to numba.core.types for objmode
         typ_name = f"ArrayItemArrayType{str(ir_utils.next_label())}"
@@ -669,7 +669,7 @@ def _get_pd_dtype_str(t):
         return "np.bool_"
 
     if isinstance(t, ArrayItemArrayType) and isinstance(
-        dtype, (StringArrayType, ArrayItemArrayType)
+        dtype, StringArrayType | ArrayItemArrayType
     ):
         return "object"
 

@@ -219,7 +219,7 @@ def _empty_like(val):
 
     is_series = isinstance(val, BodoSeries)
 
-    if isinstance(val, (BodoDataFrame, BodoSeries)):
+    if isinstance(val, BodoDataFrame | BodoSeries):
         # Avoid triggering data collection
         # Ok since BodoDataFrame/Series always have Arrow schema and not objects
         val = val.head(0)
@@ -492,7 +492,7 @@ def to_datetime(
     Converts elements of a BodoSeries to timestamp[ns] type.
     Currently, Bodo only supports arg of either BodoSeries or BodoDataFrame instance, falling back to Pandas otherwise.
     """
-    if not isinstance(arg, (BodoSeries, BodoDataFrame)):
+    if not isinstance(arg, BodoSeries | BodoDataFrame):
         raise BodoLibNotImplementedException(
             "to_datetime() is not supported for arg that is not an instance of BodoSeries or BodoDataFrame. Falling back to Pandas."
         )

@@ -132,7 +132,7 @@ def jit_import_check():
 
 def item_file_name(item):
     """Get the name of a pytest item. Uses the default pytest implementation, except for C++ tests, where we return the cached name"""
-    if isinstance(item, (CppTestFile, CppTestItem)):
+    if isinstance(item, CppTestFile | CppTestItem):
         return item.filename
     else:
         return item.module.__name__.split(".")[-1] + ".py"
@@ -140,7 +140,7 @@ def item_file_name(item):
 
 def item_module_name(item):
     """Get the pytest module name. Uses default pytest implementation, except for c++, whiche uses the filename"""
-    if isinstance(item, (CppTestFile, CppTestItem)):
+    if isinstance(item, CppTestFile | CppTestItem):
         return item.filename
     else:
         return item.module.__name__

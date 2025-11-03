@@ -70,7 +70,7 @@ def unify_schemas(
             elif f.type == pa.large_binary():
                 schema = schema.set(i, f.with_type(pa.binary()))
             elif isinstance(
-                f.type, (pa.ListType, pa.LargeListType)
+                f.type, pa.ListType | pa.LargeListType
             ) and f.type.value_type in (pa.string(), pa.large_string()):
                 # This handles the pa.list_(pa.large_string()) case
                 # that the next `elif` doesn't.
@@ -470,7 +470,7 @@ def get_bodo_pq_dataset_from_fpath(
             # We suppress Arrow's error message since it doesn't apply to Bodo
             # (the bit about doing a union of datasets)
             e = bodo.utils.typing.BodoError(LIST_OF_FILES_ERROR_MSG)
-        elif isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
+        elif isinstance(fpath, list) and isinstance(e, OSError | FileNotFoundError):
             e = bodo.utils.typing.BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
         else:
             e = bodo.utils.typing.BodoError(
@@ -702,7 +702,7 @@ def populate_row_counts_in_pq_dataset_pieces(
         for error in comm.allgather(error):
             if error:
                 if isinstance(fpath, list) and isinstance(
-                    error, (OSError, FileNotFoundError)
+                    error, OSError | FileNotFoundError
                 ):
                     # Import compiler lazily to access BodoError
                     import bodo.decorators  # isort:skip # noqa
@@ -1282,7 +1282,7 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> s
                     )
             num_rows = metadata.num_rows
         except Exception as e:
-            if isinstance(e, (OSError, FileNotFoundError)):
+            if isinstance(e, OSError | FileNotFoundError):
                 # skip the path that produced the error (error will be reported at runtime)
                 num_rows = 0
             else:

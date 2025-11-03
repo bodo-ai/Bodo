@@ -285,7 +285,7 @@ def test_basic_write_new_append(
     not_hashable = False
     for i in range(len(expected_df.columns)):
         # Technically bytes are hashable but Spark uses bytearray and that's not.
-        if isinstance(expected_df.iloc[0, i], (list, dict, set, bytearray, bytes)):
+        if isinstance(expected_df.iloc[0, i], list | dict | set | bytearray | bytes):
             not_hashable = True
             break
     if not_hashable:
@@ -1473,7 +1473,7 @@ def bucket_scalar_impl(x, y: int) -> int | None:
 
     if isinstance(x, int):
         res = mmh3.hash(struct.pack("<q", x))
-    elif isinstance(x, (datetime, pd.Timestamp)):
+    elif isinstance(x, datetime | pd.Timestamp):
         if pd.isna(x):
             return None
         res = mmh3.hash(
@@ -1552,7 +1552,7 @@ ARRAY_TRANSFORM_FUNC = {
             None
             if pd.isna(x)
             else (
-                (x.date() if isinstance(x, (datetime, pd.Timestamp)) else x)
+                (x.date() if isinstance(x, datetime | pd.Timestamp) else x)
                 - date(1970, 1, 1)
             ).days
         )

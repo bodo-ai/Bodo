@@ -236,7 +236,7 @@ def is_ll_eq(builder, val1, val2):
     assert t1 == t2, "invalid llvm value comparison"
 
     # compare individual elements for aggregate types
-    if isinstance(t1, (lir.BaseStructType, lir.ArrayType)):
+    if isinstance(t1, lir.BaseStructType | lir.ArrayType):
         n_elems = len(t1.elements) if isinstance(t1, lir.BaseStructType) else t1.count
         eq = lir.Constant(lir.IntType(1), 1)
         for i in range(n_elems):

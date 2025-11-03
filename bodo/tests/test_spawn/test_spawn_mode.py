@@ -333,7 +333,7 @@ def test_results_deleted_after_collection(datapath):
 
     df = impl()
     assert isinstance(df, BodoDataFrame)
-    assert isinstance(df._mgr, (LazyBlockManager, LazyArrayManager))
+    assert isinstance(df._mgr, LazyBlockManager | LazyArrayManager)
     res_id = df._mgr._md_result_id
     assert res_id is not None
     collect_func = df._mgr._collect_func

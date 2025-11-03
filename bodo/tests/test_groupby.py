@@ -6669,7 +6669,7 @@ def test_nunique_supported_types(test_size_df, memory_leak_check):
 
     if len(test_size_df.columns) == 1 or (
         isinstance(test_size_df["B"].dtype, pd.CategoricalDtype)
-        or (len(test_size_df) > 0 and isinstance(test_size_df["B"][0], (tuple, list)))
+        or (len(test_size_df) > 0 and isinstance(test_size_df["B"][0], tuple | list))
     ):
         return
 
@@ -6739,7 +6739,7 @@ def test_shift_supported_types(test_size_df, memory_leak_check):
     """
 
     if len(test_size_df.columns) == 1 or (
-        len(test_size_df) > 0 and isinstance(test_size_df["B"][0], (tuple, list))
+        len(test_size_df) > 0 and isinstance(test_size_df["B"][0], tuple | list)
     ):
         return
 

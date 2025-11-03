@@ -957,7 +957,7 @@ def literal(val) -> Literal:
     # PyIceberg literal doesn't support Pandas types
     if isinstance(val, pd.Timestamp):
         return TimestampLiteral(datetime_to_micros(val))
-    if isinstance(val, (list, pd.core.arrays.ExtensionArray)):
+    if isinstance(val, list | pd.core.arrays.ExtensionArray):
         return {literal(v) for v in val}  # type: ignore
     # TODO: Potentially need to support nested structures
     return inner_literal(val)

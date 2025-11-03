@@ -349,10 +349,10 @@ def _build_new_build_map(func_ir, name, old_body, old_lineno, new_items):
     for pair in new_items:
         k, v = pair
         key_def = guard(get_definition, func_ir, k)
-        if isinstance(key_def, (ir.Const, ir.Global, ir.FreeVar)):
+        if isinstance(key_def, ir.Const | ir.Global | ir.FreeVar):
             literal_keys.append(key_def.value)
         value_def = guard(get_definition, func_ir, v)
-        if isinstance(value_def, (ir.Const, ir.Global, ir.FreeVar)):
+        if isinstance(value_def, ir.Const | ir.Global | ir.FreeVar):
             values.append(value_def.value)
         else:
             # Append unknown value if not a literal.

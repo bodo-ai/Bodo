@@ -293,11 +293,9 @@ def gen_pandas_parquet_metadata_template(
             numpy_type = "object"
         elif isinstance(
             col_type,
-            (
-                bodo.types.ArrayItemArrayType,
-                bodo.types.StructArrayType,
-                bodo.types.MapArrayType,
-            ),
+            bodo.types.ArrayItemArrayType
+            | bodo.types.StructArrayType
+            | bodo.types.MapArrayType,
         ):
             # TODO: provide meaningful pandas_type when possible.
             # For example "pandas_type": "list[list[int64]]", "numpy_type": "object"

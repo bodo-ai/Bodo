@@ -51,7 +51,7 @@ class LazyPlan:
     def __init__(self, plan_class, empty_data, *args):
         self.plan_class = plan_class
         self.args = args
-        assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
+        assert isinstance(empty_data, pd.DataFrame | pd.Series), (
             "LazyPlan: empty_data must be a DataFrame or Series"
         )
         self.is_series = isinstance(empty_data, pd.Series)
@@ -123,7 +123,7 @@ class LazyPlan:
             else:
                 # Remember we encountered this node.
                 visited.add(id(node))
-                if isinstance(node, (LogicalComparisonJoin, LogicalCrossProduct)):
+                if isinstance(node, LogicalComparisonJoin | LogicalCrossProduct):
                     # For comparison join, the first two args contain source plans.
                     for arg in node.args[0:2]:
                         if isinstance(arg, LazyPlan):
@@ -149,7 +149,7 @@ class LazyPlan:
                     do_cte_check=do_cte_check,
                 )
                 return ret
-            elif isinstance(x, (tuple, list)):
+            elif isinstance(x, tuple | list):
                 return type(x)(
                     recursive_check(i, use_cache, cte_ref, do_cte_check) for i in x
                 )
@@ -189,12 +189,10 @@ class LazyPlan:
         def should_use_cache(node):
             return not isinstance(
                 node,
-                (
-                    LogicalComparisonJoin,
-                    LogicalSetOperation,
-                    LogicalInsertScalarSubquery,
-                    LogicalCrossProduct,
-                ),
+                LogicalComparisonJoin
+                | LogicalSetOperation
+                | LogicalInsertScalarSubquery
+                | LogicalCrossProduct,
             )
 
         if cte_ref is not None and self is cte_ref[0]:
@@ -1078,7 +1076,7 @@ def _init_lazy_distributed_arg(arg, visited_plans=None):
         visited_plans.add(id(arg))
         for a in arg.args:
             _init_lazy_distributed_arg(a, visited_plans=visited_plans)
-    elif isinstance(arg, (tuple, list)):
+    elif isinstance(arg, tuple | list):
         for a in arg:
             _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
@@ -1329,7 +1327,7 @@ def maybe_make_list(obj):
     """If non-iterable input, turn into singleton list"""
     if obj is None:
         return []
-    elif not isinstance(obj, (tuple, list)):
+    elif not isinstance(obj, tuple | list):
         return [obj]
     elif not isinstance(obj, list):
         return list(obj)

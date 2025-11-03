@@ -216,12 +216,12 @@ def overload_np_asmatrix(A):
 
         return impl
     if isinstance(A, types.List) and isinstance(
-        A.dtype, (types.Integer, types.Float, types.Complex)
+        A.dtype, types.Integer | types.Float | types.Complex
     ):
         return lambda A: init_np_matrix(
             np.array([A]).reshape((1, len(A)))
         )  # pragma: no cover
-    if isinstance(A, (types.Integer, types.Float, types.Complex)):
+    if isinstance(A, types.Integer | types.Float | types.Complex):
         return lambda A: np.asmatrix(np.array([A]))  # pragma: no cover
     raise_bodo_error(
         f"np.asmatrix unsupported on input of type {A}"

@@ -780,11 +780,9 @@ def _validate_groupby_state_type(output_type):
                 col_arr_type = output_type.build_table_type.arr_types[sort_col_idx]
                 if isinstance(
                     col_arr_type,
-                    (
-                        bodo.types.MapArrayType,
-                        bodo.types.ArrayItemArrayType,
-                        bodo.types.StructArrayType,
-                    ),
+                    bodo.types.MapArrayType
+                    | bodo.types.ArrayItemArrayType
+                    | bodo.types.StructArrayType,
                 ):
                     raise BodoError(
                         "Groupby (Min Row-Number Filter): Sorting on semi-structured arrays is not supported."
@@ -805,11 +803,9 @@ def _validate_groupby_state_type(output_type):
                 if (
                     isinstance(
                         col_arr_type,
-                        (
-                            bodo.types.MapArrayType,
-                            bodo.types.ArrayItemArrayType,
-                            bodo.types.StructArrayType,
-                        ),
+                        bodo.types.MapArrayType
+                        | bodo.types.ArrayItemArrayType
+                        | bodo.types.StructArrayType,
                     )
                     and output_type.fnames[i] not in supported_nested_agg_funcs
                 ):

@@ -587,13 +587,11 @@ def array_to_info_codegen(context, builder, sig, args):
     # nullable integer/bool array
     if isinstance(
         arr_type,
-        (
-            IntegerArrayType,
-            FloatingArrayType,
-            DecimalArrayType,
-            TimeArrayType,
-            DatetimeArrayType,
-        ),
+        IntegerArrayType
+        | FloatingArrayType
+        | DecimalArrayType
+        | TimeArrayType
+        | DatetimeArrayType,
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
@@ -1331,13 +1329,11 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     # nullable integer/bool array
     if isinstance(
         arr_type,
-        (
-            IntegerArrayType,
-            FloatingArrayType,
-            DecimalArrayType,
-            TimeArrayType,
-            DatetimeArrayType,
-        ),
+        IntegerArrayType
+        | FloatingArrayType
+        | DecimalArrayType
+        | TimeArrayType
+        | DatetimeArrayType,
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
