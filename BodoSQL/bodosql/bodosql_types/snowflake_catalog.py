@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from bodo.io.snowflake import parse_conn_str
+from bodo.io.utils import parse_snowflake_conn_str
 from bodosql import DatabaseCatalog
 from bodosql.imported_java_classes import JavaEntryPoint, build_java_properties
 
@@ -144,11 +144,11 @@ class SnowflakeCatalog(DatabaseCatalog):
 
     @classmethod
     def from_conn_str(cls, conn_str: str) -> SnowflakeCatalog:
-        conn_contents = parse_conn_str(conn_str, strict_parsing=True)
+        conn_contents = parse_snowflake_conn_str(conn_str, strict_parsing=True)
         ref_str = "See https://docs.snowflake.com/developer-guide/python-connector/sqlalchemy#connection-parameters for constructing a connection URL."
 
         # Parse Required Parameters Out of conn_contents
-        # TODO: Output of parse_conn_str is better as NamedTuple
+        # TODO: Output of parse_snowflake_conn_str is better as NamedTuple
         # But what argument are required for Snowflake SQLAlchemy
         # Snowflake Docs have more details
         if (username := conn_contents.pop("user", None)) is None:
