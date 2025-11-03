@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from types import NoneType
+import sys
+
+if sys.version_info >= (3, 10):
+    from types import NoneType
+else:
+    NoneType = type(None)
 
 import numpy as np
 import pandas as pd

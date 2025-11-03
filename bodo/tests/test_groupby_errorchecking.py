@@ -1744,7 +1744,10 @@ def test_cumulatives_unsupported_types(test_cumulatives_df, memory_leak_check):
     # cummin/cummax supports datetime and timedelta
     if not isinstance(
         test_cumulatives_df["B"].values[0],
-        np.timedelta64 | np.datetime64,
+        (
+            np.timedelta64,
+            np.datetime64,
+        ),
     ):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(impl1)(test_cumulatives_df)
@@ -1940,7 +1943,7 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
 
     err_msg = "is unsupported/not a valid input type"
 
-    if isinstance(test_cumulatives_df["B"][0], np.bool_ | pd.Timedelta):
+    if isinstance(test_cumulatives_df["B"][0], (np.bool_, pd.Timedelta)):
         return
 
     with pytest.raises(BodoError, match=err_msg):

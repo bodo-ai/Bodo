@@ -191,7 +191,7 @@ def test_coalesce(args, memory_leak_check):
     series_str = (
         "pd.Series"
         if any(
-            isinstance(a, pd.Series | pd.core.arrays.base.ExtensionArray) for a in args
+            isinstance(a, (pd.Series, pd.core.arrays.base.ExtensionArray)) for a in args
         )
         else ""
     )
@@ -221,7 +221,7 @@ def test_coalesce_str_array_optimized(memory_leak_check):
     series_str = (
         "pd.Series"
         if any(
-            isinstance(a, pd.Series | pd.core.arrays.base.ExtensionArray) for a in args
+            isinstance(a, (pd.Series, pd.core.arrays.base.ExtensionArray)) for a in args
         )
         else ""
     )

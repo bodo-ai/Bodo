@@ -2265,7 +2265,7 @@ def gen_logical_table_to_table_impl(
         TableType: converted table
     """
     in_col_inds = in_col_inds_t.instance_type.meta
-    assert isinstance(in_table_t, TableType | types.BaseTuple | types.NoneType), (
+    assert isinstance(in_table_t, (TableType, types.BaseTuple, types.NoneType)), (
         "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
     )
 
@@ -2291,7 +2291,7 @@ def gen_logical_table_to_table_impl(
     )
 
     # handle array-only input data
-    if isinstance(in_table_t, types.BaseTuple | types.NoneType):
+    if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
         return _logical_tuple_table_to_table_codegen(
             in_table_t,
             extra_arrs_t,
@@ -2556,7 +2556,7 @@ class LogicalTableToTableInfer(AbstractTemplate):
 
             in_col_inds = unwrap_typeref(in_col_inds_t).meta
             # handle array-only input data
-            if isinstance(in_table_t, types.BaseTuple | types.NoneType):
+            if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
                 n_in_table_arrs = (
                     get_overload_const_int(n_table_cols_t)
                     if is_overload_constant_int(n_table_cols_t)

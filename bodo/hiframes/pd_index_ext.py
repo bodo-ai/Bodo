@@ -122,7 +122,7 @@ def typeof_pd_index(val, c):
     ):
         # At least some index values contain the actual dtype in
         # Pandas 1.4.
-        if isinstance(val.dtype, pd.core.arrays.integer.IntegerDtype | pd.ArrowDtype):
+        if isinstance(val.dtype, (pd.core.arrays.integer.IntegerDtype, pd.ArrowDtype)):
             # Get the numpy dtype
             numpy_dtype = val.dtype.numpy_dtype
             # Convert the numpy dtype to the Numba type
@@ -157,7 +157,7 @@ def typeof_pd_index(val, c):
     ):
         # At least some index values contain the actual dtype in
         # Pandas 1.4.
-        if isinstance(val.dtype, pd.Float32Dtype | pd.Float64Dtype | pd.ArrowDtype):
+        if isinstance(val.dtype, (pd.Float32Dtype, pd.Float64Dtype, pd.ArrowDtype)):
             # Get the numpy dtype
             numpy_dtype = val.dtype.numpy_dtype
             # Convert the numpy dtype to the Numba type
@@ -199,9 +199,11 @@ def typeof_pd_index(val, c):
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
     if arr_typ == bodo.types.datetime_date_array_type or isinstance(
         arr_typ,
-        bodo.types.DecimalArrayType
-        | bodo.types.DatetimeArrayType
-        | bodo.types.TimeArrayType,
+        (
+            bodo.types.DecimalArrayType,
+            bodo.types.DatetimeArrayType,
+            bodo.types.TimeArrayType,
+        ),
     ):
         return NumericIndexType(
             arr_typ.dtype,
@@ -876,17 +878,19 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     # ----- Data: Array type ------
     elif bodo.utils.utils.is_array_typ(data, False) or isinstance(
-        data, SeriesType | types.List | types.UniTuple
+        data, (SeriesType, types.List, types.UniTuple)
     ):
         # Numeric Indices:
         if (
             isinstance(
                 elem_type,
-                types.Integer
-                | types.Float
-                | types.Boolean
-                | bodo.types.TimeType
-                | bodo.types.Decimal128Type,
+                (
+                    types.Integer,
+                    types.Float,
+                    types.Boolean,
+                    bodo.types.TimeType,
+                    bodo.types.Decimal128Type,
+                ),
             )
             or elem_type == bodo.types.datetime_date_type
         ):
@@ -3211,7 +3215,7 @@ def Index_get_name(i):
 def overload_index_getitem(I, ind):
     # output of integer indexing is scalar value
     if isinstance(
-        I, NumericIndexType | StringIndexType | BinaryIndexType
+        I, (NumericIndexType, StringIndexType, BinaryIndexType)
     ) and isinstance(ind, types.Integer):
         return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[
             ind
@@ -3224,7 +3228,7 @@ def overload_index_getitem(I, ind):
             bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
-    if isinstance(I, StringIndexType | BinaryIndexType):
+    if isinstance(I, (StringIndexType, BinaryIndexType)):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_binary_str_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
             bodo.hiframes.pd_index_ext.get_index_name(I),
@@ -3241,13 +3245,15 @@ def array_type_to_index(arr_typ, name_typ=None):
 
     assert isinstance(
         arr_typ,
-        types.Array
-        | IntegerArrayType
-        | FloatingArrayType
-        | bodo.types.CategoricalArrayType
-        | bodo.types.DecimalArrayType
-        | bodo.types.TimeArrayType
-        | bodo.types.DatetimeArrayType,
+        (
+            types.Array,
+            IntegerArrayType,
+            FloatingArrayType,
+            bodo.types.CategoricalArrayType,
+            bodo.types.DecimalArrayType,
+            bodo.types.TimeArrayType,
+            bodo.types.DatetimeArrayType,
+        ),
     ) or arr_typ in (
         bodo.types.datetime_date_array_type,
         bodo.types.boolean_array_type,
@@ -3271,7 +3277,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     if (
         isinstance(
             arr_typ.dtype,
-            types.Integer | types.Float | types.Boolean | bodo.types.TimeType,
+            (types.Integer, types.Float, types.Boolean, bodo.types.TimeType),
         )
         or arr_typ == bodo.types.datetime_date_array_type
     ):
@@ -3283,16 +3289,18 @@ def array_type_to_index(arr_typ, name_typ=None):
 def is_pd_index_type(t):
     return isinstance(
         t,
-        NumericIndexType
-        | DatetimeIndexType
-        | TimedeltaIndexType
-        | IntervalIndexType
-        | CategoricalIndexType
-        | PeriodIndexType
-        | StringIndexType
-        | BinaryIndexType
-        | RangeIndexType
-        | HeterogeneousIndexType,
+        (
+            NumericIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            IntervalIndexType,
+            CategoricalIndexType,
+            PeriodIndexType,
+            StringIndexType,
+            BinaryIndexType,
+            RangeIndexType,
+            HeterogeneousIndexType,
+        ),
     )
 
 
@@ -3310,7 +3318,7 @@ def _verify_setop_compatible(func_name, I, other):
         BodoError: if other is unsupported or incompatible with I for set operations
     """
 
-    if not is_pd_index_type(other) and not isinstance(other, SeriesType | types.Array):
+    if not is_pd_index_type(other) and not isinstance(other, (SeriesType, types.Array)):
         raise BodoError(
             f"pd.Index.{func_name}(): unsupported type for argument other: {other}"
         )
@@ -3966,15 +3974,17 @@ def overload_values(I):
 def overload_index_len(I):
     if isinstance(
         I,
-        NumericIndexType
-        | StringIndexType
-        | BinaryIndexType
-        | PeriodIndexType
-        | IntervalIndexType
-        | CategoricalIndexType
-        | DatetimeIndexType
-        | TimedeltaIndexType
-        | HeterogeneousIndexType,
+        (
+            NumericIndexType,
+            StringIndexType,
+            BinaryIndexType,
+            PeriodIndexType,
+            IntervalIndexType,
+            CategoricalIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            HeterogeneousIndexType,
+        ),
     ):
         # TODO: test
         return lambda I: len(
@@ -4048,7 +4058,7 @@ def overload_index_is_montonic(I):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         I, "Index.is_monotonic_increasing"
     )
-    if isinstance(I, NumericIndexType | DatetimeIndexType | TimedeltaIndexType):
+    if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
 
         def impl(I):  # pragma: no cover
             arr = bodo.hiframes.pd_index_ext.get_index_data(I)
@@ -4098,7 +4108,7 @@ def overload_index_is_montonic_decreasing(I):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         I, "Index.is_monotonic_decreasing"
     )
-    if isinstance(I, NumericIndexType | DatetimeIndexType | TimedeltaIndexType):
+    if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
 
         def impl(I):  # pragma: no cover
             arr = bodo.hiframes.pd_index_ext.get_index_data(I)
@@ -4418,7 +4428,7 @@ def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
     # avoid returning shape for tuple input (results in dimension mismatch error)
-    if isinstance(self.typemap[var.name], HeterogeneousIndexType | MultiIndexType):
+    if isinstance(self.typemap[var.name], (HeterogeneousIndexType, MultiIndexType)):
         return None
     if equiv_set.has_shape(var):
         return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
@@ -4753,15 +4763,17 @@ def is_index_type(t):
     """return True if 't' is an Index type"""
     return isinstance(
         t,
-        RangeIndexType
-        | NumericIndexType
-        | StringIndexType
-        | BinaryIndexType
-        | PeriodIndexType
-        | DatetimeIndexType
-        | TimedeltaIndexType
-        | IntervalIndexType
-        | CategoricalIndexType,
+        (
+            RangeIndexType,
+            NumericIndexType,
+            StringIndexType,
+            BinaryIndexType,
+            PeriodIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            IntervalIndexType,
+            CategoricalIndexType,
+        ),
     )
 
 
@@ -5037,7 +5049,7 @@ def overload_index_to_series(I, index=None, name=None):
             func_text += (
                 "    new_index = bodo.utils.conversion.index_from_array(index)\n"
             )
-        elif isinstance(index, types.List | types.BaseTuple):
+        elif isinstance(index, (types.List, types.BaseTuple)):
             func_text += "    arr = bodo.utils.conversion.coerce_to_array(index)\n"
             func_text += "    new_index = bodo.utils.conversion.index_from_array(arr)\n"
         else:
@@ -6239,7 +6251,7 @@ def overload_index_isin(I, values):
         return impl_arr
 
     # 'values' should be a set or list, TODO: support other list-likes such as Array
-    if not isinstance(values, types.Set | types.List):  # pragma: no cover
+    if not isinstance(values, (types.Set, types.List)):  # pragma: no cover
         raise BodoError("Index.isin(): 'values' parameter should be a set or a list")
 
     def impl(I, values):  # pragma: no cover
@@ -6275,7 +6287,7 @@ def overload_range_index_isin(I, values):
         return impl_arr
 
     # 'values' should be a set or list, TODO: support other list-likes such as Array
-    if not isinstance(values, types.Set | types.List):
+    if not isinstance(values, (types.Set, types.List)):
         raise BodoError("Index.isin(): 'values' parameter should be a set or a list")
 
     def impl(I, values):  # pragma: no cover
@@ -7153,7 +7165,7 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
     """Constant lowering for NumericIndexType."""
 
     # make sure the type is one of the numeric ones
-    assert isinstance(ty.dtype, types.Integer | types.Float | types.Boolean)
+    assert isinstance(ty.dtype, (types.Integer, types.Float, types.Boolean))
 
     # get the data
     data = context.get_constant_generic(

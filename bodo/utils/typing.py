@@ -58,7 +58,7 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
-Index = list[str | dict]
+Index = list[pt.Union[str, dict]]
 FileSchema: pt.TypeAlias = tuple[
     list[str], list, Index, list[int], list, list, list, pa.Schema
 ]
@@ -77,7 +77,7 @@ def is_timedelta_type(in_type):
 
 def is_dtype_nullable(in_dtype):
     """checks whether 'in_dtype' has sentinel NA values (as opposed to bitmap)"""
-    return isinstance(in_dtype, types.Float | types.NPDatetime | types.NPTimedelta)
+    return isinstance(in_dtype, (types.Float, types.NPDatetime, types.NPTimedelta))
 
 
 def is_nullable(typ):
@@ -456,7 +456,7 @@ def is_overload_constant_list(val):
     (TODO: revisit).
     """
     return (
-        isinstance(val, list | tuple)
+        isinstance(val, (list, tuple))
         or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
         or is_initial_value_list_type(val)
         or isinstance(val, types.LiteralList)
@@ -494,7 +494,7 @@ def is_initial_value_type(t):
     # Numba 0.51 assigns unkown or Poison to values sometimes
     # see test_groupby_agg_const_dict::impl16
     return not any(
-        isinstance(v, types.Poison | numba.core.interpreter._UNKNOWN_VALUE)
+        isinstance(v, (types.Poison, numba.core.interpreter._UNKNOWN_VALUE))
         for v in vals
     )
 
@@ -664,9 +664,7 @@ def get_overload_const(val):
     if val is _no_input:
         return _no_input
     # actual value
-    if val is None or isinstance(
-        val, bool | int | float | str | tuple | types.Dispatcher
-    ):
+    if val is None or isinstance(val, (bool, int, float, str, tuple, types.Dispatcher)):
         return val
     # Omitted case
     if isinstance(val, types.Omitted):
@@ -717,7 +715,7 @@ def assert_bodo_error(cond, msg=""):
 
 def element_type(val):
     """Return the element type of a scalar or array"""
-    if isinstance(val, types.List | types.ArrayCompatible):
+    if isinstance(val, (types.List, types.ArrayCompatible)):
         if isinstance(val.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
             return val.dtype.elem_type
         # Bytes type is array compatible, but should be treated as scalar
@@ -738,7 +736,7 @@ def can_replace(to_replace, value):
         # Integer and Float cannot replace Boolean
         and not (
             isinstance(to_replace, types.Boolean)
-            and isinstance(value, types.Integer | types.Float)
+            and isinstance(value, (types.Integer, types.Float))
         )
     )
 
@@ -907,7 +905,7 @@ def get_overload_const_list(val) -> list[Any] | tuple[Any, ...] | None:
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
-    if isinstance(val, list | tuple):
+    if isinstance(val, (list, tuple)):
         return val
     if isinstance(val, types.Omitted) and isinstance(val.value, tuple):
         return val.value
@@ -998,10 +996,12 @@ def is_const_func_type(t) -> bool:
     """check if 't' is a constant function type"""
     return isinstance(
         t,
-        types.MakeFunctionLiteral
-        | bodo.utils.typing.FunctionLiteral
-        | types.Dispatcher
-        | bodo.decorators.WrapPythonDispatcherType,
+        (
+            types.MakeFunctionLiteral,
+            bodo.utils.typing.FunctionLiteral,
+            types.Dispatcher,
+            bodo.decorators.WrapPythonDispatcherType,
+        ),
     )
 
 
@@ -1009,7 +1009,7 @@ def get_overload_const_func(val, func_ir):
     """get constant function object or ir.Expr.make_function from function type"""
     from bodo.decorators import WrapPythonDispatcherType
 
-    if isinstance(val, types.MakeFunctionLiteral | bodo.utils.typing.FunctionLiteral):
+    if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
         func = val.literal_value
         # Handle functions that are currently make_function expressions from BodoSQL
         if isinstance(func, ir.Expr) and func.op == "make_function":
@@ -1076,15 +1076,17 @@ def parse_dtype(dtype, func_name=None):
     # input is array dtype already (see dtype_to_array_type)
     if isinstance(
         dtype,
-        types.Number
-        | types.NPDatetime
-        | bodo.types.TimestampTZType
-        | bodo.types.Decimal128Type
-        | bodo.types.StructType
-        | bodo.types.MapScalarType
-        | bodo.types.TimeType
-        | bodo.hiframes.pd_categorical_ext.PDCategoricalDtype
-        | bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+        (
+            types.Number,
+            types.NPDatetime,
+            bodo.types.TimestampTZType,
+            bodo.types.Decimal128Type,
+            bodo.types.StructType,
+            bodo.types.MapScalarType,
+            bodo.types.TimeType,
+            bodo.hiframes.pd_categorical_ext.PDCategoricalDtype,
+            bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+        ),
     ) or dtype in (
         bodo.types.string_type,
         bodo.types.bytes_type,
@@ -1139,7 +1141,7 @@ def is_list_like_index_type(
     return (
         isinstance(t, types.List)
         or (isinstance(t, types.Array) and t.ndim == 1)
-        or isinstance(t, NumericIndexType | RangeIndexType)
+        or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
         or isinstance(t, bodo.types.IntegerArrayType)
         or t == boolean_array_type
@@ -1203,18 +1205,20 @@ def get_index_data_arr_types(t):
     if isinstance(t, MultiIndexType):
         return tuple(t.array_types)
 
-    if isinstance(t, RangeIndexType | PeriodIndexType):
+    if isinstance(t, (RangeIndexType, PeriodIndexType)):
         return (types.Array(types.int64, 1, "C"),)
 
     if isinstance(
         t,
-        NumericIndexType
-        | StringIndexType
-        | BinaryIndexType
-        | DatetimeIndexType
-        | TimedeltaIndexType
-        | CategoricalIndexType
-        | IntervalIndexType,
+        (
+            NumericIndexType,
+            StringIndexType,
+            BinaryIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            CategoricalIndexType,
+            IntervalIndexType,
+        ),
     ):
         return (t.data,)
 
@@ -1278,7 +1282,7 @@ def get_index_type_from_dtype(t):
         return BinaryIndexType(types.none)
 
     if (
-        isinstance(t, types.Integer | types.Float | types.Boolean)
+        isinstance(t, (types.Integer, types.Float, types.Boolean))
         or t == bodo.types.datetime_date_type
     ):
         return NumericIndexType(t, types.none)
@@ -1503,7 +1507,7 @@ def is_literal_type(t):
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
         # constant
         or (
-            isinstance(t, types.Literal | types.Omitted)
+            isinstance(t, (types.Literal, types.Omitted))
             and not isinstance(t, types.LiteralStrKeyDict)
         )
         or t == types.none  # None type is always literal since single value
@@ -1514,7 +1518,7 @@ def is_literal_type(t):
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
         # dtype literals should be treated as literals
-        or isinstance(t, types.DTypeSpec | types.Function)
+        or isinstance(t, (types.DTypeSpec, types.Function))
         or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
         or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
         or t
@@ -1552,7 +1556,7 @@ def is_overload_constant_series(t):
     from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
     return (
-        isinstance(t, SeriesType | HeterogeneousSeriesType)
+        isinstance(t, (SeriesType, HeterogeneousSeriesType))
         and is_literal_type(t.data)
         and is_literal_type(t.index)
         and is_literal_type(t.name_typ)
@@ -1598,7 +1602,7 @@ def get_literal_value(t):
         return t.dispatcher
     if is_initial_value_type(t):
         return t.initial_value
-    if isinstance(t, types.DTypeSpec | types.Function):
+    if isinstance(t, (types.DTypeSpec, types.Function)):
         return t
     if isinstance(t, bodo.libs.int_arr_ext.IntDtype):
         return getattr(pd, str(t)[:-2])()
@@ -1620,7 +1624,7 @@ def can_literalize_type(t, pyobject_to_literal=False):
     """return True if type 't' can have literal values"""
     return (
         t in (bodo.types.string_type, types.bool_)
-        or isinstance(t, types.Integer | types.List | types.SliceType | types.DictType)
+        or isinstance(t, (types.Integer, types.List, types.SliceType, types.DictType))
         or (pyobject_to_literal and t == types.pyobject)
     )
 
@@ -1733,7 +1737,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return types.Array(bodo.types.timedelta64ns, 1, "C")
 
     # regular numpy array
-    if isinstance(dtype, types.Number | types.NPDatetime | types.NPTimedelta):
+    if isinstance(dtype, (types.Number, types.NPDatetime, types.NPTimedelta)):
         arr = types.Array(dtype, 1, "C")
         # If this comes from an optional type try converting to
         # nullable.
@@ -1899,12 +1903,14 @@ def is_iterable_type(t):
         bodo.utils.utils.is_array_typ(t, False)
         or isinstance(
             t,
-            SeriesType
-            | DataFrameType
-            | types.List
-            | types.BaseTuple
-            | types.LiteralList
-            | types.RangeType,
+            (
+                SeriesType,
+                DataFrameType,
+                types.List,
+                types.BaseTuple,
+                types.LiteralList,
+                types.RangeType,
+            ),
         )
         or bodo.hiframes.pd_index_ext.is_pd_index_type(t)
     )
@@ -1916,14 +1922,16 @@ def is_scalar_type(t: types.Type) -> bool:
     """
     return isinstance(
         t,
-        types.Boolean
-        | types.Number
-        | types.IntegerLiteral
-        | types.BooleanLiteral
-        | types.StringLiteral
-        | bodo.hiframes.pd_timestamp_ext.PandasTimestampType
-        | bodo.types.TimeType
-        | bodo.types.Decimal128Type,
+        (
+            types.Boolean,
+            types.Number,
+            types.IntegerLiteral,
+            types.BooleanLiteral,
+            types.StringLiteral,
+            bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+            bodo.types.TimeType,
+            bodo.types.Decimal128Type,
+        ),
     ) or t in (
         bodo.types.datetime64ns,
         bodo.types.timedelta64ns,
@@ -2048,7 +2056,7 @@ def get_common_scalar_dtype(
     # - If too large, we default to closes Decimal128 type expecting lossy conversion
     if any(isinstance(t, bodo.types.Decimal128Type) for t in scalar_types):
         if any(
-            not isinstance(t, types.Number | bodo.types.Decimal128Type)
+            not isinstance(t, (types.Number, bodo.types.Decimal128Type))
             for t in scalar_types
         ):
             return None, False
@@ -2218,7 +2226,10 @@ def is_immutable_array(typ):
     """
     return isinstance(
         typ,
-        bodo.types.ArrayItemArrayType | bodo.types.MapArrayType,
+        (
+            bodo.types.ArrayItemArrayType,
+            bodo.types.MapArrayType,
+        ),
     )
 
 
@@ -2234,8 +2245,10 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
         elif isinstance(
             typ,
-            bodo.libs.int_arr_ext.IntegerArrayType
-            | bodo.libs.float_arr_ext.FloatingArrayType,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
         ):
             all_types.append(types.Array(typ.dtype, 1, "C"))
 
@@ -2405,7 +2418,7 @@ class NumTypeStaticGetItem(AbstractTemplate):
             isinstance(val, types.NumberClass)
             or (
                 isinstance(val, types.TypeRef)
-                and isinstance(val.instance_type, types.NPDatetime | types.NPTimedelta)
+                and isinstance(val.instance_type, (types.NPDatetime, types.NPTimedelta))
             )
         ):
             return signature(types.TypeRef(val.instance_type[idx]), *args)
@@ -2586,7 +2599,7 @@ def type_col_to_index(col_names):
         return bodo.types.StringIndexType(None)
     elif all(isinstance(a, bytes) for a in col_names):
         return bodo.types.BinaryIndexType(None)
-    elif all(isinstance(a, int | float) for a in col_names):  # pragma: no cover
+    elif all(isinstance(a, (int, float)) for a in col_names):  # pragma: no cover
         # TODO(ehsan): test
         if any(isinstance(a, (float)) for a in col_names):
             return bodo.types.NumericIndexType(types.float64)
@@ -2865,12 +2878,12 @@ def _check_objmode_type(val, typ):
         val_typ = typ
 
     # list/set reflection is irrelevant in objmode
-    if isinstance(val_typ, types.List | types.Set):
+    if isinstance(val_typ, (types.List, types.Set)):
         val_typ = val_typ.copy(reflected=False)
 
     # Numba casts number types liberally
-    if isinstance(val_typ, types.Integer | types.Float) and isinstance(
-        typ, types.Integer | types.Float
+    if isinstance(val_typ, (types.Integer, types.Float)) and isinstance(
+        typ, (types.Integer, types.Float)
     ):
         return val
 
@@ -3076,13 +3089,15 @@ def get_castable_arr_dtype(arr_type: types.Type):
     """
     if isinstance(
         arr_type,
-        bodo.types.ArrayItemArrayType
-        | bodo.types.MapArrayType
-        | bodo.types.StructArrayType,
+        (
+            bodo.types.ArrayItemArrayType,
+            bodo.types.MapArrayType,
+            bodo.types.StructArrayType,
+        ),
     ):
         cast_typ = arr_type
     elif isinstance(
-        arr_type, bodo.types.IntegerArrayType | bodo.types.FloatingArrayType
+        arr_type, (bodo.types.IntegerArrayType, bodo.types.FloatingArrayType)
     ):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
     elif arr_type == bodo.types.boolean_array_type:

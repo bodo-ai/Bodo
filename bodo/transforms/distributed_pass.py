@@ -297,8 +297,10 @@ class DistributedPass:
                     f = distributed_run_extensions[type(inst)]
                     if isinstance(
                         inst,
-                        bodo.ir.parquet_ext.ParquetReader
-                        | bodo.ir.iceberg_ext.IcebergReader,
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
                     ) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
                         and inst.db_type == "snowflake"
@@ -344,7 +346,7 @@ class DistributedPass:
                         out_nodes = [inst]
                     elif isinstance(rhs, ir.Expr):
                         out_nodes = self._run_expr(inst, equiv_set, avail_vars)
-                elif isinstance(inst, ir.StaticSetItem | ir.SetItem):
+                elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     self._fix_set_node_sig(inst)
                     out_nodes = []
                     index_var = get_getsetitem_index_var(inst, self.typemap, out_nodes)
@@ -609,8 +611,10 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.ml_support.xgb_ext.BodoXGBClassifierType
-                | bodo.ml_support.xgb_ext.BodoXGBRegressorType,
+                (
+                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
+                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
+                ),
             )
         ):  # pragma: no cover
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -623,23 +627,25 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType
-                | bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType
-                | bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLassoType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType
-                | bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType
-                | bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType
-                | bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
+                (
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
+                ),
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
@@ -665,17 +671,19 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType
-                | bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType
-                | bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoLassoType
-                | bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType
-                | bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType
-                | bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                (
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                ),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -690,9 +698,11 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType
-                | bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType
-                | bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
+                (
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
+                ),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -1612,7 +1622,7 @@ class DistributedPass:
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
             # no need for transformation for len of distributed List/Dict
             and not isinstance(
-                self.typemap[rhs.args[0].name], types.List | types.DictType
+                self.typemap[rhs.args[0].name], (types.List, types.DictType)
             )
         ):
             arr = rhs.args[0]
@@ -3213,7 +3223,7 @@ class DistributedPass:
             ]
         # tuple of int vars
         else:
-            assert isinstance(size_var, tuple | list)
+            assert isinstance(size_var, (tuple, list))
             size_list = list(size_var)
 
         count_var = self._get_1D_count(size_list[0], out)
@@ -3567,7 +3577,7 @@ class DistributedPass:
         out = [full_node]
 
         # no need for transformation for getitem/setitem of distributed List/Dict
-        if isinstance(self.typemap[arr.name], types.List | types.DictType):
+        if isinstance(self.typemap[arr.name], (types.List, types.DictType)):
             return out
 
         # adjust parallel access indices (in parfors)
@@ -3587,7 +3597,7 @@ class DistributedPass:
         elif (arr.name, index_var.name) in self._parallel_accesses:
             return out
         elif self._is_1D_or_1D_Var_arr(arr.name) and isinstance(
-            node, ir.StaticSetItem | ir.SetItem
+            node, (ir.StaticSetItem, ir.SetItem)
         ):
             return self._run_dist_setitem(
                 node, arr, index_var, equiv_set, avail_vars, out
@@ -4371,7 +4381,7 @@ class DistributedPass:
         """
         shape = equiv_set.get_shape(var)
         if (
-            isinstance(shape, list | tuple)
+            isinstance(shape, (list, tuple))
             and len(shape) > 0
             and shape[0].name in avail_vars
         ):
@@ -4408,7 +4418,7 @@ class DistributedPass:
 
         # use shape if parfor start not found (TODO shouldn't reach here?)
         shape = equiv_set.get_shape(arr)
-        if isinstance(shape, list | tuple) and len(shape) > 0:
+        if isinstance(shape, (list, tuple)) and len(shape) > 0:
             size_var = shape[0]
             nodes = []
             start_var = self._get_1D_start(size_var, avail_vars, nodes)
@@ -4726,7 +4736,7 @@ class DistributedPass:
         for var_def in reduce_var_defs:
             if isinstance(var_def, ir.Var):
                 var_def = guard(get_definition, self.func_ir, var_def)
-            if isinstance(var_def, ir.Const | ir.FreeVar | ir.Global):
+            if isinstance(var_def, (ir.Const, ir.FreeVar, ir.Global)):
                 return var_def.value
 
         return None  # init value not found
@@ -4928,7 +4938,7 @@ class DistributedPass:
         for stmt in nodes:
             assert isinstance(stmt, ir.Assign)
             rhs = stmt.value
-            assert isinstance(rhs, ir.Var | ir.Const | ir.Expr)
+            assert isinstance(rhs, (ir.Var, ir.Const, ir.Expr))
             if isinstance(rhs, ir.Expr):
                 assert rhs.op == "static_getitem"
                 vals_list.append(stmt.target)

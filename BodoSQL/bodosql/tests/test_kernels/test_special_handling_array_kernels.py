@@ -157,10 +157,12 @@ def test_is_in_string_int(memory_leak_check, args):
 
     if isinstance(
         arr,
-        pd.Series
-        | np.ndarray
-        | pd.core.arrays.base.ExtensionArray
-        | pd.core.arrays.NumpyExtensionArray,
+        (
+            pd.Series,
+            np.ndarray,
+            pd.core.arrays.base.ExtensionArray,
+            pd.core.arrays.NumpyExtensionArray,
+        ),
     ):
 
         def is_in_equiv_fn(arr, search_vals):

@@ -240,7 +240,7 @@ def test_bitshiftleft(test_bitwise_number_bits):
         if pd.isna(A) or pd.isna(B):
             return None
         else:
-            if not isinstance(A, np.uint8 | np.uint16 | np.uint32 | np.uint64):
+            if not isinstance(A, (np.uint8, np.uint16, np.uint32, np.uint64)):
                 return np.int64(A) << B
             else:
                 return np.uint64(A) << np.uint8(B)

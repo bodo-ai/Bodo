@@ -377,7 +377,7 @@ class DistributedAnalysis:
                 self._analyze_assign(inst, equiv_set, array_dists, parfor_dists)
             elif isinstance(inst, Parfor):
                 self._analyze_parfor(inst, array_dists, parfor_dists)
-            elif isinstance(inst, ir.SetItem | ir.StaticSetItem):
+            elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                 self._analyze_setitem(inst, equiv_set, array_dists)
             elif isinstance(inst, ir.Print):
                 continue
@@ -556,7 +556,7 @@ class DistributedAnalysis:
                         code_expr = "is not None"
                         pandas_fn = "notna"
                     if isinstance(
-                        arg1_typ, bodo.types.DataFrameType | bodo.types.SeriesType
+                        arg1_typ, (bodo.types.DataFrameType, bodo.types.SeriesType)
                     ):
                         obj_name = (
                             "DataFrame"
@@ -646,7 +646,7 @@ class DistributedAnalysis:
                         return
 
             # treat global values similar to arguments
-            if isinstance(rhs, ir.FreeVar | ir.Global | ir.Const):
+            if isinstance(rhs, (ir.FreeVar, ir.Global, ir.Const)):
                 # add name to ir.Const to handle it similar to Global/FreeVar nodes
                 if isinstance(rhs, ir.Const):
                     rhs.name = lhs
@@ -2070,7 +2070,7 @@ class DistributedAnalysis:
             for col_dists in rhs_dists:
                 table_dist = (
                     Distribution(min(a.value for a in col_dists))
-                    if isinstance(col_dists, list | tuple)
+                    if isinstance(col_dists, (list, tuple))
                     else col_dists
                 )
                 table_dists.append(table_dist)
@@ -3842,7 +3842,7 @@ class DistributedAnalysis:
             return
 
         # getitem on list/dictionary of distributed values
-        if isinstance(in_typ, types.List | types.DictType) and (
+        if isinstance(in_typ, (types.List, types.DictType)) and (
             is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
         ):
             # output and dictionary have the same distribution
@@ -3876,7 +3876,7 @@ class DistributedAnalysis:
         value_typ = self.typemap[inst.value.name]
 
         # setitem on list/dictionary of distributed values
-        if isinstance(target_typ, types.List | types.DictType) and (
+        if isinstance(target_typ, (types.List, types.DictType)) and (
             is_distributable_typ(value_typ) or is_distributable_tuple_typ(value_typ)
         ):
             # output and dictionary have the same distribution
@@ -4256,7 +4256,7 @@ class DistributedAnalysis:
 
 def _set_REP(typemap, metadata, diag_info, var_list, array_dists, info=None, loc=None):
     """set distribution of all variables in 'var_list' to REP if distributable."""
-    if isinstance(var_list, str | ir.Var):
+    if isinstance(var_list, (str, ir.Var)):
         var_list = [var_list]
     for var in var_list:
         varname = var.name if isinstance(var, ir.Var) else var
@@ -4548,7 +4548,7 @@ def _arrays_written(arrs, blocks):
             if isinstance(inst, Parfor) and _arrays_written(arrs, inst.loop_body):
                 return True
             if (
-                isinstance(inst, ir.SetItem | ir.StaticSetItem)
+                isinstance(inst, (ir.SetItem, ir.StaticSetItem))
                 and inst.target.name in arrs
             ):
                 return True

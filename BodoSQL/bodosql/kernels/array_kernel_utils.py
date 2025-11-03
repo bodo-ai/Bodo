@@ -845,10 +845,10 @@ def is_valid_numeric_bool(arg):  # pragma: no cover
     """
     return not (
         arg != types.none
-        and not isinstance(arg, types.Integer | types.Float | types.Boolean)
+        and not isinstance(arg, (types.Integer, types.Float, types.Boolean))
         and not (
             bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, types.Integer | types.Float | types.Boolean)
+            and isinstance(arg.dtype, (types.Integer, types.Float, types.Boolean))
         )
         and not is_overload_constant_number(arg)
         and not is_overload_constant_bool(arg)
@@ -875,10 +875,10 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
 def is_numeric_without_decimal(arg):
     return (
         is_overload_none(arg)
-        or isinstance(arg, types.Integer | types.Boolean | types.Float)
+        or isinstance(arg, (types.Integer, types.Boolean, types.Float))
         or (
             bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, types.Integer | types.Boolean | types.Float)
+            and isinstance(arg.dtype, (types.Integer, types.Boolean, types.Float))
         )
     )
 
@@ -1022,7 +1022,7 @@ def is_valid_decimal_arg(arg):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
     returns: False if the argument is not a decimal or decimal column
     """
-    return isinstance(arg, bodo.types.Decimal128Type | bodo.types.DecimalArrayType)
+    return isinstance(arg, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType))
 
 
 def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
@@ -1594,7 +1594,7 @@ def vectorized_sol(args, scalar_fn, dtype, manual_coercion=False):
     length = -1
     for arg in args:
         if isinstance(
-            arg, pd.core.arrays.base.ExtensionArray | pd.Series | np.ndarray | pa.Array
+            arg, (pd.core.arrays.base.ExtensionArray, pd.Series, np.ndarray, pa.Array)
         ):
             length = len(arg)
             break
@@ -1603,7 +1603,7 @@ def vectorized_sol(args, scalar_fn, dtype, manual_coercion=False):
     arglist = []
     for arg in args:
         if isinstance(
-            arg, pd.core.arrays.base.ExtensionArray | pd.Series | np.ndarray | pa.Array
+            arg, (pd.core.arrays.base.ExtensionArray, pd.Series, np.ndarray, pa.Array)
         ):
             arglist.append(arg)
         else:
@@ -2070,9 +2070,9 @@ def get_combined_type(in_types, calling_func):
         return bodo.types.ArrayItemArrayType(combined_inner_dtype)
 
     # For map arrays, recursively ensure the two child arrays match
-    if isinstance(seed_type, bodo.types.MapArrayType | types.DictType):
+    if isinstance(seed_type, (bodo.types.MapArrayType, types.DictType)):
         if not all(
-            isinstance(typ, bodo.types.MapArrayType | types.DictType)
+            isinstance(typ, (bodo.types.MapArrayType, types.DictType))
             for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
@@ -2091,11 +2091,11 @@ def get_combined_type(in_types, calling_func):
 
     # For struct arrays, match the names recursively ensure the all child arrays match
     if isinstance(
-        seed_type, bodo.types.StructArrayType | bodo.libs.struct_arr_ext.StructType
+        seed_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         if not all(
             isinstance(
-                typ, bodo.types.StructArrayType | bodo.libs.struct_arr_ext.StructType
+                typ, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
             )
             and typ.names == seed_type.names
             for typ in in_types

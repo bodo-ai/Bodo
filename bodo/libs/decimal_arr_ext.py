@@ -1829,8 +1829,8 @@ def overload_add_or_subtract_decimal_arrays(d1, d2, do_addition):
             "add_or_subtract_decimal_arrays: DecimalArrayType expected at least one inputs"
         )
 
-    if not isinstance(d1, DecimalArrayType | Decimal128Type) or not isinstance(
-        d2, DecimalArrayType | Decimal128Type
+    if not isinstance(d1, (DecimalArrayType, Decimal128Type)) or not isinstance(
+        d2, (DecimalArrayType, Decimal128Type)
     ):  # pragma: no cover
         raise BodoError(
             "add_or_subtract_decimal_arrays: both arguments must be either a decimal array or a decimal scalar"
@@ -2055,10 +2055,10 @@ def overload_multiply_decimal_arrays(d1, d2):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(d1, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
         "multiply_decimal_arrays: decimal input1 expected"
     )
-    assert isinstance(d2, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
         "multiply_decimal_arrays: decimal input2 expected"
     )
     assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (
@@ -2259,10 +2259,10 @@ def overload_modulo_decimal_arrays(d1, d2):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(d1, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
         "modulo_decimal_arrays: decimal input1 expected"
     )
-    assert isinstance(d2, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
         "modulo_decimal_arrays: decimal input2 expected"
     )
     assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (
@@ -2466,10 +2466,10 @@ def overload_divide_decimal_arrays(d1, d2, do_div0=False):
     """
     from bodo.libs.array import delete_info, info_to_array
 
-    assert isinstance(d1, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d1, (DecimalArrayType, Decimal128Type)), (
         "divide_decimal_arrays: decimal input1 expected"
     )
-    assert isinstance(d2, DecimalArrayType | Decimal128Type), (
+    assert isinstance(d2, (DecimalArrayType, Decimal128Type)), (
         "divide_decimal_arrays: decimal input2 expected"
     )
     assert isinstance(d1, DecimalArrayType) or isinstance(d2, DecimalArrayType), (

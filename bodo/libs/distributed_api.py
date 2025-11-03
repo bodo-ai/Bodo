@@ -320,11 +320,13 @@ def isend(arr, size, pe, tag, cond=True):
     if (
         isinstance(
             arr,
-            IntegerArrayType
-            | FloatingArrayType
-            | DecimalArrayType
-            | TimeArrayType
-            | DatetimeArrayType,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                TimeArrayType,
+                DatetimeArrayType,
+            ),
         )
         or arr == datetime_date_array_type
     ):
@@ -531,7 +533,7 @@ def dist_reduce_impl(value, reduce_op, comm):
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, bodo.types.Decimal128Type | bodo.types.PandasTimestampType
+            target_typ, (bodo.types.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
@@ -1351,7 +1353,7 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
 
     # nullable int/float/bool/date/time arrays
     if isinstance(
-        data, IntegerArrayType | FloatingArrayType | TimeArrayType | DatetimeArrayType
+        data, (IntegerArrayType, FloatingArrayType, TimeArrayType, DatetimeArrayType)
     ) or data in (
         boolean_array_type,
         datetime_date_array_type,
@@ -1419,7 +1421,11 @@ class BcastScalarInfer(AbstractTemplate):
         if not (
             isinstance(
                 val,
-                types.Integer | types.Float | bodo.types.PandasTimestampType,
+                (
+                    types.Integer,
+                    types.Float,
+                    bodo.types.PandasTimestampType,
+                ),
             )
             or val
             in [

@@ -373,7 +373,7 @@ def _to_readonly(t):
     if isinstance(t, NumericIndexType):
         return NumericIndexType(t.dtype, t.name_typ, _to_readonly(t.data))
 
-    if isinstance(t, DatetimeIndexType | TimedeltaIndexType):
+    if isinstance(t, (DatetimeIndexType, TimedeltaIndexType)):
         return t.__class__(t.name_typ, _to_readonly(t.data))
 
     return t
