@@ -159,13 +159,11 @@ def overload_isna(arr, i):
     # masked Integer array, boolean array
     if isinstance(
         arr,
-        (
-            IntegerArrayType,
-            FloatingArrayType,
-            DecimalArrayType,
-            TimeArrayType,
-            DatetimeArrayType,
-        ),
+        IntegerArrayType
+        | FloatingArrayType
+        | DecimalArrayType
+        | TimeArrayType
+        | DatetimeArrayType,
     ) or arr in (
         boolean_array_type,
         datetime_date_array_type,
@@ -256,7 +254,7 @@ def overload_isna(arr, i):
         return lambda arr, i: np.isnan(arr[i])  # pragma: no cover
 
     # NaT for dt64
-    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
+    if isinstance(dtype, types.NPDatetime | types.NPTimedelta):
         return lambda arr, i: np.isnat(arr[i])  # pragma: no cover
 
     # XXX integers don't have nans, extend to boolean
@@ -272,7 +270,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, types.Array) and isinstance(arr.dtype, types.Float):
         return setna
 
-    if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
+    if isinstance(arr.dtype, types.NPDatetime | types.NPTimedelta):
         nat = arr.dtype("NaT")
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
@@ -318,13 +316,11 @@ def setna_overload(arr, ind, int_nan_const=0):
 
     if isinstance(
         arr,
-        (
-            IntegerArrayType,
-            FloatingArrayType,
-            DecimalArrayType,
-            TimeArrayType,
-            TimestampTZArrayType,
-        ),
+        IntegerArrayType
+        | FloatingArrayType
+        | DecimalArrayType
+        | TimeArrayType
+        | TimestampTZArrayType,
     ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
@@ -849,7 +845,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
     arr_val = args[0]
     arr_typ = sig.args[0]
     if isinstance(
-        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+        arr_typ, IntegerArrayType | FloatingArrayType | BooleanArrayType
     ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
@@ -896,7 +892,7 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
     arr_val = args[0]
     arr_typ = sig.args[0]
     if isinstance(
-        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+        arr_typ, IntegerArrayType | FloatingArrayType | BooleanArrayType
     ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
@@ -1662,7 +1658,7 @@ def concat_overload(arr_list):
         )  # pragma: no cover
 
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and arr_list.dtype == bodo.types.null_array_type
     ):
 
@@ -1676,7 +1672,7 @@ def concat_overload(arr_list):
         return null_array_concat_impl
 
     # array(item) arrays
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, ArrayItemArrayType
     ):
 
@@ -1720,7 +1716,7 @@ def concat_overload(arr_list):
         return array_item_concat_impl
 
     # Struct Array
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, bodo.types.StructArrayType
     ):
         struct_keys = arr_list.dtype.names
@@ -1767,7 +1763,7 @@ def concat_overload(arr_list):
         return loc_vars["struct_array_concat_impl"]
 
     # TZ-Aware arrays
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, bodo.types.DatetimeArrayType
     ):
         tz_literal = arr_list.dtype.tz
@@ -1791,7 +1787,7 @@ def concat_overload(arr_list):
 
     # datetime.date array
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and arr_list.dtype == datetime_date_array_type
     ):
 
@@ -1815,7 +1811,7 @@ def concat_overload(arr_list):
         return datetime_date_array_concat_impl
 
     # Time array
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, TimeArrayType
     ):
         prec = arr_list.dtype.precision
@@ -1840,7 +1836,7 @@ def concat_overload(arr_list):
 
     # TimestampTZ array
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and arr_list.dtype == timestamptz_array_type
     ):
 
@@ -1865,7 +1861,7 @@ def concat_overload(arr_list):
 
     # datetime.timedelta array
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and arr_list.dtype == timedelta_array_type
     ):
 
@@ -1889,7 +1885,7 @@ def concat_overload(arr_list):
         return datetime_timedelta_array_concat_impl
 
     # Decimal array
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, DecimalArrayType
     ):
         precision = arr_list.dtype.precision
@@ -1919,7 +1915,7 @@ def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and (
             is_str_arr_type(arr_list.dtype)
             or arr_list.dtype == bodo.types.binary_array_type
@@ -2109,7 +2105,7 @@ def concat_overload(arr_list):
 
     # Integer array input, or mix of Integer array and Numpy int array
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and isinstance(arr_list.dtype, IntegerArrayType)
         or (
             isinstance(arr_list, types.BaseTuple)
@@ -2144,7 +2140,7 @@ def concat_overload(arr_list):
 
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and arr_list.dtype == boolean_array_type
         or (
             isinstance(arr_list, types.BaseTuple)
@@ -2175,7 +2171,7 @@ def concat_overload(arr_list):
 
     # Floating array input, or mix of Floating array and Numpy float array
     if (
-        isinstance(arr_list, (types.UniTuple, types.List))
+        isinstance(arr_list, types.UniTuple | types.List)
         and isinstance(arr_list.dtype, FloatingArrayType)
         or (
             isinstance(arr_list, types.BaseTuple)
@@ -2209,7 +2205,7 @@ def concat_overload(arr_list):
         return impl_float_arr_list
 
     # categorical arrays
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, CategoricalArrayType
     ):
 
@@ -2265,12 +2261,12 @@ def concat_overload(arr_list):
     if (
         isinstance(arr_list, types.BaseTuple)
         and any(
-            isinstance(t, (types.Array, IntegerArrayType))
+            isinstance(t, types.Array | IntegerArrayType)
             and isinstance(t.dtype, types.Integer)
             for t in arr_list.types
         )
         and any(
-            isinstance(t, (types.Array, FloatingArrayType))
+            isinstance(t, types.Array | FloatingArrayType)
             and isinstance(t.dtype, types.Float)
             for t in arr_list.types
         )
@@ -2279,7 +2275,7 @@ def concat_overload(arr_list):
             astype_float_tup(arr_list)
         )  # pragma: no cover
 
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, bodo.types.MapArrayType
     ):
 
@@ -2292,7 +2288,7 @@ def concat_overload(arr_list):
             return result
 
         return impl_map_arr_list
-    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+    if isinstance(arr_list, types.UniTuple | types.List) and isinstance(
         arr_list.dtype, bodo.types.TupleArrayType
     ):
 
@@ -2355,8 +2351,8 @@ def overload_convert_to_nullable_tup(arr_tup):
     arrays with common dtype
     """
     # no need for conversion if already nullable int
-    if isinstance(arr_tup, (types.UniTuple, types.List)) and isinstance(
-        arr_tup.dtype, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+    if isinstance(arr_tup, types.UniTuple | types.List) and isinstance(
+        arr_tup.dtype, IntegerArrayType | FloatingArrayType | BooleanArrayType
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
@@ -2773,8 +2769,8 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
 
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
-    if not isinstance(arr, (FloatingArrayType, IntegerArrayType)) and isinstance(
-        dtype, (types.Integer, types.Float)
+    if not isinstance(arr, FloatingArrayType | IntegerArrayType) and isinstance(
+        dtype, types.Integer | types.Float
     ):
         dtype = dtype if isinstance(dtype, types.Float) else types.float64
 
@@ -3013,7 +3009,7 @@ def overload_sort(arr, ascending, inplace):
 
 def overload_array_max(A):
     if (
-        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        isinstance(A, IntegerArrayType | FloatingArrayType | SeriesType)
         or A == boolean_array_type
     ):
 
@@ -3030,7 +3026,7 @@ overload(max, inline="always", no_unliteral=True)(overload_array_max)
 
 def overload_array_min(A):
     if (
-        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        isinstance(A, IntegerArrayType | FloatingArrayType | SeriesType)
         or A == boolean_array_type
     ):
 
@@ -3047,7 +3043,7 @@ overload(min, inline="always", no_unliteral=True)(overload_array_min)
 
 def overload_array_sum(A):
     if (
-        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        isinstance(A, IntegerArrayType | FloatingArrayType | SeriesType)
         or A == boolean_array_type
     ):
 
@@ -3065,7 +3061,7 @@ overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 @overload(np.prod, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_array_prod(A):
     if (
-        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        isinstance(A, IntegerArrayType | FloatingArrayType | SeriesType)
         or A == boolean_array_type
     ):
 
@@ -4164,12 +4160,12 @@ def np_cbrt_scalar(x, float_dtype):  # pragma: no cover
 @overload(np.hstack, no_unliteral=True, jit_options={"cache": True})
 def np_hstack(tup):
     # Verify that arr_iter is a tuple, list of arrays, or Series of Arrays
-    is_sequence = isinstance(tup, (types.BaseTuple, types.List))
+    is_sequence = isinstance(tup, types.BaseTuple | types.List)
     is_series = isinstance(
         tup,
-        (bodo.types.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType),
+        bodo.types.SeriesType | bodo.hiframes.pd_series_ext.HeterogeneousSeriesType,
     ) and isinstance(
-        tup.data, (types.BaseTuple, types.List, bodo.types.NullableTupleType)
+        tup.data, types.BaseTuple | types.List | bodo.types.NullableTupleType
     )
     if isinstance(tup, types.BaseTuple):
         # Determine that each type is an array type
@@ -4319,7 +4315,7 @@ def np_tile(A, reps):
         (np.ndarray) A copy of input A with the data transformed in the manner specified
         by the combination of A.ndim and the reps tuple.
     """
-    if not isinstance(reps, (types.Tuple, types.UniTuple)):  # pragma: no cover
+    if not isinstance(reps, types.Tuple | types.UniTuple):  # pragma: no cover
         raise_bodo_error("np.tile: reps argument must be a tuple")
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
         A, bodo.types.FloatingArrayType
@@ -4449,7 +4445,7 @@ def _overload_nan_argmin(arr):
     if (
         isinstance(
             arr,
-            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+            IntegerArrayType | FloatingArrayType | DatetimeArrayType | DecimalArrayType,
         )
         or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]
@@ -4531,7 +4527,7 @@ def _overload_nan_argmax(arr):
     if (
         isinstance(
             arr,
-            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+            IntegerArrayType | FloatingArrayType | DatetimeArrayType | DecimalArrayType,
         )
         or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.types.timedelta64ns

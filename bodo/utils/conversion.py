@@ -89,7 +89,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
         if data == bodo.libs.bool_arr_ext.boolean_array_type:
             return signature(data, *folded_args).replace(pysig=pysig)
 
-        if isinstance(data, (types.List, types.UniTuple)):
+        if isinstance(data, types.List | types.UniTuple):
             # If we have an optional type, extract the underlying type
             elem_type = data.dtype
             if isinstance(elem_type, types.Optional):
@@ -106,7 +106,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
 
         if isinstance(data, types.Array):
             if not is_overload_none(use_nullable_array) and (
-                isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
+                isinstance(data.dtype, types.Boolean | types.Integer | types.Float)
                 or data.dtype == bodo.types.timedelta64ns
                 or data.dtype == bodo.types.datetime64ns
             ):
@@ -145,7 +145,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             return signature(data.data, *folded_args).replace(pysig=pysig)
 
         # index types
-        if isinstance(data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+        if isinstance(data, NumericIndexType | DatetimeIndexType | TimedeltaIndexType):
             if isinstance(data, NumericIndexType) and not is_overload_none(
                 use_nullable_array
             ):
@@ -353,7 +353,7 @@ def overload_coerce_to_ndarray(
     # numpy array
     if isinstance(data, types.Array):
         if not is_overload_none(use_nullable_array) and (
-            isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
+            isinstance(data.dtype, types.Boolean | types.Integer | types.Float)
             or data.dtype == bodo.types.timedelta64ns
             or data.dtype == bodo.types.datetime64ns
         ):
@@ -379,7 +379,7 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     # list/UniTuple
-    if isinstance(data, (types.List, types.UniTuple)):
+    if isinstance(data, types.List | types.UniTuple):
         # If we have an optional type, extract the underlying type
         elem_type = data.dtype
         if isinstance(elem_type, types.Optional):
@@ -415,7 +415,7 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     # index types
-    if isinstance(data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+    if isinstance(data, NumericIndexType | DatetimeIndexType | TimedeltaIndexType):
         if isinstance(data, NumericIndexType) and not is_overload_none(
             use_nullable_array
         ):
@@ -668,7 +668,7 @@ def overload_coerce_to_ndarray(
 
     # Tuple of numerics can be converted to Numpy array
     if isinstance(data, types.BaseTuple) and all(
-        isinstance(t, (types.Float, types.Integer)) for t in data.types
+        isinstance(t, types.Float | types.Integer) for t in data.types
     ):
         return (
             lambda data,
@@ -818,10 +818,8 @@ def overload_ndarray_if_nullable_arr(data):
     if (
         isinstance(
             data,
-            (
-                bodo.libs.int_arr_ext.IntegerArrayType,
-                bodo.libs.float_arr_ext.FloatingArrayType,
-            ),
+            bodo.libs.int_arr_ext.IntegerArrayType
+            | bodo.libs.float_arr_ext.FloatingArrayType,
         )
         or data == bodo.libs.bool_arr_ext.boolean_array_type
     ):
@@ -875,12 +873,10 @@ def overload_coerce_to_array(
             not is_nullable_type(data.data)
             or isinstance(
                 data.data,
-                (
-                    ArrayItemArrayType,
-                    bodo.types.TupleArrayType,
-                    bodo.types.StructArrayType,
-                    bodo.types.MapArrayType,
-                ),
+                ArrayItemArrayType
+                | bodo.types.TupleArrayType
+                | bodo.types.StructArrayType
+                | bodo.types.MapArrayType,
             )
             or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(data)
             or bodo.hiframes.pd_series_ext.is_dt64_series_typ(data)
@@ -1025,7 +1021,7 @@ def overload_coerce_to_array(
         return impl_map_array_to_nullable
 
     # string/binary/categorical Index
-    if isinstance(data, (StringIndexType, BinaryIndexType, CategoricalIndexType)):
+    if isinstance(data, StringIndexType | BinaryIndexType | CategoricalIndexType):
         return (
             lambda data,
             error_on_nonarray=True,
@@ -1062,7 +1058,7 @@ def overload_coerce_to_array(
     # string tuple
     if (
         isinstance(data, types.UniTuple)
-        and isinstance(data.dtype, (types.UnicodeType, types.StringLiteral))
+        and isinstance(data.dtype, types.UnicodeType | types.StringLiteral)
     ) or (
         isinstance(data, types.BaseTuple)
         and all(isinstance(t, types.StringLiteral) for t in data.types)
@@ -1086,7 +1082,7 @@ def overload_coerce_to_array(
         )  # pragma: no cover
 
     # list/tuple of tuples
-    if isinstance(data, (types.List, types.UniTuple)) and isinstance(
+    if isinstance(data, types.List | types.UniTuple) and isinstance(
         data.dtype, types.BaseTuple
     ):
         # TODO: support variable length data (e.g strings) in tuples
@@ -1151,7 +1147,7 @@ def overload_coerce_to_array(
     # for every value we opt to make the output array dictionary
     # encoded.
     if not is_overload_none(scalar_to_arr_len) and isinstance(
-        data, (types.UnicodeType, types.StringLiteral)
+        data, types.UnicodeType | types.StringLiteral
     ):
         if not is_overload_constant_bool(dict_encode):
             raise BodoError("dict_code must be a constant bool value")
@@ -2309,17 +2305,15 @@ def overload_convert_to_index(data, name=None):
     # already Index
     if isinstance(
         data,
-        (
-            RangeIndexType,
-            NumericIndexType,
-            DatetimeIndexType,
-            TimedeltaIndexType,
-            StringIndexType,
-            BinaryIndexType,
-            CategoricalIndexType,
-            PeriodIndexType,
-            types.NoneType,
-        ),
+        RangeIndexType
+        | NumericIndexType
+        | DatetimeIndexType
+        | TimedeltaIndexType
+        | StringIndexType
+        | BinaryIndexType
+        | CategoricalIndexType
+        | PeriodIndexType
+        | types.NoneType,
     ):
         return lambda data, name=None: data  # pragma: no cover
 
@@ -2378,13 +2372,11 @@ def overload_index_from_array(data, name=None):
     if (
         isinstance(
             data.dtype,
-            (
-                types.Integer,
-                types.Float,
-                types.Boolean,
-                bodo.types.TimeType,
-                bodo.types.Decimal128Type,
-            ),
+            types.Integer
+            | types.Float
+            | types.Boolean
+            | bodo.types.TimeType
+            | bodo.types.Decimal128Type,
         )
         or data.dtype == bodo.types.datetime_date_type
     ):
@@ -2502,13 +2494,11 @@ def overload_extract_name_if_none(data, name):
     # Index type, TODO: other indices like Range?
     if isinstance(
         data,
-        (
-            NumericIndexType,
-            DatetimeIndexType,
-            TimedeltaIndexType,
-            PeriodIndexType,
-            CategoricalIndexType,
-        ),
+        NumericIndexType
+        | DatetimeIndexType
+        | TimedeltaIndexType
+        | PeriodIndexType
+        | CategoricalIndexType,
     ):
         return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(
             data

@@ -136,18 +136,18 @@ def convert_scalar(val):
         return convert_timestamp(val)
     elif isinstance(val, datetime.date):
         return convert_date(val)
-    elif isinstance(val, (bool, np.bool_)):
+    elif isinstance(val, bool | np.bool_):
         # This needs to go before int because it may be a subclass
         return convert_bool(val)
-    elif isinstance(val, (np.int64, int, np.uint64, np.uint32)):
+    elif isinstance(val, np.int64 | int | np.uint64 | np.uint32):
         return convert_long(val)
-    elif isinstance(val, (np.int32, np.int16, np.int8, np.uint8, np.uint16)):
+    elif isinstance(val, np.int32 | np.int16 | np.int8 | np.uint8 | np.uint16):
         return convert_integer(val)
     elif isinstance(val, str):
         return convert_string(val)
     elif isinstance(val, np.float32):
         return convert_float32(val)
-    elif isinstance(val, (float, np.float64)):
+    elif isinstance(val, float | np.float64):
         return convert_float64(val)
     elif isinstance(val, np.datetime64):
         return convert_dt64(val)

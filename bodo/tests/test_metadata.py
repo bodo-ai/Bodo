@@ -190,7 +190,9 @@ def test_dtype_converter_literal_values(typ_val):
     assert typ_from_converter == typ_val
 
     # Test literal type's for the types which numba supports
-    if not (typ_val is None or isinstance(typ_val, (float, bytes, dict, tuple, list))):
+    if not (
+        typ_val is None or isinstance(typ_val, float | bytes | dict | tuple | list)
+    ):
         literal_typ = numba.types.literal(typ_val)
         converted_enum_list = _dtype_to_type_enum_list(literal_typ)
         assert (
@@ -285,9 +287,7 @@ def test_series_typing_metadata(series_val, memory_leak_check):
 def test_series_index_metadata(metadata_supported_index_types, memory_leak_check):
     """tests that the typing metadata for the series index is properly set when returning a Series from Bodo"""
     df_value = pd.Series(1, index=metadata_supported_index_types)
-    if isinstance(
-        metadata_supported_index_types, (pd.CategoricalIndex, pd.PeriodIndex)
-    ):
+    if isinstance(metadata_supported_index_types, pd.CategoricalIndex | pd.PeriodIndex):
         # We don't support the Iloc code for Categorical/PeriodIndex
         @bodo.jit
         def impl(S):
@@ -317,9 +317,7 @@ def test_dataframe_typing_metadata(df_value, memory_leak_check):
 def test_dataframe_index_metadata(metadata_supported_index_types, memory_leak_check):
     """tests that the typing metadata for the dataframe index is properly set when returning a DataFrame from Bodo"""
     df_value = pd.DataFrame({"A": 1}, index=metadata_supported_index_types)
-    if isinstance(
-        metadata_supported_index_types, (pd.CategoricalIndex, pd.PeriodIndex)
-    ):
+    if isinstance(metadata_supported_index_types, pd.CategoricalIndex | pd.PeriodIndex):
         # We don't support the Iloc code for Categorical/PeriodIndex
         @bodo.jit
         def impl(df):

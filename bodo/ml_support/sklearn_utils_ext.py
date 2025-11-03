@@ -46,7 +46,7 @@ def sklearn_utils_shuffle_overload(
         # Therefore, we need to define a unique entry for `data`'s type within
         # numba.core.types:
         data_type_name = f"utils_shuffle_type_{numba.core.ir_utils.next_label()}"
-        if isinstance(data, (DataFrameType, SeriesType)):
+        if isinstance(data, DataFrameType | SeriesType):
             # Following train_test_split, make sure we use NumericIndexType
             # over other unsupported index types for pandas inputs
             data_typ = data.copy(index=NumericIndexType(types.int64))

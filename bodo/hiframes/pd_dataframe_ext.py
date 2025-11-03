@@ -672,7 +672,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
                     "Dataframe.apply(): only user-defined functions with axis=1 supported"
                 )
             if (
-                isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+                isinstance(f_return_type, SeriesType | HeterogeneousSeriesType)
                 and f_return_type.const_info is None
             ):
                 raise BodoError(
@@ -1744,7 +1744,7 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t):
         if (
             isinstance(
                 data_typs[col_ind],
-                (FloatingArrayType, IntegerArrayType, BooleanArrayType),
+                FloatingArrayType | IntegerArrayType | BooleanArrayType,
             )
             and isinstance(arr_type, types.Array)
             and arr_type.dtype == data_typs[col_ind].dtype
@@ -2526,7 +2526,7 @@ class LenTemplate(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         # TODO: Fuse more templates
-        if isinstance(args[0], (DataFrameType, bodo.types.TableType)):
+        if isinstance(args[0], DataFrameType | bodo.types.TableType):
             return types.int64(*args)
 
 
@@ -2932,7 +2932,7 @@ def concat_overload(
         data_args = []
         names = []
         for i, obj in enumerate(objs.types):
-            assert isinstance(obj, (SeriesType, DataFrameType))
+            assert isinstance(obj, SeriesType | DataFrameType)
             check_runtime_cols_unsupported(obj, "pandas.concat()")
             if isinstance(obj, SeriesType):
                 # TODO: use Series name if possible
@@ -4571,9 +4571,7 @@ def to_csv_overload(
                     "DataFrame.to_csv(): 'compression' argument defaults to None in JIT code, which is the only supported value."
                 )
             )
-    if not (
-        is_overload_none(columns) or isinstance(columns, (types.List, types.Tuple))
-    ):
+    if not (is_overload_none(columns) or isinstance(columns, types.List | types.Tuple)):
         raise BodoError(
             "DataFrame.to_csv(): 'columns' argument must be list a or tuple type."
         )

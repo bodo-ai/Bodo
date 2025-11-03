@@ -56,12 +56,10 @@ def overload_is_object(V):
         in_dtype = V.data
     result = isinstance(
         in_dtype,
-        (
-            bodo.types.StructArrayType,
-            StructType,
-            bodo.types.MapArrayType,
-            types.DictType,
-        ),
+        bodo.types.StructArrayType
+        | StructType
+        | bodo.types.MapArrayType
+        | types.DictType,
     )
     scalar_text = f"res[i] = {result}"
     return gen_vectorized(

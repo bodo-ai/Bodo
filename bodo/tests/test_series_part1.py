@@ -288,7 +288,7 @@ def test_replace_series_val(series_val):
 
     message = ""
     if any(
-        isinstance(x, (datetime.date, pd.Timedelta, pd.Timestamp))
+        isinstance(x, datetime.date | pd.Timedelta | pd.Timestamp)
         for x in [to_replace, value]
     ):
         # TODO: [BE-469]
@@ -467,7 +467,7 @@ def test_replace_types_unsupported(series_replace):
     elif (
         (isinstance(to_replace, int) and isinstance(value, float))
         or isinstance(to_replace, bool)
-        and (isinstance(value, (int, float)) and not isinstance(value, bool))
+        and (isinstance(value, int | float) and not isinstance(value, bool))
     ):
         message = "cannot replace type"
     elif series.dtype is np.dtype("int64") and isinstance(to_replace, float):
@@ -2067,7 +2067,7 @@ def test_series_setitem_slice(series_val, memory_leak_check):
         return
 
     # string/binary setitem not supported yet. Binary JIRA: BE-1256
-    if isinstance(series_val.iat[0], (str, bytes)):
+    if isinstance(series_val.iat[0], str | bytes):
         return
 
     val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
@@ -2092,7 +2092,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
         return
 
     # string/binary setitem not supported yet. Binary JIRA: BE-1256
-    if isinstance(series_val.iat[0], (str, bytes)):
+    if isinstance(series_val.iat[0], str | bytes):
         return
     val = series_val.iloc[0:2].values.copy()  # values to avoid alignment
     if list_val_arg:

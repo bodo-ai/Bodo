@@ -578,7 +578,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 # Arrow reader is equivalent to tables for column elimination purposes
                 if isinstance(rhs, ir.Var) and isinstance(
                     lhs_type,
-                    (TableType, bodo.io.arrow_reader.ArrowReaderType),
+                    TableType | bodo.io.arrow_reader.ArrowReaderType,
                 ):
                     lhs_key = (lhs_name, None)
                     rhs_key = (rhs.name, None)

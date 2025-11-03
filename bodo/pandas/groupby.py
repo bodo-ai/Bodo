@@ -508,7 +508,7 @@ def _groupby_apply_plan(
 
     out_type = _get_scalar_udf_out_type(func, selected_self)
 
-    if isinstance(out_type, (bodo.types.DataFrameType, bodo.types.SeriesType)):
+    if isinstance(out_type, bodo.types.DataFrameType | bodo.types.SeriesType):
         raise BodoLibNotImplementedException(
             "Groupby.apply(): functions returning Series or DataFrame not implemented yet."
         )
@@ -949,9 +949,7 @@ def _get_agg_output_type(
 
         # Matches Pandas error without the need to fall back.
         if (
-            isinstance(
-                out_numba_type, (bodo.types.SeriesType, bodo.types.DataFrameType)
-            )
+            isinstance(out_numba_type, bodo.types.SeriesType | bodo.types.DataFrameType)
             or is_array_typ(out_numba_type)
         ) and not pa.types.is_list(pa_type):
             raise ValueError(

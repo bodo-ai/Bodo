@@ -2433,11 +2433,9 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     if (
         isinstance(
             col_array_dtype,
-            (
-                bodo.types.IntegerArrayType,
-                bodo.types.FloatingArrayType,
-                bodo.types.TimeArrayType,
-            ),
+            bodo.types.IntegerArrayType
+            | bodo.types.FloatingArrayType
+            | bodo.types.TimeArrayType,
         )
         or col_array_dtype
         in (
@@ -2478,7 +2476,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
 
         return checkna_func
 
-    elif isinstance(col_array_dtype, (types.Array, bodo.types.DatetimeArrayType)):
+    elif isinstance(col_array_dtype, types.Array | bodo.types.DatetimeArrayType):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
             bodo.types.datetime64ns,
@@ -2584,11 +2582,9 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
     if isinstance(
         col_dtype,
-        (
-            types.Number,
-            bodo.types.TimeType,
-            bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
-        ),
+        types.Number
+        | bodo.types.TimeType
+        | bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
     ) or col_dtype in [
         bodo.types.datetime_date_type,
         bodo.types.datetime64ns,
@@ -2834,11 +2830,9 @@ def _replace_column_accesses(
             if (
                 isinstance(
                     array_typ,
-                    (
-                        bodo.libs.int_arr_ext.IntegerArrayType,
-                        bodo.types.FloatingArrayType,
-                        bodo.types.TimeArrayType,
-                    ),
+                    bodo.libs.int_arr_ext.IntegerArrayType
+                    | bodo.types.FloatingArrayType
+                    | bodo.types.TimeArrayType,
                 )
                 or array_typ
                 in (
@@ -3436,13 +3430,11 @@ def _get_interval_join_info(
     require(
         isinstance(
             dtype,
-            (
-                types.Integer,
-                types.Float,
-                PandasDatetimeTZDtype,
-                bodo.types.TimeType,
-                bodo.types.Decimal128Type,
-            ),
+            types.Integer
+            | types.Float
+            | PandasDatetimeTZDtype
+            | bodo.types.TimeType
+            | bodo.types.Decimal128Type,
         )
         or dtype
         in (

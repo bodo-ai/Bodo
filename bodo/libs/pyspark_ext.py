@@ -510,7 +510,7 @@ def _gen_df_select(spark_df, cols, avoid_stararg=False):
     if (
         isinstance(cols, tuple)
         and len(cols) == 1
-        and isinstance(cols[0], (types.StarArgTuple, types.StarArgUniTuple))
+        and isinstance(cols[0], types.StarArgTuple | types.StarArgUniTuple)
     ):
         cols = cols[0]
 

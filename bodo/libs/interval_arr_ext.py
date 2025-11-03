@@ -526,11 +526,11 @@ def interval_arr_setitem(arr, ind, val):
     # 2. interval_arr[slice] = interval_scalar
     # 3. interval_arr[slice] = interval_array
     if (
-        isinstance(ind, (types.Integer, types.SliceType))
+        isinstance(ind, types.Integer | types.SliceType)
         and isinstance(val, IntervalType)
     ) or (
         isinstance(ind, types.SliceType)
-        and isinstance(val, (IntervalType, IntervalArrayType))
+        and isinstance(val, IntervalType | IntervalArrayType)
     ):
 
         def impl(arr, ind, val):  # pragma: no cover

@@ -979,10 +979,10 @@ def arith_op_supported_by_numba(op, lhs, rhs):
 
     if op == operator.mul:
         # np timedeltas
-        rhs_td = isinstance(lhs, (types.Integer, types.Float)) and isinstance(
+        rhs_td = isinstance(lhs, types.Integer | types.Float) and isinstance(
             rhs, types.NPTimedelta
         )
-        lhs_td = isinstance(rhs, (types.Integer, types.Float)) and isinstance(
+        lhs_td = isinstance(rhs, types.Integer | types.Float) and isinstance(
             lhs, types.NPTimedelta
         )
         timedeltas = rhs_td or lhs_td
@@ -1015,7 +1015,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
     if op == operator.pow:
         # int ^ const_int/int
         int_lit = isinstance(lhs, types.Integer) and isinstance(
-            rhs, (types.IntegerLiteral, types.Integer)
+            rhs, types.IntegerLiteral | types.Integer
         )
 
         # float ^ (float/int/unsigned/signed)
@@ -1041,7 +1041,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         floats = isinstance(lhs, types.Float) and isinstance(rhs, types.Float)
 
         deltas = isinstance(lhs, types.NPTimedelta) and isinstance(
-            rhs, (types.Integer, types.Float, types.NPTimedelta)
+            rhs, types.Integer | types.Float | types.NPTimedelta
         )
         arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
 
@@ -1057,7 +1057,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         complexx = isinstance(lhs, types.Complex) and isinstance(rhs, types.Complex)
 
         deltas = isinstance(lhs, types.NPTimedelta) and isinstance(
-            rhs, (types.Integer, types.Float, types.NPTimedelta)
+            rhs, types.Integer | types.Float | types.NPTimedelta
         )
 
         arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
@@ -1115,8 +1115,8 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         char_seq_char_seq = isinstance(lhs, types.UnicodeCharSeq) and isinstance(
             rhs, types.UnicodeCharSeq
         )
-        char_seq_bytes = isinstance(lhs, (types.CharSeq, types.Bytes)) and isinstance(
-            rhs, (types.CharSeq, types.Bytes)
+        char_seq_bytes = isinstance(lhs, types.CharSeq | types.Bytes) and isinstance(
+            rhs, types.CharSeq | types.Bytes
         )
 
         char_add = char_seq_char or char_char_seq or char_seq_char_seq or char_seq_bytes

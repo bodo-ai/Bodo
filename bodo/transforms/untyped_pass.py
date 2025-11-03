@@ -215,7 +215,7 @@ class UntypedPass:
         # TODO(ehsan): the code may not use "h5py" directly ("from h5py import File")
         # but that's rare and not high priority at this time
         if (
-            isinstance(rhs, (ir.Const, ir.Global, ir.FreeVar))
+            isinstance(rhs, ir.Const | ir.Global | ir.FreeVar)
             and isinstance(rhs.value, pytypes.ModuleType)
             and rhs.value.__name__ == "h5py"
             and not bodo.utils.utils.has_supported_h5py()
@@ -297,23 +297,23 @@ class UntypedPass:
                     # Handle global import via getattr
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     is_datetime_date_today = (
-                        isinstance(mod_def, (ir.Global, ir.FreeVar))
+                        isinstance(mod_def, ir.Global | ir.FreeVar)
                         and mod_def.value == datetime
                     )
                 elif val_def.attr == "datetime":
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     is_datetime_datetime_today = (
-                        isinstance(mod_def, (ir.Global, ir.FreeVar))
+                        isinstance(mod_def, ir.Global | ir.FreeVar)
                         and mod_def.value == datetime
                     )
             else:
                 # Handle relative imports by checking if the value matches importing from Python
                 is_datetime_date_today = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
+                    isinstance(val_def, ir.Global | ir.FreeVar)
                     and val_def.value == datetime.date
                 )
                 is_datetime_datetime_today = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
+                    isinstance(val_def, ir.Global | ir.FreeVar)
                     and val_def.value == datetime.datetime
                 )
             if is_datetime_date_today:
@@ -458,7 +458,7 @@ class UntypedPass:
             else:
                 # Handle relative imports by checking if the value matches importing from Python
                 is_pd_Timedelta = isinstance(
-                    val_def, (ir.Global, ir.FreeVar)
+                    val_def, ir.Global | ir.FreeVar
                 ) and val_def.value in (pd.Timedelta, bd.Timedelta)
             if is_pd_Timedelta:
                 raise BodoError(f"pandas.Timedelta.{rhs.attr} not yet supported.")
@@ -486,7 +486,7 @@ class UntypedPass:
             else:
                 # Handle relative imports by checking if the value matches importing from Python
                 is_timestamp_unsupported = isinstance(
-                    val_def, (ir.Global, ir.FreeVar)
+                    val_def, ir.Global | ir.FreeVar
                 ) and val_def.value in (pd.Timestamp, bd.Timestamp)
             if is_timestamp_unsupported:
                 raise BodoError("pandas.Timestamp." + rhs.attr + " not supported yet")
@@ -753,7 +753,7 @@ class UntypedPass:
             for stmt in block.body:
                 if (
                     is_assign(stmt)
-                    and isinstance(stmt.value, (ir.Global, ir.FreeVar, ir.Const))
+                    and isinstance(stmt.value, ir.Global | ir.FreeVar | ir.Const)
                     and isinstance(stmt.value.value, CPUDispatcher)
                     and getattr(stmt.value.value, "is_nested_func", False)
                 ):
@@ -1547,7 +1547,7 @@ class UntypedPass:
         )
         # Per Pandas documentation (names: array-like). Since columns don't need string types,
         # we only check that this is a list or tuple (since constant arrays aren't supported).
-        if col_names != 0 and not isinstance(col_names, (list, tuple)):
+        if col_names != 0 and not isinstance(col_names, list | tuple):
             raise BodoError(
                 "pd.read_csv() 'names' should be a constant list if provided",
                 loc=rhs.loc,
@@ -1569,7 +1569,7 @@ class UntypedPass:
         # We don't support sequences yet
         if (
             index_col is not None
-            and not isinstance(index_col, (int, str))
+            and not isinstance(index_col, int | str)
             # isinstance(True, int) == True, so check True is unsupported.
             or index_col is True
         ):
@@ -1592,7 +1592,7 @@ class UntypedPass:
         )
         # Per Pandas documentation (usecols: list-like or callable).
         # We don't support callables yet.
-        if usecols is not None and (not isinstance(usecols, (tuple, list))):
+        if usecols is not None and (not isinstance(usecols, tuple | list)):
             raise BodoError(
                 "pd.read_csv() 'usecols' must be a constant list of columns names or column indices if provided",
                 loc=rhs.loc,
@@ -1680,7 +1680,7 @@ class UntypedPass:
         # Check for False if the user provides the default value
         if date_cols == False:
             date_cols = []
-        if not isinstance(date_cols, (tuple, list)):
+        if not isinstance(date_cols, tuple | list):
             raise BodoError(
                 "pd.read_csv() 'parse_dates' must be a constant list of column names or column indices if provided",
                 loc=rhs.loc,
@@ -2068,9 +2068,9 @@ class UntypedPass:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
                 if isinstance(
-                    t, (types.Array, IntegerArrayType, FloatingArrayType)
+                    t, types.Array | IntegerArrayType | FloatingArrayType
                 ) and isinstance(
-                    t.dtype, (types.Integer, types.Float)
+                    t.dtype, types.Integer | types.Float
                 ):  # pragma: no cover
                     dtype_map[c] = types.Array(types.float64, 1, "C")
 
@@ -3161,7 +3161,7 @@ class UntypedPass:
         if is_expr(var_def, "build_map"):
             var_def.op = "build_list"
             var_def.items = [v[0] for v in var_def.items]
-        elif isinstance(var_def, (ir.Global, ir.FreeVar, ir.Const)):
+        elif isinstance(var_def, ir.Global | ir.FreeVar | ir.Const):
             var_def.value = 11  # arbitrary value that can be typed
 
 
@@ -4070,6 +4070,6 @@ def _get_csv_df_type_from_file(
 
 def _check_int_list(list_val):
     """check whether list_val is list/tuple and its elements are of type int"""
-    return isinstance(list_val, (list, tuple)) and all(
+    return isinstance(list_val, list | tuple) and all(
         isinstance(val, int) for val in list_val
     )

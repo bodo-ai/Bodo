@@ -30,7 +30,7 @@ def test_select_named_param(
     )
     decimal_columns = (
         ["col1", "col2"]
-        if isinstance(named_params_all_column_types["a"], (float, np.floating))
+        if isinstance(named_params_all_column_types["a"], float | np.floating)
         else None
     )
     check_query(
@@ -64,7 +64,7 @@ def test_named_param_mixed_column_scalar(
     )
     decimal_columns = (
         ["col1"]
-        if isinstance(named_params_all_column_types["a"], (float, np.floating))
+        if isinstance(named_params_all_column_types["a"], float | np.floating)
         else None
     )
     check_query(

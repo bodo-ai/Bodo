@@ -2764,7 +2764,7 @@ def test_series_mask_false(series_val, memory_leak_check):
         return
 
     if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
-        series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
+        series_val.dtype.categories[0], pd.Timestamp | pd.Timedelta
     ):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
@@ -3374,7 +3374,7 @@ def is_where_mask_supported_series(S):
     if isinstance(S.values[0], Decimal):
         return False
     if isinstance(S.dtype, pd.CategoricalDtype) and isinstance(
-        S.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
+        S.dtype.categories[0], pd.Timestamp | pd.Timedelta
     ):
         return False
     if not isinstance(S.dtype, pd.CategoricalDtype) and isinstance(
@@ -3461,7 +3461,7 @@ def test_series_np_select(series_val):
             default = False
         py_out = np.select([cond1, cond2], [A1, A2], default=default)
 
-    if isinstance(A1.values, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+    if isinstance(A1.values, pd.arrays.IntegerArray | pd.arrays.BooleanArray):
         py_out = pd.array(py_out, A1.dtype)
 
     for impl in [impl1, impl2, impl3, impl4]:
@@ -3485,7 +3485,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, (list, pd.Series)):
+    if isinstance(fill_val, list | pd.Series):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
@@ -3525,7 +3525,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             )
         if isinstance(infered_typ, bodo.types.PDCategoricalDtype):
             if isinstance(
-                series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
+                series_val.dtype.categories, pd.TimedeltaIndex | pd.DatetimeIndex
             ):
                 py_out = pd.array(
                     pd.Series(py_out)
@@ -3560,7 +3560,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, (list, pd.Series)):
+    if isinstance(fill_val, list | pd.Series):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
