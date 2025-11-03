@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import sys
 import typing as pt  # Any, Tuple, Dict
 from abc import ABCMeta, abstractmethod
-
-if sys.version_info >= (3, 10):
-    from types import NoneType
-else:
-    NoneType = type(None)
+from types import NoneType
 
 from numba.core import types
 
