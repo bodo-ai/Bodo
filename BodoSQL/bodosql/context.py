@@ -21,7 +21,7 @@ import bodo.hiframes.pd_multi_index_ext
 import bodo.io.iceberg.merge_into  # noqa
 import bodo.io.iceberg.read_compilation
 import bodosql
-from bodo.ir.sql_ext import parse_dbtype
+from bodo.io.utils import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodo.utils.utils import bodo_spawn_exec

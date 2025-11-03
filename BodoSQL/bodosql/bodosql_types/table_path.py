@@ -5,6 +5,7 @@ from functools import cached_property
 from urllib.parse import ParseResult, urlparse
 
 import bodo
+import bodo.io.utils
 from bodo.io.parquet_pio import get_parquet_dataset
 
 
@@ -40,7 +41,7 @@ def check_tablepath_constant_arguments(
             )
         elif not isinstance(conn_str, str):
             raise ValueError("bodosql.TablePath(): `conn_str` must be a string")
-        db_type, _ = bodo.ir.sql_ext.parse_dbtype(conn_str)
+        db_type, _ = bodo.io.utils.parse_dbtype(conn_str)
         if db_type == "iceberg":
             if db_schema is None:
                 raise ValueError(
