@@ -7,6 +7,8 @@ and is necessary to import before using BodoSQL in JIT.
 # Initialize JIT compiler
 import bodo.decorators
 
+import bodosql
+
 # Import BodoSQL types
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
 from bodosql.bodosql_types.table_path_ext import TablePathType
@@ -52,3 +54,7 @@ import bodosql.kernels.lead_lag
 import bodosql.kernels.lateral
 import bodosql.kernels.listagg
 import bodosql.kernels.crypto_funcs
+
+
+# Set top-level type aliases
+bodosql.TablePathType = TablePathType
