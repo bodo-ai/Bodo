@@ -1,3 +1,7 @@
+"""JIT extensions for FileSystemCatalog"""
+
+from __future__ import annotations
+
 from numba.core import types
 from numba.extending import (
     NativeValue,
