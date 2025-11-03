@@ -10,6 +10,10 @@ from bodosql.bodosql_types.rest_catalog import (
     RESTCatalog,
     get_REST_connection,
 )
+from bodosql.bodosql_types.glue_catalog import (
+    GlueCatalog,
+    get_glue_connection,
+)
 
 
 use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "0") != "0"

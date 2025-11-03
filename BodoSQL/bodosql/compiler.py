@@ -21,10 +21,8 @@ from bodosql.bodosql_types.snowflake_catalog_ext import (
 from bodosql.bodosql_types.rest_catalog_ext import (
     RESTCatalogType,
 )
-from bodosql.bodosql_types.glue_catalog import (
-    GlueCatalog,
+from bodosql.bodosql_types.glue_catalog_ext import (
     GlueCatalogType,
-    get_glue_connection,
 )
 from bodosql.bodosql_types.s3_tables_catalog import (
     S3TablesCatalog,
@@ -58,3 +56,4 @@ bodosql.DatabaseCatalogType = DatabaseCatalogType
 bodosql.FileSystemCatalogType = FileSystemCatalogType
 bodosql.SnowflakeCatalogType = SnowflakeCatalogType
 bodosql.RESTCatalogType = RESTCatalogType
+bodosql.GlueCatalogType = GlueCatalogType
