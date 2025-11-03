@@ -10,12 +10,11 @@ from typing import cast
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
 import bodo
+from bodo.mpi4py import MPI
 
 # This gateway is always None on every rank but rank 0,
 # it is initialized by the get_gateway call.
 gateway = None
-
-from bodo.libs.distributed_api import bcast_scalar
 
 
 def get_java_path() -> str:
@@ -107,8 +106,9 @@ def get_gateway():
             msg = f"Error when launching the BodoSQL JVM. {str(e)}"
             failed = True
 
-    failed = bcast_scalar(failed)
-    msg = bcast_scalar(msg)
+    comm = MPI.COMM_WORLD
+    failed = comm.bcast(failed)
+    msg = comm.bcast(msg)
     if failed:
         raise Exception(msg)
     return gateway
