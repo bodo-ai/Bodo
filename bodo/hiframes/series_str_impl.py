@@ -1469,7 +1469,7 @@ def overload_str_method_getitem(S_str, ind):
     if not isinstance(S_str, SeriesStrMethodType):
         return
 
-    if not isinstance(types.unliteral(ind), (types.SliceType, types.Integer)):
+    if not isinstance(types.unliteral(ind), types.SliceType | types.Integer):
         raise BodoError("index input to Series.str[] should be a slice or an integer")
 
     if isinstance(ind, types.SliceType):

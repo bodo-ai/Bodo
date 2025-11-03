@@ -446,7 +446,7 @@ class TypingTransforms:
 
                 # handle potential DataFrame set column here
                 # df['col'] = arr
-                if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                if isinstance(inst, ir.SetItem | ir.StaticSetItem):
                     out_nodes = self._run_setitem(inst, label)
                 elif isinstance(inst, ir.SetAttr):
                     out_nodes = self._run_setattr(inst, label)
@@ -569,7 +569,7 @@ class TypingTransforms:
             ) or is_expr(t, "make_function")
             # check for BaseTuple since could be types.unknown
             if (
-                isinstance(tup_typ, (types.BaseTuple, types.LiteralList))
+                isinstance(tup_typ, types.BaseTuple | types.LiteralList)
                 and any(is_func_literal(t) for t in tup_typ)
             ) or (
                 isinstance(tup_typ, types.List)
@@ -595,7 +595,7 @@ class TypingTransforms:
         # find constant index for df["A"], df[["A", "B"]] or df.groupby("A")["B"] cases
         # constant index can be string, int or non-bool list
         if (
-            isinstance(target_typ, (DataFrameType, DataFrameGroupByType, RollingType))
+            isinstance(target_typ, DataFrameType | DataFrameGroupByType | RollingType)
             and not is_literal_type(idx_typ)
             and (
                 idx_typ == bodo.types.string_type
@@ -673,7 +673,7 @@ class TypingTransforms:
                 )
             elif (
                 is_list_like_index_type(idx_typ.types[0])
-                and isinstance(idx_typ.types[0].dtype, (types.Integer, types.Boolean))
+                and isinstance(idx_typ.types[0].dtype, types.Integer | types.Boolean)
                 or isinstance(idx_typ.types[0], types.SliceType)
             ):
                 impl = (
@@ -726,7 +726,7 @@ class TypingTransforms:
             # may require schema change, see test_loc_col_select (impl4)
             if (
                 len(val) > 0
-                and not isinstance(val[0], (bool, np.bool_))
+                and not isinstance(val[0], bool | np.bool_)
                 and not all(c in df_type.columns for c in val)
             ):
                 nodes.append(assign)
@@ -985,11 +985,9 @@ class TypingTransforms:
         require(
             isinstance(
                 read_node,
-                (
-                    bodo.ir.parquet_ext.ParquetReader,
-                    bodo.ir.iceberg_ext.IcebergReader,
-                    bodo.ir.sql_ext.SqlReader,
-                ),
+                bodo.ir.parquet_ext.ParquetReader
+                | bodo.ir.iceberg_ext.IcebergReader
+                | bodo.ir.sql_ext.SqlReader,
             )
         )
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
@@ -1823,7 +1821,7 @@ class TypingTransforms:
         list_set_arg = call_def.args[0]
         list_set_typ = self.typemap.get(list_set_arg.name, None)
         require(
-            isinstance(list_set_typ, (types.List, types.Set))
+            isinstance(list_set_typ, types.List | types.Set)
             and list_set_typ.dtype != bodo.types.datetime64ns
             and not isinstance(
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
@@ -2591,7 +2589,7 @@ class TypingTransforms:
             return nodes + [inst]
 
         # single column case like df["A"] = 3
-        if not isinstance(idx_const, (tuple, list, np.ndarray, pd.Index)):
+        if not isinstance(idx_const, tuple | list | np.ndarray | pd.Index):
             return nodes + self._run_df_set_column(inst, idx_const, label)
 
         nodes += self._gen_df_setitem_full_column(inst, inst.target, idx_const, label)
@@ -2615,7 +2613,7 @@ class TypingTransforms:
             return nodes + [inst]
 
         # get column names if bool list
-        if len(col_inds) > 0 and isinstance(col_inds[0], (bool, np.bool_)):
+        if len(col_inds) > 0 and isinstance(col_inds[0], bool | np.bool_):
             col_inds = list(pd.Series(df_type.columns, dtype=object)[col_inds])
 
         # if setting full columns
@@ -2694,7 +2692,7 @@ class TypingTransforms:
             col_inds = None
 
         # normalize single column name to list
-        if not isinstance(col_inds, (list, tuple, np.ndarray)):
+        if not isinstance(col_inds, list | tuple | np.ndarray):
             # if is slice, form list form column names / numbers as appropriate
             if isinstance(col_inds, slice):
                 all_cols = list(target_typ.df_type.columns)
@@ -4407,7 +4405,7 @@ class TypingTransforms:
         freevar_inds = []
         for i, freevar in enumerate(items):
             freevar_def = guard(get_definition, self.func_ir, freevar)
-            if isinstance(freevar_def, (ir.Const, ir.Global, ir.FreeVar)) or is_expr(
+            if isinstance(freevar_def, ir.Const | ir.Global | ir.FreeVar) or is_expr(
                 freevar_def, "make_function"
             ):
                 continue
@@ -4496,7 +4494,7 @@ class TypingTransforms:
         require(
             isinstance(fvar, ir.Var)
             and isinstance(
-                self.typemap.get(fvar.name, None), (DataFrameType, SeriesType)
+                self.typemap.get(fvar.name, None), DataFrameType | SeriesType
             )
         )
         apply_rhs = apply_assign.value
@@ -5357,7 +5355,7 @@ class TypingTransforms:
             is_expr(getattr_assign.value, "getattr")
             and isinstance(
                 self.typemap.get(getattr_assign.value.value.name, None),
-                (types.List, types.ListType),
+                types.List | types.ListType,
             )
         )
         require(getattr_assign.value.attr == "append")
@@ -5785,7 +5783,7 @@ class TypingTransforms:
         TODO(ehsan): use has_no_side_effect() to be less conservative?
         """
         return (
-            isinstance(expr, (ir.Const, ir.Global, ir.FreeVar))
+            isinstance(expr, ir.Const | ir.Global | ir.FreeVar)
             or (isinstance(expr, ir.Expr) and expr.op not in ("inplace_binop", "call"))
             or (
                 is_call(expr)
@@ -6018,7 +6016,7 @@ class TypingTransforms:
             # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
             # filter pushdown in that situation.
             return (
-                isinstance(list_set_typ, (types.List, types.Set))
+                isinstance(list_set_typ, types.List | types.Set)
                 and list_set_typ.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     list_set_typ.dtype,

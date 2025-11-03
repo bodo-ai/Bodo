@@ -597,7 +597,7 @@ def overload_iloc_getitem(I, idx):
 
         if (
             is_list_like_index_type(idx.types[0])
-            and isinstance(idx.types[0].dtype, (types.Integer, types.Boolean))
+            and isinstance(idx.types[0].dtype, types.Integer | types.Boolean)
         ) or isinstance(idx.types[0], types.SliceType):
             return _gen_iloc_getitem_bool_slice_impl(
                 df, col_names, idx.types[0], "idx[0]", is_out_series
@@ -607,7 +607,7 @@ def overload_iloc_getitem(I, idx):
     # array of bools/ints, or slice
     if (
         is_list_like_index_type(idx)
-        and isinstance(idx.dtype, (types.Integer, types.Boolean))
+        and isinstance(idx.dtype, types.Integer | types.Boolean)
     ) or isinstance(idx, types.SliceType):
         return _gen_iloc_getitem_bool_slice_impl(df, df.columns, idx, "idx", False)
 
@@ -813,7 +813,7 @@ def overload_loc_getitem(I, idx):
             # may require schema change, see test_loc_col_select (impl4)
             if (
                 len(col_idx_list) > 0
-                and not isinstance(col_idx_list[0], (bool, np.bool_))
+                and not isinstance(col_idx_list[0], bool | np.bool_)
                 and not all(c in df.column_index for c in col_idx_list)
             ):
                 raise_bodo_error(
@@ -834,7 +834,7 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     col_names = []
     col_inds = []
     # get column names if bool list
-    if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
+    if len(col_idx_list) > 0 and isinstance(col_idx_list[0], bool | np.bool_):
         for i, kept in enumerate(col_idx_list):
             if kept:
                 col_inds.append(i)

@@ -85,7 +85,7 @@ def sql_hash(A, scalars):  # pragma: no cover
 def overload_sql_hash(A, scalars):
     """Handles cases where HASH receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("Hash argument must be a tuple")
     for i in range(len(A)):
         if isinstance(A[i], types.optional):

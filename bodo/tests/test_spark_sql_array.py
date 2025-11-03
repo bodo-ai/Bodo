@@ -117,7 +117,7 @@ def test_array_contains(dataframe_val, memory_leak_check):
         test_impl = test_impl_int
     elif isinstance(df.A[0][0], str):
         test_impl = test_impl_str
-    elif isinstance(df.A[0][0], (bool, np.bool_)):
+    elif isinstance(df.A[0][0], bool | np.bool_):
         test_impl = test_impl_bool
 
     check_func(test_impl, (df,))
@@ -178,7 +178,7 @@ def test_array_max(dataframe_val, memory_leak_check):
     df = dataframe_val
     # np.max is not supported on pd.array in pandas
     if not isinstance(df.A[0][0], str) and not isinstance(
-        df.A[0], (pd.arrays.BooleanArray, pd.arrays.IntegerArray)
+        df.A[0], pd.arrays.BooleanArray | pd.arrays.IntegerArray
     ):
         check_func(test_impl, (df,))
 
@@ -191,7 +191,7 @@ def test_array_min(dataframe_val, memory_leak_check):
     df = dataframe_val
     # np.min is not supported on pd.array in pandas
     if not isinstance(df.A[0][0], str) and not isinstance(
-        df.A[0], (pd.arrays.BooleanArray, pd.arrays.IntegerArray)
+        df.A[0], pd.arrays.BooleanArray | pd.arrays.IntegerArray
     ):
         check_func(test_impl, (df,))
 
@@ -217,7 +217,7 @@ def test_array_position(dataframe_val, memory_leak_check):
         test_impl = test_impl_int
     elif isinstance(df.A[0][0], str):
         test_impl = test_impl_str
-    elif isinstance(df.A[0][0], (bool, np.bool_)):
+    elif isinstance(df.A[0][0], bool | np.bool_):
         test_impl = test_impl_bool
 
     check_func(test_impl, (df,))
@@ -237,7 +237,7 @@ def test_array_remove(dataframe_val, memory_leak_check):
         arr = np.array([3])
     elif isinstance(df.A[0][0], str):
         arr = np.array(["hi"], dtype=object)
-    elif isinstance(df.A[0][0], (bool, np.bool_)):
+    elif isinstance(df.A[0][0], bool | np.bool_):
         arr = pd.array([True])
 
     check_func(test_impl, (df, arr), dist_test=False)

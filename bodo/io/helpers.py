@@ -470,12 +470,10 @@ def _numba_to_pyarrow_type(
     elif (
         isinstance(
             numba_type,
-            (
-                types.Array,
-                IntegerArrayType,
-                FloatingArrayType,
-                bodo.types.PrimitiveArrayType,
-            ),
+            types.Array
+            | IntegerArrayType
+            | FloatingArrayType
+            | bodo.types.PrimitiveArrayType,
         )
         and numba_type.dtype in _numba_pyarrow_type_map
     ):

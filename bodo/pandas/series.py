@@ -2334,7 +2334,11 @@ def validate_reduce(func_name, pa_type):
     ):
         if isinstance(
             pa_type,
-            (pa.DurationType, pa.ListType, pa.LargeListType, pa.StructType, pa.MapType),
+            pa.DurationType
+            | pa.ListType
+            | pa.LargeListType
+            | pa.StructType
+            | pa.MapType,
         ):
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
@@ -3121,10 +3125,7 @@ def gen_arith(self, other, name):
     """Generates Series.add/radd/sub/rsub."""
     if isinstance(
         other,
-        (
-            BodoSeries,
-            pd.Series,
-        ),
+        BodoSeries | pd.Series,
     ):
         raise BodoLibNotImplementedException(
             f"Series.{name}() is not supported for other of type {type(other)} yet."

@@ -268,7 +268,7 @@ def overload_series_iloc_getitem(I, idx):
         # so we can unify the slice and list implementations
         # TODO: other list-like such as Series/Index
         if is_list_like_index_type(idx) and isinstance(
-            idx.dtype, (types.Integer, types.Boolean)
+            idx.dtype, types.Integer | types.Boolean
         ):
 
             def impl(I, idx):  # pragma: no cover
@@ -390,7 +390,7 @@ def overload_series_iloc_setitem(I, idx, val):
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
         if is_list_like_index_type(idx) and isinstance(
-            idx.dtype, (types.Integer, types.Boolean)
+            idx.dtype, types.Integer | types.Boolean
         ):
             # Scalar case the same as int/slice. Needs a separate
             # implementation for bodo.utils.conversion.coerce_to_array
@@ -627,7 +627,7 @@ def overload_series_getitem(S, idx):
 
         # TODO: other list-like such as Series, Index
         if is_list_like_index_type(idx) and isinstance(
-            idx.dtype, (types.Integer, types.Boolean)
+            idx.dtype, types.Integer | types.Boolean
         ):
             if (
                 isinstance(S.index, NumericIndexType)
@@ -769,7 +769,7 @@ def overload_series_setitem(S, idx, val):
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
         if is_list_like_index_type(idx) and isinstance(
-            idx.dtype, (types.Integer, types.Boolean)
+            idx.dtype, types.Integer | types.Boolean
         ):
             if (
                 isinstance(S.index, NumericIndexType)
@@ -795,7 +795,7 @@ def overload_series_setitem(S, idx, val):
 @overload(operator.setitem, no_unliteral=True)
 def overload_array_list_setitem(A, idx, val):
     """Support setitem of Arrays with list/Series index (since not supported by Numba)"""
-    if isinstance(A, types.Array) and isinstance(idx, (types.List, SeriesType)):
+    if isinstance(A, types.Array) and isinstance(idx, types.List | SeriesType):
 
         def impl(A, idx, val):  # pragma: no cover
             A[bodo.utils.conversion.coerce_to_array(idx)] = val
@@ -809,7 +809,7 @@ def overload_const_index_series_getitem(S, idx):
     input to df.apply() UDFs.
     """
     if (
-        isinstance(S, (SeriesType, HeterogeneousSeriesType))
+        isinstance(S, SeriesType | HeterogeneousSeriesType)
         and isinstance(S.index, HeterogeneousIndexType)
         and is_overload_constant_tuple(S.index.data)
     ):

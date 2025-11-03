@@ -678,7 +678,7 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
     # in test_metadata/test_dtype_converter_literal_values
 
     # handle actually literal python values
-    if isinstance(typ, (dict, int, list, tuple, str, bool, bytes, float)):
+    if isinstance(typ, dict | int | list | tuple | str | bool | bytes | float):
         return [SeriesDtypeEnum.Literal.value, typ]
     elif typ is None:
         return [SeriesDtypeEnum.Literal.value, typ]
@@ -883,7 +883,7 @@ def _is_wrapper_pd_arr(arr):
         return False
 
     return isinstance(
-        arr, (pd.arrays.NumpyExtensionArray, pd.arrays.TimedeltaArray)
+        arr, pd.arrays.NumpyExtensionArray | pd.arrays.TimedeltaArray
     ) or (isinstance(arr, pd.arrays.DatetimeArray) and arr.tz is None)
 
 
@@ -1677,32 +1677,26 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.types.dict_str_arr_type
     elif isinstance(first_val, str):
         return bodo.types.dict_str_arr_type if _use_dict_str_type else string_array_type
-    elif isinstance(first_val, (bytes, bytearray)):
+    elif isinstance(first_val, bytes | bytearray):
         return binary_array_type
-    elif isinstance(first_val, (bool, np.bool_)):
+    elif isinstance(first_val, bool | np.bool_):
         return bodo.libs.bool_arr_ext.boolean_array_type
     elif isinstance(
         first_val,
-        (
-            int,
-            np.int8,
-            np.int16,
-            np.int32,
-            np.int64,
-            np.uint8,
-            np.uint16,
-            np.uint32,
-            np.uint64,
-        ),
+        int
+        | np.int8
+        | np.int16
+        | np.int32
+        | np.int64
+        | np.uint8
+        | np.uint16
+        | np.uint32
+        | np.uint64,
     ):
         return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
     elif isinstance(
         first_val,
-        (
-            float,
-            np.float32,
-            np.float64,
-        ),
+        float | np.float32 | np.float64,
     ):  # pragma: no cover
         return bodo.libs.float_arr_ext.FloatingArrayType(numba.typeof(first_val))
     # assuming object arrays with dictionary values string keys are struct arrays, which
@@ -1710,7 +1704,7 @@ def _infer_ndarray_obj_dtype(val):
     # key have same data type
     # TODO: distinguish between Struct and Map arrays properly
     elif (
-        isinstance(first_val, (dict, Dict))
+        isinstance(first_val, dict | Dict)
         and (len(first_val.keys()) <= struct_size_limit)
         and all(isinstance(k, str) for k in first_val.keys())
     ):
@@ -1718,7 +1712,7 @@ def _infer_ndarray_obj_dtype(val):
         # TODO: handle None value in first_val elements
         data_types = tuple(_get_struct_value_arr_type(v) for v in first_val.values())
         return StructArrayType(data_types, field_names)
-    elif isinstance(first_val, (dict, Dict)):
+    elif isinstance(first_val, dict | Dict):
         key_arr_type = numba.typeof(_value_to_array(list(first_val.keys())))
         value_arr_type = numba.typeof(_value_to_array(list(first_val.values())))
         # TODO: handle 2D ndarray case
@@ -1728,18 +1722,16 @@ def _infer_ndarray_obj_dtype(val):
         return TupleArrayType(data_types)
     if isinstance(
         first_val,
-        (
-            list,
-            np.ndarray,
-            pd.arrays.NumpyExtensionArray,
-            pd.arrays.ArrowExtensionArray,
-            pd.arrays.BooleanArray,
-            pd.arrays.IntegerArray,
-            pd.arrays.FloatingArray,
-            pd.arrays.StringArray,
-            pd.arrays.ArrowStringArray,
-            pd.arrays.DatetimeArray,
-        ),
+        list
+        | np.ndarray
+        | pd.arrays.NumpyExtensionArray
+        | pd.arrays.ArrowExtensionArray
+        | pd.arrays.BooleanArray
+        | pd.arrays.IntegerArray
+        | pd.arrays.FloatingArray
+        | pd.arrays.StringArray
+        | pd.arrays.ArrowStringArray
+        | pd.arrays.DatetimeArray,
     ):
         if isinstance(first_val, list):
             first_val = np.array(first_val, object)
@@ -1780,8 +1772,8 @@ def _infer_ndarray_obj_dtype(val):
 
 def _value_to_array(val):
     """convert list or dict value to object array for typing purposes"""
-    assert isinstance(val, (list, dict, Dict))
-    if isinstance(val, (dict, Dict)):
+    assert isinstance(val, list | dict | Dict)
+    if isinstance(val, dict | Dict):
         if isinstance(val, Dict):
             val = dict(val)
         return np.array([val], np.object_)
@@ -1795,7 +1787,7 @@ def _value_to_array(val):
 
 def _get_struct_value_arr_type(v):
     """get data array type for a field value of a struct array"""
-    if isinstance(v, (dict, Dict)):
+    if isinstance(v, dict | Dict):
         return numba.typeof(_value_to_array(v))
 
     if isinstance(v, list):

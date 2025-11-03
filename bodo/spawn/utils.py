@@ -202,7 +202,7 @@ def gatherv_nojit(data, root, comm):
     """
 
     if data is not None and not isinstance(
-        data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
+        data, pd.DataFrame | pd.Series | ArrowExtensionArray
     ):
         raise ValueError(
             "gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input"
@@ -313,7 +313,7 @@ def _get_data_sample(data):
     if data is None:
         return None
 
-    if isinstance(data, (BodoDataFrame, BodoSeries, pd.DataFrame, pd.Series)):
+    if isinstance(data, BodoDataFrame | BodoSeries | pd.DataFrame | pd.Series):
         # NOTE: handles object columns correctly using Arrow schema inference for Pandas
         return _empty_like(data)
 

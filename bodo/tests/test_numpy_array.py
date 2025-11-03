@@ -1122,7 +1122,7 @@ def test_np_select(arr_tuple_val, memory_leak_check):
     A1 = arr_tuple_val[0][:minsize]
     A2 = arr_tuple_val[1][:minsize]
 
-    if not isinstance(A1[0], (np.integer, np.bool_, np.float64, np.float32)):
+    if not isinstance(A1[0], np.integer | np.bool_ | np.float64 | np.float32):
         py_out = na_impl(A1, A2, cond1, cond2)
     else:
         py_out = np.select([cond1, cond2], [A1, A2])
@@ -1186,7 +1186,7 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
     A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = None
     A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = None
 
-    if not isinstance(val0, (np.integer, np.bool_, np.float64, np.float32)):
+    if not isinstance(val0, np.integer | np.bool_ | np.float64 | np.float32):
         py_out = na_impl(A1, A2, cond1, cond2)
     else:
         default = 0
@@ -1194,7 +1194,7 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
             default = False
         py_out = np.select([cond1, cond2], [A1, A2], default=default)
 
-    if isinstance(A1, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+    if isinstance(A1, pd.arrays.IntegerArray | pd.arrays.BooleanArray):
         py_out = pd.array(py_out, A1.dtype)
 
     if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
@@ -1255,7 +1255,7 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
         )
 
     py_out = np.where(cond, A1, A2)
-    if isinstance(A1, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+    if isinstance(A1, pd.arrays.IntegerArray | pd.arrays.BooleanArray):
         py_out = pd.array(py_out, A1.dtype)
 
     check_func(impl, (A1, A2, cond), py_output=py_out)

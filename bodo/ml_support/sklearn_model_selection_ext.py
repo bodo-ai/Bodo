@@ -550,7 +550,7 @@ def overload_train_test_split(
         data_type_name = f"data_split_type_{numba.core.ir_utils.next_label()}"
         labels_type_name = f"labels_split_type_{numba.core.ir_utils.next_label()}"
         for d, d_type_name in ((data, data_type_name), (labels, labels_type_name)):
-            if isinstance(d, (DataFrameType, SeriesType)):
+            if isinstance(d, DataFrameType | SeriesType):
                 d_typ = d.copy(index=NumericIndexType(types.int64))
                 setattr(types, d_type_name, d_typ)
             else:

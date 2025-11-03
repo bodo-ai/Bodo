@@ -194,7 +194,7 @@ def test_cast_float64(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_float64(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_float64(arr)
 
     # Simulates casting to float64 on a single row
@@ -228,7 +228,7 @@ def test_cast_float32(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_float32(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_float32(arr)
 
     # Simulates casting to float32 on a single row
@@ -265,7 +265,7 @@ def test_cast_int64(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_int64(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_int64(arr)
 
     # Simulates casting to float64 on a single row
@@ -306,7 +306,7 @@ def test_cast_int32(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_int32(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_int32(arr)
 
     # Simulates casting to float64 on a single row
@@ -345,7 +345,7 @@ def test_cast_int16(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_int16(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_int16(arr)
 
     # Simulates casting to float64 on a single row
@@ -387,7 +387,7 @@ def test_cast_int8(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_int8(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_int8(arr)
 
     # Simulates casting to float64 on a single row
@@ -429,7 +429,7 @@ def test_cast_boolean(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_boolean(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
+    if isinstance(args[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_boolean(arr)
 
     # Simulates casting to float64 on a single row
@@ -491,7 +491,7 @@ def test_cast_char_other(args, memory_leak_check):
     def char_scalar_fn(elem):
         if pd.isna(elem):
             return None
-        elif isinstance(elem, (bodo.types.Time, bodo.types.TimeType)):
+        elif isinstance(elem, bodo.types.Time | bodo.types.TimeType):
             # Using Snowflake's default TIME format: HH:MM:SS
             return f"{elem.hour:02}:{elem.minute:02}:{elem.second:02}"
         elif isinstance(elem, bytes):
@@ -514,7 +514,7 @@ def test_cast_char_nums(numeric_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_char(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(numeric_arrays[0], (int, float, str)):
+    if isinstance(numeric_arrays[0], int | float | str):
         impl = lambda arr: bodosql.kernels.cast_char(arr)
 
     # Simulates casting to string on a single row
@@ -523,7 +523,7 @@ def test_cast_char_nums(numeric_arrays, memory_leak_check):
             return None
         elif isinstance(x, float):
             return f"{x:f}"
-        elif isinstance(x, (bool, np.bool_)):
+        elif isinstance(x, bool | np.bool_):
             return str(x).lower()
         else:
             return str(x)
@@ -545,7 +545,7 @@ def test_cast_char_times(time_arrays, memory_leak_check):
         return pd.Series(bodosql.kernels.cast_char(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (pd.Timestamp, pd.Timedelta)):
+    if isinstance(args[0], pd.Timestamp | pd.Timedelta):
         impl = lambda arr: bodosql.kernels.cast_char(arr)
 
     # Simulates casting to float64 on a single row

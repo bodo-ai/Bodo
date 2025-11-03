@@ -281,7 +281,7 @@ def coalesce(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
 def overload_coalesce(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where COALESCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("Coalesce argument must be a tuple")
     for i in range(len(A)):
         if isinstance(A[i], types.optional):
@@ -639,7 +639,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
 def decode(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where DECODE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("Decode argument must be a tuple")
     for i, val in enumerate(A):
         if isinstance(val, types.optional):
@@ -828,7 +828,7 @@ def object_filter_keys(A, keep_keys, scalars):  # pragma: no cover
 def overload_object_filter_keys(A, keep_keys, scalars):
     """Handles cases where OBJECT_PICK/OBJECT_DELETE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("OBJECT_PICK/OBJECT_DELETE argument must be a tuple")
     for i, val in enumerate(A):
         if isinstance(val, types.optional):
@@ -906,7 +906,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
     extra_globals = {}
 
     if isinstance(
-        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        json_type, bodo.types.StructArrayType | bodo.libs.struct_arr_ext.StructType
     ):
         # Generated code for when the json data is a struct array or struct scalar.
 
@@ -955,7 +955,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
         out_dtype = bodo.types.StructArrayType(tuple(dtypes), tuple(names))
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
 
-    elif isinstance(json_type, (bodo.types.MapArrayType, bodo.types.MapScalarType)):
+    elif isinstance(json_type, bodo.types.MapArrayType | bodo.types.MapScalarType):
         keep_condition = "in" if keep_mode else "not in"
 
         # Generated code for when the json data comes from a MapArray or a scalar dictionary.
@@ -1033,7 +1033,7 @@ def concat_ws(A, sep, dict_encoding_state=None, func_id=-1):  # pragma: no cover
 def overload_concat_ws(A, sep, dict_encoding_state=None, func_id=-1):
     """Handles cases where concat_ws receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("concat_ws argument must be a tuple")
     arg_names = ["A", "sep", "dict_encoding_state", "func_id"]
     default_map = {"dict_encoding_state": None, "func_id": -1}
@@ -1227,7 +1227,7 @@ def least(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
 def overload_least(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where LEAST receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("Least argument must be a tuple")
     for i in range(len(A)):
         if isinstance(A[i], types.optional):
@@ -1282,7 +1282,7 @@ def greatest(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
 def overload_greatest(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where GREATEST receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if not isinstance(A, (types.Tuple, types.UniTuple)):
+    if not isinstance(A, types.Tuple | types.UniTuple):
         raise_bodo_error("Greatest argument must be a tuple")
     for i in range(len(A)):
         if isinstance(A[i], types.optional):

@@ -1573,13 +1573,11 @@ def is_supported_shift_array_type(arr_type):
         )
         or isinstance(
             arr_type,
-            (
-                bodo.types.IntegerArrayType,
-                bodo.types.FloatingArrayType,
-                bodo.types.DecimalArrayType,
-                bodo.types.DatetimeArrayType,
-                bodo.types.TimeArrayType,
-            ),
+            bodo.types.IntegerArrayType
+            | bodo.types.FloatingArrayType
+            | bodo.types.DecimalArrayType
+            | bodo.types.DatetimeArrayType
+            | bodo.types.TimeArrayType,
         )
         or arr_type
         in (
@@ -1661,7 +1659,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
 def get_first_non_na(arr):
     """get first non-NA value of numeric array."""
     # just return 0 for non-floats
-    if isinstance(arr.dtype, (types.Integer, types.Boolean)):
+    if isinstance(arr.dtype, types.Integer | types.Boolean):
         zero = arr.dtype(0)
         return lambda arr: zero if len(arr) == 0 else arr[0]  # pragma: no cover
 
@@ -1686,7 +1684,7 @@ def get_first_non_na(arr):
 def get_last_non_na(arr):
     """get last non-NA value of numeric array."""
     # just return 0 for non-floats
-    if isinstance(arr.dtype, (types.Integer, types.Boolean)):
+    if isinstance(arr.dtype, types.Integer | types.Boolean):
         zero = arr.dtype(0)
         return lambda arr: zero if len(arr) == 0 else arr[-1]  # pragma: no cover
 

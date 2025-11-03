@@ -50,7 +50,7 @@ def test_contains(args, memory_leak_check):
         return pd.Series(bodosql.kernels.contains(arr, pattern))
 
     # avoid Series conversion for scalar output
-    if all(not isinstance(arg, (pd.Series, np.ndarray)) for arg in args):
+    if all(not isinstance(arg, pd.Series | np.ndarray) for arg in args):
         impl = lambda arr, pattern: bodosql.kernels.contains(arr, pattern)
 
     # Simulates CONTAINS on a single row
@@ -1184,7 +1184,7 @@ def test_lpad_rpad(args, memory_leak_check):
 
     # avoid Series conversion for scalar output
     if all(
-        not isinstance(arg, (pd.Series, pd.core.arrays.ExtensionArray, np.ndarray))
+        not isinstance(arg, pd.Series | pd.core.arrays.ExtensionArray | np.ndarray)
         for arg in args
     ):
         impl1 = lambda arr, length, lpad_string: bodosql.kernels.lpad(
@@ -1509,7 +1509,7 @@ def test_reverse(strings_binary, memory_leak_check):
         return pd.Series(bodosql.kernels.reverse(arr))
 
     # avoid Series conversion for scalar output
-    if not isinstance(strings_binary, (pd.Series, np.ndarray)):
+    if not isinstance(strings_binary, pd.Series | np.ndarray):
         impl = lambda arr: bodosql.kernels.reverse(arr)
 
     # Simulates REVERSE on a single row
@@ -1547,7 +1547,7 @@ def test_rtrimmed_length(strings, answer, memory_leak_check):
         return pd.Series(bodosql.kernels.rtrimmed_length(arr))
 
     # avoid Series conversion for scalar output
-    if not isinstance(strings, (pd.Series, np.ndarray)):
+    if not isinstance(strings, pd.Series | np.ndarray):
         impl = lambda arr: bodosql.kernels.rtrimmed_length(arr)
 
     check_func(
@@ -2142,7 +2142,7 @@ def test_substring(args, memory_leak_check):
         return pd.Series(bodosql.kernels.substring(arr, start, length))
 
     # avoid Series conversion for scalar output
-    if all(not isinstance(arg, (pd.Series, np.ndarray)) for arg in args):
+    if all(not isinstance(arg, pd.Series | np.ndarray) for arg in args):
         impl = lambda arr, start, length: bodosql.kernels.substring(arr, start, length)
 
     # Simulates SUBSTRING on a single row

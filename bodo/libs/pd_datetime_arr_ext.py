@@ -60,11 +60,11 @@ class PandasDatetimeTZDtype(types.Type):
 
     def __init__(self, tz):
         if isinstance(
-            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+            tz, pytz._FixedOffset | pytz.tzinfo.BaseTzInfo | datetime.timezone
         ):
             tz = get_tz_type_info(tz)
 
-        if not isinstance(tz, (int, str)) and tz is not None:
+        if not isinstance(tz, int | str) and tz is not None:
             raise BodoError(
                 "Timezone must be either a valid pytz type with a zone, a fixed offset, or None"
             )
@@ -187,11 +187,11 @@ class DatetimeArrayType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, tz):
         if isinstance(
-            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+            tz, pytz._FixedOffset | pytz.tzinfo.BaseTzInfo | datetime.timezone
         ):
             tz = get_tz_type_info(tz)
 
-        if not isinstance(tz, (int, str)) and tz is not None:
+        if not isinstance(tz, int | str) and tz is not None:
             raise BodoError(
                 "Timezone must be either a valid pytz type with a zone, a fixed offset, or None"
             )

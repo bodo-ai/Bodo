@@ -989,7 +989,7 @@ def test_index_copy_kwd_arg_err_msg(all_index_types):
     idx_val = all_index_types[0]
 
     idx_typ_str = idx_typ_to_format_str_map[type(bodo.typeof(idx_val))].format("copy()")
-    if isinstance(bodo.typeof(idx_val), (MultiIndexType, IntervalIndexType)):
+    if isinstance(bodo.typeof(idx_val), MultiIndexType | IntervalIndexType):
         err_string = f"{idx_typ_str}: not yet supported"
     else:
         err_string = f"{idx_typ_str}: dtype parameter only supports default value None"
@@ -1018,7 +1018,7 @@ def test_index_take_kwd_arg_err_msg(all_index_types):
 
     idx_val = all_index_types[0]
 
-    if isinstance(bodo.typeof(idx_val), (MultiIndexType, IntervalIndexType)):
+    if isinstance(bodo.typeof(idx_val), MultiIndexType | IntervalIndexType):
         idx_typ_str = idx_typ_to_format_str_map[type(bodo.typeof(idx_val))].format(
             "take()"
         )

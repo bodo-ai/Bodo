@@ -657,7 +657,7 @@ def test_index_to_series(args):
 
     # Passing in other iterables for index not supported for Timedelta or Binary.
     # Lists/tuples not supported for distributed tests.
-    if not isinstance(other[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
+    if not isinstance(other[0], bytes | pd._libs.tslibs.timedeltas.Timedelta):
         check_func(impl3, (index, list(other)), dist_test=False, check_dtype=False)
         check_func(
             impl3, (index, pd.Series(other)), dist_test=dist_test_A, check_dtype=False
@@ -665,7 +665,7 @@ def test_index_to_series(args):
         check_func(
             impl3, (index, other.to_numpy()), dist_test=dist_test_A, check_dtype=False
         )
-    if not isinstance(index[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
+    if not isinstance(index[0], bytes | pd._libs.tslibs.timedeltas.Timedelta):
         check_func(impl3, (other, tuple(index)), dist_test=False, check_dtype=False)
         if not isinstance(other, pd.MultiIndex):
             check_func(
@@ -2404,7 +2404,7 @@ def test_index_isin(args, memory_leak_check):
     check_func(impl, (idx, elems), dist_test=dist_test)
     # TODO: fix casting certain types of series to list or set
     if (
-        not isinstance(idx, (pd.TimedeltaIndex, pd.DatetimeIndex))
+        not isinstance(idx, pd.TimedeltaIndex | pd.DatetimeIndex)
         and idx.dtype != "object"
     ):
         check_func(impl, (idx, list(elems)), dist_test=dist_test)

@@ -1620,10 +1620,7 @@ def overload_runtime_join_filter(
             or arr_type == bodo.types.binary_array_type
             or isinstance(
                 arr_type,
-                (
-                    bodo.types.MapArrayType,
-                    bodo.types.ArrayItemArrayType,
-                ),
+                bodo.types.MapArrayType | bodo.types.ArrayItemArrayType,
             )
         ):
             num_var_type_columns += 1

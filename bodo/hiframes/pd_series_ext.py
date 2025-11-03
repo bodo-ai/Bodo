@@ -727,7 +727,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 
         if is_udf:
             if (
-                isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+                isinstance(f_return_type, SeriesType | HeterogeneousSeriesType)
                 and f_return_type.const_info is None
             ):
                 raise BodoError(

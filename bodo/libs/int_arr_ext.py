@@ -243,7 +243,7 @@ def lower_constant_int_arr(context, builder, typ, pyval):
     dtype = pyval.dtype
     if dtype == np.object_:
         dtype = np.int64
-    elif isinstance(dtype, (pd.ArrowDtype, pd.core.dtypes.dtypes.BaseMaskedDtype)):
+    elif isinstance(dtype, pd.ArrowDtype | pd.core.dtypes.dtypes.BaseMaskedDtype):
         dtype = dtype.numpy_dtype
     elif isinstance(dtype, pd.arrays.IntegerArray):
         dtype = pyval.dtype.type
@@ -420,7 +420,7 @@ def int_arr_setitem(A, idx, val):
     # See test_bitwise.py::test_bitshiftright[vector_scalar_uint64_case]
     # TODO(Nick): Verify inputs can be safely cast to an integer
     is_scalar = isinstance(
-        val, (types.Integer, types.Boolean, types.Float, bodo.types.Decimal128Type)
+        val, types.Integer | types.Boolean | types.Float | bodo.types.Decimal128Type
     )
 
     # scalar case
@@ -438,10 +438,7 @@ def int_arr_setitem(A, idx, val):
 
     # TODO(Nick): Verify inputs can be safely case to an integer
     if not (
-        (
-            is_iterable_type(val)
-            and isinstance(val.dtype, (types.Integer, types.Boolean))
-        )
+        (is_iterable_type(val) and isinstance(val.dtype, types.Integer | types.Boolean))
         or is_scalar
     ):
         raise BodoError(typ_err_msg)
@@ -856,8 +853,8 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     inplace = (
         op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
     )
-    is_lhs_scalar = isinstance(lhs, (types.Number, types.Boolean))
-    is_rhs_scalar = isinstance(rhs, (types.Number, types.Boolean))
+    is_lhs_scalar = isinstance(lhs, types.Number | types.Boolean)
+    is_rhs_scalar = isinstance(rhs, types.Number | types.Boolean)
     # use type inference to get output dtype
     # NOTE: using Numpy array instead of scalar dtypes since output dtype can be
     # different for arrays. For example, int32 + int32 is int64 for scalar but int32 for

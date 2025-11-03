@@ -62,7 +62,7 @@ def _get_nan(val):  # pragma: no cover
 @overload(_get_nan, no_unliteral=True)
 def _get_nan_overload(val):
     """get NA value with same type as val"""
-    if isinstance(val, (types.NPDatetime, types.NPTimedelta)):
+    if isinstance(val, types.NPDatetime | types.NPTimedelta):
         nat = val("NaT")
         return lambda val: nat  # pragma: no cover
 
@@ -83,7 +83,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
 def _get_type_max_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, bodo.types.IntegerArrayType | IntDtype | FloatingArrayType | FloatDtype
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_max_value(
@@ -175,7 +175,7 @@ def _get_type_min_value(dtype):  # pragma: no cover
 def _get_type_min_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, bodo.types.IntegerArrayType | IntDtype | FloatingArrayType | FloatDtype
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_min_value(

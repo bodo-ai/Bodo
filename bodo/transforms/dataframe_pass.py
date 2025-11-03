@@ -250,7 +250,7 @@ class DataFramePass:
         # replace df.iloc._obj with df
         if (
             isinstance(
-                rhs_type, (DataFrameILocType, DataFrameLocType, DataFrameIatType)
+                rhs_type, DataFrameILocType | DataFrameLocType | DataFrameIatType
             )
             and rhs.attr == "_obj"
         ):
@@ -319,7 +319,7 @@ class DataFramePass:
             # of expressions. This normalizes them to regular unary/binop expressions
             # so that Bodo transforms handle them properly.
             if (
-                isinstance(func_def, (ir.Const, ir.FreeVar, ir.Global))
+                isinstance(func_def, ir.Const | ir.FreeVar | ir.Global)
                 and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
             ):  # pragma: no cover
                 return self._convert_op_call_to_expr(assign, rhs, func_def.value)
@@ -337,7 +337,7 @@ class DataFramePass:
                 return [assign]
             # Cases like dtype(value) in np.linspace implementation
             elif isinstance(
-                func_def, (ir.Const, ir.FreeVar, ir.Global)
+                func_def, ir.Const | ir.FreeVar | ir.Global
             ) and func_def.value in (
                 int,
                 np.int8,
@@ -535,11 +535,9 @@ class DataFramePass:
             isinstance(func_mod, ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (
-                    DataFrameType,
-                    bodo.hiframes.pd_series_ext.SeriesType,
-                    DataFrameGroupByType,
-                ),
+                DataFrameType
+                | bodo.hiframes.pd_series_ext.SeriesType
+                | DataFrameGroupByType,
             )
             and func_name == "pipe"
         ):
@@ -2208,9 +2206,9 @@ class DataFramePass:
 
         # whether UDF returns a single row (as Series) or scalar
         if (
-            isinstance(udf_return_type, (SeriesType, HeterogeneousSeriesType))
+            isinstance(udf_return_type, SeriesType | HeterogeneousSeriesType)
             and udf_return_type.const_info is not None
-        ) or not isinstance(udf_return_type, (SeriesType, DataFrameType)):
+        ) or not isinstance(udf_return_type, SeriesType | DataFrameType):
             func_text += self._gen_groupby_apply_row_loop(
                 grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
             )
@@ -2261,7 +2259,7 @@ class DataFramePass:
         func_text += "    piece = in_data[starts[i]:ends[i]]\n"
 
         func_text += f"    out = map_func(piece, {udf_arg_names})\n"
-        if isinstance(udf_return_type, (SeriesType, HeterogeneousSeriesType)):
+        if isinstance(udf_return_type, SeriesType | HeterogeneousSeriesType):
             func_text += (
                 "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
             )
@@ -2679,7 +2677,7 @@ class DataFramePass:
     def is_bool_arr(self, varname):
         typ = self.typemap[varname]
         return (
-            isinstance(typ, (SeriesType, types.Array, BooleanArrayType))
+            isinstance(typ, SeriesType | types.Array | BooleanArrayType)
             and typ.dtype == types.bool_
         )
 
