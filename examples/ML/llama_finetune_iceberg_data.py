@@ -192,11 +192,6 @@ def train_main(train_df):
 
     model = bodo.ai.prepare_model(model)
 
-    if model:
-        device = next(model.parameters()).device
-    else:
-        device = None
-
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     dataset_func = lambda df: LlamaDataset(df, tokenizer)
     train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=dataset_func, pin_memory=True)
