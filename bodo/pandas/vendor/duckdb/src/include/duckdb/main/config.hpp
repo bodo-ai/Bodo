@@ -29,7 +29,7 @@
 #include "duckdb/execution/index/index_type_set.hpp"
 #include "duckdb/function/cast/default_casts.hpp"
 #include "duckdb/function/replacement_scan.hpp"
-#include "duckdb/optimizer/optimizer_extension.hpp"
+# Bodo Change: Remove optimzer_extension
 #include "duckdb/parser/parsed_data/create_info.hpp"
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/main/setting_info.hpp"
