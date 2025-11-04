@@ -9,17 +9,7 @@
 
 namespace duckdb {
 
-struct ExtractVersionStrOperator {
-	template <typename INPUT_TYPE, typename RESULT_TYPE>
-	static RESULT_TYPE Operation(INPUT_TYPE input, Vector &result) {
-		const idx_t len = input.GetSize();
-		if (len != 36) {
-			throw InvalidInputException("Given string '%s' is invalid UUID.", input.GetString());
-		}
-		// UUIDv4 and UUIDv7 stores version as the 15-th uint8_t.
-		return input.GetPointer()[14] - '0';
-	}
-};
+namespace {
 
 struct ExtractVersionUuidOperator {
 	template <typename INPUT_TYPE, typename RESULT_TYPE>
@@ -35,37 +25,26 @@ struct ExtractTimestampUuidOperator {
 	template <typename INPUT_TYPE, typename RESULT_TYPE>
 	static RESULT_TYPE Operation(INPUT_TYPE input, Vector &result) {
 		// Validate whether the given UUID is v7.
-		const uint8_t version = ((uint8_t)((input.upper) >> 8) & 0xf0) >> 4;
+		const uint8_t version = (static_cast<uint8_t>((input.upper) >> 8) & 0xf0) >> 4;
 		if (version != 7) {
 			throw InvalidInputException("Given UUID is with version %u, not version 7.", version);
 		}
 
 		// UUID v7 begins with a 48 bit big-endian Unix Epoch timestamp with millisecond granularity.
-		const int64_t upper = input.upper;
+		int64_t upper = input.upper;
+		// flip the top byte
+		upper ^= NumericLimits<int64_t>::Minimum();
 		int64_t unix_ts_milli = upper;
 		unix_ts_milli = unix_ts_milli >> 16;
 
-		static constexpr uint64_t kMilliToMicro = 1000;
-		const int64_t unix_ts_ms = unix_ts_milli * kMilliToMicro;
+		static constexpr int64_t kMilliToMicro = 1000;
+		const int64_t unix_ts_ms = kMilliToMicro * unix_ts_milli;
 		return timestamp_t {unix_ts_ms};
 	}
 };
 
-struct ExtractTimestampStrOperator {
-	template <typename INPUT_TYPE, typename RESULT_TYPE>
-	static RESULT_TYPE Operation(INPUT_TYPE input, Vector &result) {
-		// Validate whether the give input is a valid UUID.
-		hugeint_t uuid_hugeint;
-		if (!BaseUUID::FromCString(input.GetData(), input.GetSize(), uuid_hugeint)) {
-			throw InvalidInputException("Given string '%s' is invalid UUID.", input.GetString());
-		}
-
-		return ExtractTimestampUuidOperator::Operation<hugeint_t, RESULT_TYPE>(uuid_hugeint, result);
-	}
-};
-
 template <typename INPUT, typename OP>
-static void ExtractVersionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+void ExtractVersionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &input = args.data[0];
 	idx_t count = args.size();
@@ -73,7 +52,7 @@ static void ExtractVersionFunction(DataChunk &args, ExpressionState &state, Vect
 }
 
 template <typename INPUT, typename OP>
-static void ExtractTimestampFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+void ExtractTimestampFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &input = args.data[0];
 	idx_t count = args.size();
@@ -88,7 +67,7 @@ struct RandomLocalState : public FunctionLocalState {
 	RandomEngine random_engine;
 };
 
-static void RandomFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+void RandomFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 0);
 	auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<RandomLocalState>();
 
@@ -99,21 +78,14 @@ static void RandomFunction(DataChunk &args, ExpressionState &state, Vector &resu
 	}
 }
 
-static unique_ptr<FunctionLocalState> RandomInitLocalState(ExpressionState &state, const BoundFunctionExpression &expr,
-                                                           FunctionData *bind_data) {
+unique_ptr<FunctionLocalState> RandomInitLocalState(ExpressionState &state, const BoundFunctionExpression &expr,
+                                                    FunctionData *bind_data) {
 	auto &random_engine = RandomEngine::Get(state.GetContext());
 	lock_guard<mutex> guard(random_engine.lock);
 	return make_uniq<RandomLocalState>(random_engine.NextRandomInteger64());
 }
 
-ScalarFunction RandomFun::GetFunction() {
-	ScalarFunction random("random", {}, LogicalType::DOUBLE, RandomFunction, nullptr, nullptr, nullptr,
-	                      RandomInitLocalState);
-	random.stability = FunctionStability::VOLATILE;
-	return random;
-}
-
-static void GenerateUUIDv4Function(DataChunk &args, ExpressionState &state, Vector &result) {
+void GenerateUUIDv4Function(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 0);
 	auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<RandomLocalState>();
 
@@ -125,7 +97,7 @@ static void GenerateUUIDv4Function(DataChunk &args, ExpressionState &state, Vect
 	}
 }
 
-static void GenerateUUIDv7Function(DataChunk &args, ExpressionState &state, Vector &result) {
+void GenerateUUIDv7Function(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 0);
 	auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<RandomLocalState>();
 
@@ -135,6 +107,15 @@ static void GenerateUUIDv7Function(DataChunk &args, ExpressionState &state, Vect
 	for (idx_t i = 0; i < args.size(); i++) {
 		result_data[i] = UUIDv7::GenerateRandomUUID(lstate.random_engine);
 	}
+}
+
+} // namespace
+
+ScalarFunction RandomFun::GetFunction() {
+	ScalarFunction random("random", {}, LogicalType::DOUBLE, RandomFunction, nullptr, nullptr, nullptr,
+	                      RandomInitLocalState);
+	random.stability = FunctionStability::VOLATILE;
+	return random;
 }
 
 ScalarFunction UUIDFun::GetFunction() {
@@ -157,22 +138,14 @@ ScalarFunction UUIDv7Fun::GetFunction() {
 	return uuid_v7_function;
 }
 
-ScalarFunctionSet ExtractUuidVerisonFun::GetFunctions() {
-	ScalarFunctionSet version_extraction;
-	version_extraction.AddFunction(ScalarFunction({LogicalType::VARCHAR}, LogicalType::UINTEGER,
-	                                              ExtractVersionFunction<string_t, ExtractVersionStrOperator>));
-	version_extraction.AddFunction(ScalarFunction({LogicalType::UUID}, LogicalType::UINTEGER,
-	                                              ExtractVersionFunction<hugeint_t, ExtractVersionUuidOperator>));
-	return version_extraction;
+ScalarFunction UUIDExtractVersionFun::GetFunction() {
+	return ScalarFunction({LogicalType::UUID}, LogicalType::UINTEGER,
+	                      ExtractVersionFunction<hugeint_t, ExtractVersionUuidOperator>);
 }
 
-ScalarFunctionSet ExtractUuidTimestampFun::GetFunctions() {
-	ScalarFunctionSet timestamp_extraction;
-	timestamp_extraction.AddFunction(ScalarFunction({LogicalType::VARCHAR}, LogicalType::TIMESTAMP_TZ,
-	                                                ExtractTimestampFunction<string_t, ExtractTimestampStrOperator>));
-	timestamp_extraction.AddFunction(ScalarFunction({LogicalType::UUID}, LogicalType::TIMESTAMP_TZ,
-	                                                ExtractTimestampFunction<hugeint_t, ExtractTimestampUuidOperator>));
-	return timestamp_extraction;
+ScalarFunction UUIDExtractTimestampFun::GetFunction() {
+	return ScalarFunction({LogicalType::UUID}, LogicalType::TIMESTAMP_TZ,
+	                      ExtractTimestampFunction<hugeint_t, ExtractTimestampUuidOperator>);
 }
 
 } // namespace duckdb

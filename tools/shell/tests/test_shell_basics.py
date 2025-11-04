@@ -16,7 +16,11 @@ def test_basic(shell):
 
 
 def test_range(shell):
-    test = ShellTest(shell).statement("select * from range(10000)")
+    test = (
+        ShellTest(shell)
+        .statement(".mode csv")
+        .statement("select * from range(10000)")
+    )
     result = test.run()
     result.check_stdout("9999")
 
@@ -181,6 +185,11 @@ def test_echo(shell):
 def test_exit(shell, alias):
     test = ShellTest(shell).statement(f".{alias}")
     result = test.run()
+
+def test_exit_rc(shell):
+    test = ShellTest(shell).statement(f".exit 17")
+    result = test.run()
+    assert result.status_code == 17
 
 def test_print(shell):
     test = ShellTest(shell).statement(".print asdf")
@@ -413,6 +422,56 @@ def test_tables_pattern(shell):
     result = test.run()
     result.check_stdout("asda  csda")
 
+def test_tables_schema_disambiguation(shell):
+    test = (
+        ShellTest(shell)
+        .statement("CREATE SCHEMA a;")
+        .statement("CREATE SCHEMA b;")
+        .statement("CREATE TABLE a.foobar(name VARCHAR);")
+        .statement("CREATE TABLE b.foobar(name VARCHAR);")
+        .statement(".tables")
+    )
+    result = test.run()
+    result.check_stdout("a.foobar  b.foobar")
+
+def test_tables_schema_filtering(shell):
+    test = (
+        ShellTest(shell)
+        .statement("CREATE SCHEMA a;")
+        .statement("CREATE SCHEMA b;")
+        .statement("CREATE TABLE a.foobar(name VARCHAR);")
+        .statement("CREATE TABLE b.foobar(name VARCHAR);")
+        .statement("CREATE TABLE a.unique_table(x INTEGER);")
+        .statement("CREATE TABLE b.other_table(y INTEGER);")
+        .statement(".tables a.%")
+    )
+    result = test.run()
+    result.check_stdout("foobar        unique_table")
+
+def test_tables_backward_compatibility(shell):
+    test = (
+        ShellTest(shell)
+        .statement("CREATE TABLE main_table(i INTEGER);")
+        .statement("CREATE TABLE unique_table(x INTEGER);")
+        .statement(".tables")
+    )
+    result = test.run()
+    result.check_stdout("main_table    unique_table")
+
+def test_tables_with_views(shell):
+    test = (
+        ShellTest(shell)
+        .statement("CREATE SCHEMA a;")
+        .statement("CREATE SCHEMA b;")
+        .statement("CREATE TABLE a.foobar(name VARCHAR);")
+        .statement("CREATE TABLE b.foobar(name VARCHAR);")
+        .statement("CREATE VIEW a.test_view AS SELECT 1 AS x;")
+        .statement("CREATE VIEW b.test_view AS SELECT 2 AS y;")
+        .statement(".tables")
+    )
+    result = test.run()
+    result.check_stdout("a.foobar     a.test_view  b.foobar     b.test_view")
+
 def test_indexes(shell):
     test = (
         ShellTest(shell)
@@ -636,6 +695,15 @@ def test_mode_insert(shell):
     result.check_not_exist('3.139999')
     result.check_not_exist('2.710000')
 
+def test_mode_insert_table(shell):
+    test = (
+        ShellTest(shell)
+        .statement(".mode insert my_table")
+        .statement("SELECT 42;")
+    )
+    result = test.run()
+    result.check_stdout('my_table')
+
 def test_mode_line(shell):
     test = (
         ShellTest(shell)
@@ -834,6 +902,17 @@ def test_dump_mixed(shell):
     result = test.run()
     result.check_stdout('CREATE TABLE a(d DATE, k FLOAT, t TIMESTAMP);')
 
+def test_dump_blobs(shell):
+    test = (
+        ShellTest(shell)
+        .statement("create table test(t VARCHAR, b BLOB);")
+        .statement(".changes off")
+        .statement("insert into test values('literal blob', '\\x07\\x08\\x09');")
+        .statement(".dump")
+    )
+    result = test.run()
+    result.check_stdout("'\\x07\\x08\\x09'")
+
 def test_invalid_csv(shell, tmp_path):
     file = tmp_path / 'nonsencsv.csv'
     with open(file, 'wb+') as f:
@@ -868,18 +947,6 @@ def test_mode_trash(shell):
     )
     result = test.run()
     result.check_stdout('')
-
-@pytest.mark.skip(reason="Broken test, ported directly, was commented out")
-def test_dump_blobs(shell):
-    test = (
-        ShellTest(shell)
-        .statement("CREATE TABLE a (b BLOB);")
-        .statement(".changes off")
-        .statement("INSERT INTO a VALUES (DATE '1992-01-01', 0.3, NOW());")
-        .statement(".dump")
-    )
-    result = test.run()
-    result.check_stdout('COMMIT')
 
 def test_sqlite_comments(shell):
     # Using /* <comment> */
@@ -1046,6 +1113,24 @@ def test_prepared_statement(shell):
     test = ShellTest(shell).statement("select ?")
     result = test.run()
     result.check_stderr("Prepared statement parameters cannot be used directly")
+
+def test_shell_csv_file(shell):
+    test = (
+        ShellTest(shell, ['data/csv/dates.csv'])
+        .statement('SELECT * FROM dates')
+    )
+    result = test.run()
+    result.check_stdout("2008-08-10")
+
+def test_tables_invalid_pattern_handling(shell):
+    test = (
+        ShellTest(shell)
+        .statement("CREATE TABLE test_table(i INTEGER);")
+        .statement(".tables \"invalid\"pattern\"")
+    )
+    result = test.run()
+    # Should show usage message for invalid pattern
+    result.check_stderr("Usage: .tables ?TABLE?")
 
 
 # fmt: on

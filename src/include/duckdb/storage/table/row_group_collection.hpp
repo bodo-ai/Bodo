@@ -36,6 +36,7 @@ struct CollectionCheckpointState;
 struct PersistentCollectionData;
 class CheckpointTask;
 class TableIOManager;
+class DataTable;
 
 class RowGroupCollection {
 public:
@@ -51,6 +52,7 @@ public:
 	void Initialize(PersistentCollectionData &data);
 	void Initialize(PersistentTableData &data);
 	void InitializeEmpty();
+	void FinalizeCheckpoint(MetaBlockPointer pointer);
 
 	bool IsEmpty() const;
 
@@ -75,6 +77,8 @@ public:
 
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
 	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state);
+	//! Returns true, if the row group can fetch the row id for the transaction.
+	bool CanFetch(TransactionData, const row_t row_id);
 
 	//! Initialize an append of a variable number of rows. FinalizeAppend must be called after appending is done.
 	void InitializeAppend(TableAppendState &state);
@@ -96,9 +100,10 @@ public:
 	void RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count);
 
 	idx_t Delete(TransactionData transaction, DataTable &table, row_t *ids, idx_t count);
-	void Update(TransactionData transaction, row_t *ids, const vector<PhysicalIndex> &column_ids, DataChunk &updates);
-	void UpdateColumn(TransactionData transaction, Vector &row_ids, const vector<column_t> &column_path,
-	                  DataChunk &updates);
+	void Update(TransactionData transaction, DataTable &table, row_t *ids, const vector<PhysicalIndex> &column_ids,
+	            DataChunk &updates);
+	void UpdateColumn(TransactionData transaction, DataTable &table, Vector &row_ids,
+	                  const vector<column_t> &column_path, DataChunk &updates);
 
 	void Checkpoint(TableDataWriter &writer, TableStatistics &global_stats);
 
@@ -143,9 +148,12 @@ public:
 	idx_t GetRowGroupSize() const {
 		return row_group_size;
 	}
+	void SetAppendRequiresNewRowGroup();
 
 private:
 	bool IsEmpty(SegmentLock &) const;
+
+	optional_ptr<RowGroup> NextUpdateRowGroup(row_t *ids, idx_t &pos, idx_t count) const;
 
 private:
 	//! BlockManager
@@ -164,7 +172,11 @@ private:
 	//! Table statistics
 	TableStatistics stats;
 	//! Allocation size, only tracked for appends
-	idx_t allocation_size;
+	atomic<idx_t> allocation_size;
+	//! Root metadata pointer, if the collection is loaded from disk
+	MetaBlockPointer metadata_pointer;
+	//! Whether or not we need to append a new row group prior to appending
+	bool requires_new_row_group;
 };
 
 } // namespace duckdb

@@ -257,7 +257,10 @@ public:
 			    BitpackingPrimitives::MinimumBitWidth<T, false>(static_cast<T>(min_max_delta_diff));
 			auto regular_required_bitwidth = BitpackingPrimitives::MinimumBitWidth(min_max_diff);
 
-			if (delta_required_bitwidth < regular_required_bitwidth && mode != BitpackingMode::FOR) {
+			//! `min_max_diff` is uninitialized if `can_do_for` isn't true
+			bool prefer_for = can_do_for && delta_required_bitwidth >= regular_required_bitwidth;
+
+			if (!prefer_for && mode != BitpackingMode::FOR) {
 				SubtractFrameOfReference(delta_buffer, minimum_delta);
 
 				OP::WriteDeltaFor(reinterpret_cast<T *>(delta_buffer), compression_buffer_validity,
@@ -329,7 +332,7 @@ template <class T>
 unique_ptr<AnalyzeState> BitpackingInitAnalyze(ColumnData &col_data, PhysicalType type) {
 	auto &config = DBConfig::GetConfig(col_data.GetDatabase());
 
-	CompressionInfo info(col_data.GetBlockManager().GetBlockSize());
+	CompressionInfo info(col_data.GetBlockManager());
 	auto state = make_uniq<BitpackingAnalyzeState<T>>(info);
 	state->state.mode = config.options.force_bitpacking_mode;
 
@@ -338,8 +341,6 @@ unique_ptr<AnalyzeState> BitpackingInitAnalyze(ColumnData &col_data, PhysicalTyp
 
 template <class T>
 bool BitpackingAnalyze(AnalyzeState &state, Vector &input, idx_t count) {
-	auto &analyze_state = state.Cast<BitpackingAnalyzeState<T>>();
-
 	// We use BITPACKING_METADATA_GROUP_SIZE tuples, which can exceed the block size.
 	// In that case, we disable bitpacking.
 	// we are conservative here by multiplying by 2
@@ -348,6 +349,7 @@ bool BitpackingAnalyze(AnalyzeState &state, Vector &input, idx_t count) {
 		return false;
 	}
 
+	auto &analyze_state = state.Cast<BitpackingAnalyzeState<T>>();
 	UnifiedVectorFormat vdata;
 	input.ToUnifiedFormat(count, vdata);
 
@@ -499,7 +501,7 @@ public:
 		auto &type = checkpoint_data.GetType();
 
 		auto compressed_segment = ColumnSegment::CreateTransientSegment(db, function, type, row_start,
-		                                                                info.GetBlockSize(), info.GetBlockSize());
+		                                                                info.GetBlockSize(), info.GetBlockManager());
 		current_segment = std::move(compressed_segment);
 
 		auto &buffer_manager = BufferManager::GetBufferManager(db);
@@ -661,7 +663,7 @@ public:
 	//! depending on the bitpacking mode of that group.
 	void LoadNextGroup() {
 		D_ASSERT(bitpacking_metadata_ptr > handle.Ptr() &&
-		         bitpacking_metadata_ptr < handle.Ptr() + current_segment.GetBlockManager().GetBlockSize());
+		         (bitpacking_metadata_ptr < handle.Ptr() + current_segment.GetBlockManager().GetBlockSize()));
 		current_group_offset = 0;
 		current_group = DecodeMeta(reinterpret_cast<bitpacking_metadata_encoded_t *>(bitpacking_metadata_ptr));
 

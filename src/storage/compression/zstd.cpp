@@ -146,7 +146,7 @@ unique_ptr<AnalyzeState> ZSTDStorage::StringInitAnalyze(ColumnData &col_data, Ph
 		// compatibility mode with old versions - disable zstd
 		return nullptr;
 	}
-	CompressionInfo info(col_data.GetBlockManager().GetBlockSize());
+	CompressionInfo info(col_data.GetBlockManager());
 	auto &data_table_info = col_data.info;
 	auto &attached_db = data_table_info.GetDB();
 	auto &config = DBConfig::Get(attached_db);
@@ -203,8 +203,9 @@ idx_t ZSTDStorage::StringFinalAnalyze(AnalyzeState &state_p) {
 	if (average_length >= threshold) {
 		penalty = 1.0;
 	} else {
-		// Inbetween these two points you're better off using uncompressed or a different compression algorithm.
-		return NumericLimits<idx_t>::Maximum();
+		// set a high penalty if we are below the threshold - this still allows ZSTD to be forced
+		// but makes it very unlikely to be chosen automatically
+		penalty = 1000.0;
 	}
 
 	auto expected_compressed_size = (double)state.total_size / 2.0;
@@ -294,7 +295,7 @@ public:
 		}
 
 		if (!to_use->IsValid()) {
-			*to_use = buffer_manager.Allocate(MemoryTag::OVERFLOW_STRINGS, block_manager.GetBlockSize());
+			*to_use = buffer_manager.Allocate(MemoryTag::OVERFLOW_STRINGS, &block_manager);
 		}
 		return *to_use;
 	}
@@ -473,7 +474,7 @@ public:
 
 		// Write the current page to disk
 		auto &block_manager = partial_block_manager.GetBlockManager();
-		block_manager.Write(buffer.GetFileBuffer(), block_id);
+		block_manager.Write(QueryContext(), buffer.GetFileBuffer(), block_id);
 	}
 
 	void FlushVector() {
@@ -524,7 +525,7 @@ public:
 		auto &db = checkpoint_data.GetDatabase();
 		auto &type = checkpoint_data.GetType();
 		auto compressed_segment = ColumnSegment::CreateTransientSegment(db, function, type, row_start,
-		                                                                info.GetBlockSize(), info.GetBlockSize());
+		                                                                info.GetBlockSize(), info.GetBlockManager());
 		segment = std::move(compressed_segment);
 
 		auto &buffer_manager = BufferManager::GetBufferManager(checkpoint_data.GetDatabase());
@@ -899,16 +900,15 @@ public:
 		for (idx_t i = 0; i < count; i++) {
 			uncompressed_length += string_lengths[i];
 		}
-		auto empty_string = StringVector::EmptyString(result, uncompressed_length);
-		auto uncompressed_data = empty_string.GetDataWriteable();
+		auto &buffer = StringVector::GetStringBuffer(result);
+		auto uncompressed_data = buffer.AllocateShrinkableBuffer(uncompressed_length);
 		auto string_data = FlatVector::GetData<string_t>(result);
 
-		DecompressString(scan_state, reinterpret_cast<data_ptr_t>(uncompressed_data), uncompressed_length);
+		DecompressString(scan_state, uncompressed_data, uncompressed_length);
 
 		idx_t offset = 0;
-		auto uncompressed_data_const = empty_string.GetData();
 		for (idx_t i = 0; i < count; i++) {
-			string_data[result_offset + i] = string_t(uncompressed_data_const + offset, string_lengths[i]);
+			string_data[result_offset + i] = string_t(char_ptr_cast(uncompressed_data + offset), string_lengths[i]);
 			offset += string_lengths[i];
 		}
 		scan_state.scanned_count += count;

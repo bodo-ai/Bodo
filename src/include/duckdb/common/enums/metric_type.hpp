@@ -34,6 +34,10 @@ enum class MetricsType : uint8_t {
     LATENCY,
     ROWS_RETURNED,
     OPERATOR_NAME,
+    SYSTEM_PEAK_BUFFER_MEMORY,
+    SYSTEM_PEAK_TEMP_DIR_SIZE,
+    TOTAL_BYTES_READ,
+    TOTAL_BYTES_WRITTEN,
     ALL_OPTIMIZERS,
     CUMULATIVE_OPTIMIZER_TIMING,
     PLANNER,
@@ -69,6 +73,7 @@ enum class MetricsType : uint8_t {
     OPTIMIZER_MATERIALIZED_CTE,
     OPTIMIZER_SUM_REWRITER,
     OPTIMIZER_LATE_MATERIALIZATION,
+    OPTIMIZER_CTE_INLINING,
 };
 
 struct MetricsTypeHashFunction {
@@ -90,6 +95,7 @@ public:
 
     static bool IsOptimizerMetric(MetricsType type);
     static bool IsPhaseTimingMetric(MetricsType type);
+    static bool IsQueryGlobalMetric(MetricsType type);
 };
 
 } // namespace duckdb

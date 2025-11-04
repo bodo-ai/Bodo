@@ -20,6 +20,27 @@
             }
         },
         {
+            "name": "duckdb_table_function_get_client_context",
+            "return_type": "void",
+            "params": [
+                {
+                    "type": "duckdb_bind_info",
+                    "name": "info"
+                },
+                {
+                    "type": "duckdb_client_context *",
+                    "name": "out_context"
+                }
+            ],
+            "comment": {
+                "description": "Retrieves the client context of the bind info of a table function.\n\n",
+                "param_comments": {
+                    "info": "The bind info object of the table function.",
+                    "out_context": "The client context of the bind info. Must be destroyed with `duckdb_destroy_client_context`."
+                }
+            }
+        },
+        {
             "name": "duckdb_bind_add_result_column",
             "return_type": "void",
             "params": [
@@ -124,11 +145,11 @@
                 }
             ],
             "comment": {
-                "description": "Sets the user-provided bind data in the bind object. This object can be retrieved again during execution.\n\n",
+                "description": "Sets the user-provided bind data in the bind object of the table function. \nThis object can be retrieved again during execution.\n\n",
                 "param_comments": {
-                    "info": "The info object",
+                    "info": "The bind info of the table function.",
                     "bind_data": "The bind data object.",
-                    "destroy": "The callback that will be called to destroy the bind data (if any)"
+                    "destroy": "The callback to destroy the bind data (if any)."
                 }
             }
         },
@@ -171,7 +192,7 @@
                 }
             ],
             "comment": {
-                "description": "Report that an error has occurred while calling bind.\n\n",
+                "description": "Report that an error has occurred while calling bind on a table function.\n\n",
                 "param_comments": {
                     "info": "The info object",
                     "error": "The error message"

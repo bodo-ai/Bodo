@@ -14,10 +14,10 @@ JSONBufferHandle::JSONBufferHandle(JSONReader &reader, idx_t buffer_index_p, idx
       buffer_size(buffer_size_p), buffer_start(buffer_start_p) {
 }
 
-JSONFileHandle::JSONFileHandle(unique_ptr<FileHandle> file_handle_p, Allocator &allocator_p)
-    : file_handle(std::move(file_handle_p)), allocator(allocator_p), can_seek(file_handle->CanSeek()),
-      file_size(file_handle->GetFileSize()), read_position(0), requested_reads(0), actual_reads(0),
-      last_read_requested(false), cached_size(0) {
+JSONFileHandle::JSONFileHandle(QueryContext context_p, unique_ptr<FileHandle> file_handle_p, Allocator &allocator_p)
+    : context(context_p), file_handle(std::move(file_handle_p)), allocator(allocator_p),
+      can_seek(file_handle->CanSeek()), file_size(file_handle->GetFileSize()), read_position(0), requested_reads(0),
+      actual_reads(0), last_read_requested(false), cached_size(0) {
 }
 
 bool JSONFileHandle::IsOpen() const {
@@ -95,7 +95,7 @@ void JSONFileHandle::ReadAtPosition(char *pointer, idx_t size, idx_t position,
 	}
 	if (size != 0) {
 		auto &handle = override_handle ? *override_handle.get() : *file_handle.get();
-		handle.Read(pointer, size, position);
+		handle.Read(context, pointer, size, position);
 	}
 
 	const auto incremented_actual_reads = ++actual_reads;
@@ -174,8 +174,8 @@ idx_t JSONFileHandle::ReadFromCache(char *&pointer, idx_t &size, atomic<idx_t> &
 	return read_size;
 }
 
-JSONReader::JSONReader(ClientContext &context, JSONReaderOptions options_p, string file_name_p)
-    : BaseFileReader(std::move(file_name_p)), context(context), options(std::move(options_p)), initialized(0),
+JSONReader::JSONReader(ClientContext &context, JSONReaderOptions options_p, OpenFileInfo file_p)
+    : BaseFileReader(std::move(file_p)), context(context), options(std::move(options_p)), initialized(0),
       next_buffer_index(0), thrown(false) {
 }
 
@@ -183,8 +183,9 @@ void JSONReader::OpenJSONFile() {
 	lock_guard<mutex> guard(lock);
 	if (!IsOpen()) {
 		auto &fs = FileSystem::GetFileSystem(context);
-		auto regular_file_handle = fs.OpenFile(file_name, FileFlags::FILE_FLAGS_READ | options.compression);
-		file_handle = make_uniq<JSONFileHandle>(std::move(regular_file_handle), BufferAllocator::Get(context));
+		auto regular_file_handle = fs.OpenFile(file, FileFlags::FILE_FLAGS_READ | options.compression);
+		file_handle = make_uniq<JSONFileHandle>(QueryContext(context), std::move(regular_file_handle),
+		                                        BufferAllocator::Get(context));
 	}
 	Reset();
 }
@@ -242,7 +243,7 @@ void JSONReader::SetRecordType(duckdb::JSONRecordType type) {
 }
 
 const string &JSONReader::GetFileName() const {
-	return file_name;
+	return file.path;
 }
 
 JSONFileHandle &JSONReader::GetFileHandle() const {
@@ -290,8 +291,8 @@ void JSONReader::SetBufferLineOrObjectCount(JSONBufferHandle &handle, idx_t coun
 void JSONReader::AddParseError(JSONReaderScanState &scan_state, idx_t line_or_object_in_buf, yyjson_read_err &err,
                                const string &extra) {
 	string unit = options.format == JSONFormat::NEWLINE_DELIMITED ? "line" : "record/value";
-	auto error_msg = StringUtil::Format("Malformed JSON in file \"%s\", at byte %llu in %s {line}: %s. %s", file_name,
-	                                    err.pos + 1, unit, err.msg, extra);
+	auto error_msg = StringUtil::Format("Malformed JSON in file \"%s\", at byte %llu in %s {line}: %s. %s",
+	                                    GetFileName(), err.pos + 1, unit, err.msg, extra);
 	lock_guard<mutex> guard(lock);
 	AddError(scan_state.current_buffer_handle->buffer_index, line_or_object_in_buf + 1, error_msg);
 	ThrowErrorsIfPossible();
@@ -306,7 +307,7 @@ void JSONReader::AddTransformError(JSONReaderScanState &scan_state, idx_t object
 	auto line_or_object_in_buffer = scan_state.lines_or_objects_in_buffer - scan_state.scan_count + object_index;
 	string unit = options.format == JSONFormat::NEWLINE_DELIMITED ? "line" : "record/value";
 	auto error_msg =
-	    StringUtil::Format("JSON transform error in file \"%s\", in %s {line}: %s", file_name, unit, error_message);
+	    StringUtil::Format("JSON transform error in file \"%s\", in %s {line}: %s", GetFileName(), unit, error_message);
 	lock_guard<mutex> guard(lock);
 	AddError(scan_state.current_buffer_handle->buffer_index, line_or_object_in_buffer, error_msg);
 	ThrowErrorsIfPossible();
@@ -701,7 +702,8 @@ void JSONReader::AutoDetect(Allocator &allocator, idx_t buffer_capacity) {
 	    GetRecordType() != JSONRecordType::RECORDS) {
 		string unit = options.format == JSONFormat::NEWLINE_DELIMITED ? "line" : "record/value";
 		throw InvalidInputException(
-		    "JSON auto-detection error in file \"%s\": Expected records, detected non-record JSON instead", file_name);
+		    "JSON auto-detection error in file \"%s\": Expected records, detected non-record JSON instead",
+		    GetFileName());
 	}
 	// store the buffer in the file so it can be re-used by the first reader of the file
 	if (!file_handle->IsPipe()) {
@@ -736,7 +738,7 @@ bool JSONReader::CopyRemainderFromPreviousBuffer(JSONReaderScanState &scan_state
 	idx_t prev_buffer_size = previous_buffer_handle->buffer_size - previous_buffer_handle->buffer_start;
 	auto prev_buffer_ptr = char_ptr_cast(previous_buffer_handle->buffer.get()) + previous_buffer_handle->buffer_size;
 	auto prev_object_start = PreviousNewline(prev_buffer_ptr, prev_buffer_size);
-	auto prev_object_size = prev_buffer_ptr - prev_object_start;
+	auto prev_object_size = NumericCast<idx_t>(prev_buffer_ptr - prev_object_start);
 
 	D_ASSERT(scan_state.buffer_offset == options.maximum_object_size);
 	if (prev_object_size > scan_state.buffer_offset) {
@@ -903,8 +905,11 @@ void JSONReader::FinalizeBuffer(JSONReaderScanState &scan_state) {
 	// we read something
 	// skip over the array start if required
 	if (!scan_state.is_last) {
-		if (scan_state.buffer_index.GetIndex() == 0 && GetFormat() == JSONFormat::ARRAY) {
-			SkipOverArrayStart(scan_state);
+		if (scan_state.buffer_index.GetIndex() == 0) {
+			StringUtil::SkipBOM(scan_state.buffer_ptr, scan_state.buffer_size, scan_state.buffer_offset);
+			if (GetFormat() == JSONFormat::ARRAY) {
+				SkipOverArrayStart(scan_state);
+			}
 		}
 	}
 	// then finalize the buffer

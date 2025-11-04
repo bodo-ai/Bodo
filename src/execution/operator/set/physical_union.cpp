@@ -6,9 +6,9 @@
 
 namespace duckdb {
 
-PhysicalUnion::PhysicalUnion(vector<LogicalType> types, PhysicalOperator &top, PhysicalOperator &bottom,
-                             idx_t estimated_cardinality, bool allow_out_of_order)
-    : PhysicalOperator(PhysicalOperatorType::UNION, std::move(types), estimated_cardinality),
+PhysicalUnion::PhysicalUnion(PhysicalPlan &physical_plan, vector<LogicalType> types, PhysicalOperator &top,
+                             PhysicalOperator &bottom, idx_t estimated_cardinality, bool allow_out_of_order)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::UNION, std::move(types), estimated_cardinality),
       allow_out_of_order(allow_out_of_order) {
 	children.push_back(top);
 	children.push_back(bottom);
@@ -17,6 +17,18 @@ PhysicalUnion::PhysicalUnion(vector<LogicalType> types, PhysicalOperator &top, P
 //===--------------------------------------------------------------------===//
 // Pipeline Construction
 //===--------------------------------------------------------------------===//
+static bool ContainsSink(PhysicalOperator &op) {
+	if (op.IsSink()) {
+		return true;
+	}
+	for (auto &child : op.children) {
+		if (ContainsSink(child)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void PhysicalUnion::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
 	op_state.reset();
 	sink_state.reset();
@@ -52,7 +64,11 @@ void PhysicalUnion::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipelin
 
 	vector<shared_ptr<Pipeline>> dependencies;
 	optional_ptr<MetaPipeline> last_child_ptr;
-	const auto can_saturate_threads = children[0].get().CanSaturateThreads(current.GetClientContext());
+	// users commonly UNION ALL together a bunch of cheap scan pipelines (e.g., instead of a multi file list)
+	// in these cases, we don't want to avoid breadth-first plan evaluation,
+	// as it doesn't pose a threat to memory usage (it's just a bunch of straight scans)
+	const auto can_saturate_threads =
+	    ContainsSink(children[0]) && children[0].get().CanSaturateThreads(current.GetClientContext());
 	if (order_matters || can_saturate_threads) {
 		// we add dependencies if order matters: union_pipeline comes after all pipelines created by building current
 		dependencies = meta_pipeline.AddDependenciesFrom(union_pipeline, union_pipeline, false);

@@ -20,8 +20,9 @@ namespace duckdb {
 template <class SRC, class TGT, class OP = ParquetCastOperator, bool ALL_VALID>
 static void TemplatedWritePlain(Vector &col, ColumnWriterStatistics *stats, const idx_t chunk_start,
                                 const idx_t chunk_end, const ValidityMask &mask, WriteStream &ser) {
-	static constexpr bool COPY_DIRECTLY_FROM_VECTOR =
-	    ALL_VALID && std::is_same<SRC, TGT>::value && std::is_arithmetic<TGT>::value;
+	static constexpr bool COPY_DIRECTLY_FROM_VECTOR = ALL_VALID && std::is_same<SRC, TGT>::value &&
+	                                                  std::is_arithmetic<TGT>::value &&
+	                                                  std::is_same<OP, ParquetCastOperator>::value;
 
 	const auto *const ptr = FlatVector::GetData<SRC>(col);
 
@@ -67,7 +68,9 @@ class StandardColumnWriterState : public PrimitiveColumnWriterState {
 public:
 	StandardColumnWriterState(ParquetWriter &writer, duckdb_parquet::RowGroup &row_group, idx_t col_idx)
 	    : PrimitiveColumnWriterState(writer, row_group, col_idx),
-	      dictionary(BufferAllocator::Get(writer.GetContext()), writer.DictionarySizeLimit(),
+	      dictionary(BufferAllocator::Get(writer.GetContext()),
+	                 writer.DictionarySizeLimit().IsValid() ? writer.DictionarySizeLimit().GetIndex()
+	                                                        : NumericCast<idx_t>(row_group.num_rows) / 5,
 	                 writer.StringDictionaryPageSizeLimit()),
 	      encoding(duckdb_parquet::Encoding::PLAIN) {
 	}
@@ -89,8 +92,8 @@ public:
 	                                 duckdb_parquet::Encoding::type encoding_p,
 	                                 const PrimitiveDictionary<SRC, TGT, OP> &dictionary_p)
 	    : encoding(encoding_p), dbp_initialized(false), dbp_encoder(total_value_count), dlba_initialized(false),
-	      dlba_encoder(total_value_count, total_string_size), bss_encoder(total_value_count, sizeof(TGT)),
-	      dictionary(dictionary_p), dict_written_value(false),
+	      dlba_encoder(total_value_count, total_string_size), bss_initialized(false),
+	      bss_encoder(total_value_count, sizeof(TGT)), dictionary(dictionary_p), dict_written_value(false),
 	      dict_bit_width(RleBpDecoder::ComputeBitWidth(dictionary.GetSize())), dict_encoder(dict_bit_width) {
 	}
 	duckdb_parquet::Encoding::type encoding;
@@ -101,6 +104,7 @@ public:
 	bool dlba_initialized;
 	DlbaEncoder dlba_encoder;
 
+	bool bss_initialized;
 	BssEncoder bss_encoder;
 
 	const PrimitiveDictionary<SRC, TGT, OP> &dictionary;
@@ -142,7 +146,7 @@ public:
 		switch (page_state.encoding) {
 		case duckdb_parquet::Encoding::DELTA_BINARY_PACKED:
 			if (!page_state.dbp_initialized) {
-				dbp_encoder::BeginWrite<int64_t>(page_state.dbp_encoder, temp_writer, 0);
+				page_state.dbp_encoder.BeginWrite(temp_writer, 0);
 			}
 			page_state.dbp_encoder.FinishWrite(temp_writer);
 			break;
@@ -158,11 +162,15 @@ public:
 			break;
 		case duckdb_parquet::Encoding::DELTA_LENGTH_BYTE_ARRAY:
 			if (!page_state.dlba_initialized) {
-				dlba_encoder::BeginWrite<string_t>(page_state.dlba_encoder, temp_writer, string_t(""));
+				page_state.dlba_encoder.BeginWrite(BufferAllocator::Get(writer.GetContext()), temp_writer,
+				                                   string_t(""));
 			}
 			page_state.dlba_encoder.FinishWrite(temp_writer);
 			break;
 		case duckdb_parquet::Encoding::BYTE_STREAM_SPLIT:
+			if (!page_state.bss_initialized) {
+				page_state.bss_encoder.BeginWrite(BufferAllocator::Get(writer.GetContext()));
+			}
 			page_state.bss_encoder.FinishWrite(temp_writer);
 			break;
 		case duckdb_parquet::Encoding::PLAIN:
@@ -201,7 +209,7 @@ public:
 				const auto &src_value = data_ptr[vector_index];
 				state.dictionary.Insert(src_value);
 				state.total_value_count++;
-				state.total_string_size += dlba_encoder::GetDlbaStringSize(src_value);
+				state.total_string_size += DlbaEncoder::GetStringSize(src_value);
 			}
 		} else {
 			for (idx_t i = 0; i < vcount; i++) {
@@ -212,7 +220,7 @@ public:
 					const auto &src_value = data_ptr[vector_index];
 					state.dictionary.Insert(src_value);
 					state.total_value_count++;
-					state.total_string_size += dlba_encoder::GetDlbaStringSize(src_value);
+					state.total_string_size += DlbaEncoder::GetStringSize(src_value);
 				}
 				vector_index++;
 			}
@@ -224,6 +232,7 @@ public:
 
 		auto &state = state_p.Cast<StandardColumnWriterState<SRC, TGT, OP>>();
 		if (state.dictionary.GetSize() == 0 || state.dictionary.IsFull()) {
+			state.dictionary.Reset();
 			if (writer.GetParquetVersion() == ParquetVersion::V1) {
 				// Can't do the cool stuff for V1
 				state.encoding = duckdb_parquet::Encoding::PLAIN;
@@ -278,15 +287,19 @@ public:
 		auto &state = state_p.Cast<StandardColumnWriterState<SRC, TGT, OP>>();
 		D_ASSERT(state.encoding == duckdb_parquet::Encoding::RLE_DICTIONARY);
 
-		state.bloom_filter =
-		    make_uniq<ParquetBloomFilter>(state.dictionary.GetSize(), writer.BloomFilterFalsePositiveRatio());
+		if (writer.EnableBloomFilters()) {
+			state.bloom_filter =
+			    make_uniq<ParquetBloomFilter>(state.dictionary.GetSize(), writer.BloomFilterFalsePositiveRatio());
+		}
 
 		state.dictionary.IterateValues([&](const SRC &src_value, const TGT &tgt_value) {
 			// update the statistics
 			OP::template HandleStats<SRC, TGT>(stats, tgt_value);
-			// update the bloom filter
-			auto hash = OP::template XXHash64<SRC, TGT>(tgt_value);
-			state.bloom_filter->FilterInsert(hash);
+			if (state.bloom_filter) {
+				// update the bloom filter
+				auto hash = OP::template XXHash64<SRC, TGT>(tgt_value);
+				state.bloom_filter->FilterInsert(hash);
+			}
 		});
 
 		// flush the dictionary page and add it to the to-be-written pages
@@ -351,7 +364,7 @@ private:
 					}
 					const TGT target_value = OP::template Operation<SRC, TGT>(data_ptr[r]);
 					OP::template HandleStats<SRC, TGT>(stats, target_value);
-					dbp_encoder::BeginWrite(page_state.dbp_encoder, temp_writer, target_value);
+					page_state.dbp_encoder.BeginWrite(temp_writer, target_value);
 					page_state.dbp_initialized = true;
 					r++; // skip over
 					break;
@@ -364,7 +377,7 @@ private:
 				}
 				const TGT target_value = OP::template Operation<SRC, TGT>(data_ptr[r]);
 				OP::template HandleStats<SRC, TGT>(stats, target_value);
-				dbp_encoder::WriteValue(page_state.dbp_encoder, temp_writer, target_value);
+				page_state.dbp_encoder.WriteValue(temp_writer, target_value);
 			}
 			break;
 		}
@@ -378,7 +391,8 @@ private:
 					}
 					const TGT target_value = OP::template Operation<SRC, TGT>(data_ptr[r]);
 					OP::template HandleStats<SRC, TGT>(stats, target_value);
-					dlba_encoder::BeginWrite(page_state.dlba_encoder, temp_writer, target_value);
+					page_state.dlba_encoder.BeginWrite(BufferAllocator::Get(writer.GetContext()), temp_writer,
+					                                   target_value);
 					page_state.dlba_initialized = true;
 					r++; // skip over
 					break;
@@ -391,18 +405,22 @@ private:
 				}
 				const TGT target_value = OP::template Operation<SRC, TGT>(data_ptr[r]);
 				OP::template HandleStats<SRC, TGT>(stats, target_value);
-				dlba_encoder::WriteValue(page_state.dlba_encoder, temp_writer, target_value);
+				page_state.dlba_encoder.WriteValue(temp_writer, target_value);
 			}
 			break;
 		}
 		case duckdb_parquet::Encoding::BYTE_STREAM_SPLIT: {
+			if (!page_state.bss_initialized) {
+				page_state.bss_encoder.BeginWrite(BufferAllocator::Get(writer.GetContext()));
+				page_state.bss_initialized = true;
+			}
 			for (idx_t r = chunk_start; r < chunk_end; r++) {
 				if (!ALL_VALID && !mask.RowIsValid(r)) {
 					continue;
 				}
 				const TGT target_value = OP::template Operation<SRC, TGT>(data_ptr[r]);
 				OP::template HandleStats<SRC, TGT>(stats, target_value);
-				bss_encoder::WriteValue(page_state.bss_encoder, target_value);
+				page_state.bss_encoder.WriteValue(target_value);
 			}
 			break;
 		}

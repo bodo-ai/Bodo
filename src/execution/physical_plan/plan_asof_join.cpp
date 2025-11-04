@@ -13,6 +13,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
+#include "duckdb/main/settings.hpp"
 
 namespace duckdb {
 
@@ -26,7 +27,7 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 	//
 	//		 ∏ * \ pk
 	//		 |
-	//		 Γ pk;first(P),arg_xxx(B,inequality)
+	//		 Γ pk;first(P),arg_xxx_null(B,inequality)
 	//		 |
 	//		 ∏ *,inequality
 	//		 |
@@ -41,6 +42,11 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 	join_op.types = op.children[1]->types;
 	const auto &probe_types = op.children[0]->types;
 	join_op.types.insert(join_op.types.end(), probe_types.begin(), probe_types.end());
+
+	// TODO: We can't handle predicates right now because we would have to remap column references.
+	if (op.predicate) {
+		return nullptr;
+	}
 
 	//	Fill in the projection maps to simplify the code below
 	//	Since NLJ doesn't support projection, but ASOF does,
@@ -82,16 +88,21 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 		case ExpressionType::COMPARE_GREATERTHAN:
 			D_ASSERT(asof_idx == op.conditions.size());
 			asof_idx = i;
-			arg_min_max = "arg_max";
+			arg_min_max = "arg_max_null";
 			break;
 		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 		case ExpressionType::COMPARE_LESSTHAN:
 			D_ASSERT(asof_idx == op.conditions.size());
 			asof_idx = i;
-			arg_min_max = "arg_min";
+			arg_min_max = "arg_min_null";
+			break;
+		case ExpressionType::COMPARE_EQUAL:
+		case ExpressionType::COMPARE_NOTEQUAL:
+		case ExpressionType::COMPARE_DISTINCT_FROM:
 			break;
 		default:
-			break;
+			//	Unsupported NLJ comparison
+			return nullptr;
 		}
 	}
 
@@ -115,9 +126,9 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 		return nullptr;
 	}
 
-	QueryErrorContext error_context;
-	auto arg_min_max_func = binder->GetCatalogEntry(CatalogType::SCALAR_FUNCTION_ENTRY, SYSTEM_CATALOG, DEFAULT_SCHEMA,
-	                                                arg_min_max, OnEntryNotFound::RETURN_NULL, error_context);
+	EntryLookupInfo function_lookup(CatalogType::SCALAR_FUNCTION_ENTRY, arg_min_max);
+	auto arg_min_max_func =
+	    binder->GetCatalogEntry(SYSTEM_CATALOG, DEFAULT_SCHEMA, function_lookup, OnEntryNotFound::RETURN_NULL);
 	//	Can't find the arg_min/max aggregate we need, so give up before we break anything.
 	if (!arg_min_max_func || arg_min_max_func->type != CatalogType::AGGREGATE_FUNCTION_ENTRY) {
 		return nullptr;
@@ -264,9 +275,10 @@ PhysicalOperator &PhysicalPlanGenerator::PlanAsOfJoin(LogicalComparisonJoin &op)
 	}
 	D_ASSERT(asof_idx < op.conditions.size());
 
-	auto &config = ClientConfig::GetConfig(context);
-	if (!config.force_asof_iejoin) {
-		if (op.children[0]->has_estimated_cardinality && lhs_cardinality <= config.asof_loop_join_threshold) {
+	bool force_asof_join = DBConfig::GetSetting<DebugAsofIejoinSetting>(context);
+	if (!force_asof_join) {
+		idx_t asof_join_threshold = DBConfig::GetSetting<AsofLoopJoinThresholdSetting>(context);
+		if (op.children[0]->has_estimated_cardinality && lhs_cardinality < asof_join_threshold) {
 			auto result = PlanAsOfLoopJoin(op, left, right);
 			if (result) {
 				return *result;

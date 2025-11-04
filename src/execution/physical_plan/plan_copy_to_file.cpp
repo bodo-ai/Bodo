@@ -10,6 +10,12 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalCopyToFile &op) {
 	bool preserve_insertion_order = PhysicalPlanGenerator::PreserveInsertionOrder(context, plan);
 	bool supports_batch_index = PhysicalPlanGenerator::UseBatchIndex(context, plan);
 
+	if (op.preserve_order == PreserveOrderType::PRESERVE_ORDER) {
+		preserve_insertion_order = true;
+	} else if (op.preserve_order == PreserveOrderType::DONT_PRESERVE_ORDER) {
+		preserve_insertion_order = false;
+	}
+
 	auto &fs = FileSystem::GetFileSystem(context);
 	op.file_path = fs.ExpandPath(op.file_path);
 
@@ -19,7 +25,10 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalCopyToFile &op) {
 		op.file_path = fs.JoinPath(path, "tmp_" + base);
 	}
 	if (op.per_thread_output || op.file_size_bytes.IsValid() || op.rotate || op.partition_output ||
-	    !op.partition_columns.empty() || op.overwrite_mode != CopyOverwriteMode::COPY_ERROR_ON_CONFLICT) {
+	    !op.partition_columns.empty()) {
+		if (op.preserve_order == PreserveOrderType::PRESERVE_ORDER) {
+			throw InvalidInputException("PRESERVE_ORDER is not supported with these parameters");
+		}
 		// hive-partitioning/per-thread output does not care about insertion order, and does not support batch indexes
 		preserve_insertion_order = false;
 		supports_batch_index = false;
@@ -41,6 +50,7 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalCopyToFile &op) {
 		cast_copy.use_tmp_file = op.use_tmp_file;
 		cast_copy.children.push_back(plan);
 		cast_copy.return_type = op.return_type;
+		cast_copy.write_empty_file = op.write_empty_file;
 		return copy;
 	}
 
@@ -67,6 +77,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalCopyToFile &op) {
 	cast_copy.names = op.names;
 	cast_copy.expected_types = op.expected_types;
 	cast_copy.parallel = mode == CopyFunctionExecutionMode::PARALLEL_COPY_TO_FILE;
+	cast_copy.write_empty_file = op.write_empty_file;
+	cast_copy.hive_file_pattern = op.hive_file_pattern;
 
 	cast_copy.children.push_back(plan);
 	return copy;

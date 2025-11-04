@@ -76,6 +76,34 @@ string ColumnWriterStatistics::GetMaxValue() {
 	return string();
 }
 
+bool ColumnWriterStatistics::CanHaveNaN() {
+	return false;
+}
+
+bool ColumnWriterStatistics::HasNaN() {
+	return false;
+}
+
+bool ColumnWriterStatistics::MinIsExact() {
+	return true;
+}
+
+bool ColumnWriterStatistics::MaxIsExact() {
+	return true;
+}
+
+bool ColumnWriterStatistics::HasGeoStats() {
+	return false;
+}
+
+optional_ptr<GeometryStats> ColumnWriterStatistics::GetGeoStats() {
+	return nullptr;
+}
+
+void ColumnWriterStatistics::WriteGeoStats(duckdb_parquet::GeospatialStatistics &stats) {
+	D_ASSERT(false); // this should never be called
+}
+
 //===--------------------------------------------------------------------===//
 // ColumnWriter
 //===--------------------------------------------------------------------===//
@@ -159,9 +187,12 @@ void ColumnWriter::HandleRepeatLevels(ColumnWriterState &state, ColumnWriterStat
 		// no repeat levels without a parent node
 		return;
 	}
-	while (state.repetition_levels.size() < parent->repetition_levels.size()) {
-		state.repetition_levels.push_back(parent->repetition_levels[state.repetition_levels.size()]);
+	if (state.repetition_levels.size() >= parent->repetition_levels.size()) {
+		return;
 	}
+	state.repetition_levels.insert(state.repetition_levels.end(),
+	                               parent->repetition_levels.begin() + state.repetition_levels.size(),
+	                               parent->repetition_levels.end());
 }
 
 void ColumnWriter::HandleDefineLevels(ColumnWriterState &state, ColumnWriterState *parent, const ValidityMask &validity,
@@ -172,146 +203,49 @@ void ColumnWriter::HandleDefineLevels(ColumnWriterState &state, ColumnWriterStat
 		while (state.definition_levels.size() < parent->definition_levels.size()) {
 			idx_t current_index = state.definition_levels.size();
 			if (parent->definition_levels[current_index] != PARQUET_DEFINE_VALID) {
+				//! Inherit nulls from parent
 				state.definition_levels.push_back(parent->definition_levels[current_index]);
 				state.parent_null_count++;
 			} else if (validity.RowIsValid(vector_index)) {
+				//! Produce a non-null define
 				state.definition_levels.push_back(define_value);
 			} else {
+				//! Produce a null define
 				if (!can_have_nulls) {
 					throw IOException("Parquet writer: map key column is not allowed to contain NULL values");
 				}
 				state.null_count++;
 				state.definition_levels.push_back(null_value);
 			}
+			D_ASSERT(parent->is_empty.empty() || current_index < parent->is_empty.size());
 			if (parent->is_empty.empty() || !parent->is_empty[current_index]) {
 				vector_index++;
 			}
 		}
+		return;
+	}
+
+	// no parent: set definition levels only from this validity mask
+	if (validity.AllValid()) {
+		state.definition_levels.insert(state.definition_levels.end(), count, define_value);
 	} else {
-		// no parent: set definition levels only from this validity mask
-		if (validity.AllValid()) {
-			state.definition_levels.insert(state.definition_levels.end(), count, define_value);
-		} else {
-			for (idx_t i = 0; i < count; i++) {
-				const auto is_null = !validity.RowIsValid(i);
-				state.definition_levels.emplace_back(is_null ? null_value : define_value);
-				state.null_count += is_null;
-			}
+		for (idx_t i = 0; i < count; i++) {
+			const auto is_null = !validity.RowIsValid(i);
+			state.definition_levels.emplace_back(is_null ? null_value : define_value);
+			state.null_count += is_null;
 		}
-		if (!can_have_nulls && state.null_count != 0) {
-			throw IOException("Parquet writer: map key column is not allowed to contain NULL values");
-		}
+	}
+	if (!can_have_nulls && state.null_count != 0) {
+		throw IOException("Parquet writer: map key column is not allowed to contain NULL values");
 	}
 }
-
-//===--------------------------------------------------------------------===//
-// WKB Column Writer
-//===--------------------------------------------------------------------===//
-// Used to store the metadata for a WKB-encoded geometry column when writing
-// GeoParquet files.
-class WKBColumnWriterState final : public StandardColumnWriterState<string_t, string_t, ParquetCastOperator> {
-public:
-	WKBColumnWriterState(ParquetWriter &writer, duckdb_parquet::RowGroup &row_group, idx_t col_idx)
-	    : StandardColumnWriterState(writer, row_group, col_idx), geo_data(), geo_data_writer(writer.GetContext()) {
-	}
-
-	GeoParquetColumnMetadata geo_data;
-	GeoParquetColumnMetadataWriter geo_data_writer;
-};
-
-class WKBColumnWriter final : public StandardColumnWriter<string_t, string_t, ParquetStringOperator> {
-public:
-	WKBColumnWriter(ParquetWriter &writer, const ParquetColumnSchema &column_schema, vector<string> schema_path_p,
-	                bool can_have_nulls, string name)
-	    : StandardColumnWriter(writer, column_schema, std::move(schema_path_p), can_have_nulls),
-	      column_name(std::move(name)) {
-
-		this->writer.GetGeoParquetData().RegisterGeometryColumn(column_name);
-	}
-
-	unique_ptr<ColumnWriterState> InitializeWriteState(duckdb_parquet::RowGroup &row_group) override {
-		auto result = make_uniq<WKBColumnWriterState>(writer, row_group, row_group.columns.size());
-		result->encoding = Encoding::RLE_DICTIONARY;
-		RegisterToRowGroup(row_group);
-		return std::move(result);
-	}
-
-	void Write(ColumnWriterState &state, Vector &vector, idx_t count) override {
-		StandardColumnWriter::Write(state, vector, count);
-
-		auto &geo_state = state.Cast<WKBColumnWriterState>();
-		geo_state.geo_data_writer.Update(geo_state.geo_data, vector, count);
-	}
-
-	void FinalizeWrite(ColumnWriterState &state) override {
-		StandardColumnWriter::FinalizeWrite(state);
-
-		// Add the geodata object to the writer
-		const auto &geo_state = state.Cast<WKBColumnWriterState>();
-
-		// Merge this state's geo column data with the writer's geo column data
-		writer.GetGeoParquetData().FlushColumnMeta(column_name, geo_state.geo_data);
-	}
-
-private:
-	string column_name;
-};
-
-// special double/float class to deal with dictionary encoding and NaN equality
-struct double_na_equal {
-	double_na_equal() : val(0) {
-	}
-	explicit double_na_equal(const double val_p) : val(val_p) {
-	}
-	// NOLINTNEXTLINE: allow implicit conversion to double
-	operator double() const {
-		return val;
-	}
-
-	bool operator==(const double &right) const {
-		if (std::isnan(val) && std::isnan(right)) {
-			return true;
-		}
-		return val == right;
-	}
-
-	bool operator!=(const double &right) const {
-		return !(*this == right);
-	}
-
-	double val;
-};
-
-struct float_na_equal {
-	float_na_equal() : val(0) {
-	}
-	explicit float_na_equal(const float val_p) : val(val_p) {
-	}
-	// NOLINTNEXTLINE: allow implicit conversion to float
-	operator float() const {
-		return val;
-	}
-
-	bool operator==(const float &right) const {
-		if (std::isnan(val) && std::isnan(right)) {
-			return true;
-		}
-		return val == right;
-	}
-
-	bool operator!=(const float &right) const {
-		return !(*this == right);
-	}
-
-	float val;
-};
 
 //===--------------------------------------------------------------------===//
 // Create Column Writer
 //===--------------------------------------------------------------------===//
 
 ParquetColumnSchema ColumnWriter::FillParquetSchema(vector<duckdb_parquet::SchemaElement> &schemas,
-                                                    const LogicalType &type, const string &name,
+                                                    const LogicalType &type, const string &name, bool allow_geometry,
                                                     optional_ptr<const ChildFieldIDs> field_ids, idx_t max_repeat,
                                                     idx_t max_define, bool can_have_nulls) {
 	auto null_type = can_have_nulls ? FieldRepetitionType::OPTIONAL : FieldRepetitionType::REQUIRED;
@@ -351,7 +285,8 @@ ParquetColumnSchema ColumnWriter::FillParquetSchema(vector<duckdb_parquet::Schem
 		struct_column.children.reserve(child_types.size());
 		for (auto &child_type : child_types) {
 			struct_column.children.emplace_back(FillParquetSchema(schemas, child_type.second, child_type.first,
-			                                                      child_field_ids, max_repeat, max_define + 1));
+			                                                      allow_geometry, child_field_ids, max_repeat,
+			                                                      max_define + 1));
 		}
 		return struct_column;
 	}
@@ -383,12 +318,12 @@ ParquetColumnSchema ColumnWriter::FillParquetSchema(vector<duckdb_parquet::Schem
 		repeated_element.__isset.num_children = true;
 		repeated_element.__isset.type = false;
 		repeated_element.__isset.repetition_type = true;
-		repeated_element.name = is_list ? "list" : "array";
+		repeated_element.name = "list";
 		schemas.push_back(std::move(repeated_element));
 
 		ParquetColumnSchema list_column(name, type, max_define, max_repeat, schema_idx, 0);
-		list_column.children.push_back(
-		    FillParquetSchema(schemas, child_type, "element", child_field_ids, max_repeat + 1, max_define + 2));
+		list_column.children.push_back(FillParquetSchema(schemas, child_type, "element", allow_geometry,
+		                                                 child_field_ids, max_repeat + 1, max_define + 2));
 		return list_column;
 	}
 	if (type.id() == LogicalTypeId::MAP) {
@@ -435,13 +370,14 @@ ParquetColumnSchema ColumnWriter::FillParquetSchema(vector<duckdb_parquet::Schem
 		for (idx_t i = 0; i < 2; i++) {
 			// key needs to be marked as REQUIRED
 			bool is_key = i == 0;
-			auto child_schema = FillParquetSchema(schemas, kv_types[i], kv_names[i], child_field_ids, max_repeat + 1,
-			                                      max_define + 2, !is_key);
+			auto child_schema = FillParquetSchema(schemas, kv_types[i], kv_names[i], allow_geometry, child_field_ids,
+			                                      max_repeat + 1, max_define + 2, !is_key);
 
 			map_column.children.push_back(std::move(child_schema));
 		}
 		return map_column;
 	}
+
 	duckdb_parquet::SchemaElement schema_element;
 	schema_element.type = ParquetWriter::DuckDBTypeToParquetType(type);
 	schema_element.repetition_type = null_type;
@@ -453,7 +389,7 @@ ParquetColumnSchema ColumnWriter::FillParquetSchema(vector<duckdb_parquet::Schem
 		schema_element.__isset.field_id = true;
 		schema_element.field_id = field_id->field_id;
 	}
-	ParquetWriter::SetSchemaProperties(type, schema_element);
+	ParquetWriter::SetSchemaProperties(type, schema_element, allow_geometry);
 	schemas.push_back(std::move(schema_element));
 	return ParquetColumnSchema(name, type, max_define, max_repeat, schema_idx, 0);
 }
@@ -478,7 +414,7 @@ ColumnWriter::CreateWriterRecursive(ClientContext &context, ParquetWriter &write
 	}
 	if (type.id() == LogicalTypeId::LIST || type.id() == LogicalTypeId::ARRAY) {
 		auto is_list = type.id() == LogicalTypeId::LIST;
-		path_in_schema.push_back(is_list ? "list" : "array");
+		path_in_schema.push_back("list");
 		auto child_writer = CreateWriterRecursive(context, writer, parquet_schemas, schema.children[0], path_in_schema);
 		if (is_list) {
 			return make_uniq<ListColumnWriter>(writer, schema, std::move(path_in_schema), std::move(child_writer),
@@ -503,9 +439,10 @@ ColumnWriter::CreateWriterRecursive(ClientContext &context, ParquetWriter &write
 		    make_uniq<StructColumnWriter>(writer, schema, path_in_schema, std::move(child_writers), can_have_nulls);
 		return make_uniq<ListColumnWriter>(writer, schema, path_in_schema, std::move(struct_writer), can_have_nulls);
 	}
-	if (type.id() == LogicalTypeId::BLOB && type.GetAlias() == "WKB_BLOB" &&
-	    GeoParquetFileMetadata::IsGeoParquetConversionEnabled(context)) {
-		return make_uniq<WKBColumnWriter>(writer, schema, std::move(path_in_schema), can_have_nulls, schema.name);
+
+	if (type.id() == LogicalTypeId::BLOB && type.GetAlias() == "WKB_BLOB") {
+		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetGeometryOperator>>(
+		    writer, schema, std::move(path_in_schema), can_have_nulls);
 	}
 
 	switch (type.id()) {
@@ -556,11 +493,11 @@ ColumnWriter::CreateWriterRecursive(ClientContext &context, ParquetWriter &write
 		return make_uniq<StandardColumnWriter<uint64_t, uint64_t>>(writer, schema, std::move(path_in_schema),
 		                                                           can_have_nulls);
 	case LogicalTypeId::FLOAT:
-		return make_uniq<StandardColumnWriter<float_na_equal, float>>(writer, schema, std::move(path_in_schema),
-		                                                              can_have_nulls);
+		return make_uniq<StandardColumnWriter<float_na_equal, float, FloatingPointOperator>>(
+		    writer, schema, std::move(path_in_schema), can_have_nulls);
 	case LogicalTypeId::DOUBLE:
-		return make_uniq<StandardColumnWriter<double_na_equal, double>>(writer, schema, std::move(path_in_schema),
-		                                                                can_have_nulls);
+		return make_uniq<StandardColumnWriter<double_na_equal, double, FloatingPointOperator>>(
+		    writer, schema, std::move(path_in_schema), can_have_nulls);
 	case LogicalTypeId::DECIMAL:
 		switch (type.InternalType()) {
 		case PhysicalType::INT16:
@@ -576,6 +513,8 @@ ColumnWriter::CreateWriterRecursive(ClientContext &context, ParquetWriter &write
 			return make_uniq<FixedDecimalColumnWriter>(writer, schema, std::move(path_in_schema), can_have_nulls);
 		}
 	case LogicalTypeId::BLOB:
+		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetBlobOperator>>(
+		    writer, schema, std::move(path_in_schema), can_have_nulls);
 	case LogicalTypeId::VARCHAR:
 		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetStringOperator>>(
 		    writer, schema, std::move(path_in_schema), can_have_nulls);

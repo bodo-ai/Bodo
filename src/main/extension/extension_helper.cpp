@@ -5,10 +5,12 @@
 #include "duckdb/common/serializer/buffered_file_reader.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/windows.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension.hpp"
 #include "duckdb/main/extension_install_info.hpp"
+#include "duckdb/main/settings.hpp"
 
 // Note that c++ preprocessor doesn't have a nice way to clean this up so we need to set the defines we use to false
 // explicitly when they are undefined
@@ -115,13 +117,14 @@ static const DefaultExtension internal_extensions[] = {
     {"inet", "Adds support for IP-related data types and functions", false},
     {"spatial", "Geospatial extension that adds support for working with spatial data and functions", false},
     {"aws", "Provides features that depend on the AWS SDK", false},
-    {"arrow", "A zero-copy data integration between Apache Arrow and DuckDB", false},
     {"azure", "Adds a filesystem abstraction for Azure blob storage to DuckDB", false},
+    {"encodings", "All unicode encodings to UTF-8", false},
     {"iceberg", "Adds support for Apache Iceberg", false},
     {"vss", "Adds indexing support to accelerate Vector Similarity Search", false},
     {"delta", "Adds support for Delta Lake", false},
     {"fts", "Adds support for Full-Text Search Indexes", false},
     {"ui", "Adds local UI for DuckDB", false},
+    {"ducklake", "Adds support for DuckLake, SQL as a Lakehouse Format", false},
     {nullptr, nullptr, false}};
 
 idx_t ExtensionHelper::DefaultExtensionCount() {
@@ -139,9 +142,9 @@ DefaultExtension ExtensionHelper::GetDefaultExtension(idx_t index) {
 //===--------------------------------------------------------------------===//
 // Allow Auto-Install Extensions
 //===--------------------------------------------------------------------===//
-static const char *const auto_install[] = {"motherduck", "postgres_scanner", "mysql_scanner", "sqlite_scanner",
-                                           "delta",      "iceberg",          "uc_catalog",    "ui",
-                                           nullptr};
+static const char *const auto_install[] = {
+    "motherduck", "postgres_scanner", "mysql_scanner", "sqlite_scanner", "delta", "iceberg", "uc_catalog",
+    "ui",         "ducklake",         nullptr};
 
 // TODO: unify with new autoload mechanism
 bool ExtensionHelper::AllowAutoInstall(const string &extension) {
@@ -210,9 +213,8 @@ bool ExtensionHelper::TryAutoLoadExtension(ClientContext &context, const string 
 	auto &dbconfig = DBConfig::GetConfig(context);
 	try {
 		if (dbconfig.options.autoinstall_known_extensions) {
-			auto &config = DBConfig::GetConfig(context);
 			auto autoinstall_repo = ExtensionRepository::GetRepositoryByUrl(
-			    StringValue::Get(config.GetSetting<AutoinstallExtensionRepositorySetting>(context)));
+			    StringValue::Get(DBConfig::GetConfig(context).options.autoinstall_extension_repo));
 			ExtensionInstallOptions options;
 			options.repository = autoinstall_repo;
 			ExtensionHelper::InstallExtension(context, extension_name, options);
@@ -258,8 +260,6 @@ static ExtensionUpdateResult UpdateExtensionInternal(ClientContext &context, Dat
 	ExtensionUpdateResult result;
 	result.extension_name = extension_name;
 
-	auto &config = DBConfig::GetConfig(db);
-
 	if (!fs.FileExists(full_extension_path)) {
 		result.tag = ExtensionUpdateResultTag::NOT_INSTALLED;
 		return result;
@@ -275,7 +275,7 @@ static ExtensionUpdateResult UpdateExtensionInternal(ClientContext &context, Dat
 	// Parse the version of the extension before updating
 	auto ext_binary_handle = fs.OpenFile(full_extension_path, FileOpenFlags::FILE_FLAGS_READ);
 	auto parsed_metadata = ExtensionHelper::ParseExtensionMetaData(*ext_binary_handle);
-	if (!parsed_metadata.AppearsValid() && !config.options.allow_extensions_metadata_mismatch) {
+	if (!parsed_metadata.AppearsValid() && !DBConfig::GetSetting<AllowExtensionsMetadataMismatchSetting>(context)) {
 		throw IOException(
 		    "Failed to update extension: '%s', the metadata of the extension appears invalid! To resolve this, either "
 		    "reinstall the extension using 'FORCE INSTALL %s', manually remove the file '%s', or enable '"
@@ -398,8 +398,7 @@ void ExtensionHelper::AutoLoadExtension(DatabaseInstance &db, const string &exte
 		}
 #endif
 		ExtensionHelper::LoadExternalExtension(db, *fs, extension_name);
-		DUCKDB_LOG_INFO(db, "duckdb.Extensions.ExtensionAutoloaded", extension_name);
-
+		DUCKDB_LOG_INFO(db, "Loaded extension '%s'", extension_name);
 	} catch (std::exception &e) {
 		ErrorData error(e);
 		throw AutoloadException(extension_name, error.RawMessage());
@@ -432,23 +431,6 @@ ExtensionLoadResult ExtensionHelper::LoadExtension(DuckDB &db, const std::string
 
 ExtensionLoadResult ExtensionHelper::LoadExtensionInternal(DuckDB &db, const std::string &extension,
                                                            bool initial_load) {
-#ifdef DUCKDB_TEST_REMOTE_INSTALL
-	if (!initial_load && StringUtil::Contains(DUCKDB_TEST_REMOTE_INSTALL, extension)) {
-		Connection con(db);
-		auto result = con.Query("INSTALL " + extension);
-		if (result->HasError()) {
-			result->Print();
-			return ExtensionLoadResult::EXTENSION_UNKNOWN;
-		}
-		result = con.Query("LOAD " + extension);
-		if (result->HasError()) {
-			result->Print();
-			return ExtensionLoadResult::EXTENSION_UNKNOWN;
-		}
-		return ExtensionLoadResult::LOADED_EXTENSION;
-	}
-#endif
-
 #ifdef DUCKDB_EXTENSIONS_TEST_WITH_LOADABLE
 	// Note: weird comma's are on purpose to do easy string contains on a list of extension names
 	if (!initial_load && StringUtil::Contains(DUCKDB_EXTENSIONS_TEST_WITH_LOADABLE, "," + extension + ",")) {

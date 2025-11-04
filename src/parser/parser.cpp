@@ -296,10 +296,12 @@ void Parser::ParseQuery(const string &query) {
 		auto &last_statement = statements.back();
 		last_statement->stmt_length = query.size() - last_statement->stmt_location;
 		for (auto &statement : statements) {
-			statement->query = query;
+			statement->query = query.substr(statement->stmt_location, statement->stmt_length);
+			statement->stmt_location = 0;
+			statement->stmt_length = statement->query.size();
 			if (statement->type == StatementType::CREATE_STATEMENT) {
 				auto &create = statement->Cast<CreateStatement>();
-				create.info->sql = query.substr(statement->stmt_location, statement->stmt_length);
+				create.info->sql = statement->query;
 			}
 		}
 	}
@@ -607,6 +609,11 @@ ColumnList Parser::ParseColumnList(const string &column_list, ParserOptions opti
 	}
 	auto &info = create.info->Cast<CreateTableInfo>();
 	return std::move(info.columns);
+}
+
+ColumnDefinition Parser::ParseColumnDefinition(const string &column_definition, ParserOptions options) {
+	auto column_list = ParseColumnList(column_definition, options);
+	return column_list.GetColumn(LogicalIndex(0)).Copy();
 }
 
 } // namespace duckdb
