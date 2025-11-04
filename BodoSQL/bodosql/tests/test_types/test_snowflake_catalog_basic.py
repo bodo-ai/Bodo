@@ -159,7 +159,7 @@ def test_snowflake_catalog_from_conn_str(conn_str: str):
 )
 def test_snowflake_catalog_from_conn_str_invalid_err(conn_str):
     """Test that invalid URIs fail when parsing"""
-    with pytest.raises(BodoError, match="Invalid Snowflake Connection URI Provided"):
+    with pytest.raises(ValueError, match="Invalid Snowflake Connection URI Provided"):
         bodosql.SnowflakeCatalog.from_conn_str(conn_str)
 
 
@@ -178,7 +178,7 @@ def test_snowflake_catalog_from_conn_str_invalid_err(conn_str):
 )
 def test_snowflake_catalog_from_conn_str_missing_err(conn_str):
     """Test that valid URIs fail due to missing contents"""
-    with pytest.raises(BodoError, match="`conn_str` must contain a"):
+    with pytest.raises(ValueError, match="`conn_str` must contain a"):
         bodosql.SnowflakeCatalog.from_conn_str(conn_str)
 
 
