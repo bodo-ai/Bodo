@@ -51,6 +51,8 @@ protected:
 
 class RemoveUnusedColumns;
 
+typedef unordered_map<idx_t, unordered_map<idx_t, idx_t>> CTEColMap;
+
 class RemoveUnusedColumnsPass {
 public:
 	RemoveUnusedColumnsPass(Binder &binder, ClientContext &context)
@@ -63,7 +65,18 @@ private:
 	Binder &binder;
 	ClientContext &context;
 
+    // If key idx is a cte index the it is the union of all columns
+    // needed by all the CTErefs for that CTE.
+    // If key idx is a table index (currently only CTERef table indices
+    // are stored) then it is the exact set of columns needed by that
+    // table index.
     unordered_map<idx_t, unordered_set<idx_t>> cte_required_cols;
+    // For a given table index (key), map old to new column indices.
+    CTEColMap cte_col_map;
+    // Make sure that CTERef nodes do not alias each other for the
+    // same CTE index by storing the addresses of the CTERef nodes
+    // that we've seen for each CTE index thus far.
+    unordered_map<idx_t, unordered_set<void *>> cte_ref_check;
 };
 
 //! The RemoveUnusedColumns optimizer traverses the logical operator tree and removes any columns that are not required
