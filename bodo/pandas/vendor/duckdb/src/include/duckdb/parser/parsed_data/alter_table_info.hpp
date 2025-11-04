@@ -82,7 +82,10 @@ enum class AlterTableType : uint8_t {
 	SET_COLUMN_COMMENT = 10,
 	ADD_CONSTRAINT = 11,
 	SET_PARTITIONED_BY = 12,
-	SET_SORTED_BY = 13
+	SET_SORTED_BY = 13,
+	ADD_FIELD = 14,
+	REMOVE_FIELD = 15,
+	RENAME_FIELD = 16
 };
 
 struct AlterTableInfo : public AlterInfo {
@@ -122,6 +125,32 @@ public:
 
 private:
 	RenameColumnInfo();
+};
+
+//===--------------------------------------------------------------------===//
+// RenameFieldInfo
+//===--------------------------------------------------------------------===//
+struct RenameFieldInfo : public AlterTableInfo {
+	RenameFieldInfo(AlterEntryData data, vector<string> column_path, string new_name_p);
+	~RenameFieldInfo() override;
+
+	//! Path to source field.
+	vector<string> column_path;
+	//! New name of the column (field).
+	string new_name;
+
+public:
+	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
+	string GetColumnName() const override {
+		return column_path[0];
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
+
+private:
+	RenameFieldInfo();
 };
 
 //===--------------------------------------------------------------------===//
@@ -169,6 +198,34 @@ private:
 };
 
 //===--------------------------------------------------------------------===//
+// AddFieldInfo
+//===--------------------------------------------------------------------===//
+struct AddFieldInfo : public AlterTableInfo {
+	AddFieldInfo(AlterEntryData data, vector<string> column_path, ColumnDefinition new_field, bool if_field_not_exists);
+	~AddFieldInfo() override;
+
+	//! Path to source field.
+	vector<string> column_path;
+	//! New field to add.
+	ColumnDefinition new_field;
+	//! Whether or not an error should be thrown if the field does not exist.
+	bool if_field_not_exists;
+
+public:
+	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
+	string GetColumnName() const override {
+		return column_path[0];
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
+
+private:
+	explicit AddFieldInfo(ColumnDefinition new_column);
+};
+
+//===--------------------------------------------------------------------===//
 // RemoveColumnInfo
 //===--------------------------------------------------------------------===//
 struct RemoveColumnInfo : public AlterTableInfo {
@@ -195,6 +252,33 @@ private:
 	RemoveColumnInfo();
 };
 
+//===--------------------------------------------------------------------===//
+// RemoveFieldInfo
+//===--------------------------------------------------------------------===//
+struct RemoveFieldInfo : public AlterTableInfo {
+	RemoveFieldInfo(AlterEntryData data, vector<string> column_path, bool if_column_exists, bool cascade);
+	~RemoveFieldInfo() override;
+
+	//! Path to source field.
+	vector<string> column_path;
+	//! Whether or not an error should be thrown if the column does not exist.
+	bool if_column_exists;
+	//! Whether or not the column should be removed if a dependency conflict arises (used by GENERATED columns).
+	bool cascade;
+
+public:
+	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
+	string GetColumnName() const override {
+		return column_path[0];
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
+
+private:
+	RemoveFieldInfo();
+};
 //===--------------------------------------------------------------------===//
 // ChangeColumnTypeInfo
 //===--------------------------------------------------------------------===//

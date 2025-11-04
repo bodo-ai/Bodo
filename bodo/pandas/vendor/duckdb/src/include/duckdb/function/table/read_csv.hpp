@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "duckdb/common/multi_file_reader.hpp"
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_buffer.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_buffer_manager.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_file_handle.hpp"
@@ -18,6 +18,7 @@
 #include "duckdb/function/scalar/strftime_format.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_file_scanner.hpp"
+#include "duckdb/common/csv_writer.hpp"
 
 namespace duckdb {
 class BaseScanner;
@@ -25,7 +26,7 @@ class StringValueScanner;
 
 class ReadCSV {
 public:
-	static unique_ptr<CSVFileHandle> OpenCSV(const string &file_path, const CSVReaderOptions &options,
+	static unique_ptr<CSVFileHandle> OpenCSV(const OpenFileInfo &file, const CSVReaderOptions &options,
 	                                         ClientContext &context);
 };
 
@@ -40,25 +41,14 @@ struct BaseCSVData : public TableFunctionData {
 };
 
 struct WriteCSVData : public BaseCSVData {
-	WriteCSVData(string file_path, vector<LogicalType> sql_types, vector<string> names)
-	    : sql_types(std::move(sql_types)) {
-		files.push_back(std::move(file_path));
+	explicit WriteCSVData(vector<string> names) {
 		options.name_list = std::move(names);
 		if (options.dialect_options.state_machine_options.escape == '\0') {
 			options.dialect_options.state_machine_options.escape = options.dialect_options.state_machine_options.quote;
 		}
 	}
-
-	//! The file path of the CSV file to read or write
-	vector<string> files;
-	//! The SQL types to write
-	vector<LogicalType> sql_types;
-	//! The newline string to write
-	string newline = "\n";
 	//! The size of the CSV file (in bytes) that we buffer before we flush it to disk
 	idx_t flush_size = 4096ULL * 8ULL;
-	//! For each byte whether the CSV file requires quotes when containing the byte
-	unsafe_unique_array<bool> requires_quotes;
 	//! Expressions used to convert the input into strings
 	vector<unique_ptr<Expression>> cast_expressions;
 };
@@ -94,11 +84,11 @@ struct ReadCSVData : public BaseCSVData {
 
 struct SerializedCSVReaderOptions {
 	SerializedCSVReaderOptions() = default;
-	SerializedCSVReaderOptions(CSVReaderOptions options, MultiFileReaderOptions file_options);
+	SerializedCSVReaderOptions(CSVReaderOptions options, MultiFileOptions file_options);
 	SerializedCSVReaderOptions(CSVOption<char> single_byte_delimiter, const CSVOption<string> &multi_byte_delimiter);
 
 	CSVReaderOptions options;
-	MultiFileReaderOptions file_options;
+	MultiFileOptions file_options;
 
 	void Serialize(Serializer &serializer) const;
 	static SerializedCSVReaderOptions Deserialize(Deserializer &deserializer);

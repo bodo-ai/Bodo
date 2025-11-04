@@ -21,10 +21,12 @@
 #include "duckdb/common/reference_map.hpp"
 #include "duckdb/parser/query_error_context.hpp"
 #include "duckdb/catalog/entry_lookup_info.hpp"
+#include "duckdb/common/types/string.hpp"
 
 #include <functional>
 
 namespace duckdb {
+struct AttachOptions;
 struct CreateSchemaInfo;
 struct DropInfo;
 struct BoundCreateTableInfo;
@@ -44,6 +46,7 @@ struct MetadataBlockInfo;
 
 class AttachedDatabase;
 class ClientContext;
+class QueryContext;
 class Transaction;
 
 class AggregateFunctionCatalogEntry;
@@ -65,6 +68,7 @@ struct SimilarCatalogEntry;
 
 class Binder;
 class LogicalOperator;
+class LogicalMergeInto;
 class PhysicalOperator;
 class PhysicalPlanGenerator;
 class LogicalCreateIndex;
@@ -107,8 +111,10 @@ public:
 	virtual bool IsDuckCatalog() {
 		return false;
 	}
+
 	virtual void Initialize(bool load_builtin) = 0;
 	virtual void Initialize(optional_ptr<ClientContext> context, bool load_builtin);
+	virtual void FinalizeLoad(optional_ptr<ClientContext> context);
 
 	bool IsSystemCatalog() const;
 	bool IsTemporaryCatalog() const;
@@ -239,6 +245,9 @@ public:
 	//! Gets the "schema.name" entry of the specified type, if entry does not exist behavior depends on OnEntryNotFound
 	DUCKDB_API optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const string &schema,
 	                                               const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found);
+	DUCKDB_API optional_ptr<CatalogEntry> GetEntry(ClientContext &context, CatalogType catalog_type,
+	                                               const string &schema, const string &name,
+	                                               OnEntryNotFound if_not_found);
 	DUCKDB_API optional_ptr<CatalogEntry> GetEntry(CatalogEntryRetriever &retriever, const string &schema,
 	                                               const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found);
 	DUCKDB_API CatalogEntry &GetEntry(ClientContext &context, const string &schema, const EntryLookupInfo &lookup_info);
@@ -296,6 +305,8 @@ public:
 	virtual PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
 	                                     PhysicalOperator &plan) = 0;
 	virtual PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op);
+	virtual PhysicalOperator &PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner,
+	                                        LogicalMergeInto &op, PhysicalOperator &plan);
 	virtual unique_ptr<LogicalOperator> BindCreateIndex(Binder &binder, CreateStatement &stmt, TableCatalogEntry &table,
 	                                                    unique_ptr<LogicalOperator> plan);
 	virtual unique_ptr<LogicalOperator> BindAlterAddIndex(Binder &binder, TableCatalogEntry &table_entry,
@@ -308,6 +319,15 @@ public:
 
 	virtual bool InMemory() = 0;
 	virtual string GetDBPath() = 0;
+	virtual bool SupportsTimeTravel() const {
+		return false;
+	}
+	virtual bool IsEncrypted() const {
+		return false;
+	}
+	virtual string GetEncryptionCipher() const {
+		return string();
+	}
 
 	//! Whether or not this catalog should search a specific type with the standard priority
 	DUCKDB_API virtual CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const {
@@ -326,6 +346,9 @@ public:
 
 	//! Returns the dependency manager of this catalog - if the catalog has anye
 	virtual optional_ptr<DependencyManager> GetDependencyManager();
+
+	//! Whether attaching a catalog with the given path and attach options would be considered a conflict
+	virtual bool HasConflictingAttachOptions(const string &path, const AttachOptions &options);
 
 public:
 	template <class T>
@@ -357,9 +380,20 @@ public:
 	                                                                   const string &catalog_name);
 	DUCKDB_API static vector<reference<SchemaCatalogEntry>> GetAllSchemas(ClientContext &context);
 
+	static vector<reference<CatalogEntry>> GetAllEntries(ClientContext &context, CatalogType catalog_type);
+
 	virtual void Verify();
 
 	static CatalogException UnrecognizedConfigurationError(ClientContext &context, const string &name);
+
+	//! Autoload the extension required for `configuration_name` or throw a CatalogException
+	static String AutoloadExtensionByConfigName(ClientContext &context, const String &configuration_name);
+	//! Autoload the extension required for `function_name` or throw a CatalogException
+	static bool AutoLoadExtensionByCatalogEntry(DatabaseInstance &db, CatalogType type, const string &entry_name);
+	DUCKDB_API static bool TryAutoLoad(ClientContext &context, const string &extension_name) noexcept;
+
+	//! Called when the catalog is detached
+	DUCKDB_API virtual void OnDetach(ClientContext &context);
 
 protected:
 	//! Reference to the database
@@ -383,15 +417,16 @@ private:
 	CatalogEntryLookup TryLookupEntry(CatalogEntryRetriever &retriever, const string &schema,
 	                                  const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found);
 	static CatalogEntryLookup TryLookupEntry(CatalogEntryRetriever &retriever, const vector<CatalogLookup> &lookups,
-	                                         const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found);
+	                                         const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found,
+	                                         bool allow_default_table_lookup);
 	static CatalogEntryLookup TryLookupEntry(CatalogEntryRetriever &retriever, const string &catalog,
 	                                         const string &schema, const EntryLookupInfo &lookup_info,
 	                                         OnEntryNotFound if_not_found);
 
 	//! Looks for a Catalog with a DefaultTable that matches the lookup
-	static CatalogEntryLookup TryLookupDefaultTable(CatalogEntryRetriever &retriever, const string &catalog,
-	                                                const string &schema, const EntryLookupInfo &lookup_info,
-	                                                OnEntryNotFound if_not_found);
+	static CatalogEntryLookup TryLookupDefaultTable(CatalogEntryRetriever &retriever,
+	                                                const EntryLookupInfo &lookup_info,
+	                                                bool allow_ignore_at_clause = false);
 
 	//! Return an exception with did-you-mean suggestion.
 	static CatalogException CreateMissingEntryException(CatalogEntryRetriever &retriever,

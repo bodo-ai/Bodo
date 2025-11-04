@@ -1,3 +1,9 @@
+if(NOT CLANG_TIDY)
+  add_subdirectory(capi)
+endif()
+add_subdirectory(extension)
+add_subdirectory(http)
+add_subdirectory(relation)
 add_subdirectory(secret)
 add_subdirectory(settings)
 add_subdirectory(buffered_data)
@@ -23,10 +29,14 @@ add_library_unity(
   config.cpp
   connection.cpp
   database.cpp
+  database_file_path_manager.cpp
   database_path_and_type.cpp
   database_manager.cpp
   db_instance_cache.cpp
   error_manager.cpp
+  extension.cpp
+  extension_install_info.cpp
+  extension_manager.cpp
   materialized_query_result.cpp
   pending_query_result.cpp
   prepared_statement.cpp

@@ -21,6 +21,7 @@ struct StaticFunctionDefinition {
 	const char *parameters;
 	const char *description;
 	const char *example;
+	const char *categories;
 	get_scalar_function_t get_function;
 	get_scalar_function_set_t get_function_set;
 	get_aggregate_function_t get_aggregate_function;
@@ -33,6 +34,7 @@ struct CatalogTransaction;
 struct FunctionList {
 	static const StaticFunctionDefinition *GetInternalFunctionList();
 	static void RegisterFunctions(Catalog &catalog, CatalogTransaction transaction);
+	static void RegisterExtensionFunctions(ExtensionLoader &db, const StaticFunctionDefinition *functions);
 };
 
 } // namespace duckdb
