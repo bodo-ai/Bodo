@@ -37,7 +37,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Checkout the branch (only required once): `psh git checkout working-branch`.
 1. Pull latest changes (do this after every push): `psh git pull`.
-1. Re-build: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python -m pip install --no-deps --no-build-isolation -ve . && cd ..`.
+1. Re-build: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python -m pip install --no-deps --no-build-isolation -ve . && cd ..`.
 
 ## Using Bodo/BodoSQL
 
@@ -74,4 +74,4 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 - If you set `export BODO_SKIP_CPP_TESTS=1` you can skip compiling the C++ tests, which can take a long time to build.
 
 ## Troubleshooting
-If you encounter any issues, [check this confluence document](https://bodo.atlassian.net/wiki/spaces/B/pages/1894416388/Troubleshooting+build+bodo+from+source+on+platform). 
+If you encounter any issues, [check this confluence document](https://bodo.atlassian.net/wiki/spaces/B/pages/1894416388/Troubleshooting+build+bodo+from+source+on+platform).

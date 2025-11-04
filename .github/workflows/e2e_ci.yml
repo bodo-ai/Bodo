@@ -103,8 +103,9 @@ jobs:
         pleias_ocr_correction_inference.py
         pleias_ocr_correction_tokenization.py
         pandas_ddp_example.py
-        #Tutorials/*.py
-        #Getting-Started/dataframes.py
+        llama_finetune_iceberg_data.py
+        _Tutorials/*.py
+        _Getting-Started/dataframes.py
     steps:
       - uses: actions/checkout@v5
       - uses: prefix-dev/setup-pixi@v0.9.0

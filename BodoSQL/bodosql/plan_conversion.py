@@ -18,6 +18,7 @@ from bodo.pandas.plan import (
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalFilter,
+    LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
     UnaryOpExpression,
@@ -106,10 +107,8 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalJoin":
         return java_join_to_python_join(ctx, java_plan)
 
-    # TODO[BSE-5152]: support runtime join filters (ok to ignore for now since they are
-    # just optimizations)
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
-        return java_plan_to_python_plan(ctx, java_plan.getInput())
+        return java_rtjf_to_python_rtjf(ctx, java_plan)
 
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
@@ -259,6 +258,10 @@ def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
     from bodo.ext import plan_optimizer
 
+    ctx.join_filter_info[java_join.getJoinFilterID()] = (
+        java_join.getOriginalJoinFilterKeyLocations()
+    )
+
     join_info = java_join.analyzeCondition()
 
     # TODO[BSE-5149]: support non-equi joins
@@ -291,8 +294,61 @@ def java_join_to_python_join(ctx, java_join):
         right_plan,
         join_type,
         key_indices,
+        java_join.getJoinFilterID(),
     )
     return planComparisonJoin
+
+
+def java_rtjf_to_python_rtjf(ctx, java_plan):
+    """Convert a BodoSQL Java runtime join filter plan to a Python runtime join filter
+    plan.
+    """
+    input = java_plan_to_python_plan(ctx, java_plan.getInput())
+
+    # Get join filter info
+    # IDs of joins creating each filter
+    filter_ids: list[int] = java_plan.getJoinFilterIDs()
+    # Mapping columns of the join to the columns in the current table
+    equality_filter_columns: list[list[int]] = java_plan.getEqualityFilterColumns()
+    # Indicating for which of the columns is it the first filtering site
+    equality_is_first_locations: list[list[bool]] = (
+        java_plan.getEqualityIsFirstLocations()
+    )
+
+    # Zip tuples and sort all three lists by filter_ids
+    sorted_filter_data = sorted(
+        zip(filter_ids, equality_filter_columns, equality_is_first_locations),
+        key=lambda x: x[0],
+    )
+
+    # Relocate filter columns based on original join filter key locations
+    # See generateRuntimeJoinFilterCode() in BodoPhysicalRuntimeJoinFilter.kt
+    new_filter_ids = []
+    new_equality_filter_columns = []
+    new_equality_is_first_locations = []
+    for fid, eq_cols, is_first_cols in sorted_filter_data:
+        if fid not in ctx.join_filter_info:
+            raise ValueError(f"Join filter ID {fid} not found in join filter info")
+
+        orig_key_locs = ctx.join_filter_info[fid]
+        filter_cols = [-1] * len(eq_cols)
+        is_first = [False] * len(is_first_cols)
+
+        for loc_ind, key in enumerate(orig_key_locs):
+            filter_cols[key] = eq_cols[loc_ind]
+            is_first[key] = is_first_cols[loc_ind]
+
+        new_filter_ids.append(fid)
+        new_equality_filter_columns.append(filter_cols)
+        new_equality_is_first_locations.append(is_first)
+
+    return LogicalJoinFilter(
+        input.empty_data,
+        input,
+        new_filter_ids,
+        new_equality_filter_columns,
+        new_equality_is_first_locations,
+    )
 
 
 def java_filter_to_python_filter(ctx, java_filter):
@@ -537,8 +593,9 @@ def generate_iceberg_read(read_info):
     uri = file_path.toUri()
     path_str = uri.getRawPath()
 
-    # TODO: pass filters and limits
     df = bd.read_iceberg(
+        # path_str has the schema in it so it's not needed in table id
+        # TODO: update when supporting other catalog types
         full_table_path[-1],
         location=path_str,
         row_filter=row_filter,

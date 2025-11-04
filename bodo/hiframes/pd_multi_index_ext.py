@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import operator
-import typing as pt
 
 import numba
 import pandas as pd
@@ -31,13 +30,13 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
-IndexNameType = pt.Union[
-    types.NoneType,
-    types.StringLiteral,
-    types.UnicodeType,
-    types.Integer,
-    types.IntegerLiteral,
-]
+IndexNameType = (
+    types.NoneType
+    | types.StringLiteral
+    | types.UnicodeType
+    | types.Integer
+    | types.IntegerLiteral
+)
 
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
