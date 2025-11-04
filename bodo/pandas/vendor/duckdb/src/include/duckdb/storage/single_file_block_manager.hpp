@@ -16,29 +16,31 @@
 #include "duckdb/common/set.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/main/config.hpp"
-#include "duckdb/common/encryption_functions.hpp"
+// Bodo change: Remove encryption files
+//#include "duckdb/common/encryption_functions.hpp"
 
 namespace duckdb {
 
 class DatabaseInstance;
 struct MetadataHandle;
 
-struct EncryptionOptions {
-	//! indicates whether the db is encrypted
-	bool encryption_enabled = false;
-	//! Whether Additional Authenticated Data is used
-	bool additional_authenticated_data = false;
-	//! derived encryption key id
-	string derived_key_id;
-	// //! Cipher used for encryption
-	// EncryptionTypes::CipherType cipher = EncryptionTypes::CipherType::INVALID;
-	//! key derivation function (kdf) used
-	EncryptionTypes::KeyDerivationFunction kdf = EncryptionTypes::KeyDerivationFunction::SHA256;
-	//! Key Length
-	uint32_t key_length = MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH;
-	//! User key pointer (to StorageOptions)
-	shared_ptr<string> user_key;
-};
+// Bodo Change: Remove encryption options
+//struct EncryptionOptions {
+//	//! indicates whether the db is encrypted
+//	bool encryption_enabled = false;
+//	//! Whether Additional Authenticated Data is used
+//	bool additional_authenticated_data = false;
+//	//! derived encryption key id
+//	string derived_key_id;
+//	// //! Cipher used for encryption
+//	// EncryptionTypes::CipherType cipher = EncryptionTypes::CipherType::INVALID;
+//	//! key derivation function (kdf) used
+//	EncryptionTypes::KeyDerivationFunction kdf = EncryptionTypes::KeyDerivationFunction::SHA256;
+//	//! Key Length
+//	uint32_t key_length = MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH;
+//	//! User key pointer (to StorageOptions)
+//	shared_ptr<string> user_key;
+//};
 
 struct StorageManagerOptions {
 	bool read_only = false;
@@ -50,7 +52,8 @@ struct StorageManagerOptions {
 	optional_idx block_header_size;
 	//! Unique database identifier and optional encryption salt.
 	data_t db_identifier[MainHeader::DB_IDENTIFIER_LEN];
-	EncryptionOptions encryption_options;
+	// Bodo Change: Remove encryption options
+	//EncryptionOptions encryption_options;
 };
 
 //! SingleFileBlockManager is an implementation for a BlockManager which manages blocks in a single file

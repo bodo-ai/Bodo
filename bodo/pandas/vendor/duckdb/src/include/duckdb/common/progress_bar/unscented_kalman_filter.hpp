@@ -8,7 +8,9 @@
 
 #pragma once
 
-#include "duckdb.hpp"
+// Bodo Change: Remove duckdb.hpp
+//#include "duckdb.hpp"
+#include "duckdb/common/vector.hpp"
 #include <chrono>
 
 namespace duckdb {
@@ -25,7 +27,7 @@ private:
 	static constexpr double KAPPA = 0.0;
 
 	double lambda;
-	vector<double> wm, wc; // weights for mean and covariance
+	duckdb::vector<double> wm, wc; // weights for mean and covariance
 
 	// State: [progress (0-1), velocity (progress/second)]
 	vector<double> x;         // state estimate

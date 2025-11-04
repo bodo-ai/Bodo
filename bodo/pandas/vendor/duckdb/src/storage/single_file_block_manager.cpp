@@ -3,9 +3,10 @@
 #include "duckdb/catalog/duck_catalog.hpp"
 #include "duckdb/common/allocator.hpp"
 #include "duckdb/common/checksum.hpp"
-#include "duckdb/common/encryption_functions.hpp"
-#include "duckdb/common/encryption_key_manager.hpp"
-#include "duckdb/common/encryption_state.hpp"
+// Bodo Change: Remove encryption files
+//#include "duckdb/common/encryption_functions.hpp"
+//#include "duckdb/common/encryption_key_manager.hpp"
+//#include "duckdb/common/encryption_state.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/common/types/uuid.hpp"
