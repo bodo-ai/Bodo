@@ -1,5 +1,4 @@
 import bodo
-import bodosql
 from bodo.tests.utils import pytest_mark_snowflake, pytest_spawn_mode
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     snowflake_sample_data_snowflake_catalog,
@@ -28,5 +27,7 @@ def test_basic_sql(snowflake_sample_data_snowflake_catalog):
     """
     Simple test to ensure that we can run SQL queries in Spawn mode.
     """
+    import bodosql.compiler  # isort:skip # noqa
+
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     exec_query(bc)

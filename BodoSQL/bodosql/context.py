@@ -528,6 +528,7 @@ class BodoSQLContext:
             return output
         else:
             import numba
+            import bodosql.compiler  # isort:skip # noqa
 
             func_text, lowered_globals = self._convert_to_pandas(
                 sql,
@@ -1363,6 +1364,8 @@ def create_java_named_parameter_type_map(named_params: dict[str, Any]):
 
     # Fallback to JIT for typing parameters
     import bodo.decorators  # isort:skip # noqa
+    from numba.core import types
+
     from bodosql.context_ext import (
         get_sql_param_column_type_info,
     )

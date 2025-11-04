@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import bodosql
 from bodo.tests.utils import pytest_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
 
@@ -11,6 +10,8 @@ pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
 
 def test_quickstart_local_sql():
     """Test example equivalent to docs/quick_start/quickstart_local_sql.md"""
+    import bodosql.compiler  # isort:skip # noqa
+
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
