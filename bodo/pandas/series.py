@@ -2055,7 +2055,9 @@ class BodoDatetimeProperties:
                 series.dtype in allowed_types or _is_pd_pa_timestamp_no_tz(series.dtype)
             )
         ):
-            raise AttributeError("Can only use .dt accessor with datetimelike values")
+            raise AttributeError(
+                f"Can only use .dt accessor with datetimelike values, got {series.dtype} {type(series.dtype)} instead"
+            )
         self._series = series
         self._dtype = series.dtype
 
@@ -3072,11 +3074,19 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
         ("axis", inspect.Parameter.KEYWORD_ONLY, (None,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
     ],
-    "str.replace": [
+    "replace": [
         ("to_replace", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("value", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("regex", inspect.Parameter.KEYWORD_ONLY, (False,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
+    ],
+    "str.replace": [
+        ("pat", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
+        ("repl", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
+        ("n", inspect.Parameter.POSITIONAL_OR_KEYWORD, (-1,)),
+        ("case", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("flags", inspect.Parameter.POSITIONAL_OR_KEYWORD, (0,)),
+        ("regex", inspect.Parameter.POSITIONAL_OR_KEYWORD, (False,)),
     ],
     "str.wrap": [
         ("width", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
@@ -3436,6 +3446,7 @@ allowed_types_map = {
     "dt_default": (
         pd.ArrowDtype(pa.timestamp("ns")),
         pd.ArrowDtype(pa.date64()),
+        pd.ArrowDtype(pa.date32()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
     ),
