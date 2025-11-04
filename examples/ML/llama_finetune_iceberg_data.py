@@ -196,12 +196,6 @@ def train_main(train_df):
         device = next(model.parameters()).device
     else:
         device = None
-    gpu_ranks = bodo.get_gpu_ranks()
-
-    # Rebalance data (same as before)
-    accelerators_used = len(gpu_ranks) != 0
-    if accelerators_used:
-        train_df = bodo.rebalance(train_df, dests=gpu_ranks, random=True, parallel=True)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     dataset_func = lambda df: LlamaDataset(df, tokenizer)
