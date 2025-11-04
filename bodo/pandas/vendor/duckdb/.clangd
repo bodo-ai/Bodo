@@ -1,3 +1,0 @@
-CompileFlags:
-  CompilationDatabase: build/clangd
-  Add: -Wno-unqualified-std-cast-call
