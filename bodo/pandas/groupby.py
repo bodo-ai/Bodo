@@ -597,7 +597,7 @@ def _groupby_agg_plan(
             else None
         )
         col_idx = (
-            grouped._obj.columns.get_loc(func.in_col) if func.in_col is not None else 0
+            grouped._obj.columns.get_loc(func.in_col) if func.func_name != "size" else 0
         )
         exprs.append(
             AggregateExpression(
@@ -976,8 +976,8 @@ def _get_agg_output_type(
 
 
 def _cast_groupby_agg_columns(
-    func: list[GroupbyAggFunc] | str,
-    in_data: pd.Series | pd.DataFrame,
+    func: list[GroupbyAggFunc],
+    in_data: pd.DataFrame,
     out_data: pd.Series | pd.DataFrame,
     n_key_cols: int,
 ) -> pd.Series | pd.DataFrame:
@@ -989,7 +989,7 @@ def _cast_groupby_agg_columns(
             input DataFrame to which func is applied.
         out_data : An empty DataFrame/Series with the same shape as the aggregate
             output
-        in_data : An empty DataFrame/Series with the same shape as the input to the
+        in_data : An empty DataFrame with the same shape as the input to the
             aggregation.
         n_key_cols : Number of grouping keys in the output.
 
@@ -999,7 +999,7 @@ def _cast_groupby_agg_columns(
     """
 
     def get_new_type(func_):
-        if func_ == "size":
+        if func_.func_name == "size":
             return pa.int64()
         else:
             in_col = in_data[func_.in_col]
@@ -1012,6 +1012,18 @@ def _cast_groupby_agg_columns(
             [], dtype=pd.ArrowDtype(new_type), name=out_data.name, index=out_data.index
         )
         return out_data
+
+    # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
+    if out_data.columns.has_duplicates:
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): duplicate column names in output not supported yet."
+        )
+
+    # Should've been handled in previous checks, but just to be safe.
+    if in_data.columns.has_duplicates:
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): duplicate column names in input not supported yet."
+        )
 
     for i, func_ in enumerate(func):
         out_col_name = out_data.columns[i + n_key_cols]
