@@ -1078,7 +1078,7 @@ def get_sql_type(pa_type: pa.DataType):
     Returns:
         Java SQLDataType: The corresponding BodoSQL SQL data type.
     """
-    # TODO: Support other types
+    # TODO[BSE-5182]: Support other types
     type_enum = _pa_to_sql_column_type_map[pa_type]
     sql_dtype = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(type_enum)
     # TODO: support non-nullable types
