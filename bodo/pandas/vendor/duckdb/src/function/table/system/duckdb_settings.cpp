@@ -91,22 +91,23 @@ unique_ptr<GlobalTableFunctionState> DuckDBSettingsInit(ClientContext &context, 
 		}
 		result->settings.push_back(std::move(value));
 	}
-	for (auto &ext_param : config.extension_parameters) {
-		Value setting_val;
-		auto scope = SettingScope::GLOBAL;
-		auto lookup_result = context.TryGetCurrentSetting(ext_param.first, setting_val);
-		if (lookup_result) {
-			scope = lookup_result.GetScope();
-		}
-		DuckDBSettingValue value;
-		value.name = ext_param.first;
-		value.value = std::move(setting_val);
-		value.description = ext_param.second.description;
-		value.input_type = ext_param.second.type.ToString();
-		value.scope = EnumUtil::ToString(scope);
+	// Bodo Change: Remove extension files
+	//for (auto &ext_param : config.extension_parameters) {
+	//	Value setting_val;
+	//	auto scope = SettingScope::GLOBAL;
+	//	auto lookup_result = context.TryGetCurrentSetting(ext_param.first, setting_val);
+	//	if (lookup_result) {
+	//		scope = lookup_result.GetScope();
+	//	}
+	//	DuckDBSettingValue value;
+	//	value.name = ext_param.first;
+	//	value.value = std::move(setting_val);
+	//	value.description = ext_param.second.description;
+	//	value.input_type = ext_param.second.type.ToString();
+	//	value.scope = EnumUtil::ToString(scope);
 
-		result->settings.push_back(std::move(value));
-	}
+	//	result->settings.push_back(std::move(value));
+	//}
 	std::sort(result->settings.begin(), result->settings.end());
 	return std::move(result);
 }
