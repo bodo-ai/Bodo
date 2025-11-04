@@ -324,7 +324,7 @@ def gen_snowflake_schema(
             sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
         elif isinstance(
             col_type,
-            (bodo.types.ArrayItemArrayType,),
+            bodo.types.ArrayItemArrayType,
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")
@@ -332,7 +332,7 @@ def gen_snowflake_schema(
 
         elif isinstance(
             col_type,
-            (bodo.types.StructArrayType,),
+            bodo.types.StructArrayType,
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")
@@ -2499,15 +2499,11 @@ def execute_copy_into(
     # https://docs.snowflake.com/en/user-guide/binary-input-output.html#file-format-option-for-loading-unloading-binary-values
     # https://docs.snowflake.com/en/sql-reference/sql/create-file-format.html#syntax
 
-    # Time data: set as string, and data is stored correctly as time based on sf_schema info received.
-
-    binary_time_mod = {
+    binary_mod = {
         c: "::binary" if sf_schema[c] == "BINARY" else "" for c in sf_schema.keys()
     }
 
-    parquet_columns = ",".join(
-        [f'$1:"{c}"{binary_time_mod[c]}' for c in sf_schema.keys()]
-    )
+    parquet_columns = ",".join([f'$1:"{c}"{binary_mod[c]}' for c in sf_schema.keys()])
 
     if stage_dir is None:
         stage_name_with_dir = f'@"{stage_name}"'

@@ -58,7 +58,7 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
-Index = list[pt.Union[str, dict]]
+Index = list[str | dict]
 FileSchema: pt.TypeAlias = tuple[
     list[str], list, Index, list[int], list, list, list, pa.Schema
 ]

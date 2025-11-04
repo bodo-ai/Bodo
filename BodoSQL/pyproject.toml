@@ -7,7 +7,7 @@ name = "bodosql"
 dynamic = ["version"]
 description = "Bodo's Vectorized SQL execution engine for clusters"
 readme = "README_pypi.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
@@ -17,7 +17,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

@@ -1,6 +1,6 @@
 package:
     name: bodosql
-    version: {{ environ.get('BODOSQL_VERSION') }} 
+    version: {{ environ.get('BODOSQL_VERSION') }}
 
 source:
     path: ../../../BodoSQL
@@ -10,7 +10,7 @@ build:
 
 requirements:
     host:
-        - python >=3.9
+        - python >=3.10
         - setuptools >=64
         - setuptools_scm >=8
         - openjdk 17
@@ -21,7 +21,7 @@ requirements:
         - openjdk 17
         - bodo  {{ BODOSQL_VERSION }}
         - py4j ==0.10.9.9
-        - python >=3.9
+        - python >=3.10
 
 
 test:
