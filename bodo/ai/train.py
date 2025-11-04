@@ -3,7 +3,8 @@ from __future__ import annotations
 import importlib.util
 import socket
 import typing
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 if typing.TYPE_CHECKING:
     from pandas import DataFrame, Series

@@ -13,14 +13,14 @@ build:
 
 requirements:
   host:
-    - python >=3.9
+    - python >=3.10
     - setuptools >=64
     - setuptools_scm >=8
     - openjdk 17
     - maven
 
   run:
-    - python >=3.9
+    - python >=3.10
     - openjdk 17
     - py4j ==0.10.9.9
     - pyiceberg >=0.10
