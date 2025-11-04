@@ -60,8 +60,6 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      unamestr=`uname`
-
       pixi run -e azure build-bodo -Cbuild.verbose=true
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
