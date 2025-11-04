@@ -66,7 +66,7 @@ See Bodo DataFrames documentation to learn more: https://docs.bodo.ai/
 
 ## Installation
 
-Note: Bodo DataFrames requires Python 3.9+.
+Note: Bodo DataFrames requires Python 3.10+.
 
 Bodo DataFrames can be installed using Pip or Conda:
 
