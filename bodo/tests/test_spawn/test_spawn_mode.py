@@ -269,6 +269,7 @@ def test_args():
     # Test BodoSQLContext if bodosql installed in test environment
     try:
         import bodosql
+        import bodosql.compiler  # isort:skip # noqa
 
         @bodo.jit(spawn=True)
         def impl3(a, bc, b):
