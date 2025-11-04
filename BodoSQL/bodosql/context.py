@@ -5,20 +5,28 @@ import os
 import re
 import time
 import traceback
+import typing
 import warnings
 from enum import Enum
 from typing import Any
+
+if typing.TYPE_CHECKING:
+    from numba.core import types
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 
 import bodo
+import bodo.pandas as bd
+from bodo.io.utils import parse_dbtype
 from bodo.mpi4py import MPI
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
+    build_java_array_list,
+    build_java_hash_map,
 )
 from bodosql.plan_conversion import java_plan_to_python_plan
 from bodosql.utils import BodoSQLWarning, error_to_string
@@ -350,8 +358,6 @@ class BodoSQLContext:
 
     def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
         from bodo.mpi4py import MPI
-        import bodosql.compiler  # isort:skip # noqa
-        from bodosql.context_ext import compute_df_types, update_schema
 
         comm = MPI.COMM_WORLD
 
@@ -368,7 +374,7 @@ class BodoSQLContext:
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
                 write_type = JavaEntryPoint.getWriteType(plan_generator, sql)
-                orig_bodo_types, df_types = compute_df_types(self.dfs, False)
+                orig_bodo_types, df_types = get_df_types(self.dfs)
                 update_schema(
                     self.schema,
                     self.names,
@@ -1010,3 +1016,319 @@ def _ensure_dynamic_params_list(dynamic_params_list: Any) -> list:
         raise ValueError(
             "dynamic_params_list must be a tuple of Python variables if provided"
         )
+
+
+def is_table_path_type(bodo_type) -> bool:
+    """Check if the provided Bodo type is a TablePathType or TablePath without importing
+    JIT.
+    """
+    return type(bodo_type).__name__ == "TablePathType" or isinstance(
+        bodo_type, TablePath
+    )
+
+
+def get_df_types(df_list: list[pd.DataFrame | TablePath]):
+    """Given a list of dataframes or TablePath objects, this function determines
+    the DataFrame with proper schema (actual dataframe or empty one with same schema),
+    converting any TablePath to the actual DataFrame.
+    Equivalent to "compute_df_types" on the JIT side.
+    """
+
+    orig_bodo_types = []
+    df_types = []
+    for df_val in df_list:
+        orig_bodo_types.append(df_val)
+        typ = df_val
+
+        if is_table_path_type(typ):
+            table_info = typ
+            file_type = table_info._file_type
+            file_path = table_info._file_path
+            if file_type == "pq":
+                df_type = bd.read_parquet(file_path)._plan.empty_data
+            else:
+                # Fall back to JIT path for other file types.
+                import bodo.decorators  # isort:skip # noqa
+                from bodo.libs.distributed_api import get_value_for_type
+                from bodosql.context_ext import compute_df_types
+
+                df_type = get_value_for_type(compute_df_types([typ], False)[1][0])
+        else:
+            df_type = typ
+        df_types.append(df_type)
+    return orig_bodo_types, df_types
+
+
+_pa_to_sql_column_type_map = {
+    pa.null(): SqlTypeEnum.Null.value,
+    pa.int8(): SqlTypeEnum.Int8.value,
+    pa.uint8(): SqlTypeEnum.UInt8.value,
+    pa.int16(): SqlTypeEnum.Int16.value,
+    pa.uint16(): SqlTypeEnum.UInt16.value,
+    pa.int32(): SqlTypeEnum.Int32.value,
+    pa.uint32(): SqlTypeEnum.UInt32.value,
+    pa.int64(): SqlTypeEnum.Int64.value,
+    pa.uint64(): SqlTypeEnum.UInt64.value,
+    pa.float32(): SqlTypeEnum.Float32.value,
+    pa.float64(): SqlTypeEnum.Float64.value,
+    pa.timestamp("ns"): SqlTypeEnum.Timestamp_Ntz.value,
+    pa.duration("ns"): SqlTypeEnum.Timedelta.value,
+    pa.bool_(): SqlTypeEnum.Bool.value,
+    pa.string(): SqlTypeEnum.String.value,
+    pa.large_string(): SqlTypeEnum.String.value,
+    pa.binary(): SqlTypeEnum.Binary.value,
+    pa.large_binary(): SqlTypeEnum.Binary.value,
+    pa.date32(): SqlTypeEnum.Date.value,
+    pa.date64(): SqlTypeEnum.Date.value,
+}
+
+
+def get_sql_type(pa_type: pa.DataType):
+    """Convert a PyArrow data type to a BodoSQL SQL data type.
+
+    Args:
+        type (pa.DataType): The PyArrow data type.
+
+    Returns:
+        Java SQLDataType: The corresponding BodoSQL SQL data type.
+    """
+    # TODO: Support other types
+    type_enum = _pa_to_sql_column_type_map[pa_type]
+    sql_dtype = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(type_enum)
+    # TODO: support non-nullable types
+    nullable = True
+    return JavaEntryPoint.buildColumnDataTypeInfo(sql_dtype, nullable)
+
+
+def get_sql_column_type(type: pa.DataType, col_name):
+    """Create a Java SQL column type from a PyArrow data type and column name."""
+    data_type = get_sql_type(type)
+    return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
+
+
+def _get_sql_types_jit(df_type):
+    """Get the SQL types for a Bodo DataFrameType using JIT type information."""
+    import bodo.decorators  # isort:skip # noqa
+    from bodosql.context_ext import get_sql_column_type_jit
+
+    return [
+        get_sql_column_type_jit(df_type.data[i], cname)
+        for i, cname in enumerate(df_type.columns)
+    ]
+
+
+def _get_sql_types(df_type, from_jit):
+    """Get the SQL types for a Bodo DataFrameType or Pandas DataFrame.
+    The non-JIT path falls back to JIT if Arrow conversion fails.
+    """
+    if from_jit:
+        return _get_sql_types_jit(df_type)
+
+    try:
+        return [
+            get_sql_column_type(f.type, f.name) for f in pa.Schema.from_pandas(df_type)
+        ]
+    except Exception:
+        # Fallback to JIT version if Arrow version failed
+        df_type = bodo.typeof(df_type)
+        return _get_sql_types_jit(df_type)
+
+
+def update_schema(
+    schema,
+    table_names: list[str],
+    df_types: list[bodo.types.DataFrameType | pd.DataFrame],
+    estimated_row_counts: list[int | None],
+    estimated_ndvs: list[dict[str, int] | None],
+    table_types: list[types.Type | pd.DataFrame | TablePath],
+    from_jit: bool,
+    write_type: str,
+):
+    """Update a local schema with local tables.
+
+    Args:
+        schema (Java LocalSchema): The schema to update.
+        table_names (List[str]): List of tables to add to the schema.
+        df_types (List[bodo.types.DataFrameType | pd.DataFrame]): List of dataframes or Bodo DataFrame types for each table.
+        estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
+            table for the volcano planner. None if no estimate is provided.
+        estimated_ndvs (List[Optional[dict[str, int]]]): The NDV estimates for each input table.
+        table_types (List[types.Type | pd.DataFrame | TablePath]): List of Bodo types for each table. This stores
+            the original type, so a TablePath isn't converted to its
+            DataFrameType, which it is for df_types.
+        from_jit (bool): Is this typing coming from JIT?
+        write_type (str): String describing the type of write used for generating the write code.
+            Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
+            queries.
+    """
+    if bodo.get_rank() == 0:
+        for i in range(len(table_names)):
+            add_table_type(
+                table_names[i],
+                schema,
+                df_types[i],
+                estimated_row_counts[i],
+                estimated_ndvs[i],
+                table_types[i],
+                i,
+                from_jit,
+                write_type,
+            )
+
+
+def add_table_type(
+    table_name: str,
+    schema,
+    df_type: bodo.types.DataFrameType | pd.DataFrame,
+    estimated_row_count: int | None,
+    estimated_ndvs: dict[str, int] | None,
+    bodo_type: types.Type,
+    table_num: int,
+    from_jit: bool,
+    write_type: str,
+):
+    """Registers a new table into the schema. This is used to pass tables via DataFrames or the
+    TablePath API.
+
+    Args:
+        table_name (str): The name of the table.
+        schema (Java LocalSchema): The schema to update.
+        df_type (bodo.types.DataFrameType): The Bodo DataFrame type or actual dataframe.
+        estimated_row_count (Optional[int]): The expected number of rows in the table for the
+            Volcano Planner. None if no estimate is provided.
+        estimated_ndvs (Optional[dict[str, int]]): Estimated NDV values for the columns. This
+            maps the column names to the NDV estimate. Providing some and not all column NDVs
+            is supported. None if no estimate is provided.
+        bodo_type (types.Type): Bodo type for the table. This stores the original type so a TablePath
+            isn't converted to its DataFrameType, which the df_type always is.
+        table_num (int): ID for the table being processed.
+        from_jit (bool): Is this typing coming from JIT?
+        write_type (str): String describing the type of write used for generating the write code.
+            Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
+            queries.
+    """
+
+    assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
+    sql_types = _get_sql_types(df_type, from_jit)
+    col_arr = build_java_array_list(sql_types)
+
+    # To support writing to SQL Databases we register is_writeable
+    # for SQL databases.
+    is_writeable = is_table_path_type(bodo_type) and bodo_type._file_type == "sql"
+
+    if is_writeable:
+        schema_code_to_sql = (
+            f"schema='{bodo_type._db_schema}'"
+            if bodo_type._db_schema is not None
+            else ""
+        )
+        if write_type == "MERGE":
+            # Note. We only support MERGE for Iceberg. We check this in the
+            # Java code to ensure we also handle catalogs. Note the
+            # last argument is for passing additional arguments as key=value pairs.
+            write_format_code = f"bodo.io.iceberg.merge_into.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+        else:
+            write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
+    else:
+        write_format_code = ""
+
+    # Determine the DB Type for generating java code.
+    if is_table_path_type(bodo_type):
+        if bodo_type._file_type == "pq":
+            db_type = "PARQUET"
+        else:
+            assert bodo_type._file_type == "sql", (
+                "TablePathType is only implement for parquet and SQL APIs"
+            )
+            const_conn_str = bodo_type._conn_str
+            db_type, _ = parse_dbtype(const_conn_str)
+    else:
+        db_type = "MEMORY"
+
+    read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
+
+    # Convert the Python dict to a Java HashMap:
+    estimated_ndvs = {} if estimated_ndvs is None else estimated_ndvs
+    estimated_ndvs_java_map = build_java_hash_map(estimated_ndvs)
+
+    table = JavaEntryPoint.buildLocalTable(
+        table_name,
+        schema,
+        col_arr,
+        is_writeable,
+        read_code,
+        write_format_code,
+        # TablePath is a wrapper for a file so it results in an IO read.
+        # The only other option is an in memory Pandas DataFrame.
+        is_table_path_type(bodo_type),
+        db_type,
+        estimated_row_count,
+        estimated_ndvs_java_map,
+    )
+    JavaEntryPoint.addTableToSchema(schema, table)
+
+
+def _generate_table_read(
+    table_name: str,
+    bodo_type: types.Type | pd.DataFrame | TablePath,
+    table_num: int,
+    from_jit: bool,
+) -> str:
+    """Generates the read code for a table to pass to Java.
+
+    Args:
+        table_name (str): Name of the table
+        bodo_type (types.Type): Bodo Type of the table. If this is
+            a TablePath different code is generated.
+        table_num (int): What number table is being processed.
+        from_jit (bool): Is the code being generated from JIT?
+
+    Raises:
+        BodoError: If code generation is not supported for the given type.
+
+    Returns:
+        str: A string that is the generated code for a read expression.
+    """
+    if is_table_path_type(bodo_type):
+        file_type = bodo_type._file_type
+        file_path = bodo_type._file_path
+        # Escape "\" in Windows paths
+        file_path = file_path.replace("\\", "\\\\")
+
+        read_dict_list = (
+            ""
+            if bodo_type._bodo_read_as_dict is None
+            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict}"
+        )
+        if file_type == "pq":
+            # TODO: Replace with runtime variable once we support specifying
+            # the schema
+            if read_dict_list:
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, _bodo_use_index=False, _bodo_read_as_table=True, %s)"
+            else:
+                read_line = f"pd.read_parquet('{file_path}', _bodo_use_index=False, _bodo_read_as_table=True, %s)"
+        elif file_type == "sql":
+            # TODO: Replace with runtime variable once we support specifying
+            # the schema
+            conn_str = bodo_type._conn_str
+            db_type, _ = parse_dbtype(conn_str)
+            if db_type == "iceberg":
+                # Avoid errors for Windows path backslashes in generated code later
+                conn_str = conn_str.replace("\\", "/")
+                if read_dict_list:
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
+                else:
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', _bodo_read_as_table=True, %s)"
+            else:
+                read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}', _bodo_read_as_table=True, %s)"
+        else:
+            msg = f"Internal Error: Unsupported TablePathType for type: '{file_type}'"
+            if from_jit:
+                raise bodo.utils.typing.BodoError(msg)
+            else:
+                raise ValueError(msg)
+    elif from_jit:
+        read_line = f"bodo_sql_context.dataframes[{table_num}]"
+    else:
+        read_line = TABLE_ARG_PREFIX + table_name
+    return read_line
