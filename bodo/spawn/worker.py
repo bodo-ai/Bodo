@@ -41,12 +41,12 @@ from bodo.spawn.worker_state import set_is_worker
 if pt.TYPE_CHECKING:
     from bodo.pandas import LazyMetadata
 
-    distributed_return_metadata_t = pt.Union[
-        LazyMetadata,
-        list["distributed_return_metadata_t"],
-        dict[pt.Any, "distributed_return_metadata_t"],
-        ExtensionArray,
-    ]
+    distributed_return_metadata_t = (
+        LazyMetadata
+        | list["distributed_return_metadata_t"]
+        | dict[pt.Any, "distributed_return_metadata_t"]
+        | ExtensionArray
+    )
 
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
@@ -55,9 +55,9 @@ DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 spawnerpid = None
 
 
-_recv_arg_return_t = pt.Union[
-    tuple[pt.Any, pt.Union[ArgMetadata, None]], tuple["_recv_arg_return_t", ...]
-]
+_recv_arg_return_t = (
+    tuple[pt.Any, ArgMetadata | None] | tuple["_recv_arg_return_t", ...]
+)
 
 
 def _recv_arg(
@@ -119,9 +119,7 @@ PROCESS_REGISTRY: dict[uuid.UUID, subprocess.Popen | None] = {}
 
 # Once >3.12 is our minimum version we can use the below instead
 # type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
-is_distributed_t = pt.Union[
-    bool, list["is_distributed_t"], tuple["is_distributed_t", ...]
-]
+is_distributed_t = bool | list["is_distributed_t"] | tuple["is_distributed_t", ...]
 
 
 def _build_index_data(

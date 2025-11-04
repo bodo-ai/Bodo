@@ -402,6 +402,30 @@ class LogicalComparisonJoin(LogicalOperator):
         return self.args[2]
 
 
+class LogicalJoinFilter(LogicalOperator):
+    """Logical operator for join filters."""
+
+    def __init__(
+        self,
+        empty_data,
+        source,
+        filter_ids,
+        equality_filter_columns,
+        equality_is_first_locations,
+    ):
+        self.source = source
+        self.filter_ids = filter_ids
+        self.equality_filter_columns = equality_filter_columns
+        self.equality_is_first_locations = equality_is_first_locations
+        super().__init__(
+            empty_data,
+            source,
+            filter_ids,
+            equality_filter_columns,
+            equality_is_first_locations,
+        )
+
+
 class LogicalCrossProduct(LogicalOperator):
     """Logical operator for cross product joins."""
 

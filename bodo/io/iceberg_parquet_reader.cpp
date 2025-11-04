@@ -408,10 +408,7 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
         builder->GetScanOptions(), "Error during GetScanOptions",
         std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
 
-#ifdef USE_BODO_ARROW_FORK
-    scan_options->exec_context = arrow::compute::ExecContext(
-        bodo::BufferPool::DefaultPtr(), cpu_executor);
-#endif
+    scan_options->cpu_executor = cpu_executor;
 
     return scan_options;
 }
@@ -510,7 +507,6 @@ IcebergParquetReader::IcebergParquetReader(
       expr_filter_f_str(std::move(_expr_filter_f_str)),
       filter_scalars(_filter_scalars),
       snapshot_id(_snapshot_id) {
-#ifdef USE_BODO_ARROW_FORK
     // Unless explicitly disabled, use our own SingleThreadedCpuThreadPool
     // for streaming read.
     char* use_st_pool_env_ =
@@ -522,7 +518,6 @@ IcebergParquetReader::IcebergParquetReader(
         this->st_cpu_executor_.emplace(
             bodo::SingleThreadedCpuThreadPool::Default());
     }
-#endif
 }
 
 IcebergParquetReader::~IcebergParquetReader() {

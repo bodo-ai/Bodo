@@ -623,6 +623,11 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     int64_t getOpId() const { return PhysicalSink::getOpId(); }
 
+    /**
+     * @brief Get pointer to JoinState used in join filters
+     */
+    JoinState* getJoinStatePtr() const { return join_state_.get(); }
+
    private:
     /**
      * @brief  Initialize mapping of output column orders to reorder keys that
@@ -658,6 +663,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     std::set<int64_t> bound_right_inds;
 
     std::shared_ptr<JoinState> join_state_;
+
     std::vector<uint64_t> build_kept_cols;
     std::vector<uint64_t> probe_kept_cols;
     std::vector<uint64_t> left_keys;

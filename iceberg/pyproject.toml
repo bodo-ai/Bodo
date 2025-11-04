@@ -7,7 +7,7 @@ name = "bodo-iceberg-connector"
 dynamic = ["version"]
 description = "Bodo Connector for Iceberg"
 readme = "README_pypi.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -27,7 +26,7 @@ classifiers = [
 
 dependencies = [
     "py4j==0.10.9.9",
-    "pyarrow==21.0.0",
+    "pyarrow==22.0.0",
     "numpy>=1.24",
     "pandas>=2.2",
     "pyiceberg>=0.9"

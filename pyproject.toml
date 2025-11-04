@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=21.0,<21.1",
+    "pyarrow>=22.0,<22.1",
     "mpi4py>=4.0,<4.1",
     "pip"
 ]
@@ -17,7 +17,7 @@ name = "bodo"
 dynamic = ["version"]
 description = "High-Performance Python Compute Engine for Data and AI"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
@@ -27,7 +27,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,7 +36,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pyarrow>=21.0,<21.1",
+    "pyarrow>=22.0,<22.1",
     # TODO upgrade to numba 0.62.0
     "numba>=0.60,<0.62",
     "pandas>=2.2",
@@ -139,6 +138,12 @@ lint.ignore = [
     "E711", # Comparison to `None` should be `cond is not None`
     "E712", # Comparison to `...` should be `cond is False` or `if not cond:`
     "E731", # Do not assign a `lambda` expression, use a `def`
+    # Use X | Y instead of (X, Y) in isinstance
+    # Disabled because:
+    # - X | Y is slower than (X, Y), could be problematic in hot code paths
+    # - (X, Y) is more readable and formattable
+    # - Numba doesn't support X | Y
+    "UP038",
 ]
 exclude = [
     ".git/",
