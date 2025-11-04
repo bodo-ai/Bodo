@@ -5,9 +5,8 @@ ci:
 
 # We should never format the copied Calcite files, in order to avoid massive diffs when Calcite is updated.
 # See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
-exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources
-# Exclude vendored duckdb code
-exclude: ^bodo/pandas/vendor/.*
+# Also exclude vendored duckdb code
+exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources|^bodo/pandas/vendor/
 repos:
   # Basics
   - repo: https://github.com/pre-commit/pre-commit-hooks
