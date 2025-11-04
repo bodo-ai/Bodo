@@ -998,36 +998,35 @@ def _cast_groupby_agg_columns(
             on the aggregate functions.
     """
 
-    def get_new_type(func_):
-        if func_.func_name == "size":
-            return pa.int64()
-        else:
-            in_col = in_data[func_.in_col]
-            return _get_agg_output_type(func_, in_col.dtype.pyarrow_dtype, in_col.name)
-
-    if isinstance(out_data, pd.Series):
-        func = func[0]
-        new_type = get_new_type(func)
-        out_data = pd.Series(
-            [], dtype=pd.ArrowDtype(new_type), name=out_data.name, index=out_data.index
-        )
-        return out_data
-
-    # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
-    if out_data.columns.has_duplicates:
-        raise BodoLibNotImplementedException(
-            "GroupBy.agg(): duplicate column names in output not supported yet."
-        )
-
-    # Should've been handled in previous checks, but just to be safe.
     if in_data.columns.has_duplicates:
         raise BodoLibNotImplementedException(
             "GroupBy.agg(): duplicate column names in input not supported yet."
         )
 
+    # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
+    if isinstance(out_data, pd.DataFrame) and out_data.columns.has_duplicates:
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): duplicate column names in output not supported yet."
+        )
+
     for i, func_ in enumerate(func):
+        if func_.func_name == "size":
+            new_type = pa.int64()
+        else:
+            in_col = in_data[func_.in_col]
+            new_type = _get_agg_output_type(
+                func_, in_col.dtype.pyarrow_dtype, in_col.name
+            )
+
+        if isinstance(out_data, pd.Series):
+            return pd.Series(
+                [],
+                dtype=pd.ArrowDtype(new_type),
+                name=out_data.name,
+                index=out_data.index,
+            )
+
         out_col_name = out_data.columns[i + n_key_cols]
-        new_type = get_new_type(func_)
         out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
 
     return out_data
