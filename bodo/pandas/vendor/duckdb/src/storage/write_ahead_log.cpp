@@ -9,8 +9,9 @@
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/duck_catalog.hpp"
 #include "duckdb/common/checksum.hpp"
-#include "duckdb/common/encryption_functions.hpp"
-#include "duckdb/common/encryption_key_manager.hpp"
+// Bodo Change: Remove encryption files
+//#include "duckdb/common/encryption_functions.hpp"
+//#include "duckdb/common/encryption_key_manager.hpp"
 #include "duckdb/common/serializer/binary_serializer.hpp"
 #include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/execution/index/bound_index.hpp"

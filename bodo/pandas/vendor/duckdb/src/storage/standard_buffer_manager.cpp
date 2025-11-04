@@ -11,7 +11,8 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_file_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
-#include "duckdb/common/encryption_functions.hpp"
+// Bodo Change: Remove encryption files
+//#include "duckdb/common/encryption_functions.hpp"
 
 namespace duckdb {
 

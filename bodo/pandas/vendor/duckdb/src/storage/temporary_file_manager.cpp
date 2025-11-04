@@ -6,7 +6,8 @@
 #include "duckdb/storage/buffer/temporary_file_information.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/common/encryption_functions.hpp"
+// Bodo Change: Remove encryption files
+// #include "duckdb/common/encryption_functions.hpp"
 #include "zstd.h"
 
 namespace duckdb {
