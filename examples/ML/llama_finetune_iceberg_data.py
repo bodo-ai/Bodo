@@ -240,5 +240,5 @@ def train_main(train_df):
 
 if __name__ == "__main__":
 
-    train_df = load_data()[:2]
+    train_df = load_data()
     bodo.ai.torch_train(train_main, train_df)
