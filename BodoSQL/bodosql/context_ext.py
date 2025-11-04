@@ -53,13 +53,13 @@ from bodosql.context import (
     NAMED_PARAM_ARG_PREFIX,
     BodoSQLContext,
     SqlTypeEnum,
+    create_java_dynamic_parameter_type_list,
+    create_java_named_parameter_type_map,
     initialize_schema,
     update_schema,
 )
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
-    build_java_array_list,
-    build_java_hash_map,
 )
 from bodosql.utils import BodoSQLWarning, error_to_string
 
@@ -899,44 +899,6 @@ def get_sql_data_type(arr_type):
             SqlTypeEnum.Unsupported.value
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
-
-
-def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
-    """Convert a list of dynamic parameters or dynamic parameter types
-    into a Java List of ColumnDataType values.
-
-    Args:
-        dynamic_params_list (List[Any]): The input list, either a Bodo type
-        or a Python value to convert to a java type.
-
-    Returns:
-        JavaObject: A java array to pass to code generation.
-    """
-    types_list = []
-    for val in dynamic_params_list:
-        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
-        types_list.append(get_sql_param_column_type_info(typ))
-    return build_java_array_list(types_list)
-
-
-def create_java_named_parameter_type_map(named_params: dict[str, Any]):
-    """Convert a list of keys and list of values into a Java
-    Map from key to ColumnDataType values.
-
-    Args:
-        dynamic_params_list (List[Any]): The input list, either a Bodo type
-        or a Python value to convert to a java type.
-
-    Returns:
-        JavaObject: A java map to pass to code generation.
-    """
-    d = {
-        key: get_sql_param_column_type_info(
-            val if isinstance(val, types.Type) else bodo.typeof(val)
-        )
-        for key, val in named_params.items()
-    }
-    return build_java_hash_map(d)
 
 
 def get_sql_param_column_type_info(param_type: types.Type):

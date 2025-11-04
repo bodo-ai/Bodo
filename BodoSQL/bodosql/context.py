@@ -19,6 +19,7 @@ import pyarrow as pa
 
 import bodo
 import bodo.pandas as bd
+import bodosql
 from bodo.io.utils import parse_dbtype
 from bodo.mpi4py import MPI
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
@@ -597,11 +598,6 @@ class BodoSQLContext:
         Return the optimized plan for the SQL code as
         as a Python string.
         """
-        import bodosql.compiler  # isort:skip # noqa
-        from bodosql.context_ext import (
-            create_java_dynamic_parameter_type_list,
-            create_java_named_parameter_type_map,
-        )
 
         if params_dict is None:
             params_dict = {}
@@ -659,11 +655,6 @@ class BodoSQLContext:
         Returns:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
-        import bodosql.compiler  # isort:skip # noqa
-        from bodosql.context_ext import (
-            create_java_dynamic_parameter_type_list,
-            create_java_named_parameter_type_map,
-        )
 
         # Construct the relational algebra generator
         try:
@@ -706,11 +697,6 @@ class BodoSQLContext:
         Returns:
             pd.DataFrame | None | _CPPBackendExecutionFailed: The result of the query execution or a failure indicator.
         """
-        import bodosql.compiler  # isort:skip # noqa
-        from bodosql.context_ext import (
-            create_java_dynamic_parameter_type_list,
-            create_java_named_parameter_type_map,
-        )
 
         try:
             java_params_array = create_java_dynamic_parameter_type_list(
@@ -1332,3 +1318,59 @@ def _generate_table_read(
     else:
         read_line = TABLE_ARG_PREFIX + table_name
     return read_line
+
+
+def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
+    """Convert a list of dynamic parameters or dynamic parameter types
+    into a Java List of ColumnDataType values.
+
+    Args:
+        dynamic_params_list (List[Any]): The input list, either a Bodo type
+        or a Python value to convert to a java type.
+
+    Returns:
+        JavaObject: A java array to pass to code generation.
+    """
+    if len(dynamic_params_list) == 0:
+        return build_java_array_list([])
+
+    # Fallback to JIT for typing parameters
+    import bodo.decorators  # isort:skip # noqa
+    from bodosql.context_ext import (
+        get_sql_param_column_type_info,
+    )
+
+    types_list = []
+    for val in dynamic_params_list:
+        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
+        types_list.append(get_sql_param_column_type_info(typ))
+    return build_java_array_list(types_list)
+
+
+def create_java_named_parameter_type_map(named_params: dict[str, Any]):
+    """Convert a list of keys and list of values into a Java
+    Map from key to ColumnDataType values.
+
+    Args:
+        dynamic_params_list (List[Any]): The input list, either a Bodo type
+        or a Python value to convert to a java type.
+
+    Returns:
+        JavaObject: A java map to pass to code generation.
+    """
+    if len(named_params) == 0:
+        return build_java_hash_map({})
+
+    # Fallback to JIT for typing parameters
+    import bodo.decorators  # isort:skip # noqa
+    from bodosql.context_ext import (
+        get_sql_param_column_type_info,
+    )
+
+    d = {
+        key: get_sql_param_column_type_info(
+            val if isinstance(val, types.Type) else bodo.typeof(val)
+        )
+        for key, val in named_params.items()
+    }
+    return build_java_hash_map(d)
