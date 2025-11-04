@@ -22,7 +22,8 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/common/algorithm.hpp"
 
-#include "duckdb/main/extension_entries.hpp"
+// Bodo Change: Remove extension related files
+//#include "duckdb/main/extension_entries.hpp"
 
 namespace duckdb {
 
@@ -30,7 +31,7 @@ static bool GetBooleanArg(ClientContext &context, const vector<Value> &arg) {
 	return arg.empty() || arg[0].CastAs(context, LogicalType::BOOLEAN).GetValue<bool>();
 }
 
-void IsFormatExtensionKnown(const string &format) {
+..void IsFormatExtensionKnown(const string &format) {
 	for (auto &file_postfixes : EXTENSION_FILE_POSTFIXES) {
 		if (format == file_postfixes.name + 1) {
 			// It's a match, we must throw

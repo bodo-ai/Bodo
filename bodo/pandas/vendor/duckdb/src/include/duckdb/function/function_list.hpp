@@ -34,7 +34,8 @@ struct CatalogTransaction;
 struct FunctionList {
 	static const StaticFunctionDefinition *GetInternalFunctionList();
 	static void RegisterFunctions(Catalog &catalog, CatalogTransaction transaction);
-	static void RegisterExtensionFunctions(ExtensionLoader &db, const StaticFunctionDefinition *functions);
+	// Bodo Change: Remove extension related files
+	//static void RegisterExtensionFunctions(ExtensionLoader &db, const StaticFunctionDefinition *functions);
 };
 
 } // namespace duckdb

@@ -74,7 +74,7 @@ void Binder::BindSchemaOrCatalog(CatalogEntryRetriever &retriever, string &catal
 					    schema, catalog_name, schema);
 				}
 			}
-			catalog_name = schema;
+			catalog = schema;
 			schema = string();
 		}
 	}

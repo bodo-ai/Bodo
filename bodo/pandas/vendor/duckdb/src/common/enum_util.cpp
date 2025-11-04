@@ -124,7 +124,8 @@
 #include "duckdb/main/error_manager.hpp"
 #include "duckdb/main/extension.hpp"
 #include "duckdb/main/extension_helper.hpp"
-#include "duckdb/main/extension_install_info.hpp"
+// Bodo Change: Remove extension related files
+//#include "duckdb/main/extension_install_info.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/secret/secret.hpp"

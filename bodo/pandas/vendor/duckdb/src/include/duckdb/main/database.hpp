@@ -10,10 +10,12 @@
 
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/main/config.hpp"
-#include "duckdb/main/extension.hpp"
+// Bodo Change: Remove extension related files
+//#include "duckdb/main/extension.hpp"
 #include "duckdb/main/valid_checker.hpp"
-#include "duckdb/main/extension/extension_loader.hpp"
-#include "duckdb/main/extension_manager.hpp"
+// Bodo Change: Remove extension related files
+//#include "duckdb/main/extension/extension_loader.hpp"
+//#include "duckdb/main/extension_manager.hpp"
 
 namespace duckdb {
 class BufferManager;
@@ -53,18 +55,20 @@ public:
 	DUCKDB_API TaskScheduler &GetScheduler();
 	DUCKDB_API ObjectCache &GetObjectCache();
 	DUCKDB_API ConnectionManager &GetConnectionManager();
-	DUCKDB_API ExtensionManager &GetExtensionManager();
+	// Bodo Change: Remove extension related files
+	//DUCKDB_API ExtensionManager &GetExtensionManager();
 	DUCKDB_API ValidChecker &GetValidChecker();
 	DUCKDB_API LogManager &GetLogManager() const;
 
-	DUCKDB_API const duckdb_ext_api_v1 GetExtensionAPIV1();
+	// Bodo Change: Remove extension related files
+	// DUCKDB_API const duckdb_ext_api_v1 GetExtensionAPIV1();
 
 	idx_t NumberOfThreads();
 
 	DUCKDB_API static DatabaseInstance &GetDatabase(ClientContext &context);
 	DUCKDB_API static const DatabaseInstance &GetDatabase(const ClientContext &context);
 
-	DUCKDB_API bool ExtensionIsLoaded(const string &name);
+	//DUCKDB_API bool ExtensionIsLoaded(const string &name);
 
 	DUCKDB_API SettingLookupResult TryGetCurrentSetting(const string &key, Value &result) const;
 
@@ -85,13 +89,15 @@ private:
 	unique_ptr<TaskScheduler> scheduler;
 	unique_ptr<ObjectCache> object_cache;
 	unique_ptr<ConnectionManager> connection_manager;
-	unique_ptr<ExtensionManager> extension_manager;
+	// Bodo Change: Remove extension related files
+	//unique_ptr<ExtensionManager> extension_manager;
 	ValidChecker db_validity;
 	unique_ptr<DatabaseFileSystem> db_file_system;
 	shared_ptr<LogManager> log_manager;
 	unique_ptr<ExternalFileCache> external_file_cache;
 
-	duckdb_ext_api_v1 (*create_api_v1)();
+	// Bodo Change: Remove extension related files
+	//duckdb_ext_api_v1 (*create_api_v1)();
 };
 
 //! The database object. This object holds the catalog and all the
@@ -108,31 +114,32 @@ public:
 	shared_ptr<DatabaseInstance> instance;
 
 public:
-	// Load a statically loaded extension by its class
-	template <class T>
-	void LoadStaticExtension() {
-		T extension;
-		auto &manager = ExtensionManager::Get(*instance);
-		auto info = manager.BeginLoad(extension.Name());
-		if (!info) {
-			// already loaded - return
-			return;
-		}
-
-		// Instantiate a new loader
-		ExtensionLoader loader(*instance, extension.Name());
-
-		// Call the Load method of the extension
-		extension.Load(loader);
-
-		// Finalize the loading process
-		loader.FinalizeLoad();
-
-		ExtensionInstallInfo install_info;
-		install_info.mode = ExtensionInstallMode::STATICALLY_LINKED;
-		install_info.version = extension.Version();
-		info->FinishLoad(install_info);
-	}
+// Bodo Change: Remove extension related files
+//	// Load a statically loaded extension by its class
+//	template <class T>
+//	void LoadStaticExtension() {
+//		T extension;
+//		auto &manager = ExtensionManager::Get(*instance);
+//		auto info = manager.BeginLoad(extension.Name());
+//		if (!info) {
+//			// already loaded - return
+//			return;
+//		}
+//
+//		// Instantiate a new loader
+//		ExtensionLoader loader(*instance, extension.Name());
+//
+//		// Call the Load method of the extension
+//		extension.Load(loader);
+//
+//		// Finalize the loading process
+//		loader.FinalizeLoad();
+//
+//		ExtensionInstallInfo install_info;
+//		install_info.mode = ExtensionInstallMode::STATICALLY_LINKED;
+//		install_info.version = extension.Version();
+//		info->FinishLoad(install_info);
+//	}
 
 	DUCKDB_API FileSystem &GetFileSystem();
 

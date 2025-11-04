@@ -29,7 +29,7 @@
 #include "duckdb/execution/index/index_type_set.hpp"
 #include "duckdb/function/cast/default_casts.hpp"
 #include "duckdb/function/replacement_scan.hpp"
-# Bodo Change: Remove optimzer_extension
+// Bodo Change: Remove optimzer_extension
 #include "duckdb/parser/parsed_data/create_info.hpp"
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/main/setting_info.hpp"
@@ -139,8 +139,9 @@ struct DBConfigOptions {
 	CompressionType force_compression = CompressionType::COMPRESSION_AUTO;
 	//! The set of disabled compression methods (default empty)
 	set<CompressionType> disabled_compression_methods;
-	//! Force a specific bitpacking mode to be used when using the bitpacking compression method
-	BitpackingMode force_bitpacking_mode = BitpackingMode::AUTO;
+	// Bodo Change: Remove compression
+	////! Force a specific bitpacking mode to be used when using the bitpacking compression method
+	//BitpackingMode force_bitpacking_mode = BitpackingMode::AUTO;
 	//! Database configuration variables as controlled by SET
 	case_insensitive_map_t<Value> set_variables;
 	//! Database configuration variable default values;

@@ -4,7 +4,8 @@
 #include "duckdb/function/register_function_list_helper.hpp"
 #include "duckdb/parser/parsed_data/create_aggregate_function_info.hpp"
 #include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
-#include "duckdb/main/extension/extension_loader.hpp"
+// Bodo Change: Remove extension related files
+// #include "duckdb/main/extension/extension_loader.hpp"
 
 namespace duckdb {
 
@@ -27,17 +28,18 @@ struct MainRegister {
 	}
 };
 
-struct ExtensionRegister {
-	template <class T>
-	static void FillExtraInfo(T &info) {
-		info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
-	}
-
-	template <class T>
-	static void RegisterFunction(ExtensionLoader &loader, T &info) {
-		loader.RegisterFunction(std::move(info));
-	}
-};
+// Bodo Change: Remove extension related files
+//struct ExtensionRegister {
+//	template <class T>
+//	static void FillExtraInfo(T &info) {
+//		info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
+//	}
+//
+//	template <class T>
+//	static void RegisterFunction(ExtensionLoader &loader, T &info) {
+//		loader.RegisterFunction(std::move(info));
+//	}
+//};
 
 template <class OP, class T>
 static void FillExtraInfo(const StaticFunctionDefinition &function, T &info) {
@@ -81,9 +83,10 @@ static void RegisterFunctionList(REGISTER_CONTEXT &context, const StaticFunction
 	}
 }
 
-void FunctionList::RegisterExtensionFunctions(ExtensionLoader &loader, const StaticFunctionDefinition *functions) {
-	RegisterFunctionList<ExtensionRegister>(loader, functions);
-}
+// Bodo Change: Remove extension related files
+//void FunctionList::RegisterExtensionFunctions(ExtensionLoader &loader, const StaticFunctionDefinition *functions) {
+//	RegisterFunctionList<ExtensionRegister>(loader, functions);
+//}
 
 void FunctionList::RegisterFunctions(Catalog &catalog, CatalogTransaction transaction) {
 	MainRegisterContext context(catalog, transaction);
