@@ -1337,6 +1337,8 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
 
     # Fallback to JIT for typing parameters
     import bodo.decorators  # isort:skip # noqa
+    from numba.core import types
+
     from bodosql.context_ext import (
         get_sql_param_column_type_info,
     )
