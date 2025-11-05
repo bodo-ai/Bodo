@@ -1685,7 +1685,7 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
 
 
 def test_size_no_val(groupby_agg_df, as_index):
-    """Tests that calling groupby.size() on a DataFrame without value columns."""
+    """Test groupby.size() on a DataFrame without value columns."""
     sel_cols = ["D", "A"]
 
     df = groupby_agg_df[sel_cols]
