@@ -190,6 +190,7 @@ class Spawner:
         self._del_queue = deque()
         self._is_running = False
         self._workers_imported_compiler = False
+        self._workers_imported_bodosql_compiler = False
 
     def _get_spawn_command_args(self) -> tuple[str, list[str]]:
         """
@@ -428,6 +429,16 @@ class Spawner:
 
         self._workers_imported_compiler = True
         self.submit_func_to_workers(lambda: import_compiler(), [])
+
+    def import_bodosql_compiler_on_workers(self):
+        if self._workers_imported_bodosql_compiler:
+            return
+
+        def import_bodosql_compiler():
+            import bodosql.compiler  # isort:skip # noqa
+
+        self._workers_imported_bodosql_compiler = True
+        self.submit_func_to_workers(lambda: import_bodosql_compiler(), [])
 
     def lazy_manager_collect_func(self, res_id: str):
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
