@@ -29,5 +29,7 @@ def test_basic_sql(snowflake_sample_data_snowflake_catalog):
     """
     import bodosql.compiler  # isort:skip # noqa
 
+    bodo.spawn.utils.import_bodosql_compiler_on_workers()
+
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     exec_query(bc)
