@@ -67,7 +67,7 @@ private:
 	Binder &binder;
 	ClientContext &context;
 
-    // If key idx is a cte index the it is the union of all columns
+    // If key idx is a cte index then it is the union of all columns
     // needed by all the CTErefs for that CTE.
     // If key idx is a table index (currently only CTERef table indices
     // are stored) then it is the exact set of columns needed by that
