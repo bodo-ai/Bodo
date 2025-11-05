@@ -21,7 +21,9 @@ def test_quickstart_local_sql():
     with ensure_clean2(output_df_path):
         df.to_parquet(output_df_path)
 
-        with temp_env_override({"BODO_SPAWN_MODE": "1"}):
+        with temp_env_override(
+            {"BODO_SPAWN_MODE": "1", "BODO_ENABLE_DATAFRAME_LIBRARY": "1"}
+        ):
             bc = bodosql.BodoSQLContext(
                 {"TABLE1": bodosql.TablePath(output_df_path, "parquet")}
             )
