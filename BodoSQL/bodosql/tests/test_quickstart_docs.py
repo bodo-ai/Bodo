@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import pytest_spawn_mode, temp_env_override
+from bodo.tests.utils import temp_env_override
 from bodo.utils.testing import ensure_clean2
 
-pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
+pytestmark = [pytest.mark.test_docs]
 
 
 def test_quickstart_local_sql():
@@ -21,9 +21,7 @@ def test_quickstart_local_sql():
     with ensure_clean2(output_df_path):
         df.to_parquet(output_df_path)
 
-        with temp_env_override(
-            {"BODO_SPAWN_MODE": "1", "BODO_ENABLE_DATAFRAME_LIBRARY": "1"}
-        ):
+        with temp_env_override({"BODO_SPAWN_MODE": "1"}):
             bc = bodosql.BodoSQLContext(
                 {"TABLE1": bodosql.TablePath(output_df_path, "parquet")}
             )
