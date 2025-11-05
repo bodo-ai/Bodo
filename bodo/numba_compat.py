@@ -2592,9 +2592,12 @@ def add_context(self, msg):
     contextual information.
     Bodo: avoid adding During resolve call message.
     """
+    if msg in self.contexts:
+        # avoid duplicating contexts
+        return self
+    self.contexts.append(msg)
     # TODO:  [BE-486] development_mode environment variable?
     if numba.core.config.DEVELOPER_MODE:
-        self.contexts.append(msg)
         f = _termcolor.errmsg("{0}") + _termcolor.filename("During: {1}")
         newmsg = f.format(self, msg)
         self.args = (newmsg,)
@@ -2610,7 +2613,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.errors.NumbaError.add_context)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "6a388d87788f8432c2152ac55ca9acaa94dbc3b55be973b2cf22dd4ee7179ab8"
+        != "9e1a2546642bdd13e2e0bdc790edaab8bbf3329afe9554a16c400dc6dd5a16ba"
     ):  # pragma: no cover
         warnings.warn("numba.core.errors.NumbaError.add_context has changed")
 
