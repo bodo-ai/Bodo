@@ -47,6 +47,8 @@ protected:
 
 	bool HandleStructExtractRecursive(Expression &expr, optional_ptr<BoundColumnRefExpression> &colref,
 	                                  vector<idx_t> &indexes);
+
+    bool HasColumnReferencesForTable(idx_t table_index) const;
 };
 
 class RemoveUnusedColumns;

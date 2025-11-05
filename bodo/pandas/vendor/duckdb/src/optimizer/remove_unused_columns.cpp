@@ -184,6 +184,15 @@ void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
     }
 }
 
+bool BaseColumnPruner::HasColumnReferencesForTable(idx_t table_index) const {
+    for (auto &entry : column_references) {
+        if (entry.first.table_index == table_index) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
@@ -440,8 +449,38 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		auto &cte = op.Cast<LogicalMaterializedCTE>();
         const idx_t cte_id = cte.table_index;
 
+        // ----------------- CTE use side of CTE node --------------------
+        auto &use_cte_op = *(cte.children[1]);
+        if (HasColumnReferencesForTable(cte_id)) {
+            use_cte_op.ResolveOperatorTypes();
+
+            vector<idx_t> use_cte_root_table_indices = use_cte_op.GetTableIndex();
+            idx_t use_cte_root_table_index;
+            if (use_cte_root_table_indices.size() != 1) {
+                throw InternalException("child 1 don't yet know how to handle to case where CTE root node has multiple table indices! " + std::to_string(static_cast<int>(use_cte_op.type)));
+            }
+
+            // Prepare the CTE side for processing by setting the columns of the root
+            // of the CTE equal to the union of all columns needed by all the CTERefs.
+            use_cte_root_table_index = use_cte_root_table_indices[0];
+
+            int count_col_found = 0;
+            for (idx_t i = 0; i < use_cte_op.types.size(); ++i) {
+                ColumnBinding cte_binding(cte_id, i);
+                if (column_references.find(cte_binding) != column_references.end()) {
+                    ColumnBinding child_binding(use_cte_root_table_index, i);
+                    BoundColumnRefExpression tempcolref(use_cte_op.types[i], child_binding);
+                    AddBinding(tempcolref);
+                    ++count_col_found;
+                }
+            }
+        }
+
         // Process unique (non-CTE) side of the CTE.
-        VisitOperator(*cte.children[1]);
+        VisitOperator(use_cte_op);
+
+        // ----------------- CTE side of CTE node ------------------------
+
         // Find the info on the union of the columns required by all the CTERef
         // with this cte index.
         auto cte_it = pass.cte_required_cols.find(cte_id);
@@ -450,6 +489,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
         }
         RemoveUnusedColumns cte_side(binder, context, pass);
         auto &cte_op = *(cte.children[0]);
+        cte_op.ResolveOperatorTypes();
         idx_t cte_root_table_index;
         if (cte_op.type == LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY) {
 			auto &aggr = cte_op.Cast<LogicalAggregate>();
@@ -465,14 +505,13 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
                     binding = ColumnBinding(aggr.aggregate_index, agg_col);
                 }
 
-                ReferencedColumn rc;
-                rc.child_columns.emplace_back(ColumnIndex(binding.column_index));
-                cte_side.column_references.insert({binding, std::move(rc)});
+                BoundColumnRefExpression tempcolref(cte_op.types[col_idx], binding);
+                cte_side.AddBinding(tempcolref);
             }
         } else {
             vector<idx_t> cte_root_table_indices = cte_op.GetTableIndex();
             if (cte_root_table_indices.size() != 1) {
-                throw InternalException("Don't yet know how to handle to case where CTE root node has multiple table indices!");
+                throw InternalException("child 0 don't yet know how to handle to case where CTE root node has multiple table indices!" + std::to_string(static_cast<int>(cte_op.type)));
             }
             // Prepare the CTE side for processing by setting the columns of the root
             // of the CTE equal to the union of all columns needed by all the CTERefs.
@@ -480,15 +519,13 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
             // For each column needed by a CTERef.
             for (auto col_idx : cte_it->second) {
                 ColumnBinding binding(cte_root_table_index, col_idx);
-                ReferencedColumn rc;
-                rc.child_columns.emplace_back(ColumnIndex(col_idx));
-                // Say this column index is needed from the root of the CTE side.
-                cte_side.column_references.insert({binding, std::move(rc)});
+                BoundColumnRefExpression tempcolref(cte_op.types[col_idx], binding);
+                cte_side.AddBinding(tempcolref);
             }
         }
         // Now process the duplicated (CTE) side of the CTE.
         cte_side.VisitOperator(cte_op);
-		break;
+        return;
 	}
 	case LogicalOperatorType::LOGICAL_CTE_REF: {
 		auto &cteref = op.Cast<LogicalCTERef>();
@@ -540,8 +577,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	default:
 		break;
 	}
-	LogicalOperatorVisitor::VisitOperatorExpressions(op);
-	LogicalOperatorVisitor::VisitOperatorChildren(op);
+    LogicalOperatorVisitor::VisitOperatorExpressions(op);
+    LogicalOperatorVisitor::VisitOperatorChildren(op);
 
 	if (op.type == LogicalOperatorType::LOGICAL_ASOF_JOIN || op.type == LogicalOperatorType::LOGICAL_DELIM_JOIN ||
 	    op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
