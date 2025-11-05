@@ -203,6 +203,7 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.iceberg
 @pytest_mark_one_rank
 @pytest.mark.bodosql_cpp
 def test_basic_iceberg_read(iceberg_database):
