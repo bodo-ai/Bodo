@@ -90,7 +90,7 @@ from bodo.utils.typing import (
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
-_check_numba_change = False
+_check_numba_change = True
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
@@ -1272,7 +1272,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             )
             try:
                 tp = typeof(val, Purpose.argument)
-            except ValueError as typeof_exc:
+            except (errors.NumbaValueError, ValueError) as typeof_exc:
                 failed_args.append((i, str(typeof_exc)))
             else:
                 if tp is None:
@@ -1368,7 +1368,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "574ef31a488694f419a02dff4e313c1714e3dd2368d990a78fbe5e72c3bfb23f"
+        != "6fe2b0f0f701524e778ba60d8c5e08277ce2c6d0b490cd077b56accde54a7c9e"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
