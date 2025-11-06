@@ -179,6 +179,8 @@ get_data_type_from_bodo_fixed_width_array(
             in_num_bytes = sizeof(int64_t) * array->length;
             if (tz.length() > 0) {
                 type = arrow::timestamp(time_unit, tz);
+            } else if (array->tz_info.length() > 0) {
+                type = arrow::timestamp(time_unit, array->tz_info);
             } else {
                 type = arrow::timestamp(time_unit);
             }
@@ -366,6 +368,7 @@ std::shared_ptr<arrow::Array> bodo_array_to_arrow(
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             auto [type, in_num_bytes] =
+                // TODO: TIMEZONE HERE
                 get_data_type_from_bodo_fixed_width_array(
                     array, tz, time_unit, convert_timedelta_to_int64,
                     downcast_time_ns_to_us);
@@ -1443,8 +1446,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
             // Ensure we are always working with Naive/UTC timestamps and
             // nanosecond precision.
-            if (type->unit() != arrow::TimeUnit::NANO ||
-                (type->timezone() != "" && type->timezone() != "UTC")) {
+            if (type->unit() != arrow::TimeUnit::NANO) {
                 auto res = arrow::compute::Cast(
                     *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
                     arrow::compute::CastOptions::Safe(),
@@ -1454,8 +1456,13 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 ts_arr =
                     std::static_pointer_cast<arrow::TimestampArray>(casted_arr);
             }
-            return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
-                ts_arr, Bodo_CTypes::DATETIME, src_pool);
+            std::shared_ptr<array_info> bodo_arr =
+                arrow_numeric_array_to_bodo<arrow::TimestampArray>(
+                    ts_arr, Bodo_CTypes::DATETIME, src_pool);
+
+            // Store original timezone info (for DataFrame Library)
+            bodo_arr->tz_info = type->timezone();
+            return bodo_arr;
         }
         case arrow::Type::DURATION: {
             auto dur_arr =

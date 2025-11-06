@@ -9,6 +9,7 @@
 
 #include <Python.h>
 #include <arrow/type.h>
+#include <utility>
 #include <vector>
 
 #include "_meminfo.h"
@@ -928,6 +929,7 @@ struct array_info {
     int32_t precision;        // for array of decimals and times
     int32_t scale;            // for array of decimals
     uint64_t num_categories;  // for categorical arrays
+    std::string tz_info;      // timezone info for timestamp arrays
     // ID used to identify matching equivalent dictionaries.
     // Currently only used by string arrays that are the dictionaries
     // inside dictionary encoded arrays. It cannot be placed in the dictionary
@@ -962,7 +964,8 @@ struct array_info {
                int64_t _num_categories = 0, int64_t _array_id = -1,
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
-               int64_t _offset = 0, std::vector<std::string> _field_names = {})
+               int64_t _offset = 0, std::vector<std::string> _field_names = {},
+               std::string _tz_info = "")
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -972,6 +975,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
+          tz_info(std::move(_tz_info)),
           array_id(_array_id),
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
