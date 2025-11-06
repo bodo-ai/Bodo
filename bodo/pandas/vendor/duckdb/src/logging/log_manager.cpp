@@ -263,7 +263,8 @@ void LogManager::RegisterLogType(unique_ptr<LogType> type) {
 void LogManager::RegisterDefaultLogTypes() {
 	RegisterLogType(make_uniq<DefaultLogType>());
 	RegisterLogType(make_uniq<FileSystemLogType>());
-	RegisterLogType(make_uniq<HTTPLogType>());
+	// Bodo Change: Remove HTTPLogType
+	//RegisterLogType(make_uniq<HTTPLogType>());
 	RegisterLogType(make_uniq<QueryLogType>());
 	RegisterLogType(make_uniq<PhysicalOperatorLogType>());
 }

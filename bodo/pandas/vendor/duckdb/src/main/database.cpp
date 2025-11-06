@@ -30,7 +30,7 @@
 // Bodo Change: Remove compression code
 //#include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
-#include "duckdb/common/http_util.hpp"
+//#include "duckdb/common/http_util.hpp"
 #include "mbedtls_wrapper.hpp"
 #include "duckdb/main/database_file_path_manager.hpp"
 
@@ -46,7 +46,7 @@ DBConfig::DBConfig() {
 	index_types = make_uniq<IndexTypeSet>();
 	error_manager = make_uniq<ErrorManager>();
 	secret_manager = make_uniq<SecretManager>();
-	// Bodo	Change: Remove mbedtls dependency
+	// Bodo	Change: Remove http_util
 	//http_util = make_shared_ptr<HTTPUtil>();
 	// Bodo Change: Remove extension code
 	//storage_extensions["__open_file__"] = OpenFileStorageExtension::Create();

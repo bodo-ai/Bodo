@@ -100,27 +100,28 @@ Value AllowUnredactedSecretsSetting::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(config.options.allow_unredacted_secrets);
 }
 
-//===----------------------------------------------------------------------===//
-// Allow Unsigned Extensions
-//===----------------------------------------------------------------------===//
-void AllowUnsignedExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (!OnGlobalSet(db, config, input)) {
-		return;
-	}
-	config.options.allow_unsigned_extensions = input.GetValue<bool>();
-}
-
-void AllowUnsignedExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	if (!OnGlobalReset(db, config)) {
-		return;
-	}
-	config.options.allow_unsigned_extensions = DBConfigOptions().allow_unsigned_extensions;
-}
-
-Value AllowUnsignedExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.allow_unsigned_extensions);
-}
+// Bodo Change: Remove extension code
+////===----------------------------------------------------------------------===//
+//// Allow Unsigned Extensions
+////===----------------------------------------------------------------------===//
+//void AllowUnsignedExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	if (!OnGlobalSet(db, config, input)) {
+//		return;
+//	}
+//	config.options.allow_unsigned_extensions = input.GetValue<bool>();
+//}
+//
+//void AllowUnsignedExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	if (!OnGlobalReset(db, config)) {
+//		return;
+//	}
+//	config.options.allow_unsigned_extensions = DBConfigOptions().allow_unsigned_extensions;
+//}
+//
+//Value AllowUnsignedExtensionsSetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value::BOOLEAN(config.options.allow_unsigned_extensions);
+//}
 
 //===----------------------------------------------------------------------===//
 // Arrow Output Version
@@ -129,53 +130,55 @@ void ArrowOutputVersionSetting::OnSet(SettingCallbackInfo &info, Value &paramete
 	EnumUtil::FromString<ArrowFormatVersion>(StringValue::Get(parameter));
 }
 
-//===----------------------------------------------------------------------===//
-// Autoinstall Extension Repository
-//===----------------------------------------------------------------------===//
-void AutoinstallExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoinstall_extension_repo = input.GetValue<string>();
-}
+// Bodo Change: Remove extension code
+////===----------------------------------------------------------------------===//
+//// Autoinstall Extension Repository
+////===----------------------------------------------------------------------===//
+//void AutoinstallExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.autoinstall_extension_repo = input.GetValue<string>();
+//}
+//
+//void AutoinstallExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.autoinstall_extension_repo = DBConfigOptions().autoinstall_extension_repo;
+//}
+//
+//Value AutoinstallExtensionRepositorySetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value(config.options.autoinstall_extension_repo);
+//}
+//
+////===----------------------------------------------------------------------===//
+//// Autoinstall Known Extensions
+////===----------------------------------------------------------------------===//
+//void AutoinstallKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.autoinstall_known_extensions = input.GetValue<bool>();
+//}
+//
+//void AutoinstallKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.autoinstall_known_extensions = DBConfigOptions().autoinstall_known_extensions;
+//}
+//
+//Value AutoinstallKnownExtensionsSetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value::BOOLEAN(config.options.autoinstall_known_extensions);
+//}
+//
+////===----------------------------------------------------------------------===//
+//// Autoload Known Extensions
+////===----------------------------------------------------------------------===//
+//void AutoloadKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.autoload_known_extensions = input.GetValue<bool>();
+//}
+//
+//void AutoloadKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.autoload_known_extensions = DBConfigOptions().autoload_known_extensions;
+//}
 
-void AutoinstallExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoinstall_extension_repo = DBConfigOptions().autoinstall_extension_repo;
-}
-
-Value AutoinstallExtensionRepositorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.autoinstall_extension_repo);
-}
-
-//===----------------------------------------------------------------------===//
-// Autoinstall Known Extensions
-//===----------------------------------------------------------------------===//
-void AutoinstallKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoinstall_known_extensions = input.GetValue<bool>();
-}
-
-void AutoinstallKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoinstall_known_extensions = DBConfigOptions().autoinstall_known_extensions;
-}
-
-Value AutoinstallKnownExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.autoinstall_known_extensions);
-}
-
-//===----------------------------------------------------------------------===//
-// Autoload Known Extensions
-//===----------------------------------------------------------------------===//
-void AutoloadKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoload_known_extensions = input.GetValue<bool>();
-}
-
-void AutoloadKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoload_known_extensions = DBConfigOptions().autoload_known_extensions;
-}
-
-Value AutoloadKnownExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.autoload_known_extensions);
-}
+// Bodo Change: Remove extension code
+//Value AutoloadKnownExtensionsSetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value::BOOLEAN(config.options.autoload_known_extensions);
+//}
 
 //===----------------------------------------------------------------------===//
 // Checkpoint Threshold
@@ -184,21 +187,22 @@ void CheckpointThresholdSetting::ResetGlobal(DatabaseInstance *db, DBConfig &con
 	config.options.checkpoint_wal_size = DBConfigOptions().checkpoint_wal_size;
 }
 
-//===----------------------------------------------------------------------===//
-// Custom Extension Repository
-//===----------------------------------------------------------------------===//
-void CustomExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.custom_extension_repo = input.GetValue<string>();
-}
-
-void CustomExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.custom_extension_repo = DBConfigOptions().custom_extension_repo;
-}
-
-Value CustomExtensionRepositorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.custom_extension_repo);
-}
+// Bodo Change: Remove extension code
+////===----------------------------------------------------------------------===//
+//// Custom Extension Repository
+////===----------------------------------------------------------------------===//
+//void CustomExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.custom_extension_repo = input.GetValue<string>();
+//}
+//
+//void CustomExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.custom_extension_repo = DBConfigOptions().custom_extension_repo;
+//}
+//
+//Value CustomExtensionRepositorySetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value(config.options.custom_extension_repo);
+//}
 
 //===----------------------------------------------------------------------===//
 // Custom User Agent
@@ -363,22 +367,22 @@ Value ExplainOutputSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value(StringUtil::Lower(EnumUtil::ToString(config.explain_output_type)));
 }
-
-//===----------------------------------------------------------------------===//
-// Extension Directory
-//===----------------------------------------------------------------------===//
-void ExtensionDirectorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.extension_directory = input.GetValue<string>();
-}
-
-void ExtensionDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.extension_directory = DBConfigOptions().extension_directory;
-}
-
-Value ExtensionDirectorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.extension_directory);
-}
+// Bodo Change: Remove extension code
+////===----------------------------------------------------------------------===//
+//// Extension Directory
+////===----------------------------------------------------------------------===//
+//void ExtensionDirectorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.extension_directory = input.GetValue<string>();
+//}
+//
+//void ExtensionDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.extension_directory = DBConfigOptions().extension_directory;
+//}
+//
+//Value ExtensionDirectorySetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value(config.options.extension_directory);
+//}
 
 //===----------------------------------------------------------------------===//
 // External Threads

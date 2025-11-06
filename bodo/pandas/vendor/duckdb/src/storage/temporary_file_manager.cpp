@@ -6,6 +6,8 @@
 #include "duckdb/storage/buffer/temporary_file_information.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
 #include "duckdb/main/database.hpp"
+// Bodo Change: Add for QueryContext
+#include "duckdb/main/client_context.hpp"
 // Bodo Change: Remove encryption files
 // #include "duckdb/common/encryption_functions.hpp"
 #include "zstd.h"
@@ -75,10 +77,11 @@ TemporaryFileIdentifier::TemporaryFileIdentifier(DatabaseInstance &db, Temporary
                                                  bool encrypted_p)
     : size(size_p), file_index(file_index_p), encrypted(encrypted_p) {
 
-	if (encrypted) {
-		// generate a random encryption key ID and corresponding key
-		EncryptionEngine::AddTempKeyToCache(db);
-	}
+	// Bodo Change: Remove storage encryption code
+	//if (encrypted) {
+	//	// generate a random encryption key ID and corresponding key
+	//	EncryptionEngine::AddTempKeyToCache(db);
+	//}
 }
 
 bool TemporaryFileIdentifier::IsValid() const {
@@ -236,17 +239,18 @@ unique_ptr<FileBuffer> TemporaryFileHandle::ReadTemporaryBuffer(QueryContext con
 	}
 
 	idx_t read_position = GetPositionInFile(block_index);
-	if (IsEncrypted()) {
-		uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
-		//! Read nonce and tag.
-		handle->Read(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, read_position);
-		//! Read the encrypted compressed buffer.
-		handle->Read(context, read_buffer, read_size, read_position + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
-		//! Decrypt the compressed buffer.
-		EncryptionEngine::DecryptTemporaryBuffer(db, read_buffer, read_size, encryption_metadata);
-	} else {
+	// Bodo Change: Remove storage encryption code
+	//if (IsEncrypted()) {
+	//	uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
+	//	//! Read nonce and tag.
+	//	handle->Read(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, read_position);
+	//	//! Read the encrypted compressed buffer.
+	//	handle->Read(context, read_buffer, read_size, read_position + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
+	//	//! Decrypt the compressed buffer.
+	//	EncryptionEngine::DecryptTemporaryBuffer(db, read_buffer, read_size, encryption_metadata);
+	//} else {
 		handle->Read(context, read_buffer, read_size, read_position);
-	}
+	//}
 
 	if (is_uncompressed) {
 		return buffer;
@@ -281,16 +285,17 @@ void TemporaryFileHandle::WriteTemporaryBuffer(FileBuffer &buffer, const idx_t b
 		write_size = TemporaryBufferSizeToSize(identifier.size);
 	}
 	idx_t write_position = GetPositionInFile(block_index);
-	if (IsEncrypted()) {
-		uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
-		EncryptionEngine::EncryptTemporaryBuffer(db, write_buffer, write_size, encryption_metadata);
+	// Bodo Change: Remove storage encryption code
+	//if (IsEncrypted()) {
+	//	uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
+	//	EncryptionEngine::EncryptTemporaryBuffer(db, write_buffer, write_size, encryption_metadata);
 
-		handle->Write(QueryContext(), encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, write_position);
-		handle->Write(QueryContext(), write_buffer, write_size, write_position + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
-	} else {
+	//	handle->Write(QueryContext(), encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, write_position);
+	//	handle->Write(QueryContext(), write_buffer, write_size, write_position + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
+	//} else {
 		// write file directly
 		handle->Write(QueryContext(), write_buffer, write_size, write_position);
-	}
+	//}
 }
 
 void TemporaryFileHandle::EraseBlockIndex(block_id_t block_index) {

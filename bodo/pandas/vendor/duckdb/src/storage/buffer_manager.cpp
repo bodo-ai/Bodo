@@ -8,6 +8,8 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer/buffer_pool.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
+// Bodo Change: Import for QueryContext
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 

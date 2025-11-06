@@ -296,69 +296,71 @@ MainHeader ConstructMainHeader(idx_t version_number) {
 	return header;
 }
 
-void SingleFileBlockManager::StoreEncryptedCanary(AttachedDatabase &db, MainHeader &main_header, const string &key_id) {
-	const_data_ptr_t key = EncryptionEngine::GetKeyFromCache(db.GetDatabase(), key_id);
-	// Encrypt canary with the derived key
-	auto encryption_state = db.GetDatabase().GetEncryptionUtil()->CreateEncryptionState(
-	    main_header.GetEncryptionCipher(), MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
-	EncryptCanary(main_header, encryption_state, key);
-}
+// Bodo	Change: Remove storage encryption functions
+//void SingleFileBlockManager::StoreEncryptedCanary(AttachedDatabase &db, MainHeader &main_header, const string &key_id) {
+//	const_data_ptr_t key = EncryptionEngine::GetKeyFromCache(db.GetDatabase(), key_id);
+//	// Encrypt canary with the derived key
+//	auto encryption_state = db.GetDatabase().GetEncryptionUtil()->CreateEncryptionState(
+//	    main_header.GetEncryptionCipher(), MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
+//	EncryptCanary(main_header, encryption_state, key);
+//}
 
 void SingleFileBlockManager::StoreDBIdentifier(MainHeader &main_header, data_ptr_t db_identifier) {
 	main_header.SetDBIdentifier(db_identifier);
 }
 
-void SingleFileBlockManager::StoreEncryptionMetadata(MainHeader &main_header) const {
-	// The first byte is the key derivation function (kdf).
-	// The second byte is for the usage of AAD.
-	// The third byte is for the cipher.
-	// The subsequent byte is empty.
-	// The last 4 bytes are the key length.
-
-	uint8_t metadata[MainHeader::ENCRYPTION_METADATA_LEN];
-	memset(metadata, 0, MainHeader::ENCRYPTION_METADATA_LEN);
-	data_ptr_t offset = metadata;
-
-	Store<uint8_t>(options.encryption_options.kdf, offset);
-	offset++;
-	Store<uint8_t>(options.encryption_options.additional_authenticated_data, offset);
-	offset++;
-	Store<uint8_t>(db.GetStorageManager().GetCipher(), offset);
-	offset += 2;
-	Store<uint32_t>(options.encryption_options.key_length, offset);
-
-	main_header.SetEncryptionMetadata(metadata);
-}
-
-void SingleFileBlockManager::CheckAndAddEncryptionKey(MainHeader &main_header, string &user_key) {
-	//! Get the database identifier.
-	uint8_t db_identifier[MainHeader::DB_IDENTIFIER_LEN];
-	memset(db_identifier, 0, MainHeader::DB_IDENTIFIER_LEN);
-	memcpy(db_identifier, main_header.GetDBIdentifier(), MainHeader::DB_IDENTIFIER_LEN);
-
-	//! Check if the correct key is used to decrypt the database
-	// Derive the encryption key and add it to cache
-	data_t derived_key[MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH];
-	EncryptionKeyManager::DeriveKey(user_key, db_identifier, derived_key);
-
-	auto encryption_state = db.GetDatabase().GetEncryptionUtil()->CreateEncryptionState(
-	    main_header.GetEncryptionCipher(), MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
-	if (!DecryptCanary(main_header, encryption_state, derived_key)) {
-		throw IOException("Wrong encryption key used to open the database file");
-	}
-
-	options.encryption_options.derived_key_id = EncryptionEngine::AddKeyToCache(db.GetDatabase(), derived_key);
-	auto &catalog = db.GetCatalog().Cast<DuckCatalog>();
-	catalog.SetEncryptionKeyId(options.encryption_options.derived_key_id);
-	catalog.SetIsEncrypted();
-
-	std::fill(user_key.begin(), user_key.end(), 0);
-	user_key.clear();
-}
-
-void SingleFileBlockManager::CheckAndAddEncryptionKey(MainHeader &main_header) {
-	return CheckAndAddEncryptionKey(main_header, *options.encryption_options.user_key);
-}
+// Bodo	Change: Remove storage encryption functions
+//void SingleFileBlockManager::StoreEncryptionMetadata(MainHeader &main_header) const {
+//	// The first byte is the key derivation function (kdf).
+//	// The second byte is for the usage of AAD.
+//	// The third byte is for the cipher.
+//	// The subsequent byte is empty.
+//	// The last 4 bytes are the key length.
+//
+//	uint8_t metadata[MainHeader::ENCRYPTION_METADATA_LEN];
+//	memset(metadata, 0, MainHeader::ENCRYPTION_METADATA_LEN);
+//	data_ptr_t offset = metadata;
+//
+//	Store<uint8_t>(options.encryption_options.kdf, offset);
+//	offset++;
+//	Store<uint8_t>(options.encryption_options.additional_authenticated_data, offset);
+//	offset++;
+//	Store<uint8_t>(db.GetStorageManager().GetCipher(), offset);
+//	offset += 2;
+//	Store<uint32_t>(options.encryption_options.key_length, offset);
+//
+//	main_header.SetEncryptionMetadata(metadata);
+//}
+//
+//void SingleFileBlockManager::CheckAndAddEncryptionKey(MainHeader &main_header, string &user_key) {
+//	//! Get the database identifier.
+//	uint8_t db_identifier[MainHeader::DB_IDENTIFIER_LEN];
+//	memset(db_identifier, 0, MainHeader::DB_IDENTIFIER_LEN);
+//	memcpy(db_identifier, main_header.GetDBIdentifier(), MainHeader::DB_IDENTIFIER_LEN);
+//
+//	//! Check if the correct key is used to decrypt the database
+//	// Derive the encryption key and add it to cache
+//	data_t derived_key[MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH];
+//	EncryptionKeyManager::DeriveKey(user_key, db_identifier, derived_key);
+//
+//	auto encryption_state = db.GetDatabase().GetEncryptionUtil()->CreateEncryptionState(
+//	    main_header.GetEncryptionCipher(), MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
+//	if (!DecryptCanary(main_header, encryption_state, derived_key)) {
+//		throw IOException("Wrong encryption key used to open the database file");
+//	}
+//
+//	options.encryption_options.derived_key_id = EncryptionEngine::AddKeyToCache(db.GetDatabase(), derived_key);
+//	auto &catalog = db.GetCatalog().Cast<DuckCatalog>();
+//	catalog.SetEncryptionKeyId(options.encryption_options.derived_key_id);
+//	catalog.SetIsEncrypted();
+//
+//	std::fill(user_key.begin(), user_key.end(), 0);
+//	user_key.clear();
+//}
+//
+//void SingleFileBlockManager::CheckAndAddEncryptionKey(MainHeader &main_header) {
+//	return CheckAndAddEncryptionKey(main_header, *options.encryption_options.user_key);
+//}
 
 void SingleFileBlockManager::CreateNewDatabase(QueryContext context) {
 	auto flags = GetFileFlags(true);
@@ -377,7 +379,9 @@ void SingleFileBlockManager::CreateNewDatabase(QueryContext context) {
 	// Derive the encryption key and add it to the cache.
 	// Not used for plain databases.
 	data_t derived_key[MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH];
-	auto encryption_enabled = options.encryption_options.encryption_enabled;
+	// Bodo Change: disable storage encryption
+	//auto encryption_enabled = options.encryption_options.encryption_enabled;
+	bool encryption_enabled = false;
 
 	// We need the unique database identifier, if the storage version is new enough.
 	// If encryption is enabled, we also use it as the salt.
@@ -386,35 +390,37 @@ void SingleFileBlockManager::CreateNewDatabase(QueryContext context) {
 		GenerateDBIdentifier(options.db_identifier);
 	}
 
-	if (encryption_enabled) {
-		// The key is given via ATTACH.
-		EncryptionKeyManager::DeriveKey(*options.encryption_options.user_key, options.db_identifier, derived_key);
-		options.encryption_options.user_key = nullptr;
+	// Bodo Change: Remove storage encryption functions
+	//if (encryption_enabled) {
+	//	// The key is given via ATTACH.
+	//	EncryptionKeyManager::DeriveKey(*options.encryption_options.user_key, options.db_identifier, derived_key);
+	//	options.encryption_options.user_key = nullptr;
 
-		// if no encryption cipher is specified, use GCM
-		if (db.GetStorageManager().GetCipher() == EncryptionTypes::INVALID) {
-			db.GetStorageManager().SetCipher(EncryptionTypes::GCM);
-		}
+	//	// if no encryption cipher is specified, use GCM
+	//	if (db.GetStorageManager().GetCipher() == EncryptionTypes::INVALID) {
+	//		db.GetStorageManager().SetCipher(EncryptionTypes::GCM);
+	//	}
 
-		// Set the encrypted DB bit to 1.
-		main_header.SetEncrypted();
+	//	// Set the encrypted DB bit to 1.
+	//	main_header.SetEncrypted();
 
-		// The derived key is wiped in AddKeyToCache.
-		options.encryption_options.derived_key_id = EncryptionEngine::AddKeyToCache(db.GetDatabase(), derived_key);
-		auto &catalog = db.GetCatalog().Cast<DuckCatalog>();
-		catalog.SetEncryptionKeyId(options.encryption_options.derived_key_id);
-		catalog.SetIsEncrypted();
-	}
+	//	// The derived key is wiped in AddKeyToCache.
+	//	options.encryption_options.derived_key_id = EncryptionEngine::AddKeyToCache(db.GetDatabase(), derived_key);
+	//	auto &catalog = db.GetCatalog().Cast<DuckCatalog>();
+	//	catalog.SetEncryptionKeyId(options.encryption_options.derived_key_id);
+	//	catalog.SetIsEncrypted();
+	//}
 
-	// Store all metadata in the main header.
-	if (encryption_enabled) {
-		StoreEncryptionMetadata(main_header);
-	}
+	//// Store all metadata in the main header.
+	//if (encryption_enabled) {
+	//	StoreEncryptionMetadata(main_header);
+	//}
 	// Always store the database identifier.
 	StoreDBIdentifier(main_header, options.db_identifier);
-	if (encryption_enabled) {
-		StoreEncryptedCanary(db, main_header, options.encryption_options.derived_key_id);
-	}
+	// Bodo Change: Remove storage encryption functions
+	//if (encryption_enabled) {
+	//	StoreEncryptedCanary(db, main_header, options.encryption_options.derived_key_id);
+	//}
 
 	// Write the main database header.
 	SerializeHeaderStructure<MainHeader>(main_header, header_buffer.buffer);
@@ -480,36 +486,37 @@ void SingleFileBlockManager::LoadExistingDatabase(QueryContext context) {
 	MainHeader main_header = DeserializeMainHeader(header_buffer.buffer - delta);
 	memcpy(options.db_identifier, main_header.GetDBIdentifier(), MainHeader::DB_IDENTIFIER_LEN);
 
-	if (!main_header.IsEncrypted() && options.encryption_options.encryption_enabled) {
-		throw CatalogException("A key is explicitly specified, but database \"%s\" is not encrypted", path);
-		// database is not encrypted, but is tried to be opened with a key
-	}
+	// Bodo Change: Remove storage encryption functions
+	//if (!main_header.IsEncrypted() && options.encryption_options.encryption_enabled) {
+	//	throw CatalogException("A key is explicitly specified, but database \"%s\" is not encrypted", path);
+	//	// database is not encrypted, but is tried to be opened with a key
+	//}
 
-	if (main_header.IsEncrypted()) {
-		if (options.encryption_options.encryption_enabled) {
-			//! Encryption is set
-			//! Check if the given key upon attach is correct
-			// Derive the encryption key and add it to cache
-			CheckAndAddEncryptionKey(main_header);
-			// delete user key ptr
-			options.encryption_options.user_key = nullptr;
-		} else {
-			// if encrypted, but no encryption key given
-			throw CatalogException("Cannot open encrypted database \"%s\" without a key", path);
-		}
+	//if (main_header.IsEncrypted()) {
+	//	if (options.encryption_options.encryption_enabled) {
+	//		//! Encryption is set
+	//		//! Check if the given key upon attach is correct
+	//		// Derive the encryption key and add it to cache
+	//		CheckAndAddEncryptionKey(main_header);
+	//		// delete user key ptr
+	//		options.encryption_options.user_key = nullptr;
+	//	} else {
+	//		// if encrypted, but no encryption key given
+	//		throw CatalogException("Cannot open encrypted database \"%s\" without a key", path);
+	//	}
 
-		// if a cipher was provided, check if it is the same as in the config
-		auto stored_cipher = main_header.GetEncryptionCipher();
-		auto config_cipher = db.GetStorageManager().GetCipher();
-		if (config_cipher != EncryptionTypes::INVALID && config_cipher != stored_cipher) {
-			throw CatalogException("Cannot open encrypted database \"%s\" with a different cipher (%s) than the one "
-			                       "used to create it (%s)",
-			                       path, EncryptionTypes::CipherToString(config_cipher),
-			                       EncryptionTypes::CipherToString(stored_cipher));
-		}
-		// this is ugly, but the storage manager does not know the cipher type before
-		db.GetStorageManager().SetCipher(stored_cipher);
-	}
+	//	// if a cipher was provided, check if it is the same as in the config
+	//	auto stored_cipher = main_header.GetEncryptionCipher();
+	//	auto config_cipher = db.GetStorageManager().GetCipher();
+	//	if (config_cipher != EncryptionTypes::INVALID && config_cipher != stored_cipher) {
+	//		throw CatalogException("Cannot open encrypted database \"%s\" with a different cipher (%s) than the one "
+	//		                       "used to create it (%s)",
+	//		                       path, EncryptionTypes::CipherToString(config_cipher),
+	//		                       EncryptionTypes::CipherToString(stored_cipher));
+	//	}
+	//	// this is ugly, but the storage manager does not know the cipher type before
+	//	db.GetStorageManager().SetCipher(stored_cipher);
+	//}
 
 	options.version_number = main_header.version_number;
 
@@ -589,10 +596,11 @@ void SingleFileBlockManager::ReadAndChecksum(QueryContext context, FileBuffer &b
 	//! calculate delta header bytes (if any)
 	uint64_t delta = GetBlockHeaderSize() - Storage::DEFAULT_BLOCK_HEADER_SIZE;
 
-	if (options.encryption_options.encryption_enabled && !skip_block_header) {
-		auto key_id = options.encryption_options.derived_key_id;
-		EncryptionEngine::DecryptBlock(db, key_id, block.InternalBuffer(), block.Size(), delta);
-	}
+	// Bodo Change: Remove storage encryption functions
+	//if (options.encryption_options.encryption_enabled && !skip_block_header) {
+	//	auto key_id = options.encryption_options.derived_key_id;
+	//	EncryptionEngine::DecryptBlock(db, key_id, block.InternalBuffer(), block.Size(), delta);
+	//}
 
 	CheckChecksum(block, location, delta, skip_block_header);
 }
@@ -618,15 +626,16 @@ void SingleFileBlockManager::ChecksumAndWrite(QueryContext context, FileBuffer &
 
 	// encrypt if required
 	unique_ptr<FileBuffer> temp_buffer_manager;
-	if (options.encryption_options.encryption_enabled && !skip_block_header) {
-		auto key_id = options.encryption_options.derived_key_id;
-		temp_buffer_manager =
-		    make_uniq<FileBuffer>(Allocator::Get(db), block.GetBufferType(), block.Size(), GetBlockHeaderSize());
-		EncryptionEngine::EncryptBlock(db, key_id, block, *temp_buffer_manager, delta);
-		temp_buffer_manager->Write(context, *handle, location);
-	} else {
+	// Bodo Change: Remove storage encryption functions
+	//if (options.encryption_options.encryption_enabled && !skip_block_header) {
+	//	auto key_id = options.encryption_options.derived_key_id;
+	//	temp_buffer_manager =
+	//	    make_uniq<FileBuffer>(Allocator::Get(db), block.GetBufferType(), block.Size(), GetBlockHeaderSize());
+	//	EncryptionEngine::EncryptBlock(db, key_id, block, *temp_buffer_manager, delta);
+	//	temp_buffer_manager->Write(context, *handle, location);
+	//} else {
 		block.Write(context, *handle, location);
-	}
+	//}
 }
 
 void SingleFileBlockManager::Initialize(const DatabaseHeader &header, const optional_idx block_alloc_size) {
@@ -893,10 +902,11 @@ void SingleFileBlockManager::ReadBlock(data_ptr_t internal_buffer, uint64_t bloc
 	//! calculate delta header bytes (if any)
 	uint64_t delta = GetBlockHeaderSize() - Storage::DEFAULT_BLOCK_HEADER_SIZE;
 
-	if (options.encryption_options.encryption_enabled && !skip_block_header) {
-		EncryptionEngine::DecryptBlock(db, options.encryption_options.derived_key_id, internal_buffer, block_size,
-		                               delta);
-	}
+	// Bodo Change: Remove storage encryption functions
+	//if (options.encryption_options.encryption_enabled && !skip_block_header) {
+	//	EncryptionEngine::DecryptBlock(db, options.encryption_options.derived_key_id, internal_buffer, block_size,
+	//	                               delta);
+	//}
 
 	CheckChecksum(internal_buffer, delta, skip_block_header);
 }
@@ -909,10 +919,11 @@ void SingleFileBlockManager::ReadBlock(Block &block, bool skip_block_header) con
 	//! calculate delta header bytes (if any)
 	uint64_t delta = GetBlockHeaderSize() - Storage::DEFAULT_BLOCK_HEADER_SIZE;
 
-	if (options.encryption_options.encryption_enabled && !skip_block_header) {
-		EncryptionEngine::DecryptBlock(db, options.encryption_options.derived_key_id, block.InternalBuffer(),
-		                               block.Size(), delta);
-	}
+	// Bodo Change: Remove storage encryption functions
+	//if (options.encryption_options.encryption_enabled && !skip_block_header) {
+	//	EncryptionEngine::DecryptBlock(db, options.encryption_options.derived_key_id, block.InternalBuffer(),
+	//	                               block.Size(), delta);
+	//}
 
 	CheckChecksum(block, location, delta, skip_block_header);
 }

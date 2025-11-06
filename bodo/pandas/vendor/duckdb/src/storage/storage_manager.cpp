@@ -207,12 +207,13 @@ void SingleFileStorageManager::LoadDatabase(QueryContext context) {
 	options.debug_initialize = config.options.debug_initialize;
 	options.storage_version = storage_options.storage_version;
 
-	if (storage_options.encryption) {
-		// key is given upon ATTACH
-		D_ASSERT(storage_options.block_header_size == DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE);
-		options.encryption_options.encryption_enabled = true;
-		options.encryption_options.user_key = std::move(storage_options.user_key);
-	}
+	// Bodo Change: disable storage encryption
+	//if (storage_options.encryption) {
+	//	// key is given upon ATTACH
+	//	D_ASSERT(storage_options.block_header_size == DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE);
+	//	options.encryption_options.encryption_enabled = true;
+	//	options.encryption_options.user_key = std::move(storage_options.user_key);
+	//}
 
 	idx_t row_group_size = DEFAULT_ROW_GROUP_SIZE;
 	if (storage_options.row_group_size.IsValid()) {
@@ -275,10 +276,11 @@ void SingleFileStorageManager::LoadDatabase(QueryContext context) {
 
 		// set the block header size for the encrypted database files
 		// (also if they already exist)
-		if (storage_options.encryption) {
-			options.encryption_options.encryption_enabled = true;
-			D_ASSERT(storage_options.block_header_size == DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE);
-		}
+		// Bodo Change: disable storage encryption
+		//if (storage_options.encryption) {
+		//	options.encryption_options.encryption_enabled = true;
+		//	D_ASSERT(storage_options.block_header_size == DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE);
+		//}
 		if (storage_options.block_header_size.IsValid()) {
 			Storage::VerifyBlockHeaderSize(storage_options.block_header_size.GetIndex());
 			options.block_header_size = storage_options.block_header_size;

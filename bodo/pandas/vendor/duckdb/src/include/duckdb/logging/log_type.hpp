@@ -74,23 +74,24 @@ public:
 	static string ConstructLogMessage(const FileHandle &handle, const string &op);
 };
 
-class HTTPLogType : public LogType {
-public:
-	static constexpr const char *NAME = "HTTP";
-	static constexpr LogLevel LEVEL = LogLevel::LOG_DEBUG;
-
-	//! Construct the log types
-	HTTPLogType();
-
-	static LogicalType GetLogType();
-
-	static string ConstructLogMessage(BaseRequest &request, optional_ptr<HTTPResponse> response);
-
-	// FIXME: HTTPLogType should be structured probably
-	static string ConstructLogMessage(const string &str) {
-		return str;
-	}
-};
+// Bodo Change: Remove HTTPLogType
+//class HTTPLogType : public LogType {
+//public:
+//	static constexpr const char *NAME = "HTTP";
+//	static constexpr LogLevel LEVEL = LogLevel::LOG_DEBUG;
+//
+//	//! Construct the log types
+//	HTTPLogType();
+//
+//	static LogicalType GetLogType();
+//
+//	static string ConstructLogMessage(BaseRequest &request, optional_ptr<HTTPResponse> response);
+//
+//	// FIXME: HTTPLogType should be structured probably
+//	static string ConstructLogMessage(const string &str) {
+//		return str;
+//	}
+//};
 
 class PhysicalOperatorLogType : public LogType {
 public:

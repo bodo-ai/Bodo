@@ -204,19 +204,20 @@ bool DisableDatabaseInvalidationSetting::OnGlobalReset(DatabaseInstance *db, DBC
 //===----------------------------------------------------------------------===//
 // Allow Unsigned Extensions
 //===----------------------------------------------------------------------===//
-bool AllowUnsignedExtensionsSetting::OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (db && input.GetValue<bool>()) {
-		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
-	}
-	return true;
-}
-
-bool AllowUnsignedExtensionsSetting::OnGlobalReset(DatabaseInstance *db, DBConfig &config) {
-	if (db) {
-		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
-	}
-	return true;
-}
+//Bodo Change: Remove extension code
+//bool AllowUnsignedExtensionsSetting::OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	if (db && input.GetValue<bool>()) {
+//		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
+//	}
+//	return true;
+//}
+//
+//bool AllowUnsignedExtensionsSetting::OnGlobalReset(DatabaseInstance *db, DBConfig &config) {
+//	if (db) {
+//		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
+//	}
+//	return true;
+//}
 
 //===----------------------------------------------------------------------===//
 // Allowed Directories
@@ -933,23 +934,24 @@ Value FileSearchPathSetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 // Force Bitpacking Mode
 //===----------------------------------------------------------------------===//
-void ForceBitpackingModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	auto mode_str = StringUtil::Lower(input.ToString());
-	auto mode = BitpackingModeFromString(mode_str);
-	if (mode == BitpackingMode::INVALID) {
-		throw ParserException("Unrecognized option for force_bitpacking_mode, expected none, constant, constant_delta, "
-		                      "delta_for, or for");
-	}
-	config.options.force_bitpacking_mode = mode;
-}
-
-void ForceBitpackingModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.force_bitpacking_mode = DBConfigOptions().force_bitpacking_mode;
-}
-
-Value ForceBitpackingModeSetting::GetSetting(const ClientContext &context) {
-	return Value(BitpackingModeToString(context.db->config.options.force_bitpacking_mode));
-}
+// Bodo Change: Remove compression code
+//void ForceBitpackingModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	auto mode_str = StringUtil::Lower(input.ToString());
+//	auto mode = BitpackingModeFromString(mode_str);
+//	if (mode == BitpackingMode::INVALID) {
+//		throw ParserException("Unrecognized option for force_bitpacking_mode, expected none, constant, constant_delta, "
+//		                      "delta_for, or for");
+//	}
+//	config.options.force_bitpacking_mode = mode;
+//}
+//
+//void ForceBitpackingModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.force_bitpacking_mode = DBConfigOptions().force_bitpacking_mode;
+//}
+//
+//Value ForceBitpackingModeSetting::GetSetting(const ClientContext &context) {
+//	return Value(BitpackingModeToString(context.db->config.options.force_bitpacking_mode));
+//}
 
 //===----------------------------------------------------------------------===//
 // Force Compression
@@ -993,54 +995,55 @@ void HomeDirectorySetting::SetLocal(ClientContext &context, const Value &input) 
 	config.home_directory = input.IsNull() ? string() : input.ToString();
 }
 
-//===----------------------------------------------------------------------===//
-// Enable H T T P Logging
-//===----------------------------------------------------------------------===//
-void EnableHTTPLoggingSetting::SetLocal(ClientContext &context, const Value &input) {
-	auto &config = ClientConfig::GetConfig(context);
-	config.enable_http_logging = input.GetValue<bool>();
-
-	// NOTE: this is a deprecated setting: we mimick the old behaviour by setting the log storage output to STDOUT and
-	// enabling logging for http only. Note that this behaviour is slightly wonky in that it sets all sorts of logging
-	// config
-	auto &log_manager = LogManager::Get(context);
-	if (config.enable_http_logging) {
-		log_manager.SetEnableLogging(true);
-		log_manager.SetLogLevel(HTTPLogType::LEVEL);
-		unordered_set<string> enabled_log_types = {HTTPLogType::NAME};
-		log_manager.SetEnabledLogTypes(enabled_log_types);
-		log_manager.SetLogStorage(*context.db, LogConfig::STDOUT_STORAGE_NAME);
-	} else {
-		log_manager.SetEnableLogging(false);
-	}
-}
-
-void EnableHTTPLoggingSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).enable_http_logging = ClientConfig().enable_http_logging;
-}
-
-Value EnableHTTPLoggingSetting::GetSetting(const ClientContext &context) {
-	auto &config = ClientConfig::GetConfig(context);
-	return Value::BOOLEAN(config.enable_http_logging);
-}
-
-//===----------------------------------------------------------------------===//
-// H T T P Logging Output
-//===----------------------------------------------------------------------===//
-void HTTPLoggingOutputSetting::SetLocal(ClientContext &context, const Value &input) {
-	throw NotImplementedException("This setting is deprecated and can no longer be used. Check out the DuckDB docs on "
-	                              "logging for more information");
-}
-
-void HTTPLoggingOutputSetting::ResetLocal(ClientContext &context) {
-	throw NotImplementedException("This setting is deprecated and can no longer be used. Check out the DuckDB docs on "
-	                              "logging for more information");
-}
-
-Value HTTPLoggingOutputSetting::GetSetting(const ClientContext &context) {
-	auto &config = ClientConfig::GetConfig(context);
-	return Value(config.http_logging_output);
-}
+// Bodo Change: Remove http logging
+////===----------------------------------------------------------------------===//
+//// Enable H T T P Logging
+////===----------------------------------------------------------------------===//
+//void EnableHTTPLoggingSetting::SetLocal(ClientContext &context, const Value &input) {
+//	auto &config = ClientConfig::GetConfig(context);
+//	config.enable_http_logging = input.GetValue<bool>();
+//
+//	// NOTE: this is a deprecated setting: we mimick the old behaviour by setting the log storage output to STDOUT and
+//	// enabling logging for http only. Note that this behaviour is slightly wonky in that it sets all sorts of logging
+//	// config
+//	auto &log_manager = LogManager::Get(context);
+//	if (config.enable_http_logging) {
+//		log_manager.SetEnableLogging(true);
+//		log_manager.SetLogLevel(HTTPLogType::LEVEL);
+//		unordered_set<string> enabled_log_types = {HTTPLogType::NAME};
+//		log_manager.SetEnabledLogTypes(enabled_log_types);
+//		log_manager.SetLogStorage(*context.db, LogConfig::STDOUT_STORAGE_NAME);
+//	} else {
+//		log_manager.SetEnableLogging(false);
+//	}
+//}
+//
+//void EnableHTTPLoggingSetting::ResetLocal(ClientContext &context) {
+//	ClientConfig::GetConfig(context).enable_http_logging = ClientConfig().enable_http_logging;
+//}
+//
+//Value EnableHTTPLoggingSetting::GetSetting(const ClientContext &context) {
+//	auto &config = ClientConfig::GetConfig(context);
+//	return Value::BOOLEAN(config.enable_http_logging);
+//}
+//
+////===----------------------------------------------------------------------===//
+//// H T T P Logging Output
+////===----------------------------------------------------------------------===//
+//void HTTPLoggingOutputSetting::SetLocal(ClientContext &context, const Value &input) {
+//	throw NotImplementedException("This setting is deprecated and can no longer be used. Check out the DuckDB docs on "
+//	                              "logging for more information");
+//}
+//
+//void HTTPLoggingOutputSetting::ResetLocal(ClientContext &context) {
+//	throw NotImplementedException("This setting is deprecated and can no longer be used. Check out the DuckDB docs on "
+//	                              "logging for more information");
+//}
+//
+//Value HTTPLoggingOutputSetting::GetSetting(const ClientContext &context) {
+//	auto &config = ClientConfig::GetConfig(context);
+//	return Value(config.http_logging_output);
+//}
 
 //===----------------------------------------------------------------------===//
 // Index Scan Percentage

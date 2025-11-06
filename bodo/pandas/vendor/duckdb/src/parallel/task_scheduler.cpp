@@ -11,7 +11,9 @@
 #include "lightweightsemaphore.h"
 
 #include <thread>
+#else
 #include <queue>
+#endif
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -25,6 +27,12 @@
 
 namespace duckdb {
 struct SchedulerThread {
+#ifndef DUCKDB_NO_THREADS
+	explicit SchedulerThread(unique_ptr<thread> thread_p) : internal_thread(std::move(thread_p)) {
+	}
+
+	unique_ptr<thread> internal_thread;
+#endif
 };
 
 #ifndef DUCKDB_NO_THREADS
@@ -205,7 +213,7 @@ struct QueueProducerToken {
 private:
 	ConcurrentQueue *queue;
 };
-
+#endif
 
 ProducerToken::ProducerToken(TaskScheduler &scheduler, unique_ptr<QueueProducerToken> token)
     : scheduler(scheduler), token(std::move(token)) {
@@ -223,6 +231,13 @@ TaskScheduler::TaskScheduler(DatabaseInstance &db)
 }
 
 TaskScheduler::~TaskScheduler() {
+#ifndef DUCKDB_NO_THREADS
+	try {
+		RelaunchThreadsInternal(0);
+	} catch (...) {
+		// nothing we can do in the destructor if this fails
+	}
+#endif
 }
 
 TaskScheduler &TaskScheduler::GetScheduler(ClientContext &context) {
@@ -313,6 +328,7 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker) {
 	}
 #else
 	throw NotImplementedException("DuckDB was compiled without threads! Background thread loop is not allowed.");
+#endif
 }
 
 idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
@@ -343,6 +359,7 @@ idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
 	return completed_tasks;
 #else
 	throw NotImplementedException("DuckDB was compiled without threads! Background thread loop is not allowed.");
+#endif
 }
 
 void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
@@ -373,7 +390,14 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 	}
 #else
 	throw NotImplementedException("DuckDB was compiled without threads! Background thread loop is not allowed.");
+#endif
 }
+
+#ifndef DUCKDB_NO_THREADS
+static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker) {
+	scheduler->ExecuteForever(marker);
+}
+#endif
 
 int32_t TaskScheduler::NumberOfThreads() {
 	return current_thread_count.load();
@@ -395,10 +419,16 @@ void TaskScheduler::SetThreads(idx_t total_threads, idx_t external_threads) {
 	if (total_threads == 0) {
 		throw SyntaxException("Number of threads must be positive!");
 	}
+#ifndef DUCKDB_NO_THREADS
+	if (total_threads < external_threads) {
+		throw SyntaxException("Number of threads can't be smaller than number of external threads!");
+	}
+#else
 	if (total_threads != external_threads) {
 		throw NotImplementedException(
 		    "DuckDB was compiled without threads! Setting total_threads != external_threads is not allowed.");
 	}
+#endif
 	requested_thread_count = NumericCast<int32_t>(total_threads - external_threads);
 }
 
@@ -411,9 +441,18 @@ void TaskScheduler::SetAllocatorBackgroundThreads(bool enable) {
 	Allocator::SetBackgroundThreads(enable);
 }
 
-void TaskScheduler::Signal(idx_t n) {}
+void TaskScheduler::Signal(idx_t n) {
+#ifndef DUCKDB_NO_THREADS
+	typedef std::make_signed<std::size_t>::type ssize_t;
+	queue->semaphore.signal(NumericCast<ssize_t>(n));
+#endif
+}
 
-void TaskScheduler::YieldThread() {}
+void TaskScheduler::YieldThread() {
+#ifndef DUCKDB_NO_THREADS
+	std::this_thread::yield();
+#endif
+}
 
 idx_t TaskScheduler::GetEstimatedCPUId() {
 #if defined(EMSCRIPTEN)

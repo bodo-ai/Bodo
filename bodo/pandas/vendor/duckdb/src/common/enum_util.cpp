@@ -75,7 +75,7 @@
 #include "duckdb/common/file_buffer.hpp"
 #include "duckdb/common/file_open_flags.hpp"
 #include "duckdb/common/filename_pattern.hpp"
-#include "duckdb/common/http_util.hpp"
+//#include "duckdb/common/http_util.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/multi_file/multi_file_list.hpp"
 #include "duckdb/common/multi_file/multi_file_options.hpp"
@@ -3651,27 +3651,27 @@ template<>
 RenderMode EnumUtil::FromString<RenderMode>(const char *value) {
 	return static_cast<RenderMode>(StringUtil::StringToEnum(GetRenderModeValues(), 2, "RenderMode", value));
 }
-
-const StringUtil::EnumStringLiteral *GetRequestTypeValues() {
-	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(RequestType::GET_REQUEST), "GET" },
-		{ static_cast<uint32_t>(RequestType::PUT_REQUEST), "PUT" },
-		{ static_cast<uint32_t>(RequestType::HEAD_REQUEST), "HEAD" },
-		{ static_cast<uint32_t>(RequestType::DELETE_REQUEST), "DELETE" },
-		{ static_cast<uint32_t>(RequestType::POST_REQUEST), "POST" }
-	};
-	return values;
-}
-
-template<>
-const char* EnumUtil::ToChars<RequestType>(RequestType value) {
-	return StringUtil::EnumToString(GetRequestTypeValues(), 5, "RequestType", static_cast<uint32_t>(value));
-}
-
-template<>
-RequestType EnumUtil::FromString<RequestType>(const char *value) {
-	return static_cast<RequestType>(StringUtil::StringToEnum(GetRequestTypeValues(), 5, "RequestType", value));
-}
+// Bodo Change: Remove http_util code
+//const StringUtil::EnumStringLiteral *GetRequestTypeValues() {
+//	static constexpr StringUtil::EnumStringLiteral values[] {
+//		{ static_cast<uint32_t>(RequestType::GET_REQUEST), "GET" },
+//		{ static_cast<uint32_t>(RequestType::PUT_REQUEST), "PUT" },
+//		{ static_cast<uint32_t>(RequestType::HEAD_REQUEST), "HEAD" },
+//		{ static_cast<uint32_t>(RequestType::DELETE_REQUEST), "DELETE" },
+//		{ static_cast<uint32_t>(RequestType::POST_REQUEST), "POST" }
+//	};
+//	return values;
+//}
+//
+//template<>
+//const char* EnumUtil::ToChars<RequestType>(RequestType value) {
+//	return StringUtil::EnumToString(GetRequestTypeValues(), 5, "RequestType", static_cast<uint32_t>(value));
+//}
+//
+//template<>
+//RequestType EnumUtil::FromString<RequestType>(const char *value) {
+//	return static_cast<RequestType>(StringUtil::StringToEnum(GetRequestTypeValues(), 5, "RequestType", value));
+//}
 
 const StringUtil::EnumStringLiteral *GetResultModifierTypeValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {

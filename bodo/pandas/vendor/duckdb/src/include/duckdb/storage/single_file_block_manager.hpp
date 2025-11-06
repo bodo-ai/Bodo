@@ -149,13 +149,15 @@ private:
 	idx_t GetBlockLocation(block_id_t block_id) const;
 
 	// Encrypt, Store, Decrypt the canary
-	static void StoreEncryptedCanary(AttachedDatabase &db, MainHeader &main_header, const string &key_id);
+	// Bodo Change: Remove encryption functions
+	//static void StoreEncryptedCanary(AttachedDatabase &db, MainHeader &main_header, const string &key_id);
 	static void StoreDBIdentifier(MainHeader &main_header, const data_ptr_t db_identifier);
-	void StoreEncryptionMetadata(MainHeader &main_header) const;
+	//void StoreEncryptionMetadata(MainHeader &main_header) const;
 
-	//! Check and adding Encryption Keys
-	void CheckAndAddEncryptionKey(MainHeader &main_header, string &user_key);
-	void CheckAndAddEncryptionKey(MainHeader &main_header);
+	// Bodo Change: Remove encryption functions
+	////! Check and adding Encryption Keys
+	//void CheckAndAddEncryptionKey(MainHeader &main_header, string &user_key);
+	//void CheckAndAddEncryptionKey(MainHeader &main_header);
 
 	//! Return the blocks to which we will write the free list and modified blocks
 	vector<MetadataHandle> GetFreeListBlocks();

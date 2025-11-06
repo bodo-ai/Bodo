@@ -528,13 +528,14 @@ void StandardBufferManager::WriteTemporaryBuffer(MemoryTag tag, block_id_t block
 
 	idx_t offset = sizeof(idx_t) * 2;
 
-	if (db.config.options.temp_file_encryption) {
-		uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
-		EncryptionEngine::EncryptTemporaryBuffer(db, buffer.InternalBuffer(), buffer.AllocSize(), encryption_metadata);
-		//! Write the nonce (and tag for GCM).
-		handle->Write(QueryContext(), encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
-		offset += DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE;
-	}
+	// Bodo Change: Remove storage encryption code
+	//if (db.config.options.temp_file_encryption) {
+	//	uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
+	//	EncryptionEngine::EncryptTemporaryBuffer(db, buffer.InternalBuffer(), buffer.AllocSize(), encryption_metadata);
+	//	//! Write the nonce (and tag for GCM).
+	//	handle->Write(QueryContext(), encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
+	//	offset += DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE;
+	//}
 
 	buffer.Write(QueryContext(), *handle, offset);
 }
@@ -564,20 +565,21 @@ unique_ptr<FileBuffer> StandardBufferManager::ReadTemporaryBuffer(QueryContext c
 	// Allocate a buffer of the file's size and read the data into that buffer.
 	auto buffer = ConstructManagedBuffer(block_size, block_header_size, std::move(reusable_buffer));
 
-	if (db.config.options.temp_file_encryption) {
-		// encrypted
-		//! Read nonce and tag from file.
-		uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
-		handle->Read(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
+	// Bodo Change: Remove storage encryption code
+	//if (db.config.options.temp_file_encryption) {
+	//	// encrypted
+	//	//! Read nonce and tag from file.
+	//	uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
+	//	handle->Read(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
 
-		//! Read and decrypt the buffer.
-		buffer->Read(context, *handle, offset + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
-		EncryptionEngine::DecryptTemporaryBuffer(GetDatabase(), buffer->InternalBuffer(), buffer->AllocSize(),
-		                                         encryption_metadata);
-	} else {
+	//	//! Read and decrypt the buffer.
+	//	buffer->Read(context, *handle, offset + DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE);
+	//	EncryptionEngine::DecryptTemporaryBuffer(GetDatabase(), buffer->InternalBuffer(), buffer->AllocSize(),
+	//	                                         encryption_metadata);
+	//} else {
 		// unencrypted: read the data directly
 		buffer->Read(context, *handle, offset);
-	}
+	//}
 
 	handle.reset();
 
