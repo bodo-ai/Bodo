@@ -84,8 +84,8 @@ extractValue(const duckdb::Value &value) {
         case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
             // Define a timestamp type with microsecond precision and timezone
             // UTC.
-            // DuckDB will drop the nanosecond from timestamps with timezone
-            // So results from filtering a timezone aware column might be
+            // DuckDB will drop the nanoseconds from timestamps with timezone,
+            // so the result from filtering a timezone aware column might be
             // different than Pandas if constant uses nanoseconds.
             auto timestamp_type =
                 arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");

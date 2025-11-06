@@ -368,7 +368,6 @@ std::shared_ptr<arrow::Array> bodo_array_to_arrow(
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             auto [type, in_num_bytes] =
-                // TODO: TIMEZONE HERE
                 get_data_type_from_bodo_fixed_width_array(
                     array, tz, time_unit, convert_timedelta_to_int64,
                     downcast_time_ns_to_us);
