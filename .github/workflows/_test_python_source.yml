@@ -23,7 +23,7 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: string
-      # Options: DF_LIB, DF_LIB_NO_JIT, SPAWN, NORMAL
+      # Options: DF_LIB, DF_LIB_NO_JIT, SPAWN, NORMAL, NARWHALS
       test-type:
         type: string
         description: The kind of tests to run e.g. spawn tests
@@ -66,6 +66,10 @@ jobs:
           run: |
             pip install transformers
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+        - name: Install Narwhals Test dependencies
+          if: ${{ inputs.test-type == 'NARWHALS' }}
+          run: |
+            pip install hypothesis polars sqlframe ibis-framework pyarrow-hotfix
 
         # Run Tests
         - name: Run Tests
@@ -81,40 +85,49 @@ jobs:
             fi
 
             set +eo pipefail
-            # Bodo Tests: Coverage is collected
-            pytest -s -v -Wignore \
-              --cov-report= --cov=bodo \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=buildscripts/github/test_dur_bodo.json \
-              -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
 
-            # Save Exit Code for Later
-            python_test_exit_code=$?
+            if [[ "${{ inputs.test-type }}" == "NARWHALS" ]]; then
+              # Checkout narwhals fork
+              git clone https://github.com/bodo-ai/narwhals.git
+              cd narwhals
+              pytest -s -v -Wignore bodo
+              exit $?
+            else
+              # Bodo Tests: Coverage is collected
+              pytest -s -v -Wignore \
+                --cov-report= --cov=bodo \
+                --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --store-durations --clean-durations \
+                --durations-path=buildscripts/github/test_dur_bodo.json \
+                -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
 
-            # BodoSQL Tests
-            cd BodoSQL
-            pytest -s -v -Wignore \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=../buildscripts/github/test_dur_bodosql.json \
-              -m "$PYTEST_MARKER" bodosql/tests/
-            sql_test_exit_code=$?
+              # Save Exit Code for Later
+              python_test_exit_code=$?
 
-            # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
-            # so we suppress this.
-            if [ "$python_test_exit_code" -eq 5 ]; then
-              python_test_exit_code=0
+              # BodoSQL Tests
+              cd BodoSQL
+              pytest -s -v -Wignore \
+                --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --store-durations --clean-durations \
+                --durations-path=../buildscripts/github/test_dur_bodosql.json \
+                -m "$PYTEST_MARKER" bodosql/tests/
+              sql_test_exit_code=$?
+
+              # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
+              # so we suppress this.
+              if [ "$python_test_exit_code" -eq 5 ]; then
+                python_test_exit_code=0
+              fi
+              if [ "$sql_test_exit_code" -eq 5 ]; then
+                sql_test_exit_code=0
+              fi
+
+              # Merge Exit Codes.
+              # If neither Bodo nor BodoSQL fails, the exit code will be 0
+              # If one fails, the exit code will be 1
+              # If both fail, the exit code will be 2
+              exit $((python_test_exit_code + sql_test_exit_code))
             fi
-            if [ "$sql_test_exit_code" -eq 5 ]; then
-              sql_test_exit_code=0
-            fi
-
-            # Merge Exit Codes.
-            # If neither Bodo nor BodoSQL fails, the exit code will be 0
-            # If one fails, the exit code will be 1
-            # If both fail, the exit code will be 2
-            exit $((python_test_exit_code + sql_test_exit_code))
           shell: bash
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
@@ -128,6 +141,7 @@ jobs:
             BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
             # Disabling the DataFrame library for spawn tests since some of the tests
             # create Pandas manager states for testing that are not fully functional.
+            BODO_DATAFRAME_LIBRARY_WARN: ${{ inputs.test-type == 'NARWHALS' && '0' || '1' }}
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
             BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ startsWith(inputs.test-type, 'DF_LIB') && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
