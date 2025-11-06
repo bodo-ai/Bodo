@@ -3322,7 +3322,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "867c9ba7f1bcf438be56c38e26906bb551f59a99f853a9f68b71208b107c880e"
+        != "059737f7d673ac48d9d3bc8d57e66d86224aa34fb3491f68a2dc0244e38c900b"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.withcontexts._ObjModeContextType._legalize_args has changed"
