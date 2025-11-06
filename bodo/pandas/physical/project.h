@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/type.h>
+#include <iostream>
 #include <utility>
 #include "../../libs/_bodo_to_arrow.h"
 #include "../../libs/_query_profile_collector.h"
@@ -67,6 +68,12 @@ class PhysicalProjection : public PhysicalProcessBatch {
                             scalar_func_data.out_schema)
                             ->column_types[0]
                             ->copy();
+                    std::cout << "Projection function output type: "
+                              << col_type->ToString() << std::endl;
+
+                    std::cout << "Original arrow types: "
+                              << scalar_func_data.out_schema->ToString()
+                              << std::endl;
                     this->output_schema->append_column(std::move(col_type));
                     col_names.emplace_back(
                         scalar_func_data.out_schema->field(0)->name());

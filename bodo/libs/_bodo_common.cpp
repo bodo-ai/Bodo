@@ -253,7 +253,6 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::INT64:
         case arrow::Type::UINT32:
         case arrow::Type::DATE32:
-        case arrow::Type::TIMESTAMP:
         case arrow::Type::DURATION:
         case arrow::Type::INT32:
         case arrow::Type::UINT16:
@@ -263,6 +262,14 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
+        }
+        case arrow::Type::TIMESTAMP: {
+            auto arrow_timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()), -1, -1,
+                arrow_timestamp_type->timezone());
         }
 
         case arrow::Type::TIME32:
@@ -460,7 +467,8 @@ std::unique_ptr<DataType> DataType::copy() const {
 
     } else {
         return std::make_unique<DataType>(this->array_type, this->c_type,
-                                          this->precision, this->scale);
+                                          this->precision, this->scale,
+                                          this->tz_info);
     }
 }
 
@@ -493,7 +501,7 @@ std::unique_ptr<DataType> DataType::to_nullable_type() const {
             arr_type = bodo_array_type::NULLABLE_INT_BOOL;
         }
         return std::make_unique<DataType>(arr_type, dtype, this->precision,
-                                          this->scale);
+                                          this->scale, this->tz_info);
     }
 }
 
@@ -504,6 +512,9 @@ void DataType::to_string_inner(std::string& out) {
     // for decimals we want to add the precision and scale as well
     if (this->c_type == Bodo_CTypes::DECIMAL) {
         out += fmt::format("({},{})", this->precision, this->scale);
+    }
+    if (this->c_type == Bodo_CTypes::DATETIME && this->tz_info.length() > 0) {
+        out += fmt::format("({})", this->tz_info);
     }
     out += "]";
 }
@@ -641,9 +652,12 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::TIME:
             dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;
-        // TODO: Is there a way to get timezone?
         case Bodo_CTypes::DATETIME:
-            dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            if (tz_info.length() > 0) {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO, tz_info);
+            } else {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            }
             break;
         case Bodo_CTypes::TIMEDELTA:
             dtype = arrow::duration(arrow::TimeUnit::NANO);

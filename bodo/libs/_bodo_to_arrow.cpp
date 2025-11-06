@@ -1446,7 +1446,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
             // Ensure we are always working with Naive/UTC timestamps and
             // nanosecond precision.
-            if (type->unit() != arrow::TimeUnit::NANO) {
+            if (type->unit() != arrow::TimeUnit::NANO ||
+                (type->timezone() != "" && type->timezone() != "UTC")) {
                 auto res = arrow::compute::Cast(
                     *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
                     arrow::compute::CastOptions::Safe(),

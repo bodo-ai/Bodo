@@ -113,6 +113,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val) {
 
 duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
+    std::cout << "making constant timestamp ns expression" << std::endl;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }
@@ -219,6 +220,7 @@ duckdb::unique_ptr<duckdb::Expression> matchType(
 
     // Get the type to convert the constant to.
     duckdb::LogicalType series_type = series->return_type;
+    std::cout << "matching type..." << series_type.ToString() << std::endl;
     // Change the value to the given type.
     // Will throw an exception if such a conversion is not possible.
     bce_constant->value = bce_constant->value.DefaultCastAs(series_type);
@@ -1642,9 +1644,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                         break;
                 }
             } else {
-                // TODO: Do we need to check units here?
-                // Technically this is supposed to be in microseconds like
-                // TIMESTAMP
+                // Microseconds since epoch, UTC
                 duckdb_type = duckdb::LogicalType::TIMESTAMP_TZ;
             }
             break;

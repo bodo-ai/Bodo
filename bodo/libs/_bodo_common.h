@@ -586,6 +586,7 @@ struct DataType {
     const Bodo_CTypes::CTypeEnum c_type;
     const int8_t precision;
     const int8_t scale;
+    const std::string tz_info;
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
@@ -593,14 +594,16 @@ struct DataType {
      * @param c_type Type of the Array Elements
      * @param precision The precision (required for DECIMAL types)
      * @param scale The scale (required for DECIMAL types)
+     * @param tz_info The timezone (for DATETIME types)
      */
     DataType(bodo_array_type::arr_type_enum array_type,
              Bodo_CTypes::CTypeEnum c_type, int8_t precision = -1,
-             int8_t scale = -1)
+             int8_t scale = -1, std::string tz_info = "")
         : array_type(array_type),
           c_type(c_type),
           precision(precision),
-          scale(scale) {
+          scale(scale),
+          tz_info(std::move(tz_info)) {
         // TODO: For decimal types, check if scale and precision are valid and
         // throw some exception (this will likely cause issues due to other
         // places where they are not being set properly.)

@@ -5,9 +5,12 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
 #include <arrow/scalar.h>
+#include <arrow/type_fwd.h>
+#include <iostream>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
@@ -75,6 +78,16 @@ extractValue(const duckdb::Value &value) {
             duckdb::timestamp_ns_t extracted =
                 value.GetValue<duckdb::timestamp_ns_t>();
             // Create a TimestampScalar with nanosecond value
+            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+                                                            timestamp_type);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
+            // Define a timestamp type with microsecond precision and timezone
+            // UTC
+            auto timestamp_type =
+                arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
+            duckdb::timestamp_tz_t extracted =
+                value.GetValue<duckdb::timestamp_tz_t>();
             return std::make_shared<arrow::TimestampScalar>(extracted.value,
                                                             timestamp_type);
         } break;
