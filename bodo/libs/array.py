@@ -660,7 +660,8 @@ def array_to_info_codegen(context, builder, sig, args):
                 ],
             )
         if isinstance(arr_type, DatetimeArrayType):
-            tz = arr_type.tz if arr_type.tz is not None else ""
+            # Ignore fixed offset timezones for now (not supported by Arrow/DF lib)
+            tz = arr_type.tz if isinstance(arr_type.tz, str) else ""
 
             fnty = lir.FunctionType(
                 lir.IntType(8).as_pointer(),
