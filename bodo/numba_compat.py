@@ -90,7 +90,7 @@ from bodo.utils.typing import (
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
-_check_numba_change = True
+_check_numba_change = False
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
@@ -6520,7 +6520,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "f8156e35de7a847fe24659297d6eb20bb9ba02bd16b6e91a1626e506063cba0f"
+        != "3a52b41d6aebc421ef1d3120bee5085ff66aa9f24fca314a45b73867ea095a23"
     ):
         warnings.warn(
             "numba.core.withcontexts._ObjModeContextType.mutate_with_body has changed"
@@ -6529,7 +6529,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.withcontexts._mutate_with_block_callee)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "7205965480743283b02bdf06f4ab397bd5d0e585f5587d51333ab87e43522bbe"
+        != "8bb47c3f61fee58463994d8afebfa227f863d57123f265d519b2fee0c6573ff7"
     ):
         warnings.warn("numba.core.withcontexts._mutate_with_block_callee has changed")
 
