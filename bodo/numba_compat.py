@@ -5665,7 +5665,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba_get_cache_path)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "eb33b7198697b8ef78edddcf69e58973c44744ff2cb2f54d4015611ad43baed0"
+        != "c386ead0952afc5d6d6d710a93596c79abbe81a9d71715ee9c57267cd363a6d1"
     ):
         warnings.warn(
             "numba.core.caching.IPythonCacheLocator.get_cache_path has changed"
