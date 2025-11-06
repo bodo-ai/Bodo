@@ -5,6 +5,8 @@
 #include "duckdb/common/bind_helpers.hpp"
 #include "duckdb/common/filename_pattern.hpp"
 #include "duckdb/common/local_file_system.hpp"
+// Bodo Change
+#include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/function/table/read_csv.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
@@ -31,15 +33,16 @@ static bool GetBooleanArg(ClientContext &context, const vector<Value> &arg) {
 	return arg.empty() || arg[0].CastAs(context, LogicalType::BOOLEAN).GetValue<bool>();
 }
 
-..void IsFormatExtensionKnown(const string &format) {
-	for (auto &file_postfixes : EXTENSION_FILE_POSTFIXES) {
-		if (format == file_postfixes.name + 1) {
-			// It's a match, we must throw
-			throw CatalogException(
-			    "Copy Function with name \"%s\" is not in the catalog, but it exists in the %s extension.", format,
-			    file_postfixes.extension);
-		}
-	}
+void IsFormatExtensionKnown(const string &format) {
+	// Bodo Change: Remove extension related files
+	//for (auto &file_postfixes : EXTENSION_FILE_POSTFIXES) {
+	//	if (format == file_postfixes.name + 1) {
+	//		// It's a match, we must throw
+	//		throw CatalogException(
+	//		    "Copy Function with name \"%s\" is not in the catalog, but it exists in the %s extension.", format,
+	//		    file_postfixes.extension);
+	//	}
+	//}
 }
 
 case_insensitive_map_t<CopyOption> Binder::GetFullCopyOptionsList(const CopyFunction &function, CopyOptionMode mode) {

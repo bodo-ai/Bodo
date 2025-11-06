@@ -120,11 +120,12 @@
 #include "duckdb/logging/log_storage.hpp"
 #include "duckdb/logging/logging.hpp"
 #include "duckdb/main/appender.hpp"
-#include "duckdb/main/capi/capi_internal.hpp"
-#include "duckdb/main/error_manager.hpp"
-#include "duckdb/main/extension.hpp"
-#include "duckdb/main/extension_helper.hpp"
 // Bodo Change: Remove extension related files
+//#include "duckdb/main/capi/capi_internal.hpp"
+#include "duckdb/main/error_manager.hpp"
+// Bodo Change: Remove extension related files
+//#include "duckdb/main/extension.hpp"
+//#include "duckdb/main/extension_helper.hpp"
 //#include "duckdb/main/extension_install_info.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/main/query_result.hpp"

@@ -3,7 +3,8 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/function/encoding_function.hpp"
-#include "duckdb/main/extension_helper.hpp"
+// Bodo Change: Remove extension code
+//#include "duckdb/main/extension_helper.hpp"
 
 namespace duckdb {
 
@@ -55,11 +56,12 @@ CSVEncoder::CSVEncoder(ClientContext &context_p, const string &encoding_name_to_
 		auto loaded_encodings = config.GetLoadedEncodedFunctions();
 		std::ostringstream error;
 		error << "The CSV Reader does not support the encoding: \"" << encoding_name_to_find << "\"\n";
-		if (!context_p.db->ExtensionIsLoaded("encodings")) {
-			error << "It is possible that the encoding exists in the encodings extension. You can try \"INSTALL "
-			         "encodings; LOAD encodings\""
-			      << "\n";
-		}
+		// Bodo Change: Remove extension code
+		//if (!context_p.db->ExtensionIsLoaded("encodings")) {
+		//	error << "It is possible that the encoding exists in the encodings extension. You can try \"INSTALL "
+		//	         "encodings; LOAD encodings\""
+		//	      << "\n";
+		//}
 		error << "The currently supported encodings are: " << '\n';
 		for (auto &encoding_function : loaded_encodings) {
 			error << "*  " << encoding_function.get().GetName() << '\n';

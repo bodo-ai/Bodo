@@ -1,7 +1,7 @@
 #include "duckdb/common/virtual_file_system.hpp"
 
 #include "duckdb/common/file_opener.hpp"
-#include "duckdb/common/gzip_file_system.hpp"
+//#include "duckdb/common/gzip_file_system.hpp"
 #include "duckdb/common/pipe_file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -12,7 +12,8 @@ VirtualFileSystem::VirtualFileSystem() : VirtualFileSystem(FileSystem::CreateLoc
 }
 
 VirtualFileSystem::VirtualFileSystem(unique_ptr<FileSystem> &&inner) : default_fs(std::move(inner)) {
-	VirtualFileSystem::RegisterSubSystem(FileCompressionType::GZIP, make_uniq<GZipFileSystem>());
+	// Bodo Change: Remove compression related files
+	//	VirtualFileSystem::RegisterSubSystem(FileCompressionType::GZIP, make_uniq<GZipFileSystem>());
 }
 
 unique_ptr<FileHandle> VirtualFileSystem::OpenFileExtended(const OpenFileInfo &file, FileOpenFlags flags,
@@ -228,23 +229,24 @@ FileSystem &VirtualFileSystem::FindFileSystem(const string &path, optional_ptr<D
 	if (!fs && db_instance) {
 		string required_extension;
 
-		for (const auto &entry : EXTENSION_FILE_PREFIXES) {
-			if (StringUtil::StartsWith(path, entry.name)) {
-				required_extension = entry.extension;
-			}
-		}
-		if (!required_extension.empty() && db_instance && !db_instance->ExtensionIsLoaded(required_extension)) {
-			auto &dbconfig = DBConfig::GetConfig(*db_instance);
-			if (!ExtensionHelper::CanAutoloadExtension(required_extension) ||
-			    !dbconfig.options.autoload_known_extensions) {
-				auto error_message = "File " + path + " requires the extension " + required_extension + " to be loaded";
-				error_message =
-				    ExtensionHelper::AddExtensionInstallHintToErrorMsg(*db_instance, error_message, required_extension);
-				throw MissingExtensionException(error_message);
-			}
-			// an extension is required to read this file, but it is not loaded - try to load it
-			ExtensionHelper::AutoLoadExtension(*db_instance, required_extension);
-		}
+		// Bodo Change: Remove extension related files
+		//for (const auto &entry : EXTENSION_FILE_PREFIXES) {
+		//	if (StringUtil::StartsWith(path, entry.name)) {
+		//		required_extension = entry.extension;
+		//	}
+		//}
+		//if (!required_extension.empty() && db_instance && !db_instance->ExtensionIsLoaded(required_extension)) {
+		//	auto &dbconfig = DBConfig::GetConfig(*db_instance);
+		//	if (!ExtensionHelper::CanAutoloadExtension(required_extension) ||
+		//	    !dbconfig.options.autoload_known_extensions) {
+		//		auto error_message = "File " + path + " requires the extension " + required_extension + " to be loaded";
+		//		error_message =
+		//		    ExtensionHelper::AddExtensionInstallHintToErrorMsg(*db_instance, error_message, required_extension);
+		//		throw MissingExtensionException(error_message);
+		//	}
+		//	// an extension is required to read this file, but it is not loaded - try to load it
+		//	ExtensionHelper::AutoLoadExtension(*db_instance, required_extension);
+		//}
 
 		// Retry after having autoloaded
 		fs = FindFileSystem(path);

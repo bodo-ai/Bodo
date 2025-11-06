@@ -23,7 +23,8 @@
 #include "duckdb/storage/buffer/buffer_handle.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
 #include "duckdb/common/types/uuid.hpp"
-#include "fsst.h"
+// Bodo Change: Remove unneeded dependencies
+//#include "fsst.h"
 
 #include <cstring> // strlen() on Solaris
 namespace duckdb {
