@@ -1921,9 +1921,36 @@ def CacheImpl__init__(self, py_func):
         qualname = py_func.__qualname__
     except AttributeError:  # pragma: no cover
         qualname = py_func.__name__
+
+    # Is there an override for locators list?
+    if numba.config.CACHE_LOCATOR_CLASSES:
+        import importlib
+
+        locator_classes = []
+        for locator_class_path in numba.config.CACHE_LOCATOR_CLASSES.split(","):
+            locator_class_path = locator_class_path.strip()
+            if "." in locator_class_path:
+                # assume full module path: package.module.Klass
+                module_path, class_name = locator_class_path.rsplit(".", 1)
+                try:
+                    module = importlib.import_module(module_path)
+                    cls = getattr(module, class_name)
+                except (ImportError, AttributeError) as e:
+                    raise RuntimeError(f"Failed to import '{locator_class_path}' specified via "
+                                        "NUMBA_CACHE_LOCATOR_CLASSES env variable") from e
+            else:
+                # fallback to local globals
+                cls = globals().get(locator_class_path)
+                if cls is None:
+                    raise RuntimeError(f"Unknown cache locator class: '{locator_class_path}' specified via "
+                                        "NUMBA_CACHE_LOCATOR_CLASSES env variable")
+            locator_classes.append(cls)
+    else:
+        locator_classes = self._locator_classes
+
     # Find a locator
     source_path = inspect.getfile(py_func)
-    for cls in self._locator_classes:
+    for cls in locator_classes:
         locator = cls.from_function(py_func, source_path)
         if locator is not None:
             break
@@ -1971,9 +1998,9 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.caching.CacheImpl.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
+        != "4d692ab2c1a932a36a9f3232f9c9d30311f3d72a7bb67ca946c6fa9d23445706"
     ):  # pragma: no cover
-        warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
+        warnings.warn("numba.core.caching.CacheImpl.__init__ has changed")
 
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
