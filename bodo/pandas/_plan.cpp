@@ -1130,7 +1130,8 @@ duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
 
     return duckdb::make_uniq<duckdb::LogicalMaterializedCTE>(
         "bodo_cte", table_index, arrow_schema->num_fields(),
-        std::move(duplicated_duck), std::move(uses_duplicated_duck));
+        std::move(duplicated_duck), std::move(uses_duplicated_duck),
+        bododuckdb::CTEMaterialize::CTE_MATERIALIZE_NEVER);
 }
 
 duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
