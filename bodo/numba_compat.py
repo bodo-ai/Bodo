@@ -5505,6 +5505,60 @@ numba.core.typing.context.BaseContext.unify_pairs = unify_pairs
 
 #### END MONKEY PATCH SUPPORT FOR unifying unknown types ####
 
+
+# Bodo change: add in_partial_typing to resolution cache key introduced in Numba 0.62
+# to support partial typing properly.
+# See https://github.com/numba/numba/pull/9259
+# See test_func_nested_jit_error
+
+def lookup_resolve_cache(self, func, args, kws) -> "_ResolveCache":
+    """Lookup resolution cache for the given function type and argument
+    types.
+    """
+    from numba.core.typing.context import _ResolveCache
+    import bodo
+
+    if not self._stack or numba.config.DISABLE_TYPEINFER_FAIL_CACHE:
+        # if callstack is empty, bypass fail_cache
+        return _ResolveCache()
+
+    def normalize_dict(obj):
+        if isinstance(obj, dict):
+            return tuple(sorted(kws.items()))
+        return kws
+
+    def hashable(obj):
+        try:
+            hash(obj)
+        except TypeError:
+            return False
+        else:
+            return True
+
+    # Bodo change: add in_partial_typing to resolution cache key
+    key = func, args, normalize_dict(kws), bodo.transforms.typing_pass.in_partial_typing
+    if not hashable(key):
+        return _ResolveCache()
+    return self._fail_cache.setdefault(key, _ResolveCache())
+
+
+# lookup_resolve_cache introduced in Numba 0.62
+if hasattr(numba.core.typing.context.CallStack, "lookup_resolve_cache"):
+    if _check_numba_change:  # pragma: no cover
+        lines = inspect.getsource(
+            numba.core.typing.context.CallStack.lookup_resolve_cache
+        )
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "7504f3d617b85491f6574ed3ce779db539dfafefc98958790a3bd2d24086d829"
+        ):
+            warnings.warn(
+                "numba.core.typing.context.CallStack.lookup_resolve_cache has changed"
+            )
+
+    numba.core.typing.context.CallStack.lookup_resolve_cache = lookup_resolve_cache
+
+
 #### BEGIN MONKEY PATCH FOR METADATA CACHING SUPPORT ####
 
 
