@@ -6465,7 +6465,7 @@ def _sanitize_cell_contents(c):
 
 
 # Bodo change: avoid errors for global arrays
-def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=True):
+def compile_subroutine(self, builder, impl, sig, locals=None, flags=None, caching=True):
     """
     Compile the function *impl* for the given *sig* (in nopython mode).
     Return an instance of CompileResult.
@@ -6473,6 +6473,8 @@ def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=
     If *caching* evaluates True, the function keeps the compiled function
     for reuse in *.cached_internal_func*.
     """
+    if locals is None:
+        locals = {}
     cache_key = (impl.__code__, sig, type(self.error_model))
     if not caching:
         cached = None
@@ -6502,7 +6504,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.base.BaseContext.compile_subroutine)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "232faaf0f405cab5622a7d0222e1567e78799d19ea446f0db5948a5cf899128c"
+        != "26956c62fc3dee11d7c0d802cea4a9ad40e8ce80e619457fe948a0b3e7a6fb12"
     ):  # pragma: no cover
         warnings.warn("numba.core.base.BaseContext.compile_subroutine has changed")
 
