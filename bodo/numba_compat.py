@@ -4877,7 +4877,7 @@ def BaseNativeLowering_run_pass(self, state):
     calltypes = state.calltypes
     flags = state.flags
     metadata = state.metadata
-    pre_stats = llvm.passmanagers.dump_refprune_stats()
+    pre_stats = llvm.newpassmanagers.dump_refprune_stats()
 
     msg = "Function %s failed at nopython " "mode lowering" % (state.func_id.func_name,)
     with fallback_context(state, msg):
@@ -4937,7 +4937,7 @@ def BaseNativeLowering_run_pass(self, state):
         metadata["global_arrs"] = targetctx.global_arrays
         targetctx.global_arrays = []
         # capture pruning stats
-        post_stats = llvm.passmanagers.dump_refprune_stats()
+        post_stats = llvm.newpassmanagers.dump_refprune_stats()
         metadata["prune_stats"] = post_stats - pre_stats
 
         # Save the LLVM pass timings
@@ -4950,7 +4950,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typed_passes.BaseNativeLowering.run_pass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "d783ca2977135107fb4f095f21854c6e63930673f90d933e3ac37421537d4550"
+        != "49a9d0f4a8aa592f7304a14f960452274af3ff8aa911e1eb48c9fd5e1e05f29c"
     ):  # pragma: no cover
         warnings.warn("numba.core.typed_passes.BaseNativeLowering.run_pass has changed")
 
