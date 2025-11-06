@@ -3739,7 +3739,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.canonicalize_array_math)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b2200e9100613631cc554f4b640bc1181ba7cea0ece83630122d15b86941be2e"
+        != "559a6c7f0034c5aea7601fde9ef7df57eb49209d1fc7597f9e611903da9ed7b2"
     ):  # pragma: no cover
         warnings.warn("canonicalize_array_math has changed")
 
