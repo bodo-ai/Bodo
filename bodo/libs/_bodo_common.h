@@ -586,7 +586,7 @@ struct DataType {
     const Bodo_CTypes::CTypeEnum c_type;
     const int8_t precision;
     const int8_t scale;
-    const std::string tz_info;
+    const std::string timezone;
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
@@ -594,16 +594,16 @@ struct DataType {
      * @param c_type Type of the Array Elements
      * @param precision The precision (required for DECIMAL types)
      * @param scale The scale (required for DECIMAL types)
-     * @param tz_info The timezone (for DATETIME types)
+     * @param timezone The timezone (optional for DATETIME types)
      */
     DataType(bodo_array_type::arr_type_enum array_type,
              Bodo_CTypes::CTypeEnum c_type, int8_t precision = -1,
-             int8_t scale = -1, std::string tz_info = "")
+             int8_t scale = -1, std::string timezone = "")
         : array_type(array_type),
           c_type(c_type),
           precision(precision),
           scale(scale),
-          tz_info(std::move(tz_info)) {
+          timezone(std::move(timezone)) {
         // TODO: For decimal types, check if scale and precision are valid and
         // throw some exception (this will likely cause issues due to other
         // places where they are not being set properly.)
@@ -932,7 +932,7 @@ struct array_info {
     int32_t precision;        // for array of decimals and times
     int32_t scale;            // for array of decimals
     uint64_t num_categories;  // for categorical arrays
-    std::string tz_info;      // timezone info for timestamp arrays
+    std::string timezone;     // timezone info for timestamp arrays
     // ID used to identify matching equivalent dictionaries.
     // Currently only used by string arrays that are the dictionaries
     // inside dictionary encoded arrays. It cannot be placed in the dictionary
@@ -968,7 +968,7 @@ struct array_info {
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
                int64_t _offset = 0, std::vector<std::string> _field_names = {},
-               std::string _tz_info = "")
+               std::string _timezone = "")
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -978,7 +978,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
-          tz_info(std::move(_tz_info)),
+          timezone(std::move(_timezone)),
           array_id(_array_id),
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),

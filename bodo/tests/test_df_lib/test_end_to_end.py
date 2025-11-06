@@ -3847,3 +3847,54 @@ def test_asarray_df():
     assert result_bodo.shape == (4, 3)
     assert result_bodo.dtype == np.int32
     np.testing.assert_array_equal(result_bodo, result_pandas)
+
+
+@pytest.fixture
+def timezone_timestamp_df():
+    """Fixture for DataFrame with timezone-aware timestamps."""
+    data = {
+        "A": pd.date_range(
+            "2023-01-01 00:00:00",
+            periods=5,
+            freq="h",
+            tz="America/New_York",
+        ),
+        "B": pd.date_range(
+            "2023-06-01 12:00:00",
+            periods=5,
+            freq="D",
+            tz="Europe/London",
+        ),
+    }
+    return pd.DataFrame(data)
+
+
+@pytest.mark.jit_dependency
+@pytest.mark.parametrize("engine", ["python", "bodo"])
+def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
+    """Test scalar funcs preserve timezone."""
+    df = timezone_timestamp_df
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    num_plans = 1 if engine == "python" else 0
+    with assert_executed_plan_count(num_plans):
+        bodo_out = bdf.A.map(lambda x: x, engine=engine).dt.hour
+
+    expected = df.A.dt.hour
+    _test_equal(bodo_out, expected, check_pandas_types=False)
+
+
+def test_timezone_filter(index_val, timezone_timestamp_df):
+    """Test filter works with timezones"""
+    df = timezone_timestamp_df
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    val = pd.Timestamp("2023-01-01 00:02:00", tz="America/Chicago")
+    with assert_executed_plan_count(0):
+        bodo_out = bdf[bdf.A > val]
+    pandas_out = df[df.A > val]
+
+    reset_index = isinstance(index_val, pd.RangeIndex)
+    _test_equal(bodo_out, pandas_out, check_pandas_types=False, reset_index=reset_index)

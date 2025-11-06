@@ -179,8 +179,8 @@ get_data_type_from_bodo_fixed_width_array(
             in_num_bytes = sizeof(int64_t) * array->length;
             if (tz.length() > 0) {
                 type = arrow::timestamp(time_unit, tz);
-            } else if (array->tz_info.length() > 0) {
-                type = arrow::timestamp(time_unit, array->tz_info);
+            } else if (array->timezone.length() > 0) {
+                type = arrow::timestamp(time_unit, array->timezone);
             } else {
                 type = arrow::timestamp(time_unit);
             }
@@ -209,7 +209,7 @@ get_data_type_from_bodo_fixed_width_array(
  * 'duration' type).
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for Iceberg, for
- * which we specify "UTC".
+ * which we specify "UTC". This argument overrides the original timezone.
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
@@ -1462,7 +1462,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                     ts_arr, Bodo_CTypes::DATETIME, src_pool);
 
             // Store original timezone info (for DataFrame Library)
-            bodo_arr->tz_info = type->timezone();
+            bodo_arr->timezone = type->timezone();
             return bodo_arr;
         }
         case arrow::Type::DURATION: {

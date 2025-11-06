@@ -55,7 +55,7 @@ std::unique_ptr<array_info> alloc_empty_array(
             false, false, pool, mm);
         array_out->precision = datatype->precision;
         array_out->scale = datatype->scale;
-        array_out->tz_info = datatype->tz_info;
+        array_out->timezone = datatype->timezone;
         if (dict_builder) {
             assert(datatype->array_type == bodo_array_type::DICT);
             array_out->child_arrays[0] = dict_builder->dict_buff->data_array;

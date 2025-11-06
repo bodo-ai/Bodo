@@ -468,7 +468,7 @@ std::unique_ptr<DataType> DataType::copy() const {
     } else {
         return std::make_unique<DataType>(this->array_type, this->c_type,
                                           this->precision, this->scale,
-                                          this->tz_info);
+                                          this->timezone);
     }
 }
 
@@ -501,7 +501,7 @@ std::unique_ptr<DataType> DataType::to_nullable_type() const {
             arr_type = bodo_array_type::NULLABLE_INT_BOOL;
         }
         return std::make_unique<DataType>(arr_type, dtype, this->precision,
-                                          this->scale, this->tz_info);
+                                          this->scale, this->timezone);
     }
 }
 
@@ -513,8 +513,8 @@ void DataType::to_string_inner(std::string& out) {
     if (this->c_type == Bodo_CTypes::DECIMAL) {
         out += fmt::format("({},{})", this->precision, this->scale);
     }
-    if (this->c_type == Bodo_CTypes::DATETIME && this->tz_info.length() > 0) {
-        out += fmt::format("({})", this->tz_info);
+    if (this->c_type == Bodo_CTypes::DATETIME && this->timezone.length() > 0) {
+        out += fmt::format("({})", this->timezone);
     }
     out += "]";
 }
@@ -653,8 +653,8 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
             dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;
         case Bodo_CTypes::DATETIME:
-            if (tz_info.length() > 0) {
-                dtype = arrow::timestamp(arrow::TimeUnit::NANO, tz_info);
+            if (timezone.length() > 0) {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
             } else {
                 dtype = arrow::timestamp(arrow::TimeUnit::NANO);
             }
