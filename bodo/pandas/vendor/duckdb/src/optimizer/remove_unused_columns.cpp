@@ -52,9 +52,13 @@ void RemoveUnusedColumns::ClearUnusedExpressions(vector<T> &list, idx_t table_id
 	}
 }
 
+// Bodo Change: overall control of singleton pass behavior. BindingRewriter changes column refs
+// based on pruned column locations.  Add second pass CTERefVisitOperator that adds projections
+// to CTERef nodes when needed and updates column refs based on CTE column pruning.
 void RemoveUnusedColumnsPass::VisitOperator(LogicalOperator &op) {
     RemoveUnusedColumns ruc(binder, context, *this, true);
     ruc.VisitOperator(op);
+    // Do fixups and add projections for CTE ref nodes.
     ruc.CTERefVisitOperator(op);
 }
 
@@ -107,10 +111,8 @@ void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
         vector<LogicalType> new_chunk_types;
         vector<string> new_names;
 
-        for(auto &rc : bucket) {
-        }
-
         idx_t offset = 0;
+        // Configure this CTE ref to produce the unioned set of columns from above.
         for (idx_t col_idx = 0; col_idx < cteref.bound_columns.size(); col_idx++) {
             auto current_binding = ColumnBinding(cte_table_index, col_idx + offset);
             if (bucket.count(col_idx + offset) <= 0) {
@@ -128,11 +130,14 @@ void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
                 col_map.emplace(col_idx, col_idx);
             }
         }
+        // Record a column mapping for this CTE ref table index.
         pass.cte_col_map.emplace(cte_table_index, col_map);
     }
     default: {
+        // For all other node types, iterate through all of its children.
         for (size_t i = 0; i < op.children.size(); ++i) {
             LogicalOperator &child = *op.children[i];
+            // We have a CTE ref as a child.
             if (child.type == LogicalOperatorType::LOGICAL_CTE_REF) {
 		        auto &cteref = child.Cast<LogicalCTERef>();
                 const idx_t cte_id = cteref.cte_index;
@@ -159,6 +164,8 @@ void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
                     int j = 0;
                     unordered_map<idx_t, idx_t> col_map_to_use;
                     auto &cte_col_map = pass.cte_col_map[cte_table_index];
+                    // Project out only the columns actually needed from this particular
+                    // CTE ref.
                     for (auto &col_needed : actual_col_needed) {
                         idx_t col_needed_union = cte_col_map[col_needed];
                         exprs.push_back(make_uniq<BoundColumnRefExpression>(cteref.chunk_types[col_needed_union], bindings[col_needed_union]));
@@ -178,6 +185,7 @@ void RemoveUnusedColumns::CTERefVisitOperator(LogicalOperator &op) {
                 }
             }
         }
+        // Update column ref expressions in this node to use the new column mappings.
         BindingRewriter rewrite(pass.cte_col_map);
         rewrite.Rewrite(op);
     }
@@ -192,6 +200,7 @@ bool BaseColumnPruner::HasColumnReferencesForTable(idx_t table_index) const {
     }
     return false;
 }
+// Bodo Change End
 
 void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
@@ -211,7 +220,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		}
 
 		// then recurse into the children of the aggregate
+        // Bodo Change: pass "pass" to all sub-passes
 		RemoveUnusedColumns remove(binder, context, pass);
+        // Bodo Change End
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -275,7 +286,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				setop.column_count = entries.size();
 
 				for (idx_t child_idx = 0; child_idx < op.children.size(); child_idx++) {
+                    // Bodo Change: pass "pass" to all sub-passes
 					RemoveUnusedColumns remove(binder, context, pass, true);
+                    // Bodo Change End
 					auto &child = op.children[child_idx];
 
 					// we push a projection under this child that references the required columns of the union
@@ -310,7 +323,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	case LogicalOperatorType::LOGICAL_INTERSECT: {
 		// for INTERSECT/EXCEPT operations we can't remove anything, just recursively visit the children
 		for (auto &child : op.children) {
+            // Bodo Change: pass "pass" to all sub-passes
 			RemoveUnusedColumns remove(binder, context, pass, true);
+            // Bodo Change End
 			remove.VisitOperator(*child);
 		}
 		return;
@@ -341,7 +356,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		//! on top of them can select from only the table values being inserted.
 		//! TODO: Push down the projections from the returning statement
 		//! TODO: Be careful because you might be adding expressions when a user returns *
+        // Bodo Change: pass "pass" to all sub-passes
 		RemoveUnusedColumns remove(binder, context, pass, true);
+        // Bodo Change End
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -445,12 +462,58 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		everything_referenced = true;
 		break;
 	}
+    // Bodo Change: enabling column pruning of basic CTE nodes
 	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE: {
+        /*
+         * Here is a summary of how column pruning in the presence of CTEs
+         * works. Previously remove_unused_columns did one traversal of the
+         * plan tree but CTE column pruning requires two.  In the first pass,
+         * the normal column pruning code encounters CTE ref nodes and knows
+         * which columns are needed from each of those nodes.  The
+         * LOGICAL_CTE_REF case below handles taking those needed columns and
+         * unioning them with the columns needed by other CTE ref nodes for
+         * the same CTE index. This union is the complete set of columns that
+         * the CTE production side of the CTE needs to produce.  To re-use
+         * the existing code, below we push that unioned set of required
+         * columns down into the root node of the CTE production side of this
+         * CTE node and then the normal code handles column pruning for that
+         * entire sub-plan tree.
+         *
+         * In the second pass (CTERefVisitOperator), we do a post-order
+         * traversal of the plan tree and do the following:
+         * 1) When we encounter a CTE ref node, we can now prune its set of
+         * columns back to the completed union of columns for the given CTE
+         * index.
+         * 2) For all other nodes, we first check if any of their children
+         * are CTE ref nodes.  If so, and the columns needed for this CTE
+         * ref is a strict subset of union of columns then we insert a
+         * projection to remove the unneeded columns at this point. 
+         * 3) Steps 1, 2, and 3 maintain a data structure that says how
+         * columns have been pruned and the mapping between old and new
+         * column numbers for each table index.  For every node in the plan,
+         * this step sees if it uses any column from any table index that
+         * has had pruning done on it and if so updates its own sets of
+         * column mappings for its outputs and rewrites any expressions
+         * internal to the node that uses remapped column indices from its
+         * inputs.
+         *
+         * For the outermost CTE, duckdb is already configured to assume
+         * that the "using" side of the CTE requires all the columns
+         * referenced in the root node of the using side.  However, for
+         * nested CTEs, the root node of the using side of the nested CTE
+         * should use the above union of required columns.  The
+         * HasColumnReferencesForTable call below checks if the CTE node
+         * table index has any recorded column prunings.  This will be
+         * true now iff it is a nested CTE.  If it is a nested CTE, then
+         * propagate the CTE's required columns to the root node of the using
+         * side to initialize its set of required columns.
+         */
 		auto &cte = op.Cast<LogicalMaterializedCTE>();
         const idx_t cte_id = cte.table_index;
 
         // ----------------- CTE use side of CTE node --------------------
         auto &use_cte_op = *(cte.children[1]);
+        // We only be true for now if-and-only-if in nested CTE.
         if (HasColumnReferencesForTable(cte_id)) {
             use_cte_op.ResolveOperatorTypes();
 
@@ -488,9 +551,11 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	        throw InternalException("Should always find CTERef info!");
         }
         RemoveUnusedColumns cte_side(binder, context, pass);
+        // Get the root of the CTE production side of this CTE node.
         auto &cte_op = *(cte.children[0]);
         cte_op.ResolveOperatorTypes();
         idx_t cte_root_table_index;
+        // Propagate the required set of columns down to this root node.
         if (cte_op.type == LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY) {
 			auto &aggr = cte_op.Cast<LogicalAggregate>();
             // For each required column index, figure out which binding domain it belongs to
@@ -570,6 +635,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
         bucket.insert(required_here.begin(), required_here.end());
 		break;
 	}
+    // Bodo Change End
 	case LogicalOperatorType::LOGICAL_PIVOT: {
 		everything_referenced = true;
 		break;
@@ -704,9 +770,11 @@ void BaseColumnPruner::AddBinding(BoundColumnRefExpression &col) {
 	auto entry = column_references.find(col.binding);
 	if (entry == column_references.end()) {
 		// column not referenced yet - add a binding to it entirely
+        // Bodo Change: making consistent with above function.
 		ReferencedColumn column;
 		column.bindings.push_back(col);
 		column_references.insert(make_pair(col.binding, std::move(column)));
+        // Bodo Change End
 	} else {
 		// column reference already exists - add the binding and clear any sub-references
 		auto &column = entry->second;

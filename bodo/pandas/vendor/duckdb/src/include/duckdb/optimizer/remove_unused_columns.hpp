@@ -48,9 +48,14 @@ protected:
 	bool HandleStructExtractRecursive(Expression &expr, optional_ptr<BoundColumnRefExpression> &colref,
 	                                  vector<idx_t> &indexes);
 
+    // Bodo Change: utility function to detect nested CTE case.
     bool HasColumnReferencesForTable(idx_t table_index) const;
+    // Bodo Change End
 };
 
+// Bodo Change: new wrapper class for optimization pass to store one copy
+// of information since the internal RemoveUnusedColumns original pass
+// creates sub-instances of itself for various parts of the tree.
 class RemoveUnusedColumns;
 
 typedef unordered_map<idx_t, unordered_map<idx_t, idx_t>> CTEColMap;
@@ -80,21 +85,30 @@ private:
     // that we've seen for each CTE index thus far.
     unordered_map<idx_t, unordered_set<void *>> cte_ref_check;
 };
+// Bodo Change End
 
 //! The RemoveUnusedColumns optimizer traverses the logical operator tree and removes any columns that are not required
 class RemoveUnusedColumns : public BaseColumnPruner {
 public:
+    // Bodo Change: taking the reference to the new singleton outer pass
 	RemoveUnusedColumns(Binder &binder, ClientContext &context, RemoveUnusedColumnsPass &ruc_pass, bool is_root = false)
 	    : binder(binder), context(context), pass(ruc_pass), everything_referenced(is_root) {
 	}
+    // Bodo Change End
 
 	void VisitOperator(LogicalOperator &op) override;
+    // Bodo Change: second pass over the tree once we know union of CTE refs
 	void CTERefVisitOperator(LogicalOperator &op);
+    // Bodo Change End
 
 private:
 	Binder &binder;
 	ClientContext &context;
+
+    // Bodo Change: hold reference to the outer singleton pass
     RemoveUnusedColumnsPass &pass;
+    // Bodo Change End
+
 	//! Whether or not all the columns are referenced. This happens in the case of the root expression (because the
 	//! output implicitly refers all the columns below it)
 	bool everything_referenced;
