@@ -6,18 +6,19 @@
 
 namespace duckdb {
 
-void PhysicalReset::ResetExtensionVariable(ExecutionContext &context, DBConfig &config,
-                                           ExtensionOption &extension_option) const {
-	if (extension_option.set_function) {
-		extension_option.set_function(context.client, scope, extension_option.default_value);
-	}
-	if (scope == SetScope::GLOBAL) {
-		config.ResetOption(name);
-	} else {
-		auto &client_config = ClientConfig::GetConfig(context.client);
-		client_config.set_variables[name.ToStdString()] = extension_option.default_value;
-	}
-}
+// Bodo Change: Remove extension related code
+//void PhysicalReset::ResetExtensionVariable(ExecutionContext &context, DBConfig &config,
+//                                           ExtensionOption &extension_option) const {
+//	if (extension_option.set_function) {
+//		extension_option.set_function(context.client, scope, extension_option.default_value);
+//	}
+//	if (scope == SetScope::GLOBAL) {
+//		config.ResetOption(name);
+//	} else {
+//		auto &client_config = ClientConfig::GetConfig(context.client);
+//		client_config.set_variables[name.ToStdString()] = extension_option.default_value;
+//	}
+//}
 
 SourceResultType PhysicalReset::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
 	if (scope == SetScope::VARIABLE) {
@@ -30,17 +31,18 @@ SourceResultType PhysicalReset::GetData(ExecutionContext &context, DataChunk &ch
 	auto option = DBConfig::GetOptionByName(name);
 
 	if (!option) {
-		// check if this is an extra extension variable
-		auto entry = config.extension_parameters.find(name.ToStdString());
-		if (entry == config.extension_parameters.end()) {
-			auto extension_name = Catalog::AutoloadExtensionByConfigName(context.client, name);
-			entry = config.extension_parameters.find(name.ToStdString());
-			if (entry == config.extension_parameters.end()) {
-				throw InvalidInputException("Extension parameter %s was not found after autoloading",
-				                            name.ToStdString());
-			}
-		}
-		ResetExtensionVariable(context, config, entry->second);
+		// Bodo Change: Remove extension related code
+		//// check if this is an extra extension variable
+		//auto entry = config.extension_parameters.find(name.ToStdString());
+		//if (entry == config.extension_parameters.end()) {
+		//	auto extension_name = Catalog::AutoloadExtensionByConfigName(context.client, name);
+		//	entry = config.extension_parameters.find(name.ToStdString());
+		//	if (entry == config.extension_parameters.end()) {
+		//		throw InvalidInputException("Extension parameter %s was not found after autoloading",
+		//		                            name.ToStdString());
+		//	}
+		//}
+		//ResetExtensionVariable(context, config, entry->second);
 		return SourceResultType::FINISHED;
 	}
 

@@ -7,6 +7,8 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+// Bodo Change: Import bound_colref_expression.hpp, not sure why necessary
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/common/string_util.hpp"
 
 #include <algorithm>

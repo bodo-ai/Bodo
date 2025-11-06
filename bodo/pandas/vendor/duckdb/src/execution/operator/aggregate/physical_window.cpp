@@ -36,23 +36,6 @@ struct WindowSourceTask {
 	idx_t end_idx = 0;
 };
 
-struct WindowSourceTask {
-	WindowSourceTask(WindowGroupStage stage, idx_t group_idx, idx_t max_idx)
-	    : stage(stage), group_idx(group_idx), thread_idx(0), max_idx(max_idx) {
-	}
-	WindowGroupStage stage;
-	//! The hash group
-	idx_t group_idx;
-	//! The thread index (for local state)
-	idx_t thread_idx;
-	//! The total block index count
-	idx_t max_idx;
-	//! The first block index count
-	idx_t begin_idx = 0;
-	//! The end block index count
-	idx_t end_idx = 0;
-};
-
 class WindowHashGroup {
 public:
 	using HashGroupPtr = unique_ptr<ColumnDataCollection>;

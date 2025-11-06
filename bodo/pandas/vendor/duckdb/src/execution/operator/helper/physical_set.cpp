@@ -16,18 +16,19 @@ void PhysicalSet::SetGenericVariable(ClientContext &context, const string &name,
 	}
 }
 
-void PhysicalSet::SetExtensionVariable(ClientContext &context, ExtensionOption &extension_option, const string &name,
-                                       SetScope scope, const Value &value) {
-	auto &target_type = extension_option.type;
-	Value target_value = value.CastAs(context, target_type);
-	if (extension_option.set_function) {
-		extension_option.set_function(context, scope, target_value);
-	}
-	if (scope == SetScope::AUTOMATIC) {
-		scope = extension_option.default_scope;
-	}
-	SetGenericVariable(context, name, scope, std::move(target_value));
-}
+// Bodo Change: Remove extension related code
+//void PhysicalSet::SetExtensionVariable(ClientContext &context, ExtensionOption &extension_option, const string &name,
+//                                       SetScope scope, const Value &value) {
+//	auto &target_type = extension_option.type;
+//	Value target_value = value.CastAs(context, target_type);
+//	if (extension_option.set_function) {
+//		extension_option.set_function(context, scope, target_value);
+//	}
+//	if (scope == SetScope::AUTOMATIC) {
+//		scope = extension_option.default_scope;
+//	}
+//	SetGenericVariable(context, name, scope, std::move(target_value));
+//}
 
 SourceResultType PhysicalSet::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
 	auto &config = DBConfig::GetConfig(context.client);
@@ -35,16 +36,17 @@ SourceResultType PhysicalSet::GetData(ExecutionContext &context, DataChunk &chun
 	config.CheckLock(name);
 	auto option = DBConfig::GetOptionByName(name);
 	if (!option) {
-		// check if this is an extra extension variable
-		auto entry = config.extension_parameters.find(name);
-		if (entry == config.extension_parameters.end()) {
-			auto extension_name = Catalog::AutoloadExtensionByConfigName(context.client, name);
-			entry = config.extension_parameters.find(name);
-			if (entry == config.extension_parameters.end()) {
-				throw InvalidInputException("Extension parameter %s was not found after autoloading", name);
-			}
-		}
-		SetExtensionVariable(context.client, entry->second, name, scope, value);
+		// Bodo Change: Remove extension related code
+		//// check if this is an extra extension variable
+		//auto entry = config.extension_parameters.find(name);
+		//if (entry == config.extension_parameters.end()) {
+		//	auto extension_name = Catalog::AutoloadExtensionByConfigName(context.client, name);
+		//	entry = config.extension_parameters.find(name);
+		//	if (entry == config.extension_parameters.end()) {
+		//		throw InvalidInputException("Extension parameter %s was not found after autoloading", name);
+		//	}
+		//}
+		//SetExtensionVariable(context.client, entry->second, name, scope, value);
 		return SourceResultType::FINISHED;
 	}
 	SetScope variable_scope = scope;

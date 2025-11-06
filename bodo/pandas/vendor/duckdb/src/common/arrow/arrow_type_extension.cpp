@@ -306,28 +306,29 @@ struct ArrowBool8 {
 };
 
 void ArrowTypeExtensionSet::Initialize(const DBConfig &config) {
-	// Types that are 1:1
-	config.RegisterArrowExtension({"arrow.uuid", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UUID)});
-	config.RegisterArrowExtension(
-	    {"arrow.bool8", "c",
-	     make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BOOLEAN, LogicalType::TINYINT, ArrowBool8::ArrowToDuck,
-	                                             ArrowBool8::DuckToArrow)});
-
-	config.RegisterArrowExtension(
-	    {"DuckDB", "hugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::HUGEINT)});
-	config.RegisterArrowExtension(
-	    {"DuckDB", "uhugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UHUGEINT)});
-	config.RegisterArrowExtension(
-	    {"DuckDB", "time_tz", "w:8", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::TIME_TZ)});
-
-	// Types that are 1:n
-	config.RegisterArrowExtension({"arrow.json", &ArrowJson::PopulateSchema, &ArrowJson::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::JSON())});
-
-	config.RegisterArrowExtension({"DuckDB", "bit", &ArrowBit::PopulateSchema, &ArrowBit::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BIT), nullptr, nullptr});
-
-	config.RegisterArrowExtension({"DuckDB", "bignum", &ArrowBignum::PopulateSchema, &ArrowBignum::GetType,
-	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BIGNUM), nullptr, nullptr});
+// Bodo Change: Remove extension files
+//	// Types that are 1:1
+//	config.RegisterArrowExtension({"arrow.uuid", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UUID)});
+//	config.RegisterArrowExtension(
+//	    {"arrow.bool8", "c",
+//	     make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BOOLEAN, LogicalType::TINYINT, ArrowBool8::ArrowToDuck,
+//	                                             ArrowBool8::DuckToArrow)});
+//
+//	config.RegisterArrowExtension(
+//	    {"DuckDB", "hugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::HUGEINT)});
+//	config.RegisterArrowExtension(
+//	    {"DuckDB", "uhugeint", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UHUGEINT)});
+//	config.RegisterArrowExtension(
+//	    {"DuckDB", "time_tz", "w:8", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::TIME_TZ)});
+//
+//	// Types that are 1:n
+//	config.RegisterArrowExtension({"arrow.json", &ArrowJson::PopulateSchema, &ArrowJson::GetType,
+//	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::JSON())});
+//
+//	config.RegisterArrowExtension({"DuckDB", "bit", &ArrowBit::PopulateSchema, &ArrowBit::GetType,
+//	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BIT), nullptr, nullptr});
+//
+//	config.RegisterArrowExtension({"DuckDB", "bignum", &ArrowBignum::PopulateSchema, &ArrowBignum::GetType,
+//	                               make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BIGNUM), nullptr, nullptr});
 }
 } // namespace duckdb

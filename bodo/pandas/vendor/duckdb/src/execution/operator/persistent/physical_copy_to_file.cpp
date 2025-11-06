@@ -91,24 +91,6 @@ public:
 		initialized = true;
 	}
 
-	void Initialize(ClientContext &context, const PhysicalCopyToFile &op) {
-		if (initialized) {
-			return;
-		}
-		auto write_lock = lock.GetExclusiveLock();
-		if (initialized) {
-			return;
-		}
-		// initialize writing to the file
-		global_state = op.function.copy_to_initialize_global(context, *op.bind_data, op.file_path);
-		auto written_file_info = AddFile(*write_lock, op.file_path, op.return_type);
-		if (written_file_info) {
-			op.function.copy_to_get_written_statistics(context, *op.bind_data, *global_state,
-			                                           *written_file_info->file_stats);
-		}
-		initialized = true;
-	}
-
 	void CreateDir(const string &dir_path, FileSystem &fs) {
 		if (created_directories.find(dir_path) != created_directories.end()) {
 			// already attempted to create this directory

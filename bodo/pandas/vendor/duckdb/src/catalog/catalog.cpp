@@ -511,47 +511,48 @@ void FindMinimalQualification(CatalogEntryRetriever &retriever, const string &ca
 	qualify_schema = true;
 }
 
-bool Catalog::TryAutoLoad(ClientContext &context, const string &original_name) noexcept {
-	string extension_name = ExtensionHelper::ApplyExtensionAlias(original_name);
-	if (context.db->ExtensionIsLoaded(extension_name)) {
-		return true;
-	}
-#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
-	auto &dbconfig = DBConfig::GetConfig(context);
-	if (!dbconfig.options.autoload_known_extensions) {
-		return false;
-	}
-	try {
-		if (ExtensionHelper::CanAutoloadExtension(extension_name)) {
-			return ExtensionHelper::TryAutoLoadExtension(context, extension_name);
-		}
-	} catch (...) {
-		return false;
-	}
-#endif
-	return false;
-}
-
-String Catalog::AutoloadExtensionByConfigName(ClientContext &context, const String &configuration_name) {
-#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
-	auto &dbconfig = DBConfig::GetConfig(context);
-	if (dbconfig.options.autoload_known_extensions) {
-		auto extension_name =
-		    ExtensionHelper::FindExtensionInEntries(configuration_name.ToStdString(), EXTENSION_SETTINGS);
-		if (ExtensionHelper::CanAutoloadExtension(extension_name)) {
-			ExtensionHelper::AutoLoadExtension(context, extension_name);
-			return extension_name;
-		}
-	}
-#endif
-
-	throw Catalog::UnrecognizedConfigurationError(context, configuration_name.ToStdString());
-}
-
-static bool IsAutoloadableFunction(CatalogType type) {
-	return (type == CatalogType::TABLE_FUNCTION_ENTRY || type == CatalogType::SCALAR_FUNCTION_ENTRY ||
-	        type == CatalogType::AGGREGATE_FUNCTION_ENTRY || type == CatalogType::PRAGMA_FUNCTION_ENTRY);
-}
+// Bodo Change: Remove extension related code
+//bool Catalog::TryAutoLoad(ClientContext &context, const string &original_name) noexcept {
+//	string extension_name = ExtensionHelper::ApplyExtensionAlias(original_name);
+//	if (context.db->ExtensionIsLoaded(extension_name)) {
+//		return true;
+//	}
+//#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
+//	auto &dbconfig = DBConfig::GetConfig(context);
+//	if (!dbconfig.options.autoload_known_extensions) {
+//		return false;
+//	}
+//	try {
+//		if (ExtensionHelper::CanAutoloadExtension(extension_name)) {
+//			return ExtensionHelper::TryAutoLoadExtension(context, extension_name);
+//		}
+//	} catch (...) {
+//		return false;
+//	}
+//#endif
+//	return false;
+//}
+//
+//String Catalog::AutoloadExtensionByConfigName(ClientContext &context, const String &configuration_name) {
+//#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
+//	auto &dbconfig = DBConfig::GetConfig(context);
+//	if (dbconfig.options.autoload_known_extensions) {
+//		auto extension_name =
+//		    ExtensionHelper::FindExtensionInEntries(configuration_name.ToStdString(), EXTENSION_SETTINGS);
+//		if (ExtensionHelper::CanAutoloadExtension(extension_name)) {
+//			ExtensionHelper::AutoLoadExtension(context, extension_name);
+//			return extension_name;
+//		}
+//	}
+//#endif
+//
+//	throw Catalog::UnrecognizedConfigurationError(context, configuration_name.ToStdString());
+//}
+//
+//static bool IsAutoloadableFunction(CatalogType type) {
+//	return (type == CatalogType::TABLE_FUNCTION_ENTRY || type == CatalogType::SCALAR_FUNCTION_ENTRY ||
+//	        type == CatalogType::AGGREGATE_FUNCTION_ENTRY || type == CatalogType::PRAGMA_FUNCTION_ENTRY);
+//}
 
 bool IsTableFunction(CatalogType type) {
 	switch (type) {
@@ -607,63 +608,64 @@ CatalogException Catalog::CreateMissingEntryException(CatalogEntryRetriever &ret
 		}
 	}
 
-	// Check if the entry exists in any extension.
-	string extension_name;
-	auto type = lookup_info.GetCatalogType();
-	auto &entry_name = lookup_info.GetEntryName();
-	if (type == CatalogType::TABLE_FUNCTION_ENTRY || type == CatalogType::SCALAR_FUNCTION_ENTRY ||
-	    type == CatalogType::AGGREGATE_FUNCTION_ENTRY || type == CatalogType::PRAGMA_FUNCTION_ENTRY) {
-		auto lookup_result = ExtensionHelper::FindExtensionInFunctionEntries(entry_name, EXTENSION_FUNCTIONS);
-		do {
-			if (lookup_result.empty()) {
-				break;
-			}
-			vector<string> other_types;
-			string extension_for_error;
-			for (auto &function : lookup_result) {
-				auto function_type = function.second;
-				if (CompareCatalogTypes(type, function_type)) {
-					extension_name = function.first;
-					break;
-				}
-				extension_for_error = function.first;
-				other_types.push_back(CatalogTypeToString(function_type));
-			}
-			if (!extension_name.empty()) {
-				break;
-			}
-			if (other_types.size() == 1) {
-				auto &function_type = other_types[0];
-				auto error =
-				    CatalogException("%s with name \"%s\" is not in the catalog, a function by this name exists "
-				                     "in the %s extension, but it's of a different type, namely %s",
-				                     CatalogTypeToString(type), entry_name, extension_for_error, function_type);
-				return error;
-			} else {
-				D_ASSERT(!other_types.empty());
-				auto list_of_types = StringUtil::Join(other_types, ", ");
-				auto error =
-				    CatalogException("%s with name \"%s\" is not in the catalog, functions with this name exist "
-				                     "in the %s extension, but they are of different types, namely %s",
-				                     CatalogTypeToString(type), entry_name, extension_for_error, list_of_types);
-				return error;
-			}
-		} while (false);
-	} else if (type == CatalogType::TYPE_ENTRY) {
-		extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_TYPES);
-	} else if (type == CatalogType::COPY_FUNCTION_ENTRY) {
-		extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_COPY_FUNCTIONS);
-	} else if (type == CatalogType::COLLATION_ENTRY) {
-		extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_COLLATIONS);
-	}
-
-	// if we found an extension that can handle this catalog entry, create an error hinting the user
-	if (!extension_name.empty()) {
-		auto error_message = CatalogTypeToString(type) + " with name \"" + entry_name +
-		                     "\" is not in the catalog, but it exists in the " + extension_name + " extension.";
-		error_message = ExtensionHelper::AddExtensionInstallHintToErrorMsg(context, error_message, extension_name);
-		return CatalogException(error_message);
-	}
+	// Bodo Change: Remove extension related code
+	//// Check if the entry exists in any extension.
+	//string extension_name;
+	//auto type = lookup_info.GetCatalogType();
+	//auto &entry_name = lookup_info.GetEntryName();
+	//if (type == CatalogType::TABLE_FUNCTION_ENTRY || type == CatalogType::SCALAR_FUNCTION_ENTRY ||
+	//    type == CatalogType::AGGREGATE_FUNCTION_ENTRY || type == CatalogType::PRAGMA_FUNCTION_ENTRY) {
+	//	auto lookup_result = ExtensionHelper::FindExtensionInFunctionEntries(entry_name, EXTENSION_FUNCTIONS);
+	//	do {
+	//		if (lookup_result.empty()) {
+	//			break;
+	//		}
+	//		vector<string> other_types;
+	//		string extension_for_error;
+	//		for (auto &function : lookup_result) {
+	//			auto function_type = function.second;
+	//			if (CompareCatalogTypes(type, function_type)) {
+	//				extension_name = function.first;
+	//				break;
+	//			}
+	//			extension_for_error = function.first;
+	//			other_types.push_back(CatalogTypeToString(function_type));
+	//		}
+	//		if (!extension_name.empty()) {
+	//			break;
+	//		}
+	//		if (other_types.size() == 1) {
+	//			auto &function_type = other_types[0];
+	//			auto error =
+	//			    CatalogException("%s with name \"%s\" is not in the catalog, a function by this name exists "
+	//			                     "in the %s extension, but it's of a different type, namely %s",
+	//			                     CatalogTypeToString(type), entry_name, extension_for_error, function_type);
+	//			return error;
+	//		} else {
+	//			D_ASSERT(!other_types.empty());
+	//			auto list_of_types = StringUtil::Join(other_types, ", ");
+	//			auto error =
+	//			    CatalogException("%s with name \"%s\" is not in the catalog, functions with this name exist "
+	//			                     "in the %s extension, but they are of different types, namely %s",
+	//			                     CatalogTypeToString(type), entry_name, extension_for_error, list_of_types);
+	//			return error;
+	//		}
+	//	} while (false);
+	//} else if (type == CatalogType::TYPE_ENTRY) {
+	//	extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_TYPES);
+	//} else if (type == CatalogType::COPY_FUNCTION_ENTRY) {
+	//	extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_COPY_FUNCTIONS);
+	//} else if (type == CatalogType::COLLATION_ENTRY) {
+	//	extension_name = ExtensionHelper::FindExtensionInEntries(entry_name, EXTENSION_COLLATIONS);
+	//}
+	//
+	//// if we found an extension that can handle this catalog entry, create an error hinting the user
+	//if (!extension_name.empty()) {
+	//	auto error_message = CatalogTypeToString(type) + " with name \"" + entry_name +
+	//	                     "\" is not in the catalog, but it exists in the " + extension_name + " extension.";
+	//	error_message = ExtensionHelper::AddExtensionInstallHintToErrorMsg(context, error_message, extension_name);
+	//	return CatalogException(error_message);
+	//}
 
 	// entries in other schemas get a penalty
 	// however, if there is an exact match in another schema, we will always show it
@@ -939,13 +941,14 @@ optional_ptr<CatalogEntry> Catalog::GetEntry(CatalogEntryRetriever &retriever, c
                                              const EntryLookupInfo &lookup_info, OnEntryNotFound if_not_found) {
 	auto lookup_entry = TryLookupEntry(retriever, schema_name, lookup_info, if_not_found);
 
-	// Try autoloading extension to resolve lookup
-	if (!lookup_entry.Found()) {
-		if (AutoLoadExtensionByCatalogEntry(*retriever.GetContext().db, lookup_info.GetCatalogType(),
-		                                    lookup_info.GetEntryName())) {
-			lookup_entry = TryLookupEntry(retriever, schema_name, lookup_info, if_not_found);
-		}
-	}
+	// Bodo Change: Remove extension related code
+	//// Try autoloading extension to resolve lookup
+	//if (!lookup_entry.Found()) {
+	//	if (AutoLoadExtensionByCatalogEntry(*retriever.GetContext().db, lookup_info.GetCatalogType(),
+	//	                                    lookup_info.GetEntryName())) {
+	//		lookup_entry = TryLookupEntry(retriever, schema_name, lookup_info, if_not_found);
+	//	}
+	//}
 
 	if (lookup_entry.error.HasError()) {
 		lookup_entry.error.Throw();
@@ -969,13 +972,14 @@ optional_ptr<CatalogEntry> Catalog::GetEntry(CatalogEntryRetriever &retriever, c
                                              OnEntryNotFound if_not_found) {
 	auto result = TryLookupEntry(retriever, catalog, schema, lookup_info, if_not_found);
 
-	// Try autoloading extension to resolve lookup
-	if (!result.Found()) {
-		if (AutoLoadExtensionByCatalogEntry(*retriever.GetContext().db, lookup_info.GetCatalogType(),
-		                                    lookup_info.GetEntryName())) {
-			result = TryLookupEntry(retriever, catalog, schema, lookup_info, if_not_found);
-		}
-	}
+	// Bodo Change: Remove extension related code
+	//// Try autoloading extension to resolve lookup
+	//if (!result.Found()) {
+	//	if (AutoLoadExtensionByCatalogEntry(*retriever.GetContext().db, lookup_info.GetCatalogType(),
+	//	                                    lookup_info.GetEntryName())) {
+	//		result = TryLookupEntry(retriever, catalog, schema, lookup_info, if_not_found);
+	//	}
+	//}
 
 	if (result.error.HasError()) {
 		result.error.Throw();

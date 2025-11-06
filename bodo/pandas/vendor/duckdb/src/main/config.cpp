@@ -68,12 +68,14 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_SETTING(ArrowOutputListViewSetting),
     DUCKDB_SETTING_CALLBACK(ArrowOutputVersionSetting),
     DUCKDB_SETTING(AsofLoopJoinThresholdSetting),
-    DUCKDB_GLOBAL(AutoinstallExtensionRepositorySetting),
-    DUCKDB_GLOBAL(AutoinstallKnownExtensionsSetting),
-    DUCKDB_GLOBAL(AutoloadKnownExtensionsSetting),
+	// Bodo Change: Remove extension code
+    //DUCKDB_GLOBAL(AutoinstallExtensionRepositorySetting),
+    //DUCKDB_GLOBAL(AutoinstallKnownExtensionsSetting),
+    //DUCKDB_GLOBAL(AutoloadKnownExtensionsSetting),
     DUCKDB_SETTING(CatalogErrorMaxSchemasSetting),
     DUCKDB_GLOBAL(CheckpointThresholdSetting),
-    DUCKDB_GLOBAL(CustomExtensionRepositorySetting),
+	// Bodo Change: Remove extension code
+    //DUCKDB_GLOBAL(CustomExtensionRepositorySetting),
     DUCKDB_LOCAL(CustomProfilingSettingsSetting),
     DUCKDB_GLOBAL(CustomUserAgentSetting),
     DUCKDB_SETTING(DebugAsofIejoinSetting),
@@ -317,17 +319,18 @@ void DBConfig::SetOption(const string &name, Value value) {
 }
 
 void DBConfig::ResetOption(const String &name) {
-	lock_guard<mutex> l(config_lock);
-	auto extension_option = extension_parameters.find(name.ToStdString());
-	D_ASSERT(extension_option != extension_parameters.end());
-	auto &default_value = extension_option->second.default_value;
-	if (!default_value.IsNull()) {
-		// Default is not NULL, override the setting
-		options.set_variables[name.ToStdString()] = default_value;
-	} else {
-		// Otherwise just remove it from the 'set_variables' map
-		options.set_variables.erase(name.ToStdString());
-	}
+// Bodo Change: Remove extension code
+//	lock_guard<mutex> l(config_lock);
+//	auto extension_option = extension_parameters.find(name.ToStdString());
+//	D_ASSERT(extension_option != extension_parameters.end());
+//	auto &default_value = extension_option->second.default_value;
+//	if (!default_value.IsNull()) {
+//		// Default is not NULL, override the setting
+//		options.set_variables[name.ToStdString()] = default_value;
+//	} else {
+//		// Otherwise just remove it from the 'set_variables' map
+//		options.set_variables.erase(name.ToStdString());
+//	}
 }
 
 void DBConfig::ResetGenericOption(const String &name) {
@@ -427,18 +430,19 @@ LogicalType DBConfig::ParseLogicalType(const string &type) {
 
 void DBConfig::AddExtensionOption(const string &name, string description, LogicalType parameter,
                                   const Value &default_value, set_option_callback_t function, SetScope default_scope) {
-	extension_parameters.insert(make_pair(
-	    name, ExtensionOption(std::move(description), std::move(parameter), function, default_value, default_scope)));
-	// copy over unrecognized options, if they match the new extension option
-	auto iter = options.unrecognized_options.find(name);
-	if (iter != options.unrecognized_options.end()) {
-		options.set_variables[name] = iter->second;
-		options.unrecognized_options.erase(iter);
-	}
-	if (!default_value.IsNull() && options.set_variables.find(name) == options.set_variables.end()) {
-		// Default value is set, insert it into the 'set_variables' list
-		options.set_variables[name] = default_value;
-	}
+	// Bodo Chamge: Remove extension code
+	//extension_parameters.insert(make_pair(
+	//    name, ExtensionOption(std::move(description), std::move(parameter), function, default_value, default_scope)));
+	//// copy over unrecognized options, if they match the new extension option
+	//auto iter = options.unrecognized_options.find(name);
+	//if (iter != options.unrecognized_options.end()) {
+	//	options.set_variables[name] = iter->second;
+	//	options.unrecognized_options.erase(iter);
+	//}
+	//if (!default_value.IsNull() && options.set_variables.find(name) == options.set_variables.end()) {
+	//	// Default value is set, insert it into the 'set_variables' list
+	//	options.set_variables[name] = default_value;
+	//}
 }
 
 bool DBConfig::IsInMemoryDatabase(const char *database_path) {

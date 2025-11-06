@@ -24,9 +24,11 @@
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "duckdb/main/capi/extension_api.hpp"
+// Bodo Change: Remove extension code
+//#include "duckdb/main/capi/extension_api.hpp"
 #include "duckdb/storage/external_file_cache.hpp"
-#include "duckdb/storage/compression/empty_validity.hpp"
+// Bodo Change: Remove compression code
+//#include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "mbedtls_wrapper.hpp"
@@ -44,8 +46,10 @@ DBConfig::DBConfig() {
 	index_types = make_uniq<IndexTypeSet>();
 	error_manager = make_uniq<ErrorManager>();
 	secret_manager = make_uniq<SecretManager>();
-	http_util = make_shared_ptr<HTTPUtil>();
-	storage_extensions["__open_file__"] = OpenFileStorageExtension::Create();
+	// Bodo	Change: Remove mbedtls dependency
+	//http_util = make_shared_ptr<HTTPUtil>();
+	// Bodo Change: Remove extension code
+	//storage_extensions["__open_file__"] = OpenFileStorageExtension::Create();
 }
 
 DBConfig::DBConfig(bool read_only) : DBConfig::DBConfig() {
@@ -161,19 +165,20 @@ shared_ptr<AttachedDatabase> DatabaseInstance::CreateAttachedDatabase(ClientCont
 	auto &catalog = Catalog::GetSystemCatalog(*this);
 
 	if (!options.db_type.empty()) {
+		// Bodo Change: Remove extension code
 		// Find the storage extension for this database file.
-		auto extension_name = ExtensionHelper::ApplyExtensionAlias(options.db_type);
-		auto entry = config.storage_extensions.find(extension_name);
-		if (entry == config.storage_extensions.end()) {
-			throw BinderException("Unrecognized storage type \"%s\"", options.db_type);
-		}
+		//auto extension_name = ExtensionHelper::ApplyExtensionAlias(options.db_type);
+		//auto entry = config.storage_extensions.find(extension_name);
+		//if (entry == config.storage_extensions.end()) {
+		//	throw BinderException("Unrecognized storage type \"%s\"", options.db_type);
+		//}
 
-		if (entry->second->attach != nullptr && entry->second->create_transaction_manager != nullptr) {
-			// Use the storage extension to create the initial database.
-			attached_database =
-			    make_shared_ptr<AttachedDatabase>(*this, catalog, *entry->second, context, info.name, info, options);
-			return attached_database;
-		}
+		//if (entry->second->attach != nullptr && entry->second->create_transaction_manager != nullptr) {
+		//	// Use the storage extension to create the initial database.
+		//	attached_database =
+		//	    make_shared_ptr<AttachedDatabase>(*this, catalog, *entry->second, context, info.name, info, options);
+		//	return attached_database;
+		//}
 
 		attached_database = make_shared_ptr<AttachedDatabase>(*this, catalog, info.name, info.path, options);
 		return attached_database;
@@ -210,54 +215,56 @@ static void ThrowExtensionSetUnrecognizedOptions(const case_insensitive_map_t<Va
 	throw InvalidInputException("The following options were not recognized: " + concatenated);
 }
 
-void DatabaseInstance::LoadExtensionSettings() {
-	// copy the map, to protect against modifications during
-	auto unrecognized_options_copy = config.options.unrecognized_options;
+// Bodo Change: Remove extension code
+//void DatabaseInstance::LoadExtensionSettings() {
+	//// copy the map, to protect against modifications during
+	//auto unrecognized_options_copy = config.options.unrecognized_options;
 
-	if (config.options.autoload_known_extensions) {
-		if (unrecognized_options_copy.empty()) {
-			// Nothing to do
-			return;
-		}
+	//if (config.options.autoload_known_extensions) {
+	//	if (unrecognized_options_copy.empty()) {
+	//		// Nothing to do
+	//		return;
+	//	}
 
-		Connection con(*this);
-		con.BeginTransaction();
+	//	Connection con(*this);
+	//	con.BeginTransaction();
 
-		vector<string> extension_options;
-		for (auto &option : unrecognized_options_copy) {
-			auto &name = option.first;
-			auto &value = option.second;
+	//	vector<string> extension_options;
+	//	for (auto &option : unrecognized_options_copy) {
+	//		auto &name = option.first;
+	//		auto &value = option.second;
 
-			auto extension_name = ExtensionHelper::FindExtensionInEntries(name, EXTENSION_SETTINGS);
-			if (extension_name.empty()) {
-				continue;
-			}
-			if (!ExtensionHelper::TryAutoLoadExtension(*this, extension_name)) {
-				throw InvalidInputException(
-				    "To set the %s setting, the %s extension needs to be loaded. But it could not be autoloaded.", name,
-				    extension_name);
-			}
-			auto it = config.extension_parameters.find(name);
-			if (it == config.extension_parameters.end()) {
-				throw InternalException("Extension %s did not provide the '%s' config setting", extension_name, name);
-			}
-			// if the extension provided the option, it should no longer be unrecognized.
-			D_ASSERT(config.options.unrecognized_options.find(name) == config.options.unrecognized_options.end());
-			auto &context = *con.context;
-			PhysicalSet::SetExtensionVariable(context, it->second, name, SetScope::GLOBAL, value);
-			extension_options.push_back(name);
-		}
+	//		auto extension_name = ExtensionHelper::FindExtensionInEntries(name, EXTENSION_SETTINGS);
+	//		if (extension_name.empty()) {
+	//			continue;
+	//		}
+	//		if (!ExtensionHelper::TryAutoLoadExtension(*this, extension_name)) {
+	//			throw InvalidInputException(
+	//			    "To set the %s setting, the %s extension needs to be loaded. But it could not be autoloaded.", name,
+	//			    extension_name);
+	//		}
+	//		auto it = config.extension_parameters.find(name);
+	//		if (it == config.extension_parameters.end()) {
+	//			throw InternalException("Extension %s did not provide the '%s' config setting", extension_name, name);
+	//		}
+	//		// if the extension provided the option, it should no longer be unrecognized.
+	//		D_ASSERT(config.options.unrecognized_options.find(name) == config.options.unrecognized_options.end());
+	//		auto &context = *con.context;
+	//		PhysicalSet::SetExtensionVariable(context, it->second, name, SetScope::GLOBAL, value);
+	//		extension_options.push_back(name);
+	//	}
 
-		con.Commit();
-	}
-	if (!config.options.unrecognized_options.empty()) {
-		ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
-	}
-}
+	//	con.Commit();
+	//}
+	//if (!config.options.unrecognized_options.empty()) {
+	//	ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
+	//}
+//}
 
-static duckdb_ext_api_v1 CreateAPIv1Wrapper() {
-	return CreateAPIv1();
-}
+// Bodo Change: Remove extension code
+//static duckdb_ext_api_v1 CreateAPIv1Wrapper() {
+//	return CreateAPIv1();
+//}
 
 void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config) {
 	DBConfig default_config;
@@ -284,7 +291,8 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	scheduler = make_uniq<TaskScheduler>(*this);
 	object_cache = make_uniq<ObjectCache>();
 	connection_manager = make_uniq<ConnectionManager>();
-	extension_manager = make_uniq<ExtensionManager>(*this);
+	// Bodo Change: Remove extension code
+	//extension_manager = make_uniq<ExtensionManager>(*this);
 
 	// initialize the secret manager
 	config.secret_manager->Initialize(*this);
@@ -301,10 +309,11 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		if (!config.file_system) {
 			throw InternalException("No file system!?");
 		}
-		auto entry = config.storage_extensions.find(config.options.database_type);
-		if (entry == config.storage_extensions.end()) {
-			ExtensionHelper::LoadExternalExtension(*this, *config.file_system, config.options.database_type);
-		}
+		// Bodo Change: Remove extension code
+		//auto entry = config.storage_extensions.find(config.options.database_type);
+		//if (entry == config.storage_extensions.end()) {
+		//	ExtensionHelper::LoadExternalExtension(*this, *config.file_system, config.options.database_type);
+		//}
 	}
 
 	if (!db_manager->HasDefaultDatabase()) {
@@ -318,9 +327,10 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
 	instance->Initialize(path, new_config);
-	if (instance->config.options.load_extensions) {
-		ExtensionHelper::LoadAllExtensions(*this);
-	}
+	// Bodo Change: Remove extension code
+	//if (instance->config.options.load_extensions) {
+	//	ExtensionHelper::LoadAllExtensions(*this);
+	//}
 	instance->db_manager->FinalizeStartup();
 }
 
@@ -377,9 +387,10 @@ ConnectionManager &DatabaseInstance::GetConnectionManager() {
 	return *connection_manager;
 }
 
-ExtensionManager &DatabaseInstance::GetExtensionManager() {
-	return *extension_manager;
-}
+// Bodo Change: Remove extension code
+//ExtensionManager &DatabaseInstance::GetExtensionManager() {
+//	return *extension_manager;
+//}
 
 FileSystem &DuckDB::GetFileSystem() {
 	return instance->GetFileSystem();
@@ -432,9 +443,10 @@ void DatabaseInstance::Configure(DBConfig &new_config, const char *database_path
 	if (new_config.secret_manager) {
 		config.secret_manager = std::move(new_config.secret_manager);
 	}
-	if (!new_config.storage_extensions.empty()) {
-		config.storage_extensions = std::move(new_config.storage_extensions);
-	}
+	// Bodo Change: Remove extension code
+	//if (!new_config.storage_extensions.empty()) {
+	//	config.storage_extensions = std::move(new_config.storage_extensions);
+	//}
 	if (config.options.maximum_memory == DConstants::INVALID_INDEX) {
 		config.SetDefaultMaxMemory();
 	}
@@ -480,13 +492,14 @@ idx_t DuckDB::NumberOfThreads() {
 	return instance->NumberOfThreads();
 }
 
-bool DatabaseInstance::ExtensionIsLoaded(const string &name) {
-	return extension_manager->ExtensionIsLoaded(name);
-}
-
-bool DuckDB::ExtensionIsLoaded(const std::string &name) {
-	return instance->ExtensionIsLoaded(name);
-}
+// Bodo Change: Remove extension code
+//bool DatabaseInstance::ExtensionIsLoaded(const string &name) {
+//	return extension_manager->ExtensionIsLoaded(name);
+//}
+//
+//bool DuckDB::ExtensionIsLoaded(const std::string &name) {
+//	return instance->ExtensionIsLoaded(name);
+//}
 
 SettingLookupResult DatabaseInstance::TryGetCurrentSetting(const string &key, Value &result) const {
 	// check the session values

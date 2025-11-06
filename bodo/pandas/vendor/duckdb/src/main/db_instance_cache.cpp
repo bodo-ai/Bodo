@@ -1,5 +1,6 @@
 #include "duckdb/main/db_instance_cache.hpp"
-#include "duckdb/main/extension_helper.hpp"
+// Bodo Change: Remove extension code
+//#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/database_file_path_manager.hpp"
 
 namespace duckdb {

@@ -65,7 +65,9 @@ StringValueResult::StringValueResult(CSVStates &states, CSVStateMachine &state_m
 			    "Mismatch between the number of columns (%d) in the CSV file and what is expected in the scanner (%d).",
 			    number_of_columns, csv_file_scan->file_types.size());
 		}
-		icu_loaded = csv_file_scan->buffer_manager->context.db->ExtensionIsLoaded("icu");
+		// Bodo Change: Remove extension code
+		//icu_loaded = csv_file_scan->buffer_manager->context.db->ExtensionIsLoaded("icu");
+		icu_loaded = false;
 		for (idx_t i = 0; i < csv_file_scan->file_types.size(); i++) {
 			auto type = csv_file_scan->file_types[i];
 			if (type.IsJSONType()) {

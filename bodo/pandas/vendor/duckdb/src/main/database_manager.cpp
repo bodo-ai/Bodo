@@ -109,10 +109,11 @@ shared_ptr<AttachedDatabase> DatabaseManager::AttachDatabase(ClientContext &cont
 	}
 	string extension = "";
 	if (FileSystem::IsRemoteFile(info.path, extension)) {
-		if (!ExtensionHelper::TryAutoLoadExtension(context, extension)) {
-			throw MissingExtensionException("Attaching path '%s' requires extension '%s' to be loaded", info.path,
-			                                extension);
-		}
+		// Bodo Change: Remove extension code
+		//if (!ExtensionHelper::TryAutoLoadExtension(context, extension)) {
+		//	throw MissingExtensionException("Attaching path '%s' requires extension '%s' to be loaded", info.path,
+		//	                                extension);
+		//}
 		if (options.access_mode == AccessMode::AUTOMATIC) {
 			// Attaching of remote files gets bumped to READ_ONLY
 			// This is due to the fact that on most (all?) remote files writes to DB are not available
@@ -237,19 +238,19 @@ void DatabaseManager::GetDatabaseType(ClientContext &context, AttachInfo &info, 
 	if (options.db_type.empty()) {
 		return;
 	}
+	// Bodo Change: Remove extension code
+	//if (config.storage_extensions.find(options.db_type) != config.storage_extensions.end()) {
+	//	// If the database type is already registered, we don't need to load it again.
+	//	return;
+	//}
 
-	if (config.storage_extensions.find(options.db_type) != config.storage_extensions.end()) {
-		// If the database type is already registered, we don't need to load it again.
-		return;
-	}
-
-	// If we are loading a database type from an extension, then we need to check if that extension is loaded.
-	if (!Catalog::TryAutoLoad(context, options.db_type)) {
-		// FIXME: Here it might be preferable to use an AutoLoadOrThrow kind of function
-		// so that either there will be success or a message to throw, and load will be
-		// attempted only once respecting the auto-loading options
-		ExtensionHelper::LoadExternalExtension(context, options.db_type);
-	}
+	//// If we are loading a database type from an extension, then we need to check if that extension is loaded.
+	//if (!Catalog::TryAutoLoad(context, options.db_type)) {
+	//	// FIXME: Here it might be preferable to use an AutoLoadOrThrow kind of function
+	//	// so that either there will be success or a message to throw, and load will be
+	//	// attempted only once respecting the auto-loading options
+	//	ExtensionHelper::LoadExternalExtension(context, options.db_type);
+	//}
 }
 
 const string &DatabaseManager::GetDefaultDatabase(ClientContext &context) {
