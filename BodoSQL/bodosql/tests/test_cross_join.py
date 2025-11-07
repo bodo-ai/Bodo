@@ -4,7 +4,6 @@ import pytest
 
 import bodosql
 from bodo.tests.utils import pytest_slow_unless_join, temp_env_override
-from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
@@ -161,5 +160,5 @@ def test_cross_join_error(basic_df, spark_info, memory_leak_check):
     # NOTE: the error message will be Encountered "join on"... if/when
     # we revert the bodo parser to using a lookahead of 1
     # https://bodo.atlassian.net/browse/BE-4404
-    with pytest.raises(BodoError, match='.*Encountered "cross join on".*'):
+    with pytest.raises(ValueError, match='.*Encountered "cross join on".*'):
         bc.sql(query)
