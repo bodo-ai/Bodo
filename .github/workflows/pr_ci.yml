@@ -16,6 +16,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+      - name: Get Version
+        id: get_version
+        run: |
+          set -exo pipefail
+          pip install setuptools_scm
+          echo "bodo_version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+    outputs:
+      bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
   # 1) Validate changes and commit message
   validate:
@@ -79,7 +96,7 @@ jobs:
 
   # 3) Pre-Build Bodo to save build artifacts to sccache
   compile-bodo:
-    needs: [validate]
+    needs: [validate, get_version]
     name: Pre-Build Bodo for Cache
     runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     if: needs.validate.outputs.run_tests == 'true'
@@ -92,6 +109,11 @@ jobs:
         uses: ./.github/actions/build-source
         with:
           build-all: false
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.get_version.outputs.bodo_version }}
+      - name: Print Bodo Version
+        run: |
+          python -c "import bodo; print('Effective Bodo version in CI:', bodo.__version__)"
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
         if: ${{ runner.os != 'Windows' }}
