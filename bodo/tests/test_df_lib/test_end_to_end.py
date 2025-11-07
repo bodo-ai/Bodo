@@ -1684,6 +1684,22 @@ def test_groupby_agg_numeric(groupby_agg_df, func):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+def test_size_no_val(groupby_agg_df, as_index):
+    """Test groupby.size() on a DataFrame without value columns."""
+    sel_cols = ["D", "A"]
+
+    df = groupby_agg_df[sel_cols]
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby(sel_cols, as_index=as_index).size()
+    pdf = df.groupby(sel_cols, as_index=as_index).size()
+
+    _test_equal(
+        bdf2, pdf, sort_output=True, check_pandas_types=False, reset_index=~as_index
+    )
+
+
 @pytest.mark.parametrize(
     "func",
     [
