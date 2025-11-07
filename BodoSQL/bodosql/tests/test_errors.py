@@ -284,14 +284,14 @@ def test_empty_query_python(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100)})
     msg = "BodoSQLContext passed empty query string"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=msg,
     ):
         bc = bodosql.BodoSQLContext({"TABLE1": df})
         bc.sql("")
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=msg,
     ):
         bc = bodosql.BodoSQLContext({"TABLE1": df})
