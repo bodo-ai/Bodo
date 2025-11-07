@@ -1923,7 +1923,7 @@ def CacheImpl__init__(self, py_func):
         qualname = py_func.__name__
 
     # Is there an override for locators list?
-    if numba.config.CACHE_LOCATOR_CLASSES:
+    if hasattr(numba.config, "CACHE_LOCATOR_CLASSES") and numba.config.CACHE_LOCATOR_CLASSES:
         import importlib
 
         locator_classes = []
