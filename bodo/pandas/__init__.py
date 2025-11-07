@@ -9,6 +9,9 @@ from bodo.pandas.base import *
 from bodo.pandas.utils import fallback_wrapper
 import os
 
+# Pandas Scalars, types, non performance critical objects.
+from pandas import Timestamp
+
 DataFrame = BodoDataFrame
 Series = BodoSeries
 
