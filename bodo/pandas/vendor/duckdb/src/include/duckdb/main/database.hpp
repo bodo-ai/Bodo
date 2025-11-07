@@ -68,11 +68,13 @@ public:
 	DUCKDB_API static DatabaseInstance &GetDatabase(ClientContext &context);
 	DUCKDB_API static const DatabaseInstance &GetDatabase(const ClientContext &context);
 
+	// Bodo Change: Remove extension related files
 	//DUCKDB_API bool ExtensionIsLoaded(const string &name);
 
 	DUCKDB_API SettingLookupResult TryGetCurrentSetting(const string &key, Value &result) const;
 
-	DUCKDB_API shared_ptr<EncryptionUtil> GetEncryptionUtil() const;
+	// Bodo Change: Remove encryption code
+	//DUCKDB_API shared_ptr<EncryptionUtil> GetEncryptionUtil() const;
 
 	shared_ptr<AttachedDatabase> CreateAttachedDatabase(ClientContext &context, AttachInfo &info,
 	                                                    AttachOptions &options);

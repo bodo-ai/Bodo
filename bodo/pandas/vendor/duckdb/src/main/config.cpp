@@ -101,7 +101,8 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(EnableExternalAccessSetting),
     DUCKDB_GLOBAL(EnableExternalFileCacheSetting),
     DUCKDB_SETTING(EnableFSSTVectorsSetting),
-    DUCKDB_LOCAL(EnableHTTPLoggingSetting),
+	// Bodo Change: Remove HTTP logging
+    //DUCKDB_LOCAL(EnableHTTPLoggingSetting),
     DUCKDB_GLOBAL(EnableHTTPMetadataCacheSetting),
     DUCKDB_GLOBAL(EnableLogging),
     DUCKDB_SETTING(EnableMacroDependenciesSetting),
@@ -118,7 +119,8 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_LOCAL(FileSearchPathSetting),
     DUCKDB_GLOBAL(ForceCompressionSetting),
     DUCKDB_LOCAL(HomeDirectorySetting),
-    DUCKDB_LOCAL(HTTPLoggingOutputSetting),
+	// Bodo Change: Remove HTTP logging
+    //DUCKDB_LOCAL(HTTPLoggingOutputSetting),
     DUCKDB_GLOBAL(HTTPProxySetting),
     DUCKDB_GLOBAL(HTTPProxyPasswordSetting),
     DUCKDB_GLOBAL(HTTPProxyUsernameSetting),

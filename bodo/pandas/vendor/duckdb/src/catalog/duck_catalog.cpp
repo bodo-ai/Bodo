@@ -165,7 +165,9 @@ bool DuckCatalog::IsEncrypted() const {
 }
 
 string DuckCatalog::GetEncryptionCipher() const {
-	return IsSystemCatalog() ? string() : EncryptionTypes::CipherToString(db.GetStorageManager().GetCipher());
+	// Bodo Change: Remove storage encryption functions
+	//return IsSystemCatalog() ? string() : EncryptionTypes::CipherToString(db.GetStorageManager().GetCipher());
+	return string();
 }
 
 void DuckCatalog::Verify() {

@@ -19,7 +19,8 @@
 #include "duckdb/storage/metadata/metadata_writer.hpp"
 #include "duckdb/storage/storage_info.hpp"
 #include "duckdb/storage/storage_manager.hpp"
-#include "mbedtls_wrapper.hpp"
+// Bodo Change remove encryption files
+//#include "mbedtls_wrapper.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -65,53 +66,54 @@ void DeserializeEncryptionData(ReadStream &stream, data_t *dest, idx_t size) {
 	stream.ReadData(dest, size);
 }
 
-void GenerateDBIdentifier(uint8_t *db_identifier) {
-	memset(db_identifier, 0, MainHeader::DB_IDENTIFIER_LEN);
-	duckdb_mbedtls::MbedTlsWrapper::AESStateMBEDTLS::GenerateRandomDataStatic(db_identifier,
-	                                                                          MainHeader::DB_IDENTIFIER_LEN);
-}
-
-void EncryptCanary(MainHeader &main_header, const shared_ptr<EncryptionState> &encryption_state,
-                   const_data_ptr_t derived_key) {
-
-	uint8_t canary_buffer[MainHeader::CANARY_BYTE_SIZE];
-
-	// we zero-out the iv and the (not yet) encrypted canary
-	uint8_t iv[MainHeader::AES_IV_LEN];
-	memset(iv, 0, MainHeader::AES_IV_LEN);
-	memset(canary_buffer, 0, MainHeader::CANARY_BYTE_SIZE);
-
-	encryption_state->InitializeEncryption(iv, MainHeader::AES_IV_LEN, derived_key,
-	                                       MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
-	encryption_state->Process(reinterpret_cast<const_data_ptr_t>(MainHeader::CANARY), MainHeader::CANARY_BYTE_SIZE,
-	                          canary_buffer, MainHeader::CANARY_BYTE_SIZE);
-
-	main_header.SetEncryptedCanary(canary_buffer);
-}
-
-bool DecryptCanary(MainHeader &main_header, const shared_ptr<EncryptionState> &encryption_state,
-                   data_ptr_t derived_key) {
-	// just zero-out the iv
-	uint8_t iv[MainHeader::AES_IV_LEN];
-	memset(iv, 0, MainHeader::AES_IV_LEN);
-
-	//! allocate a buffer for the decrypted canary
-	data_t decrypted_canary[MainHeader::CANARY_BYTE_SIZE];
-	memset(decrypted_canary, 0, MainHeader::CANARY_BYTE_SIZE);
-
-	//! Decrypt the canary
-	encryption_state->InitializeDecryption(iv, MainHeader::AES_IV_LEN, derived_key,
-	                                       MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
-	encryption_state->Process(main_header.GetEncryptedCanary(), MainHeader::CANARY_BYTE_SIZE, decrypted_canary,
-	                          MainHeader::CANARY_BYTE_SIZE);
-
-	//! compare if the decrypted canary is correct
-	if (memcmp(decrypted_canary, MainHeader::CANARY, MainHeader::CANARY_BYTE_SIZE) != 0) {
-		return false;
-	}
-
-	return true;
-}
+// Bodo Change remove encryption code
+//void GenerateDBIdentifier(uint8_t *db_identifier) {
+//	memset(db_identifier, 0, MainHeader::DB_IDENTIFIER_LEN);
+//	duckdb_mbedtls::MbedTlsWrapper::AESStateMBEDTLS::GenerateRandomDataStatic(db_identifier,
+//	                                                                          MainHeader::DB_IDENTIFIER_LEN);
+//}
+//
+//void EncryptCanary(MainHeader &main_header, const shared_ptr<EncryptionState> &encryption_state,
+//                   const_data_ptr_t derived_key) {
+//
+//	uint8_t canary_buffer[MainHeader::CANARY_BYTE_SIZE];
+//
+//	// we zero-out the iv and the (not yet) encrypted canary
+//	uint8_t iv[MainHeader::AES_IV_LEN];
+//	memset(iv, 0, MainHeader::AES_IV_LEN);
+//	memset(canary_buffer, 0, MainHeader::CANARY_BYTE_SIZE);
+//
+//	encryption_state->InitializeEncryption(iv, MainHeader::AES_IV_LEN, derived_key,
+//	                                       MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
+//	encryption_state->Process(reinterpret_cast<const_data_ptr_t>(MainHeader::CANARY), MainHeader::CANARY_BYTE_SIZE,
+//	                          canary_buffer, MainHeader::CANARY_BYTE_SIZE);
+//
+//	main_header.SetEncryptedCanary(canary_buffer);
+//}
+//
+//bool DecryptCanary(MainHeader &main_header, const shared_ptr<EncryptionState> &encryption_state,
+//                   data_ptr_t derived_key) {
+//	// just zero-out the iv
+//	uint8_t iv[MainHeader::AES_IV_LEN];
+//	memset(iv, 0, MainHeader::AES_IV_LEN);
+//
+//	//! allocate a buffer for the decrypted canary
+//	data_t decrypted_canary[MainHeader::CANARY_BYTE_SIZE];
+//	memset(decrypted_canary, 0, MainHeader::CANARY_BYTE_SIZE);
+//
+//	//! Decrypt the canary
+//	encryption_state->InitializeDecryption(iv, MainHeader::AES_IV_LEN, derived_key,
+//	                                       MainHeader::DEFAULT_ENCRYPTION_KEY_LENGTH);
+//	encryption_state->Process(main_header.GetEncryptedCanary(), MainHeader::CANARY_BYTE_SIZE, decrypted_canary,
+//	                          MainHeader::CANARY_BYTE_SIZE);
+//
+//	//! compare if the decrypted canary is correct
+//	if (memcmp(decrypted_canary, MainHeader::CANARY, MainHeader::CANARY_BYTE_SIZE) != 0) {
+//		return false;
+//	}
+//
+//	return true;
+//}
 
 void MainHeader::Write(WriteStream &ser) {
 	ser.WriteData(const_data_ptr_cast(MAGIC_BYTES), MAGIC_BYTE_SIZE);
@@ -386,11 +388,11 @@ void SingleFileBlockManager::CreateNewDatabase(QueryContext context) {
 	// We need the unique database identifier, if the storage version is new enough.
 	// If encryption is enabled, we also use it as the salt.
 	memset(options.db_identifier, 0, MainHeader::DB_IDENTIFIER_LEN);
-	if (encryption_enabled || options.version_number.GetIndex() >= 67) {
-		GenerateDBIdentifier(options.db_identifier);
-	}
+	// Bodo Change: disable storage encryption
+	//if (encryption_enabled || options.version_number.GetIndex() >= 67) {
+	//	GenerateDBIdentifier(options.db_identifier);
+	//}
 
-	// Bodo Change: Remove storage encryption functions
 	//if (encryption_enabled) {
 	//	// The key is given via ATTACH.
 	//	EncryptionKeyManager::DeriveKey(*options.encryption_options.user_key, options.db_identifier, derived_key);

@@ -46,10 +46,11 @@ CSVEncoder::CSVEncoder(ClientContext &context_p, const string &encoding_name_to_
 	auto function = config.GetEncodeFunction(encoding_name_to_find);
 	if (!function) {
 		// Maybe we can try to auto-load from our encodings extension, if this somehow fails, we just error.
-		if (Catalog::TryAutoLoad(context_p, "encodings")) {
-			// If it successfully loaded, we can try to get our function again
-			function = config.GetEncodeFunction(encoding_name_to_find);
-		}
+		// Bodo Change: Remove extension code
+		//if (Catalog::TryAutoLoad(context_p, "encodings")) {
+		//	// If it successfully loaded, we can try to get our function again
+		//	function = config.GetEncodeFunction(encoding_name_to_find);
+		//}
 	}
 	if (!function) {
 		// If at this point we still do not have a function we throw an error.

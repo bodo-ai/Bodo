@@ -32,7 +32,8 @@ struct StorageOptions {
 	//! Whether the database is encrypted
 	bool encryption = false;
 	//! Encryption algorithm
-	EncryptionTypes::CipherType encryption_cipher = EncryptionTypes::INVALID;
+	// Bodo Change: Remove encryption code
+	//EncryptionTypes::CipherType encryption_cipher = EncryptionTypes::INVALID;
 	//! encryption key
 	//! FIXME: change to a unique_ptr in the future
 	shared_ptr<string> user_key;

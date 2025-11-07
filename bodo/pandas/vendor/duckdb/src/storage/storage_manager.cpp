@@ -13,11 +13,13 @@
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/in_memory_checkpoint.hpp"
-#include "mbedtls_wrapper.hpp"
+// Bodo Change: Remove encryption code
+//#include "mbedtls_wrapper.hpp"
 
 namespace duckdb {
 
-using SHA256State = duckdb_mbedtls::MbedTlsWrapper::SHA256State;
+// Bodo Change: remove encryption code
+//using SHA256State = duckdb_mbedtls::MbedTlsWrapper::SHA256State;
 
 void StorageOptions::Initialize(const unordered_map<string, Value> &options) {
 	string storage_version_user_provided = "";
@@ -26,25 +28,26 @@ void StorageOptions::Initialize(const unordered_map<string, Value> &options) {
 			// Extract the block allocation size. This is NOT the actual memory available on a block (block_size),
 			// even though the corresponding option we expose to the user is called "block_size".
 			block_alloc_size = entry.second.GetValue<uint64_t>();
-		} else if (entry.first == "encryption_key") {
-			// check the type of the key
-			auto type = entry.second.type();
-			if (type.id() != LogicalTypeId::VARCHAR) {
-				throw BinderException("\"%s\" is not a valid key. A key must be of type VARCHAR",
-				                      entry.second.ToString());
-			} else if (entry.second.GetValue<string>().empty()) {
-				throw BinderException("Not a valid key. A key cannot be empty");
-			}
-			user_key = make_shared_ptr<string>(StringValue::Get(entry.second.DefaultCastAs(LogicalType::BLOB)));
-			block_header_size = DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE;
-			encryption = true;
-		} else if (entry.first == "encryption_cipher") {
-			auto parsed_cipher = EncryptionTypes::StringToCipher(entry.second.ToString());
-			if (parsed_cipher != EncryptionTypes::CipherType::GCM &&
-			    parsed_cipher != EncryptionTypes::CipherType::CTR) {
-				throw BinderException("\"%s\" is not a valid cipher. Try 'GCM' or 'CTR'.", entry.second.ToString());
-			}
-			encryption_cipher = parsed_cipher;
+		// Bodo Change: Remove encryption code
+		//} else if (entry.first == "encryption_key") {
+		//	// check the type of the key
+		//	auto type = entry.second.type();
+		//	if (type.id() != LogicalTypeId::VARCHAR) {
+		//		throw BinderException("\"%s\" is not a valid key. A key must be of type VARCHAR",
+		//		                      entry.second.ToString());
+		//	} else if (entry.second.GetValue<string>().empty()) {
+		//		throw BinderException("Not a valid key. A key cannot be empty");
+		//	}
+		//	user_key = make_shared_ptr<string>(StringValue::Get(entry.second.DefaultCastAs(LogicalType::BLOB)));
+		//	block_header_size = DEFAULT_ENCRYPTION_BLOCK_HEADER_SIZE;
+		//	encryption = true;
+		//} else if (entry.first == "encryption_cipher") {
+		//	auto parsed_cipher = EncryptionTypes::StringToCipher(entry.second.ToString());
+		//	if (parsed_cipher != EncryptionTypes::CipherType::GCM &&
+		//	    parsed_cipher != EncryptionTypes::CipherType::CTR) {
+		//		throw BinderException("\"%s\" is not a valid cipher. Try 'GCM' or 'CTR'.", entry.second.ToString());
+		//	}
+		//	encryption_cipher = parsed_cipher;
 		} else if (entry.first == "row_group_size") {
 			row_group_size = entry.second.GetValue<uint64_t>();
 		} else if (entry.first == "storage_version") {

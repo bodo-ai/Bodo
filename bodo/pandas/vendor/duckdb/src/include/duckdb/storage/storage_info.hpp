@@ -131,9 +131,10 @@ public:
 		memcpy(encryption_metadata, source, ENCRYPTION_METADATA_LEN);
 	}
 
-	EncryptionTypes::CipherType GetEncryptionCipher() {
-		return static_cast<EncryptionTypes::CipherType>(encryption_metadata[2]);
-	}
+	// Bodo Change: Remove encryption functions
+	//EncryptionTypes::CipherType GetEncryptionCipher() {
+	//	return static_cast<EncryptionTypes::CipherType>(encryption_metadata[2]);
+	//}
 
 	void SetDBIdentifier(data_ptr_t source) {
 		memset(db_identifier, 0, DB_IDENTIFIER_LEN);

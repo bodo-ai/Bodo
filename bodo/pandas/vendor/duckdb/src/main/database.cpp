@@ -30,8 +30,10 @@
 // Bodo Change: Remove compression code
 //#include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
+// Bodo Change: remove http util
 //#include "duckdb/common/http_util.hpp"
-#include "mbedtls_wrapper.hpp"
+// Bodo Change: remove encryption
+//#include "mbedtls_wrapper.hpp"
 #include "duckdb/main/database_file_path_manager.hpp"
 
 
@@ -507,13 +509,14 @@ SettingLookupResult DatabaseInstance::TryGetCurrentSetting(const string &key, Va
 	return db_config.TryGetCurrentSetting(key, result);
 }
 
-shared_ptr<EncryptionUtil> DatabaseInstance::GetEncryptionUtil() const {
-	if (config.encryption_util) {
-		return config.encryption_util;
-	}
-
-	return make_shared_ptr<duckdb_mbedtls::MbedTlsWrapper::AESStateMBEDTLSFactory>();
-}
+// Bodo Change: Remove encryption code
+//shared_ptr<EncryptionUtil> DatabaseInstance::GetEncryptionUtil() const {
+//	if (config.encryption_util) {
+//		return config.encryption_util;
+//	}
+//
+//	return make_shared_ptr<duckdb_mbedtls::MbedTlsWrapper::AESStateMBEDTLSFactory>();
+//}
 
 ValidChecker &DatabaseInstance::GetValidChecker() {
 	return db_validity;

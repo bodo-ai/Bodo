@@ -470,15 +470,16 @@ struct EnableFSSTVectorsSetting {
 	static constexpr SetScope DefaultScope = SetScope::GLOBAL;
 };
 
-struct EnableHTTPLoggingSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "enable_http_logging";
-	static constexpr const char *Description = "(deprecated) Enables HTTP logging";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetLocal(ClientContext &context, const Value &parameter);
-	static void ResetLocal(ClientContext &context);
-	static Value GetSetting(const ClientContext &context);
-};
+// Bodo Change: Disable HTTP Logging
+//struct EnableHTTPLoggingSetting {
+//	using RETURN_TYPE = bool;
+//	static constexpr const char *Name = "enable_http_logging";
+//	static constexpr const char *Description = "(deprecated) Enables HTTP logging";
+//	static constexpr const char *InputType = "BOOLEAN";
+//	static void SetLocal(ClientContext &context, const Value &parameter);
+//	static void ResetLocal(ClientContext &context);
+//	static Value GetSetting(const ClientContext &context);
+//};
 
 struct EnableHTTPMetadataCacheSetting {
 	using RETURN_TYPE = bool;
@@ -645,16 +646,17 @@ struct HomeDirectorySetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct HTTPLoggingOutputSetting {
-	using RETURN_TYPE = string;
-	static constexpr const char *Name = "http_logging_output";
-	static constexpr const char *Description =
-	    "(deprecated) The file to which HTTP logging output should be saved, or empty to print to the terminal";
-	static constexpr const char *InputType = "VARCHAR";
-	static void SetLocal(ClientContext &context, const Value &parameter);
-	static void ResetLocal(ClientContext &context);
-	static Value GetSetting(const ClientContext &context);
-};
+// Bodo Change: Disable HTTP Logging
+//struct HTTPLoggingOutputSetting {
+//	using RETURN_TYPE = string;
+//	static constexpr const char *Name = "http_logging_output";
+//	static constexpr const char *Description =
+//	    "(deprecated) The file to which HTTP logging output should be saved, or empty to print to the terminal";
+//	static constexpr const char *InputType = "VARCHAR";
+//	static void SetLocal(ClientContext &context, const Value &parameter);
+//	static void ResetLocal(ClientContext &context);
+//	static Value GetSetting(const ClientContext &context);
+//};
 
 struct HTTPProxySetting {
 	using RETURN_TYPE = string;
