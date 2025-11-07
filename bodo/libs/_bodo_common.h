@@ -1440,7 +1440,8 @@ std::unique_ptr<array_info> alloc_nullable_array(
     int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "");
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -1621,7 +1622,8 @@ std::unique_ptr<array_info> alloc_array_top_level(
     bool is_locally_unique = false, bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager()) {
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "") {
     switch (const_arr_type != bodo_array_type::UNKNOWN ? const_arr_type
                                                        : arr_type) {
         case bodo_array_type::STRING:
@@ -1632,7 +1634,7 @@ std::unique_ptr<array_info> alloc_array_top_level(
 
         case bodo_array_type::NULLABLE_INT_BOOL:
             return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
-                                        std::move(mm));
+                                        std::move(mm), timezone);
 
         case bodo_array_type::INTERVAL:
             return alloc_interval_array(length, dtype, pool, std::move(mm));

@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <memory>
 
 #include <arrow/array.h>
@@ -1169,10 +1170,19 @@ std::shared_ptr<array_info> arrow_numeric_array_to_bodo(
         arrow_num_arr->values(), (void *)arrow_num_arr->raw_values(),
         n * numpy_item_size[typ_enum], typ_enum, pool);
 
-    return std::make_shared<array_info>(
+    auto bodo_arr = std::make_shared<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {data_buf_buffer, null_bitmap_buffer}));
+
+    if constexpr (std::is_same_v<T, arrow::TimestampArray>) {
+        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(
+            arrow_num_arr->type());
+        // Store original timezone info (for DataFrame Library)
+        bodo_arr->timezone = timestamp_type->timezone();
+    }
+
+    return bodo_arr;
 }
 
 /**
@@ -1445,10 +1455,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
             // Ensure we are always working with Naive/UTC timestamps and
             // nanosecond precision.
-            if (type->unit() != arrow::TimeUnit::NANO ||
-                (type->timezone() != "" && type->timezone() != "UTC")) {
+            if (type->unit() != arrow::TimeUnit::NANO) {
                 auto res = arrow::compute::Cast(
-                    *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
+                    *ts_arr,
+                    arrow::timestamp(arrow::TimeUnit::NANO, type->timezone()),
                     arrow::compute::CastOptions::Safe(),
                     bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
@@ -1456,13 +1466,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 ts_arr =
                     std::static_pointer_cast<arrow::TimestampArray>(casted_arr);
             }
-            std::shared_ptr<array_info> bodo_arr =
-                arrow_numeric_array_to_bodo<arrow::TimestampArray>(
-                    ts_arr, Bodo_CTypes::DATETIME, src_pool);
-
-            // Store original timezone info (for DataFrame Library)
-            bodo_arr->timezone = type->timezone();
-            return bodo_arr;
+            return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
+                ts_arr, Bodo_CTypes::DATETIME, src_pool);
         }
         case arrow::Type::DURATION: {
             auto dur_arr =

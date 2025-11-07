@@ -1204,7 +1204,7 @@ std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
 std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
     bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    const std::shared_ptr<::arrow::MemoryManager> mm, std::string timezone) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size;
     if (typ_enum == Bodo_CTypes::_BOOL) {
@@ -1222,7 +1222,9 @@ std::unique_ptr<array_info> alloc_nullable_array(
     return std::make_unique<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
-            {std::move(buffer), std::move(buffer_bitmask)}));
+            {std::move(buffer), std::move(buffer_bitmask)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, -1, false, false,
+        false, 0, std::vector<std::string>({}), timezone);
 }
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
