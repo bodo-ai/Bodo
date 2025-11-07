@@ -3922,7 +3922,7 @@ def test_timezone_groupby(timezone_timestamp_df):
     bdf = bd.from_pandas(df)
 
     with assert_executed_plan_count(0):
-        # TODO: fix as_index case
+        # TODO [BSE-5186]: fix as_index case
         bodo_out = bdf.groupby("A", as_index=False).min().B.dt.hour
     pandas_out = df.groupby("A", as_index=False).min().B.dt.hour
 

@@ -1453,8 +1453,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
             std::shared_ptr<arrow::TimestampType> type =
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
-            // Ensure we are always working with Naive/UTC timestamps and
-            // nanosecond precision.
+            // Ensure we are always working with nanosecond precision.
             if (type->unit() != arrow::TimeUnit::NANO) {
                 auto res = arrow::compute::Cast(
                     *ts_arr,
