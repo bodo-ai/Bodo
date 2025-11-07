@@ -142,7 +142,7 @@ def test_bad_bodosql_context(memory_leak_check):
 
     filename = "myfile.pq"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=r"BodoSQLContext\(\): 'table' values must be DataFrames",
     ):
         impl(filename)
