@@ -90,7 +90,7 @@ jobs:
               # Checkout narwhals fork
               git clone https://github.com/bodo-ai/narwhals.git
               cd narwhals
-              pytest -s -v -Wignore bodo
+              pytest -s -v -Wignore -k bodo
               exit $?
             else
               # Bodo Tests: Coverage is collected
