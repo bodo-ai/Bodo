@@ -198,7 +198,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib and jit_dependency and not weekly"
+      pytest-marker: ""
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NARWHALS
