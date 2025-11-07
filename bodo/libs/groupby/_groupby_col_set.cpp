@@ -49,9 +49,11 @@ void BasicColSet::alloc_running_value_columns(
     int64_t num_categories = in_col->num_categories;
     std::tie(arr_type, dtype) =
         get_groupby_output_dtype(ftype, arr_type, dtype);
-    out_cols.push_back(alloc_array_top_level(
-        num_groups, 1, 1, arr_type, dtype, -1, 0, num_categories, false, false,
-        false, pool, std::move(mm)));
+    auto out_arr = alloc_array_top_level(num_groups, 1, 1, arr_type, dtype, -1,
+                                         0, num_categories, false, false, false,
+                                         pool, std::move(mm));
+    out_arr->timezone = in_col->timezone;
+    out_cols.push_back(std::move(out_arr));
 }
 
 void BasicColSet::update(const std::vector<grouping_info>& grp_infos,

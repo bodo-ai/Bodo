@@ -1352,7 +1352,7 @@ struct array_info {
                                                    std::move(value_type));
         } else {
             return std::make_unique<bodo::DataType>(
-                arr_type, dtype, this->precision, this->scale);
+                arr_type, dtype, this->precision, this->scale, this->timezone);
         }
     }
 };
