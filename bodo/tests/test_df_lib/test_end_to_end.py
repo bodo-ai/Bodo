@@ -3898,3 +3898,16 @@ def test_timezone_filter(index_val, timezone_timestamp_df):
 
     reset_index = isinstance(index_val, pd.RangeIndex)
     _test_equal(bodo_out, pandas_out, check_pandas_types=False, reset_index=reset_index)
+
+
+def test_timezone_groupby(timezone_timestamp_df):
+    """Test groupby works with timezones"""
+    df = timezone_timestamp_df
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        # TODO: fix as_index case
+        bodo_out = bdf.groupby("A", as_index=False).min().B.dt.hour
+    pandas_out = df.groupby("A", as_index=False).min().B.dt.hour
+
+    _test_equal(bodo_out, pandas_out, check_pandas_types=False)

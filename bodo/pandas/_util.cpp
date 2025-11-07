@@ -6,7 +6,6 @@
 #include <arrow/result.h>
 #include <arrow/scalar.h>
 #include <arrow/type_fwd.h>
-#include <iostream>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"

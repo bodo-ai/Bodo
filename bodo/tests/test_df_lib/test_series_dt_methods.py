@@ -100,6 +100,7 @@ test_map_arg = {
     "tz_localize": [((), {"CET": "CET", "ambiguous": "NaT", "nonexistent": "NaT"})],
 }
 
+date_tz = pd.Series(pd.date_range("20130101 00:00:00", periods=10, freq="h"))
 date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
 date_s = pd.Series(pd.date_range("20221201 09:10:12", periods=10, freq="s"))
 date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
