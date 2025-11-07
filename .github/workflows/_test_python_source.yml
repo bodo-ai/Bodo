@@ -28,6 +28,10 @@ on:
         type: string
         description: The kind of tests to run e.g. spawn tests
         required: true
+      bodo-version:
+        type: string
+        description: The version string of Bodo.
+        required: true
 
 jobs:
   run:
@@ -43,6 +47,8 @@ jobs:
           uses: ./.github/actions/build-source
           with:
             build-all: true
+          env:
+            SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.bodo-version }}
         - name: Load Hadoop from Cache
           if: runner.os != 'Windows'
           uses: actions/cache/restore@v4
