@@ -180,7 +180,7 @@ def test_query_syntax_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(100)})
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=r"Non-query expression encountered in illegal context",
     ):
         impl(df)
