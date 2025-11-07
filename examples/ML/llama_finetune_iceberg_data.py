@@ -192,17 +192,6 @@ def train_main(train_df):
 
     model = bodo.ai.prepare_model(model)
 
-    if model:
-        device = next(model.parameters()).device
-    else:
-        device = None
-    gpu_ranks = bodo.get_gpu_ranks()
-
-    # Rebalance data (same as before)
-    accelerators_used = len(gpu_ranks) != 0
-    if accelerators_used:
-        train_df = bodo.rebalance(train_df, dests=gpu_ranks, random=True, parallel=True)
-
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     dataset_func = lambda df: LlamaDataset(df, tokenizer)
     train_loader = bodo.ai.prepare_dataset(train_df, BATCH_SIZE, dataset_func=dataset_func, pin_memory=True)
@@ -246,5 +235,5 @@ def train_main(train_df):
 
 if __name__ == "__main__":
 
-    train_df = load_data()[:2]
+    train_df = load_data()
     bodo.ai.torch_train(train_main, train_df)

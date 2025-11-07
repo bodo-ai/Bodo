@@ -2,7 +2,7 @@
 
 #include "physical/result_collector.h"
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result)   \
     do {                                                            \
         for (unsigned i = 0; i < idx; ++i)                          \
@@ -18,7 +18,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result)    \
     do {                                                            \
         for (unsigned i = 0; i < idx; ++i)                          \
@@ -34,7 +34,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source)            \
     do {                                                       \
         std::cout << "Rank " << rank                           \
@@ -47,7 +47,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result)  \
     do {                                                            \
         std::cout << "Rank " << rank                                \
@@ -61,7 +61,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_CONSUME_LOOP(rank)                             \
     do {                                                              \
         std::cout << "Rank " << rank                                  \
@@ -74,7 +74,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result)                \
     do {                                                                       \
         for (unsigned i = 0; i < idx; ++i)                                     \
@@ -90,7 +90,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result)                 \
     do {                                                                       \
         for (unsigned i = 0; i < idx; ++i)                                     \
@@ -106,7 +106,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_SOURCE_FINISHED(rank, source)                        \
     do {                                                                    \
         std::cout                                                           \
@@ -120,7 +120,7 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_PIPELINE
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_FINALIZE(rank, op)                                      \
     do {                                                                       \
         std::cout << "Rank " << rank << " Pipeline::Execute calling Finalize " \
@@ -129,6 +129,29 @@
 #else
 #define DEBUG_PIPELINE_FINALIZE(rank, op) \
     do {                                  \
+    } while (0)
+#endif
+
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 2)
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                           \
+    do {                                                                   \
+        for (unsigned i = 0; i < idx; ++i)                                 \
+            std::cout << " ";                                              \
+        std::cout << "Rank " << rank << " midPipelineExecute in batch "    \
+                  << op->ToString() << " " << batch->nrows() << std::endl; \
+        DEBUG_PrintTable(std::cout, batch);                                \
+    } while (0)
+#elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                           \
+    do {                                                                   \
+        for (unsigned i = 0; i < idx; ++i)                                 \
+            std::cout << " ";                                              \
+        std::cout << "Rank " << rank << " midPipelineExecute in batch "    \
+                  << op->ToString() << " " << batch->nrows() << std::endl; \
+    } while (0)
+#else
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch) \
+    do {                                         \
     } while (0)
 #endif
 
@@ -145,6 +168,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
+        DEBUG_PIPELINE_IN_BATCH(rank, sink, batch);
         // Iterating here as in the normal section below so that if the sink
         // says HAVE_MORE_OUTPUT that we can iterate with an empty batch.
         while (true) {
@@ -166,6 +190,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalProcessBatch>& op = between_ops[idx];
+        DEBUG_PIPELINE_IN_BATCH(rank, op, batch);
         while (true) {
             DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result);
 
