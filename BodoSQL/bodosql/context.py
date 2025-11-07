@@ -1070,7 +1070,19 @@ _pa_to_sql_column_type_map = {
 }
 
 
-def get_sql_type(pa_type: pa.DataType):
+def _is_nullable_dtype(dtype):
+    """Check if a dtype is nullable (numpy dtypes other than floating/datetime/timedelta are not nullable)."""
+    return not (
+        isinstance(dtype, np.dtype)
+        and not (
+            np.issubdtype(dtype, np.floating)
+            or np.issubdtype(dtype, np.datetime64)
+            or np.issubdtype(dtype, np.timedelta64)
+        )
+    )
+
+
+def get_sql_type(pa_type: pa.DataType, is_nullable=True):
     """Convert a PyArrow data type to a BodoSQL SQL data type.
 
     Args:
@@ -1082,14 +1094,12 @@ def get_sql_type(pa_type: pa.DataType):
     # TODO[BSE-5182]: Support other types
     type_enum = _pa_to_sql_column_type_map[pa_type]
     sql_dtype = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(type_enum)
-    # TODO: support non-nullable types
-    nullable = True
-    return JavaEntryPoint.buildColumnDataTypeInfo(sql_dtype, nullable)
+    return JavaEntryPoint.buildColumnDataTypeInfo(sql_dtype, is_nullable)
 
 
-def get_sql_column_type(type: pa.DataType, col_name):
+def get_sql_column_type(type: pa.DataType, col_name, is_nullable=True):
     """Create a Java SQL column type from a PyArrow data type and column name."""
-    data_type = get_sql_type(type)
+    data_type = get_sql_type(type, is_nullable)
     return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
 
 
@@ -1114,9 +1124,12 @@ def _get_sql_types(df_type, from_jit):
     try:
         # Dropping Indexes since BodoSQL doesn't support them yet and can lead to issues
         # in JIT path.
+        df_type = df_type.reset_index(drop=True)
         return [
-            get_sql_column_type(f.type, f.name)
-            for f in pa.Schema.from_pandas(df_type.reset_index(drop=True))
+            get_sql_column_type(
+                f.type, f.name, _is_nullable_dtype(df_type.dtypes.iloc[i])
+            )
+            for i, f in enumerate(pa.Schema.from_pandas(df_type))
         ]
     except Exception:
         # Fallback to JIT version if Arrow version failed
