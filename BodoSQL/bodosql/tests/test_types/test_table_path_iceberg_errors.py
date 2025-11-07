@@ -28,7 +28,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
     conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=".*"
         + re.escape(
             "bodosql.TablePath(): `db_schema` is required for iceberg database type"
@@ -46,7 +46,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
         )
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=".*"
         + re.escape("bodosql.TablePath(): `db_schema` must be a string")
         + ".*",
@@ -72,7 +72,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
     conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=".*"
         + re.escape(
             "bodosql.TablePath(): `db_schema` is required for iceberg database type"
@@ -94,7 +94,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
         impl()
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=".*"
         + re.escape("bodosql.TablePath(): `db_schema` must be a string")
         + ".*",
@@ -126,18 +126,19 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
 
     # test outside of JIT
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=".*"
         + re.escape("No table with identifier iceberg_db.does_not_exist exists")
         + ".*",
     ):
-        bodosql.BodoSQLContext(
+        bc = bodosql.BodoSQLContext(
             {
                 "ICEBERG_TBL": bodosql.TablePath(
                     "does_not_exist", "sql", conn_str=conn, db_schema=db_schema
                 )
             }
         )
+        bc.sql("SELECT * FROM iceberg_tbl")
 
     # test inside of JIT
     with pytest.raises(
