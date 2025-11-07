@@ -2048,7 +2048,7 @@ class BodoDatetimeProperties:
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
         # Allows duration[ns] type, timestamp any precision without timezone.
-        # TODO: timestamp with timezone, other duration types.
+        # TODO: other duration/time types.
         if not (
             isinstance(series, BodoSeries)
             and (series.dtype in allowed_types or _is_pd_pa_timestamp(series.dtype))
@@ -3363,7 +3363,7 @@ dt_methods = [
             "round",
             # TODO: implement end_time
         ],
-        pd.ArrowDtype(pa.timestamp("ns")),
+        None,  # preserves timezone, scale
     ),
     # idx = 1: Series(Float)
     (
