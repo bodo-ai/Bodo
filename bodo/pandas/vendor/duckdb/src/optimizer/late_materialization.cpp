@@ -406,7 +406,9 @@ bool LateMaterialization::TryLateMaterialization(unique_ptr<LogicalOperator> &op
 	}
 
 	// run the RemoveUnusedColumns optimizer to prune the (now) unused columns the plan
-	RemoveUnusedColumns unused_optimizer(optimizer.binder, optimizer.context, true);
+    // Bodo Change: use the new wrapped singleton pass object for this optimization
+	RemoveUnusedColumnsPass unused_optimizer(optimizer.binder, optimizer.context);
+    // Bodo Change End
 	unused_optimizer.VisitOperator(*op);
 	return true;
 }

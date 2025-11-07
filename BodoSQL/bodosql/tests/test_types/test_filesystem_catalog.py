@@ -203,6 +203,7 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.iceberg
 @pytest_mark_one_rank
 @pytest.mark.bodosql_cpp
 def test_basic_iceberg_read(iceberg_database):
@@ -231,8 +232,8 @@ def test_basic_iceberg_read(iceberg_database):
         )
 
     setup()
-    db_schema, _ = iceberg_database()
-    catalog = bodosql.FileSystemCatalog(".")
+    db_schema, warehouse_loc = iceberg_database()
+    catalog = bodosql.FileSystemCatalog(warehouse_loc)
     bc1 = bodosql.BodoSQLContext(catalog=catalog)
 
     query = f'SELECT B, C FROM "{db_schema}"."{table_name}"'

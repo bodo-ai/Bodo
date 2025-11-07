@@ -197,7 +197,9 @@ void Optimizer::RunBuiltInOptimizers() {
 
 	// removes unused columns
 	RunOptimizer(OptimizerType::UNUSED_COLUMNS, [&]() {
-		RemoveUnusedColumns unused(binder, context, true);
+        // Bodo Change: use the new singleton pass object for this optimization
+		RemoveUnusedColumnsPass unused(binder, context);
+        // Bodo Change End
 		unused.VisitOperator(*plan);
 	});
 
