@@ -329,24 +329,30 @@ void Connection::Append(TableDescription &description, ColumnDataCollection &col
 //}
 
 void Connection::BeginTransaction() {
-	auto result = Query("BEGIN TRANSACTION");
-	if (result->HasError()) {
-		result->ThrowError();
-	}
+	// Bodo Change: Use ClientContext transaction management directly because we removed the parser
+	//auto result = Query("BEGIN TRANSACTION");
+	//if (result->HasError()) {
+	//	result->ThrowError();
+	//}
+	this->context->transaction.BeginTransaction();
 }
 
 void Connection::Commit() {
-	auto result = Query("COMMIT");
-	if (result->HasError()) {
-		result->ThrowError();
-	}
+	// Bodo Change: Use ClientContext transaction management directly because we removed the parser
+	//auto result = Query("COMMIT");
+	//if (result->HasError()) {
+	//	result->ThrowError();
+	//}
+	this->context->transaction.Commit();
 }
 
 void Connection::Rollback() {
-	auto result = Query("ROLLBACK");
-	if (result->HasError()) {
-		result->ThrowError();
-	}
+	// Bodo Change: Use ClientContext transaction management directly because we removed the parser
+	//auto result = Query("ROLLBACK");
+	//if (result->HasError()) {
+	//	result->ThrowError();
+	//}
+	this->context->transaction.Rollback(nullptr);
 }
 
 void Connection::SetAutoCommit(bool auto_commit) {

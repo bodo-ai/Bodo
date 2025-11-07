@@ -14,6 +14,8 @@
 #include "duckdb/main/database_path_and_type.hpp"
 #include "duckdb/main/db_instance_cache.hpp"
 #include "duckdb/main/error_manager.hpp"
+// Bodo Change: Remove extension code
+//#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
@@ -35,7 +37,6 @@
 // Bodo Change: remove encryption
 //#include "mbedtls_wrapper.hpp"
 #include "duckdb/main/database_file_path_manager.hpp"
-
 
 namespace duckdb {
 
