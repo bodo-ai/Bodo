@@ -356,6 +356,10 @@ def numba_to_c_array_types(
             c_arr_types.append(numba_to_c_array_type(arr_type))
             c_arr_types.append(arr_type.dtype.precision)
             c_arr_types.append(arr_type.dtype.scale)
+        elif isinstance(arr_type, bodo.types.DatetimeArrayType):
+            c_arr_types.append(numba_to_c_array_type(arr_type))
+            # TODO: Serialize Timezone information here.
+            c_arr_types.append(0)
         else:
             c_arr_types.append(numba_to_c_array_type(arr_type))
     return np.array(c_arr_types, dtype=np.int8)

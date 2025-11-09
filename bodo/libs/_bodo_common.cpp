@@ -561,6 +561,17 @@ void DataType::Serialize(std::vector<int8_t>& arr_array_types,
         arr_array_types.push_back(scale);
         arr_c_types.push_back(precision);
         arr_c_types.push_back(scale);
+    } else if (c_type == Bodo_CTypes::DATETIME) {
+        // For Datetime types, append the length of the timezone
+        // string and then the characters as int8_t.
+        if (timezone.size() > 255) {
+            throw std::runtime_error(
+                "String too long for 1-byte length prefix");
+        }
+        uint8_t len = static_cast<uint8_t>(timezone.size());
+        arr_array_types.push_back(static_cast<int8_t>(len));
+        arr_array_types.insert(arr_array_types.end(), timezone.begin(),
+                               timezone.end());
     }
 }
 
@@ -712,38 +723,50 @@ std::shared_ptr<::arrow::Field> MapType::ToArrowType(std::string& name) const {
 
 static std::unique_ptr<DataType> from_byte_helper(
     const std::span<const int8_t> arr_array_types,
-    const std::span<const int8_t> arr_c_types, size_t& i) {
-    auto array_type =
-        static_cast<bodo_array_type::arr_type_enum>(arr_array_types[i]);
-    auto c_type = static_cast<Bodo_CTypes::CTypeEnum>(arr_c_types[i]);
-    i += 1;
+    const std::span<const int8_t> arr_c_types, size_t& c_typ_idx,
+    size_t& arr_typ_idx) {
+    auto array_type = static_cast<bodo_array_type::arr_type_enum>(
+        arr_array_types[arr_typ_idx]);
+    auto c_type = static_cast<Bodo_CTypes::CTypeEnum>(arr_c_types[c_typ_idx]);
+    c_typ_idx += 1;
+    arr_typ_idx += 1;
 
     if (array_type == bodo_array_type::ARRAY_ITEM) {
-        auto inner_arr = from_byte_helper(arr_array_types, arr_c_types, i);
+        auto inner_arr = from_byte_helper(arr_array_types, arr_c_types,
+                                          c_typ_idx, arr_typ_idx);
         return std::make_unique<ArrayType>(std::move(inner_arr));
 
     } else if (array_type == bodo_array_type::STRUCT) {
         std::vector<std::unique_ptr<DataType>> child_types;
-        size_t num_fields = static_cast<size_t>(arr_array_types[i]);
-        i += 1;
+        size_t num_fields = static_cast<size_t>(arr_array_types[arr_typ_idx]);
+        c_typ_idx += 1;
+        arr_typ_idx += 1;
 
         for (size_t j = 0; j < num_fields; j++) {
-            child_types.push_back(
-                from_byte_helper(arr_array_types, arr_c_types, i));
+            child_types.push_back(from_byte_helper(arr_array_types, arr_c_types,
+                                                   c_typ_idx, arr_typ_idx));
         }
         return std::make_unique<StructType>(std::move(child_types));
     } else if (array_type == bodo_array_type::MAP) {
-        std::unique_ptr<DataType> key_arr =
-            from_byte_helper(arr_array_types, arr_c_types, i);
-        std::unique_ptr<DataType> value_arr =
-            from_byte_helper(arr_array_types, arr_c_types, i);
+        std::unique_ptr<DataType> key_arr = from_byte_helper(
+            arr_array_types, arr_c_types, c_typ_idx, arr_typ_idx);
+        std::unique_ptr<DataType> value_arr = from_byte_helper(
+            arr_array_types, arr_c_types, c_typ_idx, arr_typ_idx);
         return std::make_unique<MapType>(std::move(key_arr),
                                          std::move(value_arr));
     } else if (c_type == Bodo_CTypes::DECIMAL) {
-        uint8_t precision = arr_c_types[i];
-        uint8_t scale = arr_c_types[i + 1];
-        i += 2;
+        uint8_t precision = arr_c_types[arr_typ_idx];
+        uint8_t scale = arr_c_types[arr_typ_idx + 1];
+        c_typ_idx += 2;
+        arr_typ_idx += 2;
         return std::make_unique<DataType>(array_type, c_type, precision, scale);
+    } else if (c_type == Bodo_CTypes::DATETIME) {
+        uint8_t len = static_cast<uint8_t>(arr_array_types[arr_typ_idx]);
+        arr_typ_idx += 1;
+        std::string timezone(
+            reinterpret_cast<const char*>(&arr_array_types[arr_typ_idx]), len);
+        arr_typ_idx += len;
+        return std::make_unique<DataType>(array_type, c_type, -1, -1, timezone);
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
@@ -752,8 +775,8 @@ static std::unique_ptr<DataType> from_byte_helper(
 std::unique_ptr<DataType> DataType::Deserialize(
     const std::span<const int8_t> arr_array_types,
     const std::span<const int8_t> arr_c_types) {
-    size_t i = 0;
-    return from_byte_helper(arr_array_types, arr_c_types, i);
+    size_t i = 0, j = 0;
+    return from_byte_helper(arr_array_types, arr_c_types, i, j);
 }
 
 Schema::Schema() : column_types() {}
@@ -788,9 +811,10 @@ Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
 
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
                            const size_t idx) {
-    size_t i = 0;
+    size_t arr_typ_idx = 0, c_typ_idx = 0;
     this->insert_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
-                                         std::vector<int8_t>({arr_c_type}), i),
+                                         std::vector<int8_t>({arr_c_type}),
+                                         c_typ_idx, arr_typ_idx),
                         idx);
 }
 
@@ -803,9 +827,10 @@ void Schema::append_column(std::unique_ptr<DataType>&& col) {
 }
 void Schema::append_column(const int8_t arr_array_type,
                            const int8_t arr_c_type) {
-    size_t i = 0;
+    size_t arr_typ_idx = 0, c_typ_idx = 0;
     this->append_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
-                                         std::vector<int8_t>({arr_c_type}), i));
+                                         std::vector<int8_t>({arr_c_type}),
+                                         c_typ_idx, arr_typ_idx));
 }
 
 void Schema::append_schema(std::unique_ptr<Schema>&& other_schema) {
@@ -820,11 +845,11 @@ std::unique_ptr<Schema> Schema::Deserialize(
     const std::span<const int8_t> arr_c_types) {
     std::unique_ptr<Schema> schema = std::make_unique<Schema>();
     schema->column_types.reserve(arr_array_types.size());
-    size_t i = 0;
+    size_t arr_typ_idx = 0, c_typ_idx = 0;
 
-    while (i < arr_array_types.size()) {
-        schema->column_types.push_back(
-            from_byte_helper(arr_array_types, arr_c_types, i));
+    while (arr_typ_idx < arr_array_types.size()) {
+        schema->column_types.push_back(from_byte_helper(
+            arr_array_types, arr_c_types, c_typ_idx, arr_typ_idx));
     }
 
     return schema;
