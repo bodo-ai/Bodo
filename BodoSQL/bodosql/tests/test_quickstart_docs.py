@@ -2,12 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import temp_env_override
+from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = [pytest.mark.test_docs]
 
 
+@pytest_mark_one_rank
 def test_quickstart_local_sql():
     """Test example equivalent to docs/quick_start/quickstart_local_sql.md"""
     import bodosql.compiler  # isort:skip # noqa
