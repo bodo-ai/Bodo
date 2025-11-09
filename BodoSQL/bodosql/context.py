@@ -151,10 +151,13 @@ class BodoSQLContext:
                 dfs.append(v)
                 estimated_row_counts.append(_get_estimated_row_count(v))
                 estimated_ndvs.append(_get_estimated_ndv(v))
+            orig_bodo_types, df_types = get_df_types(dfs)
             schema = initialize_schema()
             self.schema = schema
             self.dfs = dfs
             self.names = names
+            self.df_types = df_types
+            self.orig_bodo_types = orig_bodo_types
             self.estimated_row_counts = estimated_row_counts
             self.estimated_ndvs = estimated_ndvs
         except Exception as e:
@@ -375,14 +378,13 @@ class BodoSQLContext:
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
                 write_type = JavaEntryPoint.getWriteType(plan_generator, sql)
-                orig_bodo_types, df_types = get_df_types(self.dfs)
                 update_schema(
                     self.schema,
                     self.names,
-                    df_types,
+                    self.df_types,
                     self.estimated_row_counts,
                     self.estimated_ndvs,
-                    orig_bodo_types,
+                    self.orig_bodo_types,
                     False,
                     write_type,
                 )
