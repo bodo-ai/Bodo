@@ -561,7 +561,8 @@ void DataType::Serialize(std::vector<int8_t>& arr_array_types,
         arr_array_types.push_back(scale);
         arr_c_types.push_back(precision);
         arr_c_types.push_back(scale);
-    } else if (c_type == Bodo_CTypes::DATETIME) {
+    } else if (array_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               c_type == Bodo_CTypes::DATETIME) {
         // For Datetime types, append the length of the timezone
         // string and then the characters as int8_t.
         if (timezone.size() > 255) {
