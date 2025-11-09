@@ -586,8 +586,7 @@ struct DataType {
     const Bodo_CTypes::CTypeEnum c_type;
     const int8_t precision;
     const int8_t scale;
-    const std::string
-        timezone;  // for DATETIME types, doesn't Serialize/DeSerialize
+    const std::string timezone;  // for DATETIME types.
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum

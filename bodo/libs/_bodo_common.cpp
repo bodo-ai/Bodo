@@ -760,7 +760,8 @@ static std::unique_ptr<DataType> from_byte_helper(
         c_typ_idx += 2;
         arr_typ_idx += 2;
         return std::make_unique<DataType>(array_type, c_type, precision, scale);
-    } else if (c_type == Bodo_CTypes::DATETIME) {
+    } else if (c_type == Bodo_CTypes::DATETIME &&
+               array_type == bodo_array_type::NULLABLE_INT_BOOL) {
         uint8_t len = static_cast<uint8_t>(arr_array_types[arr_typ_idx]);
         arr_typ_idx += 1;
         std::string timezone(
