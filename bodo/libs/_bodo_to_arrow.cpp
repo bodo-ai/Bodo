@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <iostream>
 #include <memory>
 
 #include <arrow/array.h>
