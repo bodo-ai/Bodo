@@ -122,12 +122,6 @@ void Optimizer::RunBuiltInOptimizers() {
 	// this does not change the logical plan structure, but only simplifies the expression trees
 	RunOptimizer(OptimizerType::EXPRESSION_REWRITER, [&]() { rewriter.VisitOperator(*plan); });
 
-	// try to inline CTEs instead of materialization
-	RunOptimizer(OptimizerType::CTE_INLINING, [&]() {
-		CTEInlining cte_inlining(*this);
-		plan = cte_inlining.Optimize(std::move(plan));
-	});
-
 	// Rewrites SUM(x + C) into SUM(x) + C * COUNT(x)
 	RunOptimizer(OptimizerType::SUM_REWRITER, [&]() {
 		SumRewriterOptimizer optimizer(*this);
