@@ -163,6 +163,10 @@ def java_call_to_python_call(java_call, input_plan):
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
         # TODO[BSE-5154]: support all Calcite casts
 
+        # No-op casts
+        if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
+            return java_expr_to_python_expr(operand, input_plan)
+
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
             operand_type
         ):

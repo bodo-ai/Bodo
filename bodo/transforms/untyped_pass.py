@@ -35,6 +35,7 @@ from numba.core.registry import CPUDispatcher
 import bodo
 import bodo.hiframes.pd_dataframe_ext
 import bodo.io
+import bodo.io.utils
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
@@ -3575,7 +3576,7 @@ def _get_sql_types_arr_colnames(
         A very large tuple (TODO: add docs)
     """
     # find db type
-    db_type, _ = sql_ext.parse_dbtype(con_const)
+    db_type, _ = bodo.io.utils.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Does the SQL node have side effects (e.g. DELETE). If

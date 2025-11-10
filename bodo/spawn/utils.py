@@ -196,6 +196,14 @@ def import_compiler_on_workers():
     spawner.import_compiler_on_workers()
 
 
+def import_bodosql_compiler_on_workers():
+    """Import the BodoSQL JIT compiler extensions on all workers.
+    Done as necessary since import time can be significant.
+    """
+    spawner = bodo.spawn.spawner.get_spawner()
+    spawner.import_bodosql_compiler_on_workers()
+
+
 def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.

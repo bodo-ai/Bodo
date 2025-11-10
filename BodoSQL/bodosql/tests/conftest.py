@@ -21,6 +21,9 @@ from pyspark.sql.types import (
 import bodo
 import bodo.utils.allocation_tracking
 import bodosql
+
+# TODO[BSE-5181]: remove compiler import when not needed
+import bodosql.compiler  # isort:skip # noqa
 from bodo.tests.conftest import (  # noqa
     iceberg_database,
     memory_leak_check,

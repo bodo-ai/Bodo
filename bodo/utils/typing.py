@@ -1319,6 +1319,7 @@ def is_bodosql_context_type(t):
     """Check for BodoSQLContextType without importing BodoSQL unnecessarily"""
     if type(t).__name__ == "BodoSQLContextType":
         try:
+            import bodosql.compiler  # isort:skip # noqa
             from bodosql.context_ext import BodoSQLContextType
         except ImportError:  # pragma: no cover
             raise ImportError("BodoSQL not installed properly")

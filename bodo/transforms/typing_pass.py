@@ -4515,6 +4515,7 @@ class TypingTransforms:
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
         """
         import bodosql
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import BodoSQLContextType
 
         # In order to inline the sql() call, we must ensure that the type of the input dataframe(s)

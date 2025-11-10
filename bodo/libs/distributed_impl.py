@@ -600,6 +600,7 @@ def gatherv_impl_jit(
 
     if type(data).__name__ == "TablePathType":
         try:
+            import bodosql.compiler  # isort:skip # noqa
             from bodosql import TablePathType
         except ImportError:  # pragma: no cover
             raise ImportError("Install bodosql to use gatherv() with TablePathType")
