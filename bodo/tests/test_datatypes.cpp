@@ -95,15 +95,28 @@ static bodo::tests::suite tests([] {
                                      static_cast<int8_t>(precisions[2]),
                                      static_cast<int8_t>(scales[2])}));
         std::shared_ptr<array_info> expected_c_types =
-            bodo::tests::cppToBodoArr(std::vector<int8_t>(
-                {Bodo_CTypes::STRUCT, 4, Bodo_CTypes::LIST,
-                 Bodo_CTypes::DECIMAL, static_cast<int8_t>(precisions[0]),
-                 static_cast<int8_t>(scales[0]), Bodo_CTypes::MAP,
-                 Bodo_CTypes::LIST, Bodo_CTypes::DATETIME, Bodo_CTypes::DECIMAL,
-                 static_cast<int8_t>(precisions[1]),
-                 static_cast<int8_t>(scales[1]), Bodo_CTypes::DATETIME,
-                 Bodo_CTypes::DECIMAL, static_cast<int8_t>(precisions[2]),
-                 static_cast<int8_t>(scales[2])}));
+            bodo::tests::cppToBodoArr(
+                std::vector<int8_t>({Bodo_CTypes::STRUCT,
+                                     4,
+                                     Bodo_CTypes::LIST,
+                                     Bodo_CTypes::DECIMAL,
+                                     static_cast<int8_t>(precisions[0]),
+                                     static_cast<int8_t>(scales[0]),
+                                     Bodo_CTypes::MAP,
+                                     Bodo_CTypes::LIST,
+                                     Bodo_CTypes::DATETIME,
+                                     0,
+                                     Bodo_CTypes::DECIMAL,
+                                     static_cast<int8_t>(precisions[1]),
+                                     static_cast<int8_t>(scales[1]),
+                                     Bodo_CTypes::DATETIME,
+                                     /* date_type_tz tz*/ 3,
+                                     85,
+                                     84,
+                                     67,
+                                     Bodo_CTypes::DECIMAL,
+                                     static_cast<int8_t>(precisions[2]),
+                                     static_cast<int8_t>(scales[2])}));
 
         std::stringstream ss_arr_expected, ss_ctype_expected;
         DEBUG_PrintColumn(ss_arr_expected, expected_array_types);
