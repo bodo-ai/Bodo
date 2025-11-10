@@ -275,6 +275,7 @@ def test_embed_ollama():
         spawn_process_on_nodes("docker rm bodo_test_ollama_embed -f".split(" "))
 
 
+@pytest.mark.jit_dependency
 def test_llm_generate_bedrock_custom_formatters():
     prompts = bd.Series(
         [
@@ -346,6 +347,7 @@ def test_llm_generate_bedrock_default_formatter(modelId):
     assert all(isinstance(x, str) for x in res)
 
 
+@pytest.mark.jit_dependency
 def test_embed_bedrock_custom_formatters():
     prompts = bd.Series(
         [
@@ -374,6 +376,7 @@ def test_embed_bedrock_custom_formatters():
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
 
+@pytest.mark.jit_dependency
 def test_embed_bedrock_default_formatter():
     prompts = bd.Series(
         [
