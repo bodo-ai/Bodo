@@ -1126,12 +1126,16 @@ def _get_sql_types(df_type, from_jit):
     try:
         # Dropping Indexes since BodoSQL doesn't support them yet and can lead to issues
         # in JIT path.
-        df_type = df_type.reset_index(drop=True)
+        df_type = (
+            df_type._plan.empty_data
+            if isinstance(df_type, bodo.pandas.BodoDataFrame)
+            else df_type
+        )
         return [
             get_sql_column_type(
                 f.type, f.name, _is_nullable_dtype(df_type.dtypes.iloc[i])
             )
-            for i, f in enumerate(pa.Schema.from_pandas(df_type))
+            for i, f in enumerate(pa.Schema.from_pandas(df_type.reset_index(drop=True)))
         ]
     except Exception:
         # Fallback to JIT version if Arrow version failed
