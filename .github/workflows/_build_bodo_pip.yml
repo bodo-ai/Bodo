@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
@@ -52,7 +52,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.9.0
+        uses: prefix-dev/setup-pixi@v0.9.3
         with:
           pixi-version: v0.40.2
           cache: true
@@ -191,7 +191,7 @@ jobs:
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
           CIBW_BUILD: ${{ env.CIBW_BUILD }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: cibw-wheels-${{ inputs.name }}-${{ inputs.python_version }}
           path: ./wheelhouse/*.whl
