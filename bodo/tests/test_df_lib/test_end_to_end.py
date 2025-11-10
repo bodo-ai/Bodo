@@ -3927,3 +3927,33 @@ def test_timezone_groupby(timezone_timestamp_df):
     pandas_out = df.groupby("A", as_index=False).min().B.dt.hour
 
     _test_equal(bodo_out, pandas_out, check_pandas_types=False)
+
+
+def test_timezone_merge(timezone_timestamp_df):
+    """Test merge works with timezone keys"""
+    df = timezone_timestamp_df
+    df2 = pd.DataFrame(
+        {
+            "C": pd.date_range(
+                "2023-01-01 00:00:00",
+                periods=5,
+                freq="h",
+                tz="America/Chicago",
+            )
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df2)
+
+    with assert_executed_plan_count(0):
+        bodo_out = bdf.merge(bdf2, left_on="A", right_on="C", how="inner")
+    pandas_out = df.merge(df2, left_on="A", right_on="C", how="inner")
+
+    _test_equal(
+        bodo_out,
+        pandas_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
