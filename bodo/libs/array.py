@@ -94,6 +94,7 @@ ll.add_symbol("null_array_to_info", array_ext.null_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
+ll.add_symbol("datetime_array_to_info", array_ext.datetime_array_to_info)
 ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
 ll.add_symbol("timestamp_tz_array_to_info", array_ext.timestamp_tz_array_to_info)
 ll.add_symbol("info_to_array_item_array", array_ext.info_to_array_item_array)
@@ -656,6 +657,37 @@ def array_to_info_codegen(context, builder, sig, args):
                     bitmap_arr.meminfo,
                     context.get_constant(types.int32, arr_type.precision),
                     context.get_constant(types.int32, arr_type.scale),
+                ],
+            )
+        if isinstance(arr_type, DatetimeArrayType):
+            # Ignore fixed offset timezones for now (not supported by Arrow/DF lib)
+            tz = arr_type.tz if isinstance(arr_type.tz, str) else ""
+
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="datetime_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                    context.insert_const_string(builder.module, tz),
                 ],
             )
         elif isinstance(arr_type, TimeArrayType):
