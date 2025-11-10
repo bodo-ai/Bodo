@@ -279,6 +279,8 @@ def numba_to_c_types(
             c_types.append(0)  # TODO: Serialize Timezone information here
         else:
             c_types.append(numba_to_c_type(arr_type.dtype))
+    print(arr_types)
+    print(c_types)
     return np.array(c_types, dtype=np.int8)
 
 
@@ -366,6 +368,7 @@ def numba_to_c_array_types(
             c_arr_types.append(0)
         else:
             c_arr_types.append(numba_to_c_array_type(arr_type))
+    print(arr_types, c_arr_types)
     return np.array(c_arr_types, dtype=np.int8)
 
 

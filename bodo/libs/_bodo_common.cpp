@@ -831,7 +831,7 @@ void Schema::append_column(std::unique_ptr<DataType>&& col) {
 }
 void Schema::append_column(const int8_t arr_array_type,
                            const int8_t arr_c_type) {
-    size_t i;
+    size_t i = 0;
     this->append_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
                                          std::vector<int8_t>({arr_c_type}), i));
 }
