@@ -366,7 +366,6 @@ def numba_to_c_array_types(
             c_arr_types.append(0)
         else:
             c_arr_types.append(numba_to_c_array_type(arr_type))
-    print(arr_types, c_arr_types)
     return np.array(c_arr_types, dtype=np.int8)
 
 
