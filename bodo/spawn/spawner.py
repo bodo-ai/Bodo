@@ -311,6 +311,11 @@ class Spawner:
 
             self.import_compiler_on_workers()
 
+        if "bodosql.compiler" in sys.modules.keys():
+            import bodosql.compiler  # isort:skip # noqa
+
+            self.import_bodosql_compiler_on_workers()
+
         # If we get a df/series with a plan we need to execute it and get the result id
         # so we can build the arg metadata.
         # We do this first so nothing is already running when we execute the plan.
