@@ -25,7 +25,6 @@ from bodo.tests.utils import (
     pytest_polaris,
 )
 from bodo.tests.utils_jit import reduce_sum
-from bodo.utils.typing import BodoError
 from bodosql.tests.utils import assert_equal_par, gen_unique_id
 
 pytestmark = pytest_polaris
@@ -176,7 +175,7 @@ def test_create_view_validates(polaris_catalog, polaris_connection, memory_leak_
             table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
             bc.sql(table_query)
             with schema_helper(polaris_connection, schema_2, create=True):
-                with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
+                with pytest.raises(ValueError, match="Object 'TABLE1' not found"):
                     query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                     bc.execute_ddl(query)
 
@@ -187,7 +186,7 @@ def test_create_view_validates(polaris_catalog, polaris_connection, memory_leak_
             assert_equal_par(bodo_output, py_output)
 
             # Column B does not exist - validation should fail
-            with pytest.raises(BodoError, match="Column 'B' not found"):
+            with pytest.raises(ValueError, match="Column 'B' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
                 bc.execute_ddl(query)
         finally:
@@ -355,14 +354,14 @@ def test_iceberg_describe_view_error_does_not_exist(
     view_name = gen_unique_id("TEST_VIEW").upper()
     query_describe_view = f"{describe_keyword} VIEW {view_name}"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         bc.execute_ddl(query_describe_view)
 
     # Python Version
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         bc.sql(query_describe_view)
@@ -370,7 +369,7 @@ def test_iceberg_describe_view_error_does_not_exist(
     # Jit Version
     # Intentionally returns replicated output
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         check_func_seq(
@@ -508,7 +507,7 @@ def test_alter_view_rename_not_found(
     query = f"ALTER VIEW {schema}.{view_name} RENAME TO {schema}.{view_name}_renamed"
 
     # This should throw an error, saying the view does not exist or not authorized.
-    with pytest.raises(BodoError, match="does not exist or not authorized"):
+    with pytest.raises(ValueError, match="does not exist or not authorized"):
         bc.execute_ddl(query)
 
 
@@ -556,7 +555,7 @@ def test_alter_view_rename_to_existing(
         query = f"ALTER VIEW IF EXISTS {schema}.{view_name} RENAME TO {schema}.{view_name}_B"
 
         # This should throw an error, saying the view does not exist or not authorized.
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             bc.execute_ddl(query)
 
     finally:
@@ -615,7 +614,7 @@ def test_alter_view_on_table(polaris_catalog, polaris_connection, memory_leak_ch
         )
 
         # This should throw an error, saying the view does not exist or not authorized.
-        with pytest.raises(BodoError, match="View does not exist"):
+        with pytest.raises(ValueError, match="View does not exist"):
             bc.execute_ddl(query)
 
     finally:
@@ -636,21 +635,21 @@ def test_alter_unsupported_commands(
     query = f"ALTER VIEW {schema}.{view_name} SET SECURE"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         bc.execute_ddl(query)
 
     # Unsupported query
     query = f"ALTER TABLE {schema}.{table_name} SWAP WITH {schema}.{table_name}_swap"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="currently unsupported"):
+    with pytest.raises(ValueError, match="currently unsupported"):
         bc.execute_ddl(query)
 
     # Unsupported query
     query = f"ALTER TABLE {schema}.{table_name} CLUSTER BY junk_column"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         bc.execute_ddl(query)
 
 
@@ -736,7 +735,7 @@ def test_iceberg_drop_view_error_does_not_exist(
             )
         else:
             with pytest.raises(
-                BodoError,
+                ValueError,
                 match=f"View '{schema}.{view_name}' does not exist or not authorized to drop.",
             ):
                 bc.execute_ddl(query_drop_view)
@@ -751,7 +750,7 @@ def test_iceberg_drop_view_error_does_not_exist(
             )
         else:
             with pytest.raises(
-                BodoError,
+                ValueError,
                 match=f"View '{schema}.{view_name}' does not exist or not authorized to drop.",
             ):
                 bc.sql(query_drop_view)
@@ -768,7 +767,7 @@ def test_iceberg_drop_view_error_does_not_exist(
             )
         else:
             with pytest.raises(
-                BodoError,
+                ValueError,
                 match=f"View '{schema}.{view_name}' does not exist or not authorized to drop.",
             ):
                 check_func_seq(

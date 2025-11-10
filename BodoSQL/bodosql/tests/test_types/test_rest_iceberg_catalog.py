@@ -27,7 +27,7 @@ from bodo.tests.utils import (
     pytest_polaris,
     temp_env_override,
 )
-from bodosql.bodosql_types.rest_catalog import get_REST_connection
+from bodosql.bodosql_types.rest_catalog_ext import get_REST_connection
 from bodosql.tests.test_types.utils import create_iceberg_table
 
 pytestmark = pytest_polaris

@@ -16,6 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+      - name: Get Version
+        id: get_version
+        run: |
+          set -exo pipefail
+          pip install setuptools_scm
+          # Print to the logs
+          echo "bodo_version=$(python -m setuptools_scm)"
+          echo "bodo_version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+    outputs:
+      bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
   # 1) Validate changes and commit message
   validate:
@@ -107,7 +126,7 @@ jobs:
 
   # 4) Actually run tests
   pr-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test Compiler
     strategy:
       matrix:
@@ -122,10 +141,11 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   spawn-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test Spawn
     uses: ./.github/workflows/_test_python_source.yml
     with:
@@ -135,10 +155,11 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: SPAWN
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   df-lib-non-jit-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test DF Library Non-JIT
     uses: ./.github/workflows/_test_python_source.yml
     with:
@@ -148,10 +169,11 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB_NO_JIT"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   df-lib-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test DF Library
     strategy:
       matrix:
@@ -166,10 +188,25 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  narwhals-ci:
+    needs: [compile-bodo, get_version]
+    name: Test Narwhals Bodo Integration
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: ""
+      collect-coverage: false
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NARWHALS
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   bodosql-cpp-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test BodoSQL C++ Backend
     uses: ./.github/workflows/_test_python_source.yml
     with:
@@ -179,6 +216,7 @@ jobs:
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "BODOSQL_CPP"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   java-ci:
@@ -268,6 +306,7 @@ jobs:
       - collect-results
       - df-lib-ci
       - df-lib-non-jit-ci
+      - narwhals-ci
       - bodosql-cpp-ci
       - validate
     runs-on: ubuntu-latest

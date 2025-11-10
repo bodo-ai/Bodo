@@ -142,7 +142,7 @@ def test_bad_bodosql_context(memory_leak_check):
 
     filename = "myfile.pq"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=r"BodoSQLContext\(\): 'table' values must be DataFrames",
     ):
         impl(filename)
@@ -180,7 +180,7 @@ def test_query_syntax_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(100)})
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=r"Non-query expression encountered in illegal context",
     ):
         impl(df)
@@ -284,14 +284,14 @@ def test_empty_query_python(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100)})
     msg = "BodoSQLContext passed empty query string"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=msg,
     ):
         bc = bodosql.BodoSQLContext({"TABLE1": df})
         bc.sql("")
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=msg,
     ):
         bc = bodosql.BodoSQLContext({"TABLE1": df})

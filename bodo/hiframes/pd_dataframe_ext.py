@@ -38,6 +38,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.io.utils
 import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
@@ -3949,7 +3950,7 @@ def to_sql_exception_guard(
     ev = tracing.Event("to_sql_exception_guard", is_parallel=_is_parallel)
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con)
+    db_type, con_paswd = bodo.io.utils.parse_dbtype(con)
 
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case

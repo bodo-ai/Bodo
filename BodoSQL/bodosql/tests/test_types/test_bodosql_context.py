@@ -131,7 +131,7 @@ def test_remove_view(memory_leak_check):
     )
     with pytest.raises(BodoError):
         bc.sql("select * from TABLE2")
-    with pytest.raises(BodoError, match="'name' must refer to a registered view"):
+    with pytest.raises(ValueError, match="'name' must refer to a registered view"):
         bc.remove_view("TABLE2")
     bc = bc.remove_view("TABLE1")
     with pytest.raises(BodoError):
@@ -453,7 +453,7 @@ def test_remove_catalog(dummy_snowflake_catalogs, memory_leak_check):
     # TODO: Update the expected output
     check_func(impl, (bc,), py_output=local_df)
     with pytest.raises(
-        BodoError, match="BodoSQLContext must have an existing catalog registered"
+        ValueError, match="BodoSQLContext must have an existing catalog registered"
     ):
         bc2.remove_catalog()
 

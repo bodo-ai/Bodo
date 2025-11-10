@@ -11,7 +11,7 @@ from bodo.tests.utils import (
     pytest_s3_tables,
     temp_env_override,
 )
-from bodosql.bodosql_types.s3_tables_catalog import S3TablesConnectionType
+from bodosql.bodosql_types.s3_tables_catalog_ext import S3TablesConnectionType
 
 pytestmark = pytest_s3_tables
 
