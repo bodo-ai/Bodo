@@ -162,15 +162,16 @@ bool CTEInlining::Inline(unique_ptr<duckdb::LogicalOperator> &op, LogicalOperato
 			unique_ptr<LogicalOperator> &definition = cte.children[0];
 			unique_ptr<LogicalOperator> copy;
 			if (requires_copy) {
-				// there are multiple references to the CTE, we need to copy it
-				LogicalOperatorDeepCopy deep_copy(optimizer.binder, parameter_data);
-				try {
-					copy = deep_copy.DeepCopy(definition);
-				} catch (NotImplementedException &ex) {
-					// if we have to copy the lhs of a CTE, but we cannot copy the operator, we have to
-					// stop inlining and keep the materialized CTE instead
+				// Bodo Change: Disable deep copy since we can't deep copy Bodo duckdb nodes yet
+				//// there are multiple references to the CTE, we need to copy it
+				//LogicalOperatorDeepCopy deep_copy(optimizer.binder, parameter_data);
+				//try {
+				//	copy = deep_copy.DeepCopy(definition);
+				//} catch (NotImplementedException &ex) {
+				//	// if we have to copy the lhs of a CTE, but we cannot copy the operator, we have to
+				//	// stop inlining and keep the materialized CTE instead
 					return false;
-				}
+				//}
 			}
 			vector<unique_ptr<Expression>> proj_expressions;
 			definition->ResolveOperatorTypes();
