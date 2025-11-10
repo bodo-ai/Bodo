@@ -69,6 +69,8 @@ def java_plan_to_python_plan(ctx, java_plan):
                 raise NotImplementedError(
                     f"TablePath with file type {table._file_type} not supported in C++ backend yet"
                 )
+        elif isinstance(table, bodo.pandas.BodoDataFrame):
+            return table._plan
         elif isinstance(table, pd.DataFrame):
             return bodo.pandas.from_pandas(table)._plan
         else:
