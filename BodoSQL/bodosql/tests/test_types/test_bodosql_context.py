@@ -17,6 +17,7 @@ from bodo.tests.conftest import (  # noqa: F401
     iceberg_table_conn,
 )
 from bodo.tests.utils import (
+    _test_equal_guard,
     check_func,
     count_array_OneD_Vars,
     count_array_OneDs,
@@ -727,3 +728,31 @@ def test_sql_jit_options():
         ),
     ):
         f(bodosql.BodoSQLContext())
+
+
+@pytest.mark.bodosql_cpp
+def test_plan_execs_cpp_backend(datapath, memory_leak_check):
+    """Makes sure C++ backend doesn't execute any plan unnecessarily"""
+    if not bodosql.use_cpp_backend:
+        return
+
+    import bodo.pandas as bd
+    from bodo.pandas.plan import assert_executed_plan_count
+
+    with assert_executed_plan_count(1):
+        df1 = bd.read_parquet(datapath("sample-parquet-data/partitioned"))
+        bc = BodoSQLContext({"TABLE1": df1})
+        out = bc.sql("select * from TABLE1")
+
+    assert isinstance(out, bd.BodoDataFrame)
+    pd_out = pd.read_parquet(datapath("sample-parquet-data/partitioned"))
+    _test_equal_guard(
+        out,
+        pd_out,
+        sort_output=True,
+        check_names=False,
+        check_dtype=False,
+        reset_index=True,
+        check_categorical=False,
+        check_pandas_types=False,
+    )
