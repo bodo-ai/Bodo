@@ -2048,12 +2048,10 @@ class BodoDatetimeProperties:
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
         # Allows duration[ns] type, timestamp any precision without timezone.
-        # TODO: timestamp with timezone, other duration types.
+        # TODO: other duration/time types.
         if not (
             isinstance(series, BodoSeries)
-            and (
-                series.dtype in allowed_types or _is_pd_pa_timestamp_no_tz(series.dtype)
-            )
+            and (series.dtype in allowed_types or _is_pd_pa_timestamp(series.dtype))
         ):
             raise AttributeError(
                 f"Can only use .dt accessor with datetimelike values, got {series.dtype} {type(series.dtype)} instead"
@@ -3118,12 +3116,10 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
-def _is_pd_pa_timestamp_no_tz(dtype):
-    """True when dtype is Arrow extension type timestamp (without timezone)"""
-    return (
-        isinstance(dtype, pd.ArrowDtype)
-        and pa.types.is_timestamp(dtype.pyarrow_dtype)
-        and dtype.pyarrow_dtype.tz is None
+def _is_pd_pa_timestamp(dtype):
+    """True when dtype is Arrow extension type timestamp"""
+    return isinstance(dtype, pd.ArrowDtype) and pa.types.is_timestamp(
+        dtype.pyarrow_dtype
     )
 
 
@@ -3171,7 +3167,7 @@ def validate_dtype(name, obj):
     if accessor == "dt":
         if dtype not in allowed_types_map.get(
             name, [pd.ArrowDtype(pa.duration("ns"))]
-        ) and not _is_pd_pa_timestamp_no_tz(dtype):
+        ) and not _is_pd_pa_timestamp(dtype):
             raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 
@@ -3367,7 +3363,7 @@ dt_methods = [
             "round",
             # TODO: implement end_time
         ],
-        pd.ArrowDtype(pa.timestamp("ns")),
+        None,  # preserves timezone, scale
     ),
     # idx = 1: Series(Float)
     (

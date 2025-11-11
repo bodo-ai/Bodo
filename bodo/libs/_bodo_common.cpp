@@ -253,7 +253,6 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::INT64:
         case arrow::Type::UINT32:
         case arrow::Type::DATE32:
-        case arrow::Type::TIMESTAMP:
         case arrow::Type::DURATION:
         case arrow::Type::INT32:
         case arrow::Type::UINT16:
@@ -263,6 +262,14 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
+        }
+        case arrow::Type::TIMESTAMP: {
+            auto arrow_timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()), -1, -1,
+                arrow_timestamp_type->timezone());
         }
 
         case arrow::Type::TIME32:
@@ -460,7 +467,8 @@ std::unique_ptr<DataType> DataType::copy() const {
 
     } else {
         return std::make_unique<DataType>(this->array_type, this->c_type,
-                                          this->precision, this->scale);
+                                          this->precision, this->scale,
+                                          this->timezone);
     }
 }
 
@@ -493,7 +501,7 @@ std::unique_ptr<DataType> DataType::to_nullable_type() const {
             arr_type = bodo_array_type::NULLABLE_INT_BOOL;
         }
         return std::make_unique<DataType>(arr_type, dtype, this->precision,
-                                          this->scale);
+                                          this->scale, this->timezone);
     }
 }
 
@@ -504,6 +512,9 @@ void DataType::to_string_inner(std::string& out) {
     // for decimals we want to add the precision and scale as well
     if (this->c_type == Bodo_CTypes::DECIMAL) {
         out += fmt::format("({},{})", this->precision, this->scale);
+    }
+    if (this->c_type == Bodo_CTypes::DATETIME && this->timezone.length() > 0) {
+        out += fmt::format("({})", this->timezone);
     }
     out += "]";
 }
@@ -550,6 +561,20 @@ void DataType::Serialize(std::vector<int8_t>& arr_array_types,
         arr_array_types.push_back(scale);
         arr_c_types.push_back(precision);
         arr_c_types.push_back(scale);
+    } else if (array_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               c_type == Bodo_CTypes::DATETIME) {
+        // For Datetime types, append the length of the timezone
+        // string and then the characters as int8_t.
+        if (timezone.size() > 255) {
+            throw std::runtime_error(
+                "String too long for 1-byte length prefix");
+        }
+        uint8_t len = static_cast<uint8_t>(timezone.size());
+        arr_array_types.push_back(static_cast<int8_t>(len));
+        arr_array_types.insert(arr_array_types.end(), timezone.begin(),
+                               timezone.end());
+        arr_c_types.push_back(static_cast<int8_t>(len));
+        arr_c_types.insert(arr_c_types.end(), timezone.begin(), timezone.end());
     }
 }
 
@@ -641,9 +666,12 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::TIME:
             dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;
-        // TODO: Is there a way to get timezone?
         case Bodo_CTypes::DATETIME:
-            dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            if (timezone.length() > 0) {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
+            } else {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            }
             break;
         case Bodo_CTypes::TIMEDELTA:
             dtype = arrow::duration(arrow::TimeUnit::NANO);
@@ -730,6 +758,20 @@ static std::unique_ptr<DataType> from_byte_helper(
         uint8_t scale = arr_c_types[i + 1];
         i += 2;
         return std::make_unique<DataType>(array_type, c_type, precision, scale);
+    } else if (c_type == Bodo_CTypes::DATETIME &&
+               array_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t len = static_cast<uint8_t>(arr_array_types[i]);
+        i += 1;
+
+        if (len == 0) {
+            return std::make_unique<DataType>(array_type, c_type, -1, -1, "");
+        }
+
+        std::string timezone(reinterpret_cast<const char*>(&arr_array_types[i]),
+                             len);
+        i += len;
+
+        return std::make_unique<DataType>(array_type, c_type, -1, -1, timezone);
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
@@ -1190,7 +1232,7 @@ std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
 std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
     bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    const std::shared_ptr<::arrow::MemoryManager> mm, std::string timezone) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size;
     if (typ_enum == Bodo_CTypes::_BOOL) {
@@ -1208,7 +1250,9 @@ std::unique_ptr<array_info> alloc_nullable_array(
     return std::make_unique<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
-            {std::move(buffer), std::move(buffer_bitmask)}));
+            {std::move(buffer), std::move(buffer_bitmask)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, -1, false, false,
+        false, 0, std::vector<std::string>({}), timezone);
 }
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(

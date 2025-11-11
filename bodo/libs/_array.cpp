@@ -224,6 +224,26 @@ array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                           {left_buff, right_buff});
 }
 
+array_info* datetime_array_to_info(uint64_t n_items, char* data, int typ_enum,
+                                   char* null_bitmap, NRT_MemInfo* meminfo,
+                                   NRT_MemInfo* meminfo_bitmask,
+                                   const char* tz) {
+    std::string tz_str(tz);
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {data_buff, null_bitmap_buff}, {}, 0, 0, 0, -1, false, false,
+        false, /*offset*/ data - (char*)meminfo->data, {}, tz_str);
+}
+
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
@@ -1019,6 +1039,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, decimal_array_to_info);
+    SetAttrStringFromVoidPtr(m, datetime_array_to_info);
     SetAttrStringFromVoidPtr(m, time_array_to_info);
     SetAttrStringFromVoidPtr(m, info_to_string_array);
     SetAttrStringFromVoidPtr(m, info_to_array_item_array);

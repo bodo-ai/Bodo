@@ -179,6 +179,8 @@ get_data_type_from_bodo_fixed_width_array(
             in_num_bytes = sizeof(int64_t) * array->length;
             if (tz.length() > 0) {
                 type = arrow::timestamp(time_unit, tz);
+            } else if (array->timezone.length() > 0) {
+                type = arrow::timestamp(time_unit, array->timezone);
             } else {
                 type = arrow::timestamp(time_unit);
             }
@@ -207,7 +209,7 @@ get_data_type_from_bodo_fixed_width_array(
  * 'duration' type).
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for Iceberg, for
- * which we specify "UTC".
+ * which we specify "UTC". This argument overrides the original timezone.
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
@@ -1167,10 +1169,19 @@ std::shared_ptr<array_info> arrow_numeric_array_to_bodo(
         arrow_num_arr->values(), (void *)arrow_num_arr->raw_values(),
         n * numpy_item_size[typ_enum], typ_enum, pool);
 
-    return std::make_shared<array_info>(
+    auto bodo_arr = std::make_shared<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {data_buf_buffer, null_bitmap_buffer}));
+
+    if constexpr (std::is_same_v<T, arrow::TimestampArray>) {
+        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(
+            arrow_num_arr->type());
+        // Store original timezone info (for DataFrame Library)
+        bodo_arr->timezone = timestamp_type->timezone();
+    }
+
+    return bodo_arr;
 }
 
 /**
@@ -1441,12 +1452,11 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
             std::shared_ptr<arrow::TimestampType> type =
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
-            // Ensure we are always working with Naive/UTC timestamps and
-            // nanosecond precision.
-            if (type->unit() != arrow::TimeUnit::NANO ||
-                (type->timezone() != "" && type->timezone() != "UTC")) {
+            // Ensure we are always working with nanosecond precision.
+            if (type->unit() != arrow::TimeUnit::NANO) {
                 auto res = arrow::compute::Cast(
-                    *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
+                    *ts_arr,
+                    arrow::timestamp(arrow::TimeUnit::NANO, type->timezone()),
                     arrow::compute::CastOptions::Safe(),
                     bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
