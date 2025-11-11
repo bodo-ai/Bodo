@@ -17,11 +17,14 @@ if pt.TYPE_CHECKING:
         DropKeep,
         FilePath,
         IgnoreRaise,
+        Index,
         IndexLabel,
         Level,
+        Manager,
         MergeHow,
         MergeValidate,
         Renamer,
+        Self,
         SortKind,
         StorageOptions,
         Suffixes,
@@ -117,11 +120,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Support bodo.pandas.DataFrame() constructor by creating a pandas DataFrame
         and then converting it to a BodoDataFrame.
         """
-        # Handle Pandas internal use which creates an empty object and then assigns the
-        # manager:
-        # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
-        if not args and not kwargs:
-            return super().__new__(cls, *args, **kwargs)
 
         # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
 
@@ -131,6 +129,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __init__(self, *args, **kwargs):
         # No-op since already initialized by __new__
         pass
+
+    @classmethod
+    def _from_mgr(cls, mgr: Manager, axes: list[Index]) -> Self:
+        """Repace pd.DataFrame._from_mgr to create BodoDataFrame instances.
+        This avoids calling BodoDataFrame.__new__() which would cause infinite recursion
+        """
+        from pandas.core.generic import NDFrame
+
+        obj = super().__new__(cls)
+        NDFrame.__init__(obj, mgr)
+        return obj
 
     @property
     def loc(self):
