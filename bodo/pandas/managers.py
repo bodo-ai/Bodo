@@ -565,7 +565,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             raise IndexError("Requested axis not found in manager")
 
         # Normalize negative and None start/stop/step values
-        start, stop, step = slobj.indices(len(self))
+        start, stop, _ = slobj.indices(len(self))
 
         if (
             (self._md_head is not None)
@@ -573,7 +573,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             and stop <= len(self._md_head)
             and axis == 0
         ):
-            slobj = slice(start, stop, step)
             tmp_block = self._md_head._block
             array = tmp_block.values[slobj]
             bp = BlockPlacement(slice(0, len(array)))

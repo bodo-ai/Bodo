@@ -97,8 +97,17 @@ jobs:
               git clone https://github.com/bodo-ai/narwhals.git
               cd narwhals
               python -c "import bodo; print('Detected Bodo version:', bodo.__version__)"
+
+              # Run tests on one worker
+              BODO_NUM_WORKERS=1 pytest -s -v -Wignore -k bodo
+              one_rank_exit_code=$?
+
+              # Run tests on multiple workers
+              python -c "import bodo; print('bodo.num_workers():', bodo.num_workers())"
               pytest -s -v -Wignore -k bodo
-              exit $?
+              multi_rank_exit_code=$?
+
+              exit $((one_rank_exit_code + multi_rank_exit_code))
             else
               # Bodo Tests: Coverage is collected
               pytest -s -v -Wignore \
