@@ -121,6 +121,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         and then converting it to a BodoDataFrame.
         """
 
+        # Return regular pandas DataFrame for empty case to avoid internal issues.
+        if not args and not kwargs:
+            return pd.DataFrame()
+
         # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
 
         df = pd.DataFrame(*args, **kwargs)
