@@ -3957,3 +3957,8 @@ def test_timezone_merge(timezone_timestamp_df):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_empty_df(datapath, index_val):
+    """Make sure creating an empty dataframe works"""
+    _test_equal(bd.DataFrame(), pd.DataFrame())
