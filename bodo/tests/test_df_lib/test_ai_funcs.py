@@ -319,6 +319,7 @@ def test_llm_generate_bedrock_custom_formatters():
     assert all(isinstance(x, str) for x in res)
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "modelId",
     [
