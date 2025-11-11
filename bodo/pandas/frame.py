@@ -136,7 +136,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @classmethod
     def _from_mgr(cls, mgr: Manager, axes: list[Index]) -> Self:
-        """Repace pd.DataFrame._from_mgr to create BodoDataFrame instances.
+        """Replace pd.DataFrame._from_mgr to create BodoDataFrame instances.
         This avoids calling BodoDataFrame.__new__() which would cause infinite recursion
         """
         from pandas.core.generic import NDFrame
