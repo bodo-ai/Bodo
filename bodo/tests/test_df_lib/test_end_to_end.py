@@ -661,7 +661,6 @@ def test_projection_head_pushdown(datapath):
 
 def test_series_head(datapath):
     """Test for Series.head() reading from Pandas."""
-
     # Make sure bodo_df3 is unevaluated in the process.
     with assert_executed_plan_count(1):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
