@@ -103,7 +103,7 @@ jobs:
               one_rank_exit_code=$?
 
               # Run tests on multiple workers
-              python -c "import bodo; print('bodo.num_workers():', bodo.num_workers())"
+              python -c "import bodo; print('num workers:', bodo.spawn.spawner.get_num_workers())"
               pytest -s -v -Wignore -k bodo
               multi_rank_exit_code=$?
 

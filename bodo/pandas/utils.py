@@ -64,6 +64,27 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
+def normalize_slice_indices_for_lazy_md(
+    slobj: slice, nrows: int
+) -> tuple[int, int | None, int]:
+    """Normalize negative/None start/stop/step for slicing lazy metadata.
+
+    Args:
+        slobj (slice): The slice object
+        nrows (int): Total number of rows in the DataFrame/Series
+
+    Returns:
+        tuple[int, int | None, int]: A tuple of normalized (start, stop, step)
+            without negative start/stop indices. stop is None implies the slice
+            goes from start to the beginning in reverse order.
+    """
+    # Normalize negative and None start/stop/step values
+    start, stop, step = slobj.indices(nrows)
+    # Reverse slice from the beginning
+    stop = None if stop < 0 and step < 0 else stop
+    return start, stop, step
+
+
 def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
     """Return True if the Arrow schema has index arrays, False otherwise
     (RangeIndex case).
