@@ -115,6 +115,30 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     return array;
 }
 
+arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
+    auto mask_result = arrow::compute::IsNull(src);
+    if (!mask_result.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_arrow_compute_binary: Error in Arrow compute: " +
+            mask_result.status().message());
+    }
+    arrow::Datum mask = mask_result.ValueOrDie();
+
+    arrow::Result<arrow::Datum> src_res =
+        arrow::compute::ReplaceWithMask(src, mask, val);
+    if (!src_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_arrow_compute_binary: Error in Arrow compute: " +
+            src_res.status().message());
+    }
+    return src_res.ValueOrDie();
+}
+
+bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
+    return type->id() == arrow::Type::FLOAT ||
+           type->id() == arrow::Type::DOUBLE;
+}
+
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator) {
@@ -153,12 +177,47 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
             "do_arrow_compute right is neither array nor scalar.");
     }
 
+    std::shared_ptr<arrow::DataType> src1_dtype = src1.type();
+    std::shared_ptr<arrow::DataType> src2_dtype = src2.type();
+
+    if (comparator == "not_equal" && canHoldNan(src1_dtype)) {
+        arrow::Datum null_scalar = arrow::MakeScalar(std::nan(""));
+        src1 = fill_null(src1, null_scalar);
+    }
+    if (comparator == "not_equal" && canHoldNan(src2_dtype)) {
+        arrow::Datum null_scalar = arrow::MakeScalar(std::nan(""));
+        src2 = fill_null(src2, null_scalar);
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1, src2});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_binary: Error in Arrow compute: " +
+            "do_arrow_compute_binary: Error in Arrow compute: " +
             cmp_res.status().message());
+    }
+    auto cmp_datum = cmp_res.ValueOrDie();
+
+    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
+    if (canHoldNan(cmp_dtype)) {
+        // Convert NaN into NULLs.
+        auto mask_result = arrow::compute::IsNan(cmp_datum);
+        if (!mask_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary: Error in Arrow compute: " +
+                mask_result.status().message());
+        }
+        arrow::Datum mask = mask_result.ValueOrDie();
+
+        auto null_scalar = arrow::MakeNullScalar(cmp_datum.type());
+
+        cmp_res = arrow::compute::ReplaceWithMask(cmp_datum, mask,
+                                                  arrow::Datum(null_scalar));
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary: Error in Arrow compute: " +
+                cmp_res.status().message());
+        }
     }
 
     return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
