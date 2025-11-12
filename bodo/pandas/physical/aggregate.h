@@ -152,8 +152,11 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                         ftypes.back(),
                         in_table_schema->column_types[col_idx]->array_type,
                         in_table_schema->column_types[col_idx]->c_type);
+                std::string timezone =
+                    in_table_schema->column_types[col_idx]->timezone;
                 out_arr_type = std::make_unique<bodo::DataType>(
-                    std::get<0>(output_dtype), std::get<1>(output_dtype));
+                    std::get<0>(output_dtype), std::get<1>(output_dtype), -1,
+                    -1, timezone);
             }
 
             this->output_schema->append_column(std::move(out_arr_type));

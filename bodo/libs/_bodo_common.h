@@ -9,6 +9,7 @@
 
 #include <Python.h>
 #include <arrow/type.h>
+#include <utility>
 #include <vector>
 
 #include "_meminfo.h"
@@ -585,6 +586,7 @@ struct DataType {
     const Bodo_CTypes::CTypeEnum c_type;
     const int8_t precision;
     const int8_t scale;
+    const std::string timezone;  // for DATETIME types.
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
@@ -592,14 +594,16 @@ struct DataType {
      * @param c_type Type of the Array Elements
      * @param precision The precision (required for DECIMAL types)
      * @param scale The scale (required for DECIMAL types)
+     * @param timezone The timezone (optional for DATETIME types)
      */
     DataType(bodo_array_type::arr_type_enum array_type,
              Bodo_CTypes::CTypeEnum c_type, int8_t precision = -1,
-             int8_t scale = -1)
+             int8_t scale = -1, std::string timezone = "")
         : array_type(array_type),
           c_type(c_type),
           precision(precision),
-          scale(scale) {
+          scale(scale),
+          timezone(std::move(timezone)) {
         // TODO: For decimal types, check if scale and precision are valid and
         // throw some exception (this will likely cause issues due to other
         // places where they are not being set properly.)
@@ -928,6 +932,7 @@ struct array_info {
     int32_t precision;        // for array of decimals and times
     int32_t scale;            // for array of decimals
     uint64_t num_categories;  // for categorical arrays
+    std::string timezone;     // timezone info for timestamp arrays
     // ID used to identify matching equivalent dictionaries.
     // Currently only used by string arrays that are the dictionaries
     // inside dictionary encoded arrays. It cannot be placed in the dictionary
@@ -962,7 +967,8 @@ struct array_info {
                int64_t _num_categories = 0, int64_t _array_id = -1,
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
-               int64_t _offset = 0, std::vector<std::string> _field_names = {})
+               int64_t _offset = 0, std::vector<std::string> _field_names = {},
+               std::string _timezone_param = "")
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -972,6 +978,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
+          timezone(std::move(_timezone_param)),
           array_id(_array_id),
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
@@ -1345,7 +1352,7 @@ struct array_info {
                                                    std::move(value_type));
         } else {
             return std::make_unique<bodo::DataType>(
-                arr_type, dtype, this->precision, this->scale);
+                arr_type, dtype, this->precision, this->scale, this->timezone);
         }
     }
 };
@@ -1432,7 +1439,8 @@ std::unique_ptr<array_info> alloc_nullable_array(
     int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "");
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -1613,7 +1621,8 @@ std::unique_ptr<array_info> alloc_array_top_level(
     bool is_locally_unique = false, bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager()) {
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "") {
     switch (const_arr_type != bodo_array_type::UNKNOWN ? const_arr_type
                                                        : arr_type) {
         case bodo_array_type::STRING:
@@ -1624,7 +1633,7 @@ std::unique_ptr<array_info> alloc_array_top_level(
 
         case bodo_array_type::NULLABLE_INT_BOOL:
             return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
-                                        std::move(mm));
+                                        std::move(mm), timezone);
 
         case bodo_array_type::INTERVAL:
             return alloc_interval_array(length, dtype, pool, std::move(mm));

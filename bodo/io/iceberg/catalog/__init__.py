@@ -112,14 +112,14 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
             cache_key = properties[S3TABLES_TABLE_BUCKET_ARN]
 
         elif parse_res.scheme == "iceberg+snowflake":
-            from bodo.io.snowflake import parse_conn_str
+            from bodo.io.utils import parse_snowflake_conn_str
 
             from .snowflake import SnowflakeCatalog
 
             catalog = SnowflakeCatalog
             properties[URI] = base_url
             # Need to extract properties from the connection string and add them
-            comps = parse_conn_str(base_url)
+            comps = parse_snowflake_conn_str(base_url)
             properties = {**properties, **comps}
             cache_key = comps["account"]
 

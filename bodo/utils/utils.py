@@ -274,6 +274,9 @@ def numba_to_c_types(
             c_types.append(numba_to_c_type(arr_type.dtype))
             c_types.append(arr_type.dtype.precision)
             c_types.append(arr_type.dtype.scale)
+        elif isinstance(arr_type, bodo.types.DatetimeArrayType):
+            c_types.append(numba_to_c_type(arr_type.dtype))
+            c_types.append(0)  # TODO: Serialize Timezone information here
         else:
             c_types.append(numba_to_c_type(arr_type.dtype))
     return np.array(c_types, dtype=np.int8)
@@ -356,6 +359,11 @@ def numba_to_c_array_types(
             c_arr_types.append(numba_to_c_array_type(arr_type))
             c_arr_types.append(arr_type.dtype.precision)
             c_arr_types.append(arr_type.dtype.scale)
+        elif isinstance(arr_type, bodo.types.DatetimeArrayType):
+            c_arr_types.append(numba_to_c_array_type(arr_type))
+            # TODO: Serialize Timezone information here. See:
+            # https://github.com/bodo-ai/Bodo/blob/9e198ffd8fb1a554d3bdf324a01264ae0af9343f/bodo/libs/_bodo_common.cpp#L554
+            c_arr_types.append(0)
         else:
             c_arr_types.append(numba_to_c_array_type(arr_type))
     return np.array(c_arr_types, dtype=np.int8)

@@ -6,8 +6,7 @@ can be imported in multiple locations.
 from typing import Any
 
 import bodo
-from bodo.libs.distributed_api import bcast_scalar
-from bodo.utils.typing import BodoError
+from bodo.mpi4py import MPI
 from bodosql.py4j_gateway import configure_java_logging, get_gateway
 
 error = None
@@ -34,10 +33,11 @@ if bodo.get_rank() == 0:
 else:
     JavaEntryPoint = None
 
-saw_error = bcast_scalar(saw_error)
-msg = bcast_scalar(msg)
+comm = MPI.COMM_WORLD
+saw_error = comm.bcast(saw_error)
+msg = comm.bcast(msg)
 if saw_error:
-    raise BodoError(msg)
+    raise ValueError(msg)
 
 
 def build_java_array_list(elems: list[Any]):

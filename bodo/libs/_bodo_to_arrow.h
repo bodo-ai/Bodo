@@ -55,7 +55,8 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  * @param convert_timedelta_to_int64 : cast timedelta to int64.
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for
- * Iceberg/Snowflake, for which we specify "UTC".
+ * Iceberg/Snowflake, for which we specify "UTC". This argument overrides any
+ * timezones stored in columns.
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type

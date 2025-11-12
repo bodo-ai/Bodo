@@ -13,7 +13,6 @@ import bodosql
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
-from bodo.utils.typing import BodoError
 
 # Add test harnesses when adding new catalogs.
 from BodoSQL.bodosql.bodosql_types.rest_catalog import RESTCatalog
@@ -139,7 +138,7 @@ def test_create_schema_already_exists(request, harness_name: str):
         assert harness.check_schema_exists(schema_name)
 
         # Create schema again
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             bodo_output = harness.run_bodo_query(f"CREATE SCHEMA {schema_name}")
 
     finally:
@@ -310,7 +309,7 @@ def test_alter_table_rename_diffschema(request, harness_name: str):
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
 
-        with pytest.raises(BodoError, match="Namespace does not exist"):
+        with pytest.raises(ValueError, match="Namespace does not exist"):
             rename_table_identifier = harness.get_table_identifier(
                 table_name + "_renamed", "NONEXISTENT_SCHEMA"
             )
@@ -348,7 +347,7 @@ def test_alter_table_rename_not_found(request, harness_name: str):
     # Table should not exist.
     assert not harness.check_table_exists(table_identifier)
     rename_table_identifier = harness.get_table_identifier(table_name + "_renamed")
-    with pytest.raises(BodoError, match="does not exist or not authorized"):
+    with pytest.raises(ValueError, match="does not exist or not authorized"):
         query = f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
         harness.run_bodo_query(query)
 
@@ -398,7 +397,7 @@ def test_alter_table_rename_to_existing(request, harness_name: str):
         assert harness.check_table_exists(table_identifier_b)
 
         # Query
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             harness.run_bodo_query(
                 f"ALTER TABLE {table_identifier} RENAME TO {table_identifier_b}"
             )
@@ -421,21 +420,21 @@ def test_alter_unsupported_commands(request, harness_name: str):
     query = "ALTER VIEW placeholder_name SET SECURE"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         harness.run_bodo_query(query)
 
     # Unsupported query
     query = "ALTER TABLE placeholder_name SWAP WITH placeholder_name_swap"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="currently unsupported"):
+    with pytest.raises(ValueError, match="currently unsupported"):
         harness.run_bodo_query(query)
 
     # Unsupported query
     query = "ALTER TABLE placeholder_name CLUSTER BY junk_column"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         harness.run_bodo_query(query)
 
 
@@ -544,22 +543,22 @@ def test_alter_table_set_property_error(request, harness_name: str):
     on malformed queries."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
     # Invalid query
-    with pytest.raises(BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query"):
         query = "ALTER TABLE placeholder_table SET PROPERTY"
         harness.run_bodo_query(query)
 
     # Missing property value
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY 'key'"
         harness.run_bodo_query(query)
 
     # Invalid property key (non-string)
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY invalid_key = 'value'"
         harness.run_bodo_query(query)
 
     # Invalid property value (non-string)
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY 'key' = 123"
         harness.run_bodo_query(query)
 
@@ -655,7 +654,9 @@ def test_alter_table_unset_property_error(request, harness_name: str):
         assert harness.check_row_exists(output, test_row)
 
         # unset non-existent property
-        with pytest.raises(BodoError, match="Property nonexistent_tag does not exist."):
+        with pytest.raises(
+            ValueError, match="Property nonexistent_tag does not exist."
+        ):
             query = f"ALTER TABLE {table_identifier} UNSET PROPERTY 'nonexistent_tag'"
             bodo_output = harness.run_bodo_query(query)
 
@@ -852,7 +853,7 @@ def test_alter_table_add_column_ifnotexists(request, harness_name: str):
         assert harness.check_table_exists(table_identifier)
 
         # Preexisting column name
-        with pytest.raises(BodoError, match="Cannot add column, name already exists"):
+        with pytest.raises(ValueError, match="Cannot add column, name already exists"):
             query = f"ALTER TABLE {table_identifier} add column A integer"
             bodo_output = harness.run_bodo_query(query)
 
@@ -1010,7 +1011,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop non-existent column
-        with pytest.raises(BodoError, match="Cannot delete missing column"):
+        with pytest.raises(ValueError, match="Cannot delete missing column"):
             query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL3"
             bodo_output = harness.run_bodo_query(query)
 
@@ -1150,10 +1151,10 @@ def test_alter_table_rename_column(request, harness_name: str):
 
         # Rename to existing column (should error)
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED2 TO TESTCOL3"
-        with pytest.raises(BodoError, match="already exists; cannot rename"):
+        with pytest.raises(ValueError, match="already exists; cannot rename"):
             bodo_output = harness.run_bodo_query(query)
 
-        with pytest.raises(BodoError, match="Cannot rename missing column"):
+        with pytest.raises(ValueError, match="Cannot rename missing column"):
             # Rename non-existent column (should error)
             query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL4 to TESTCOL4_RENAMED"
             harness.run_bodo_query(query)
@@ -1262,7 +1263,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 
         # comment on nonexistent column
         with pytest.raises(
-            BodoError, match="Invalid column name or column does not exist"
+            ValueError, match="Invalid column name or column does not exist"
         ):
             query = f"ALTER TABLE {table_identifier} ALTER COLUMN NONEXISTENT_COLUMN COMMENT 'test_comment'"
             bodo_output = harness.run_bodo_query(query)
@@ -1758,7 +1759,7 @@ def test_show_tblproperties(request, harness_name: str):
 
         # show non-existent property (should error)
         with pytest.raises(
-            BodoError, match="The property nonexistent_tag was not found"
+            ValueError, match="The property nonexistent_tag was not found"
         ):
             query = f"SHOW TBLPROPERTIES {table_identifier} ('nonexistent_tag')"
             output = harness.run_bodo_query(query)
