@@ -1,34 +1,15 @@
 #include "duckdb/execution/operator/join/physical_comparison_join.hpp"
 
 #include "duckdb/common/enum_util.hpp"
+#include "duckdb/common/enums/join_type.hpp"
 
 namespace duckdb {
 
 PhysicalComparisonJoin::PhysicalComparisonJoin(LogicalOperator &op, PhysicalOperatorType type,
                                                vector<JoinCondition> conditions_p, JoinType join_type,
                                                idx_t estimated_cardinality)
-    : PhysicalJoin(op, type, join_type, estimated_cardinality), conditions(std::move(conditions_p)) {
+    : conditions(std::move(conditions_p)) {
 	ReorderConditions(conditions);
-}
-
-InsertionOrderPreservingMap<string> PhysicalComparisonJoin::ParamsToString() const {
-	InsertionOrderPreservingMap<string> result;
-	result["Join Type"] = EnumUtil::ToString(join_type);
-	string condition_info;
-	for (idx_t i = 0; i < conditions.size(); i++) {
-		auto &join_condition = conditions[i];
-		if (i > 0) {
-			condition_info += "\n";
-		}
-		condition_info +=
-		    StringUtil::Format("%s %s %s", join_condition.left->GetName(),
-		                       ExpressionTypeToOperator(join_condition.comparison), join_condition.right->GetName());
-		// string op = ExpressionTypeToOperator(it.comparison);
-		// extra_info += it.left->GetName() + " " + op + " " + it.right->GetName() + "\n";
-	}
-	result["Conditions"] = condition_info;
-	SetEstimatedCardinality(result, estimated_cardinality);
-	return result;
 }
 
 void PhysicalComparisonJoin::ReorderConditions(vector<JoinCondition> &conditions) {

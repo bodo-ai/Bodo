@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "duckdb/common/common.hpp"
+#include "duckdb/main/settings.hpp"
 #include "duckdb/common/named_parameter_map.hpp"
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/serializer.hpp"

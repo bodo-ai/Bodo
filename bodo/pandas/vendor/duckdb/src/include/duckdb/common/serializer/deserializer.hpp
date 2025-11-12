@@ -15,7 +15,6 @@
 #include "duckdb/common/uhugeint.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_reader_options.hpp"
 
 namespace duckdb {
 
@@ -105,18 +104,6 @@ public:
 
 	template <typename T>
 	inline void ReadPropertyWithExplicitDefault(const field_id_t field_id, const char *tag, T &ret, T default_value) {
-		if (!OnOptionalPropertyBegin(field_id, tag)) {
-			ret = std::forward<T>(default_value);
-			OnOptionalPropertyEnd(false);
-			return;
-		}
-		ret = Read<T>();
-		OnOptionalPropertyEnd(true);
-	}
-
-	template <typename T>
-	inline void ReadPropertyWithExplicitDefault(const field_id_t field_id, const char *tag, CSVOption<T> &ret,
-	                                            T default_value) {
 		if (!OnOptionalPropertyBegin(field_id, tag)) {
 			ret = std::forward<T>(default_value);
 			OnOptionalPropertyEnd(false);

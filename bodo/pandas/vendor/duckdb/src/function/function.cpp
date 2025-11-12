@@ -90,7 +90,6 @@ string BaseScalarFunction::ToString() const {
 void BuiltinFunctions::Initialize() {
 	RegisterTableScanFunctions();
 	RegisterSQLiteFunctions();
-	RegisterReadFunctions();
 	RegisterTableFunctions();
 	RegisterArrowFunctions();
 

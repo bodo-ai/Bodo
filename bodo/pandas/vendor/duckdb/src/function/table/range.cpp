@@ -372,9 +372,7 @@ void BuiltinFunctions::RegisterTableFunctions() {
 	RangeTableFunction::RegisterFunction(*this);
 	RepeatTableFunction::RegisterFunction(*this);
 	SummaryTableFunction::RegisterFunction(*this);
-	UnnestTableFunction::RegisterFunction(*this);
 	RepeatRowTableFunction::RegisterFunction(*this);
-	CSVSnifferFunction::RegisterFunction(*this);
 	ReadBlobFunction::RegisterFunction(*this);
 	ReadTextFunction::RegisterFunction(*this);
 	QueryTableFunction::RegisterFunction(*this);

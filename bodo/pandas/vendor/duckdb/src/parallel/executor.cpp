@@ -1,10 +1,6 @@
 #include "duckdb/execution/executor.hpp"
 
 #include "duckdb/execution/execution_context.hpp"
-#include "duckdb/execution/operator/helper/physical_result_collector.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-#include "duckdb/execution/operator/set/physical_cte.hpp"
-#include "duckdb/execution/operator/set/physical_recursive_cte.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
@@ -165,12 +161,6 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 	for (auto &pipeline : pipelines) {
 		auto source = pipeline->GetSource();
 		if (source->type == PhysicalOperatorType::TABLE_SCAN) {
-			auto &table_function = source->Cast<PhysicalTableScan>();
-			if (table_function.function.global_initialization == TableFunctionInitialization::INITIALIZE_ON_SCHEDULE) {
-				// certain functions have to be eagerly initialized during scheduling
-				// if that is the case - initialize the function here
-				pipeline->ResetSource(true);
-			}
 		}
 	}
 }
@@ -401,12 +391,6 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		root_pipeline->Build(*physical_plan);
 		root_pipeline->Ready();
 
-		// ready recursive cte pipelines too
-		for (auto &rec_cte_ref : recursive_ctes) {
-			auto &rec_cte = rec_cte_ref.get().Cast<PhysicalRecursiveCTE>();
-			rec_cte.recursive_meta_pipeline->Ready();
-		}
-
 		// set root pipelines, i.e., all pipelines that end in the final sink
 		root_pipeline->GetPipelines(root_pipelines, false);
 		root_pipeline_idx = 0;
@@ -434,11 +418,6 @@ void Executor::CancelTasks() {
 		lock_guard<mutex> elock(executor_lock);
 		// mark the query as cancelled so tasks will early-out
 		cancelled = true;
-		// destroy all pipelines, events and states
-		for (auto &rec_cte_ref : recursive_ctes) {
-			auto &rec_cte = rec_cte_ref.get().Cast<PhysicalRecursiveCTE>();
-			rec_cte.recursive_meta_pipeline.reset();
-		}
 		pipelines.clear();
 		root_pipelines.clear();
 		to_be_rescheduled_tasks.clear();
@@ -489,9 +468,6 @@ void Executor::RescheduleTask(shared_ptr<Task> &task_p) {
 }
 
 bool Executor::ResultCollectorIsBlocked() {
-	if (!HasStreamingResultCollector()) {
-		return false;
-	}
 	if (completed_pipelines + 1 != total_pipelines) {
 		// The result collector is always in the last pipeline
 		return false;
@@ -689,21 +665,6 @@ idx_t Executor::GetPipelinesProgress(ProgressData &progress) { // LCOV_EXCL_STAR
 
 bool Executor::HasResultCollector() {
 	return physical_plan->type == PhysicalOperatorType::RESULT_COLLECTOR;
-}
-
-bool Executor::HasStreamingResultCollector() {
-	if (!HasResultCollector()) {
-		return false;
-	}
-	auto &result_collector = physical_plan->Cast<PhysicalResultCollector>();
-	return result_collector.IsStreaming();
-}
-
-unique_ptr<QueryResult> Executor::GetResult() {
-	D_ASSERT(HasResultCollector());
-	auto &result_collector = physical_plan->Cast<PhysicalResultCollector>();
-	D_ASSERT(result_collector.sink_state);
-	return result_collector.GetResult(*result_collector.sink_state);
 }
 
 } // namespace duckdb

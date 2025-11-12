@@ -31,9 +31,6 @@ public:
 	//! The unbound SQL statement that was prepared
 	unique_ptr<SQLStatement> unbound_statement;
 
-	//! The physical plan.
-	unique_ptr<PhysicalPlan> physical_plan;
-
 	//! The result names of the transaction
 	vector<string> names;
 	//! The result types of the transaction
