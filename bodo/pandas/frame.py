@@ -17,11 +17,14 @@ if pt.TYPE_CHECKING:
         DropKeep,
         FilePath,
         IgnoreRaise,
+        Index,
         IndexLabel,
         Level,
+        Manager,
         MergeHow,
         MergeValidate,
         Renamer,
+        Self,
         SortKind,
         StorageOptions,
         Suffixes,
@@ -117,11 +120,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Support bodo.pandas.DataFrame() constructor by creating a pandas DataFrame
         and then converting it to a BodoDataFrame.
         """
-        # Handle Pandas internal use which creates an empty object and then assigns the
-        # manager:
-        # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
+
+        # Return regular pandas DataFrame for empty case to avoid internal issues.
         if not args and not kwargs:
-            return super().__new__(cls, *args, **kwargs)
+            return pd.DataFrame()
 
         # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
 
@@ -131,6 +133,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __init__(self, *args, **kwargs):
         # No-op since already initialized by __new__
         pass
+
+    @classmethod
+    def _from_mgr(cls, mgr: Manager, axes: list[Index]) -> Self:
+        """Replace pd.DataFrame._from_mgr to create BodoDataFrame instances.
+        This avoids calling BodoDataFrame.__new__() which would cause infinite recursion
+        """
+        from pandas.core.generic import NDFrame
+
+        obj = super().__new__(cls)
+        NDFrame.__init__(obj, mgr)
+        return obj
 
     @property
     def loc(self):
@@ -1539,16 +1552,20 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     ) -> BodoDataFrame | None:
         from bodo.pandas.base import _empty_like
 
+        if keep not in ("first", "last"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported."
+            )
+
         if subset is not None:
             subset_group = self.groupby(subset, as_index=False, sort=False)
             if keep == "first":
-                return subset_group.first()
-            elif keep == "last":
-                return subset_group.last()
+                drop_dups = subset_group.first()
             else:
-                raise BodoLibNotImplementedException(
-                    "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported"
-                )
+                drop_dups = subset_group.last()
+
+            # Preserve original ordering of columns
+            return drop_dups[self.columns.tolist()]
 
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)

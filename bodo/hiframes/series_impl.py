@@ -5827,6 +5827,16 @@ def overload_series_duplicated(S, keep="first"):
     """
     Support for Series.duplicated()
     """
+    unsupported_args = {"keep": keep}
+    arg_defaults = {"keep": "first"}
+
+    check_unsupported_args(
+        "Series.duplicated",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
