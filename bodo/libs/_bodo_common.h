@@ -968,7 +968,7 @@ struct array_info {
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
                int64_t _offset = 0, std::vector<std::string> _field_names = {},
-               std::string _timezone = "")
+               std::string _timezone_param = "")
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -978,7 +978,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
-          timezone(std::move(_timezone)),
+          timezone(std::move(_timezone_param)),
           array_id(_array_id),
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
