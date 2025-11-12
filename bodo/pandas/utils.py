@@ -78,9 +78,7 @@ def normalize_slice_indices_for_lazy_md(
             without negative start/stop indices. stop is None implies the slice
             goes from start to the beginning in reverse order.
     """
-    # Normalize negative and None start/stop/step values
     start, stop, step = slobj.indices(nrows)
-    # Reverse slice from the beginning
     stop = None if stop < 0 and step < 0 else stop
     return start, stop, step
 

@@ -440,7 +440,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_df._lazy
     pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[2:3])
 
-    # Slicing with negative indices (does not trigger a data fetch)
+    # Slicing with negative step (does not trigger a data fetch)
     lam = lazy_manager(
         [],
         [],
