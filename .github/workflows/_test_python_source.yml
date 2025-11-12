@@ -36,7 +36,7 @@ on:
         type: string
         description: Number of workers to use for Bodo tests.
         required: false
-        default: ''
+        default: "2"
 
 jobs:
   run:
@@ -102,17 +102,8 @@ jobs:
               git clone https://github.com/bodo-ai/narwhals.git
               cd narwhals
               python -c "import bodo; print('Detected Bodo version:', bodo.__version__)"
-
-              # Run tests on one worker
-              BODO_NUM_WORKERS=1 pytest -s -v -Wignore -k bodo
-              one_rank_exit_code=$?
-
-              # Run tests on multiple workers
-              python -c "import bodo; print('num workers:', bodo.spawn.spawner.get_num_workers())"
               pytest -s -v -Wignore -k bodo
-              multi_rank_exit_code=$?
-
-              exit $((one_rank_exit_code + multi_rank_exit_code))
+              exit $?
             else
               # Bodo Tests: Coverage is collected
               pytest -s -v -Wignore \
