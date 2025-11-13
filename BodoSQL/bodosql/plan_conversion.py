@@ -69,6 +69,8 @@ def java_plan_to_python_plan(ctx, java_plan):
                 raise NotImplementedError(
                     f"TablePath with file type {table._file_type} not supported in C++ backend yet"
                 )
+        elif isinstance(table, bodo.pandas.BodoDataFrame):
+            return table._plan
         elif isinstance(table, pd.DataFrame):
             return bodo.pandas.from_pandas(table)._plan
         else:
@@ -162,6 +164,10 @@ def java_call_to_python_call(java_call, input_plan):
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
         # TODO[BSE-5154]: support all Calcite casts
+
+        # No-op casts
+        if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
+            return java_expr_to_python_expr(operand, input_plan)
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
             operand_type

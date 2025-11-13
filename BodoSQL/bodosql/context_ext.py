@@ -6,12 +6,13 @@ which allows typing and optimization.
 import datetime
 import re
 import time
+import warnings
 from typing import Any
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import cgutils, types
+from numba.core import cgutils, ir, types
 from numba.extending import (
     NativeValue,
     box,
@@ -27,25 +28,31 @@ from numba.extending import (
 )
 
 import bodo
+import bodo.hiframes
+import bodo.hiframes.pd_multi_index_ext
+import bodo.io.iceberg.merge_into  # noqa
+import bodo.io.iceberg.read_compilation
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.io.utils import parse_dbtype
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import (
     BodoError,
     NotConstant,
     assert_bodo_error,
+    dtype_to_array_type,
     get_overload_const,
     get_overload_const_str,
     is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
 )
-from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
-from bodosql.bodosql_types.table_path import TablePathType
+from bodosql.bodosql_types.database_catalog_ext import DatabaseCatalogType
+from bodosql.bodosql_types.table_path_ext import TablePathType
 from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,
     NAMED_PARAM_ARG_PREFIX,
     BodoSQLContext,
-    compute_df_types,
+    SqlTypeEnum,
     create_java_dynamic_parameter_type_list,
     create_java_named_parameter_type_map,
     initialize_schema,
@@ -54,7 +61,7 @@ from bodosql.context import (
 from bodosql.imported_java_classes import (
     JavaEntryPoint,
 )
-from bodosql.utils import error_to_string
+from bodosql.utils import BodoSQLWarning, error_to_string
 
 
 class BodoSQLContextType(types.Type):
@@ -689,3 +696,398 @@ def overload_convert_to_pandas(
     bodo.utils.typing.raise_bodo_error(
         "Invalid BodoSQLContext.convert_to_pandas() call"
     )
+
+
+# Scalar dtypes for supported Bodo Arrays
+_numba_to_sql_column_type_map = {
+    bodo.types.null_dtype: SqlTypeEnum.Null.value,
+    types.int8: SqlTypeEnum.Int8.value,
+    types.uint8: SqlTypeEnum.UInt8.value,
+    types.int16: SqlTypeEnum.Int16.value,
+    types.uint16: SqlTypeEnum.UInt16.value,
+    types.int32: SqlTypeEnum.Int32.value,
+    types.uint32: SqlTypeEnum.UInt32.value,
+    types.int64: SqlTypeEnum.Int64.value,
+    types.uint64: SqlTypeEnum.UInt64.value,
+    types.float32: SqlTypeEnum.Float32.value,
+    types.float64: SqlTypeEnum.Float64.value,
+    types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
+    types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
+    types.bool_: SqlTypeEnum.Bool.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
+    bodo.types.bytes_type: SqlTypeEnum.Binary.value,
+    # Note date doesn't have native support yet, but the code to
+    # cast to datetime64 is handled in the Java code.
+    bodo.types.datetime_date_type: SqlTypeEnum.Date.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+}
+
+# Scalar dtypes for supported parameters
+_numba_to_sql_param_type_map = {
+    types.none: SqlTypeEnum.Null.value,
+    types.int8: SqlTypeEnum.Int8.value,
+    types.uint8: SqlTypeEnum.UInt8.value,
+    types.int16: SqlTypeEnum.Int16.value,
+    types.uint16: SqlTypeEnum.UInt16.value,
+    types.int32: SqlTypeEnum.Int32.value,
+    types.uint32: SqlTypeEnum.UInt32.value,
+    types.int64: SqlTypeEnum.Int64.value,
+    types.uint64: SqlTypeEnum.UInt64.value,
+    types.float32: SqlTypeEnum.Float32.value,
+    types.float64: SqlTypeEnum.Float64.value,
+    types.bool_: SqlTypeEnum.Bool.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
+    # Scalar datetime and timedelta are assumed
+    # to be scalar Pandas Timestamp/Timedelta
+    bodo.types.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+    # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
+}
+
+
+def construct_tz_aware_array_type(typ, nullable):
+    """Construct a BodoSQL data type for a tz-aware timestamp array
+
+    Args:
+        typ (types.Type): A tz-aware Bodo type
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type data info.
+    """
+    # Timestamps only support precision 9 right now.
+    precision = 9
+    if typ.tz is None:
+        # TZ = None is a timezone naive timestamp
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ntz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
+    else:
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Ltz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
+
+
+def construct_time_array_type(
+    typ: bodo.types.TimeArrayType | bodo.types.TimeType, nullable: bool
+):
+    """Construct a BodoSQL data type for a time array.
+
+    Args:
+        typ (Union[bodo.types.TimeArrayType, bodo.types.TimeType]): A time Bodo type
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type data info.
+    """
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Time.value
+    )
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, typ.precision)
+
+
+def construct_array_item_array_type(arr_type):
+    """Construct a BodoSQL data type for an array item array
+    value.
+
+    Args:
+        typ (bodo.types.ArrayItemArrayType): A ArrayItemArray type
+        col_name (str): Column name
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type data info.
+    """
+    child = get_sql_data_type(arr_type.dtype)
+    type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+        SqlTypeEnum.Array.value
+    )
+    return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, child)
+
+
+def construct_json_array_type(arr_type):
+    """Construct a BodoSQL data type for a JSON array
+    value.
+
+    Args:
+        typ (bodo.types.StructArrayType or bodo.types.MapArrayType): A StructArray or MapArray type
+        col_name (str): Column name
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type data info.
+    """
+    if isinstance(arr_type, bodo.types.StructArrayType):
+        # TODO: FIXME. We don't support full structs of types yet.
+        # As a placeholder we will just match Snowflake.
+        key_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.String.value
+        )
+        key = JavaEntryPoint.buildColumnDataTypeInfo(key_enum, True)
+        value_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Variant.value
+        )
+        value = JavaEntryPoint.buildColumnDataTypeInfo(value_enum, True)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
+    else:
+        # TODO: Add map scalar support
+        key = get_sql_data_type(arr_type.key_arr_type)
+        value = get_sql_data_type(arr_type.value_arr_type)
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Json_Object.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, True, key, value)
+
+
+def get_sql_column_type_jit(arr_type, col_name):
+    data_type = get_sql_data_type(arr_type)
+    return JavaEntryPoint.buildBodoSQLColumnImpl(col_name, data_type)
+
+
+def get_sql_data_type(arr_type):
+    """get SQL type for a given array type."""
+    warning_msg = f"Encountered type {arr_type} which is not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    # We currently treat NaT as nullable in BodoSQL, so for any array that has timestamp elements
+    # type, we treat it as nullable.
+    dtype_has_nullable = arr_type.dtype in (
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
+    )
+    nullable = dtype_has_nullable or bodo.utils.typing.is_nullable_type(arr_type)
+    if isinstance(arr_type, bodo.types.DatetimeArrayType):
+        # Timezone-aware Timestamp columns have their own special handling.
+        return construct_tz_aware_array_type(arr_type, nullable)
+    elif arr_type == bodo.types.timestamptz_array_type:
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Timestamp_Tz.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
+    elif isinstance(arr_type, bodo.types.TimeArrayType):
+        # Time array types have their own special handling for precision
+        return construct_time_array_type(arr_type, nullable)
+    elif isinstance(arr_type, bodo.types.DecimalArrayType):
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(
+            type_enum, nullable, arr_type.precision, arr_type.scale
+        )
+    elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
+        return construct_array_item_array_type(arr_type)
+    elif isinstance(arr_type, (bodo.types.StructArrayType, bodo.types.MapArrayType)):
+        return construct_json_array_type(arr_type)
+    elif arr_type.dtype in _numba_to_sql_column_type_map:
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            _numba_to_sql_column_type_map[arr_type.dtype]
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
+    elif isinstance(arr_type.dtype, bodo.types.PDCategoricalDtype):
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Categorical.value
+        )
+        child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, child)
+    else:
+        # The type is unsupported we raise a warning indicating this is a possible
+        # error but we generate a dummy type because we may be able to support it
+        # if its optimized out.
+        warnings.warn(BodoSQLWarning(warning_msg))
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Unsupported.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
+
+
+def get_sql_param_column_type_info(param_type: types.Type):
+    """Get the SQL type information for a given Dynamic
+    parameter type.
+
+    Args:
+        param_type (types.Type): The bodo type to lower as a parameter.
+    Return:
+        JavaObject: The ColumnDataTypeInfo for the parameter type.
+    """
+    unliteral_type = types.unliteral(param_type)
+    # The named parameters are always scalars. We don't support
+    # Optional types or None types yet. As a result this is always
+    # non-null.
+    nullable = False
+    if (
+        isinstance(unliteral_type, bodo.types.PandasTimestampType)
+        and unliteral_type.tz != None
+    ):
+        return construct_tz_aware_array_type(param_type, nullable)
+    elif isinstance(unliteral_type, bodo.types.TimeType):
+        # Time array types have their own special handling for precision
+        return construct_time_array_type(param_type, nullable)
+    elif isinstance(unliteral_type, bodo.types.Decimal128Type):
+        # Decimal types need handling for precision and scale.
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            SqlTypeEnum.Decimal.value
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(
+            type_enum, nullable, unliteral_type.precision, unliteral_type.scale
+        )
+    elif unliteral_type in _numba_to_sql_param_type_map:
+        type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
+            _numba_to_sql_param_type_map[unliteral_type]
+        )
+        return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
+    raise TypeError(
+        f"Dynamic Parameter with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    )
+
+
+def compute_df_types(df_list, is_bodo_type):
+    """Given a list of Bodo types or Python objects,
+    determines the DataFrame type for each object. This
+    is used by both Python and JIT, where Python converts to
+    Bodo types via the is_bodo_type argument. This function
+    converts any TablePathType to the actual DataFrame type,
+    which must be done in parallel.
+
+    Args:
+        df_list (List[types.Type | pd.DataFrame | bodosql.TablePath]):
+            List of table either from Python or JIT.
+        is_bodo_type (bool): Is this being called from JIT? If so we
+            don't need to get the type of each member of df_list
+
+    Raises:
+        BodoError: If a TablePathType is passed with invalid
+            values we raise an exception.
+
+    Returns:
+        Tuple(orig_bodo_types, df_types): Returns the Bodo types and
+            the bodo.types.DataFrameType for each table. The original bodo
+            types are kept to determine when code needs to be generated
+            for TablePathType
+    """
+
+    orig_bodo_types = []
+    df_types = []
+    for df_val in df_list:
+        if is_bodo_type:
+            typ = df_val
+        else:
+            typ = bodo.typeof(df_val)
+        orig_bodo_types.append(typ)
+
+        if isinstance(typ, TablePathType):
+            table_info = typ
+            file_type = table_info._file_type
+            file_path = table_info._file_path
+            if file_type == "pq":
+                # Extract the parquet information using Bodo
+                type_info = bodo.io.parquet_pio.parquet_file_schema(file_path, None)
+                # Future proof against additional return values that are unused
+                # by BodoSQL by returning a tuple.
+                col_names = type_info[0]
+                col_types = type_info[1]
+                index_cols = type_info[2]
+
+                # If index_cols is empty or a single dict, then the index is a RangeIndex
+                if (
+                    len(index_cols) == 0
+                    or len(index_cols) == 1
+                    and isinstance(index_cols[0], dict)
+                ):
+                    index_col = index_cols[0] if len(index_cols) == 1 else None
+                    if isinstance(index_col, dict) and index_col["name"] is not None:
+                        index_col_name = types.StringLiteral(index_col["name"])
+                    else:
+                        index_col_name = None
+                    index_typ = bodo.types.RangeIndexType(index_col_name)
+
+                # Otherwise the index is a specific set of columns
+                # Multiple for MultiIndex, single for single index
+                else:
+                    index_col_names = []
+                    index_col_types = []
+                    for index_col in index_cols:
+                        # if the index_col is __index_level_0_, it means it has no name.
+                        # Thus we do not write the name instead of writing '__index_level_0_' as the name
+                        if "__index_level_" in index_col:
+                            index_name = types.none
+                        else:
+                            index_name = types.StringLiteral(index_col)
+                        # Convert the column type to an index type
+                        index_loc = col_names.index(index_col)
+
+                        index_col_types.append(col_types[index_loc])
+                        index_col_names.append(index_name)
+
+                        # Remove the index from the DataFrame.
+                        col_names.pop(index_loc)
+                        col_types.pop(index_loc)
+
+                    if len(index_col_names) == 1:
+                        index_elem_dtype = index_col_types[0].dtype
+                        index_typ = bodo.utils.typing.index_typ_from_dtype_name_arr(
+                            index_elem_dtype, index_col_names[0], index_col_types[0]
+                        )
+                    else:
+                        bodo.hiframes.pd_multi_index_ext.MultiIndexType(
+                            tuple(index_col_types),
+                            tuple(index_col_names),
+                        )
+
+            elif file_type == "sql":
+                const_conn_str = table_info._conn_str
+                db_type, _ = parse_dbtype(const_conn_str)
+                if db_type == "iceberg":
+                    db_schema = table_info._db_schema
+                    iceberg_table_name = table_info._file_path
+                    # table_name = table_info.
+                    type_info = bodo.transforms.untyped_pass
+                    # schema = table_info._schema
+                    (
+                        col_names,
+                        col_types,
+                        _pyarrow_table_schema,
+                    ) = bodo.io.iceberg.read_compilation.get_iceberg_orig_schema(
+                        const_conn_str,
+                        f"{db_schema}.{iceberg_table_name}",
+                    )
+                else:
+                    type_info = (
+                        bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
+                            f"{file_path}",
+                            const_conn_str,
+                            # _bodo_read_as_dict
+                            None,
+                            ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
+                            ir.Loc("dummy_loc", -1),
+                            # is_table_input
+                            True,
+                            False,
+                            # downcast_decimal_to_double
+                            False,
+                            convert_snowflake_column_names=False,
+                        )
+                    )
+                    # Future proof against additional return values that are unused
+                    # by BodoSQL by returning a tuple.
+                    col_names = type_info[1]
+                    col_types = type_info[3]
+
+                # Generate the index type. We don't support an index column,
+                # so this is always a RangeIndex.
+                index_typ = bodo.types.RangeIndexType(None)
+            else:
+                raise BodoError(
+                    "Internal error, 'compute_df_types' found a TablePath with an invalid file type"
+                )
+
+            # Generate the DataFrame type
+            df_type = bodo.types.DataFrameType(
+                tuple(col_types),
+                index_typ,
+                tuple(col_names),
+            )
+        else:
+            df_type = typ
+        df_types.append(df_type)
+    return orig_bodo_types, df_types

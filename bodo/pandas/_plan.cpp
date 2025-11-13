@@ -1642,9 +1642,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                         break;
                 }
             } else {
-                // TODO: Do we need to check units here?
-                // Technically this is supposed to be in microseconds like
-                // TIMESTAMP
+                // Microseconds since epoch, UTC
                 duckdb_type = duckdb::LogicalType::TIMESTAMP_TZ;
             }
             break;

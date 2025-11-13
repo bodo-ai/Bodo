@@ -31,7 +31,6 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     pytest_mark_one_rank,
 )
-from bodo.utils.typing import BodoError
 from bodosql.tests.utils import assert_equal_par
 
 pytestmark = pytest.mark.iceberg
@@ -133,7 +132,7 @@ def test_drop_schema_not_exists(iceberg_filesystem_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"Schema '{schema_name}' does not exist or drop cannot be performed.",
     ):
         check_func_seq(
@@ -292,7 +291,7 @@ def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
         assert len(existing_tables) == 0, (
             "Table Name already exists. Please choose a different table name."
         )
-        with pytest.raises(BodoError, match=""):
+        with pytest.raises(ValueError, match=""):
             query = f"DROP TABLE {table_name}"
             bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
             impl(bc, query)
@@ -440,7 +439,7 @@ def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
         _test_equal_guard(bodo_output, py_output)
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             bc.execute_ddl(query_drop_view)
@@ -450,7 +449,7 @@ def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
         _test_equal_guard(bodo_output, py_output)
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             bc.sql(query_drop_view)
@@ -464,7 +463,7 @@ def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
         )
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             check_func_seq(
@@ -502,17 +501,17 @@ def test_iceberg_drop_view_unsupported_catalog_error_non_view(
     query_drop_view = f'DROP VIEW {if_exists_str} "{db_schema}"."{table_name}"'
     # execute_ddl Version
     with pytest.raises(
-        BodoError, match="DROP VIEW is unimplemented for the current catalog"
+        ValueError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         bc.execute_ddl(query_drop_view)
     # Python Version
     with pytest.raises(
-        BodoError, match="DROP VIEW is unimplemented for the current catalog"
+        ValueError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         bc.sql(query_drop_view)
     # Jit Version
     with pytest.raises(
-        BodoError, match="DROP VIEW is unimplemented for the current catalog"
+        ValueError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         check_func_seq(
             lambda bc, query: bc.sql(query),
@@ -568,14 +567,14 @@ def test_iceberg_describe_view_unsupported(
     view_name = gen_unique_id("TEST_VIEW").upper()
     query_describe_view = f"{describe_keyword} VIEW {view_name}"
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         bc.execute_ddl(query_describe_view)
 
     # Python Version
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         bc.sql(query_describe_view)
@@ -583,7 +582,7 @@ def test_iceberg_describe_view_unsupported(
     # Jit Version
     # Intentionally returns replicated output
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"View '{view_name}' does not exist or not authorized to describe.",
     ):
         check_func_seq(

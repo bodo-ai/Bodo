@@ -13,7 +13,7 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     pytest_glue,
 )
-from bodosql.bodosql_types.glue_catalog import GlueConnectionType
+from bodosql.bodosql_types.glue_catalog_ext import GlueConnectionType
 
 pytestmark = pytest_glue
 
