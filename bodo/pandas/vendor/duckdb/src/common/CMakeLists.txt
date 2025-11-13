@@ -2,12 +2,14 @@ add_subdirectory(arrow)
 add_subdirectory(crypto)
 add_subdirectory(enums)
 add_subdirectory(exception)
+add_subdirectory(multi_file)
 add_subdirectory(operator)
 add_subdirectory(progress_bar)
 add_subdirectory(tree_renderer)
 add_subdirectory(row_operations)
 add_subdirectory(serializer)
 add_subdirectory(sort)
+add_subdirectory(sorting)
 add_subdirectory(types)
 add_subdirectory(value_operations)
 add_subdirectory(vector_operations)
@@ -29,11 +31,15 @@ add_library_unity(
   bind_helpers.cpp
   box_renderer.cpp
   cgroups.cpp
+  csv_writer.cpp
   complex_json.cpp
   compressed_file_system.cpp
   constants.cpp
   checksum.cpp
-  encryption_state.cpp
+  # Bodo Change: Remove encryption source files 
+  #encryption_functions.cpp
+  #encryption_key_manager.cpp
+  #encryption_state.cpp
   exception.cpp
   exception_format_value.cpp
   extra_type_info.cpp
@@ -41,11 +47,8 @@ add_library_unity(
   file_system.cpp
   filename_pattern.cpp
   hive_partitioning.cpp
-  http_util.cpp
   pipe_file_system.cpp
   local_file_system.cpp
-  multi_file_list.cpp
-  multi_file_reader.cpp
   error_data.cpp
   opener_file_system.cpp
   printer.cpp
@@ -59,6 +62,7 @@ add_library_unity(
   render_tree.cpp
   tree_renderer.cpp
   types.cpp
+  bignum.cpp
   virtual_file_system.cpp
   windows_util.cpp)
 set(ALL_OBJECT_FILES

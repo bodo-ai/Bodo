@@ -900,6 +900,8 @@ class UntypedPass:
         Enable typing for dictionary data arg to bodosql.BodoSQLContext({'table1': df}).
         Converts constant dictionary to tuple with sentinel.
         """
+        import bodosql.compiler  # isort:skip # noqa
+
         kws = dict(rhs.kws)
         data_arg = get_call_expr_arg(
             "bodosql.BodoSQLContext", rhs.args, kws, 0, "tables"

@@ -9,9 +9,11 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry/function_entry.hpp"
+#include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_set.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/parser/parsed_data/create_aggregate_function_info.hpp"
+#include "duckdb/main/attached_database.hpp"
 
 namespace duckdb {
 
@@ -24,6 +26,10 @@ public:
 public:
 	AggregateFunctionCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateAggregateFunctionInfo &info)
 	    : FunctionEntry(CatalogType::AGGREGATE_FUNCTION_ENTRY, catalog, schema, info), functions(info.functions) {
+		for (auto &function : functions.functions) {
+			function.catalog_name = catalog.GetAttached().GetName();
+			function.schema_name = schema.name;
+		}
 	}
 
 	//! The aggregate functions
