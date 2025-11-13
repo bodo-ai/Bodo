@@ -4,7 +4,6 @@
 #include "duckdb/optimizer/filter_pushdown.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/list.hpp"
-#include "duckdb/planner/operator/logical_cte.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
@@ -141,7 +140,7 @@ void CTEInlining::TryInlining(unique_ptr<LogicalOperator> &op) {
 			// even if only a part of the CTE result is needed.
 			// Therefore, we check if the CTE Scans are below the LIMIT or TOP_N operator
 			// and if so, we try to inline the CTE definition.
-			if (ContainsLimit(*op->children[1])) {
+			if (ContainsLimit(*op->children[1]) || op->children[0]->type == LogicalOperatorType::LOGICAL_EMPTY_RESULT) {
 				// this CTE is referenced multiple times and has a limit, we want to inline it
 				bool success = Inline(op->children[1], *op, true);
 				if (success) {
@@ -163,15 +162,16 @@ bool CTEInlining::Inline(unique_ptr<duckdb::LogicalOperator> &op, LogicalOperato
 			unique_ptr<LogicalOperator> &definition = cte.children[0];
 			unique_ptr<LogicalOperator> copy;
 			if (requires_copy) {
-				// there are multiple references to the CTE, we need to copy it
-				LogicalOperatorDeepCopy deep_copy(optimizer.binder, parameter_data);
-				try {
-					copy = deep_copy.DeepCopy(definition);
-				} catch (NotImplementedException &ex) {
-					// if we have to copy the lhs of a CTE, but we cannot copy the operator, we have to
-					// stop inlining and keep the materialized CTE instead
+				// Bodo Change: Disable deep copy since we can't deep copy Bodo duckdb nodes yet
+				//// there are multiple references to the CTE, we need to copy it
+				//LogicalOperatorDeepCopy deep_copy(optimizer.binder, parameter_data);
+				//try {
+				//	copy = deep_copy.DeepCopy(definition);
+				//} catch (NotImplementedException &ex) {
+				//	// if we have to copy the lhs of a CTE, but we cannot copy the operator, we have to
+				//	// stop inlining and keep the materialized CTE instead
 					return false;
-				}
+				//}
 			}
 			vector<unique_ptr<Expression>> proj_expressions;
 			definition->ResolveOperatorTypes();

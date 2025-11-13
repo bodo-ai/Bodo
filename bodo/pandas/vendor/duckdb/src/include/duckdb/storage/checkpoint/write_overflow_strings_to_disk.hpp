@@ -28,8 +28,9 @@ public:
 	idx_t offset;
 
 public:
-	void WriteString(string_t string, block_id_t &result_block,
-	                 int32_t &result_offset) override;
+	// Bodo Change: Remove compression code
+	//void WriteString(string_t string, block_id_t &result_block,
+	//                 int32_t &result_offset) override;
 	void Flush() override;
 
 private:

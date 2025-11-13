@@ -56,7 +56,6 @@ cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
         BIT "duckdb::LogicalTypeId::BIT"
         STRING_LITERAL "duckdb::LogicalTypeId::STRING_LITERAL"
         INTEGER_LITERAL "duckdb::LogicalTypeId::INTEGER_LITERAL"
-        VARINT "duckdb::LogicalTypeId::VARINT"
         UHUGEINT "duckdb::LogicalTypeId::UHUGEINT"
         HUGEINT "duckdb::LogicalTypeId::HUGEINT"
         POINTER "duckdb::LogicalTypeId::POINTER"
