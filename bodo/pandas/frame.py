@@ -1557,8 +1557,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported."
             )
 
+        zero_size_self = _empty_like(self)
+
+        # If Index columns exist, it's as if a subset of columns are keys and groupby
+        # should be used.
+        if subset is None and get_n_index_arrays(zero_size_self.index) > 0:
+            subset = zero_size_self.columns.tolist()
+
         if subset is not None:
-            subset_group = self.groupby(subset, as_index=False, sort=False)
+            subset_group = self.groupby(
+                subset, as_index=False, sort=False, dropna=False
+            )
             if keep == "first":
                 drop_dups = subset_group.first()
             else:
@@ -1567,7 +1576,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Preserve original ordering of columns
             return drop_dups[self.columns.tolist()]
 
-        zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
         return wrap_plan(
             plan=LogicalDistinct(
