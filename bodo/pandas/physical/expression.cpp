@@ -120,22 +120,34 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
  *
  */
 arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
-    auto mask_result = arrow::compute::IsNull(src);
-    if (!mask_result.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_arrow_compute_binary: Error in Arrow compute: " +
-            mask_result.status().message());
-    }
-    arrow::Datum mask = mask_result.ValueOrDie();
+    if (src.is_array() || src.is_chunked_array()) {
+        auto mask_result = arrow::compute::IsNull(src);
+        if (!mask_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary: Error in Arrow compute: " +
+                mask_result.status().message());
+        }
+        arrow::Datum mask = mask_result.ValueOrDie();
 
-    arrow::Result<arrow::Datum> src_res =
-        arrow::compute::ReplaceWithMask(src, mask, val);
-    if (!src_res.ok()) [[unlikely]] {
+        arrow::Result<arrow::Datum> src_res =
+            arrow::compute::ReplaceWithMask(src, mask, val);
+        if (!src_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary: Error in Arrow compute: " +
+                src_res.status().message());
+        }
+        return src_res.ValueOrDie();
+    } else if (src.is_scalar()) {
+        auto scalar = src.scalar();
+        if (scalar->is_valid) {
+            return src;
+        } else {
+            return val;
+        }
+    } else {
         throw std::runtime_error(
-            "do_arrow_compute_binary: Error in Arrow compute: " +
-            src_res.status().message());
+            "fill_null can't handle non-array or scalar datum type.");
     }
-    return src_res.ValueOrDie();
 }
 
 /**
@@ -145,6 +157,63 @@ arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
 bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
     return type->id() == arrow::Type::FLOAT ||
            type->id() == arrow::Type::DOUBLE;
+}
+
+int64_t DatumLength(const arrow::Datum& d) {
+    switch (d.kind()) {
+        case arrow::Datum::ARRAY:
+            return d.make_array()->length();
+        case arrow::Datum::CHUNKED_ARRAY:
+            return d.chunked_array()->length();
+        case arrow::Datum::SCALAR:
+            return 1;
+        case arrow::Datum::RECORD_BATCH:
+            return d.record_batch()->num_rows();
+        case arrow::Datum::TABLE:
+            return d.table()->num_rows();
+        default:
+            return 0;  // NONE or unsupported
+    }
+}
+
+std::string DatumKindToString(arrow::Datum::Kind kind) {
+    switch (kind) {
+        case arrow::Datum::NONE:
+            return "NONE";
+        case arrow::Datum::SCALAR:
+            return "SCALAR";
+        case arrow::Datum::ARRAY:
+            return "ARRAY";
+        case arrow::Datum::CHUNKED_ARRAY:
+            return "CHUNKED_ARRAY";
+        case arrow::Datum::RECORD_BATCH:
+            return "RECORD_BATCH";
+        case arrow::Datum::TABLE:
+            return "TABLE";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+arrow::Datum MakeNanScalar(const std::shared_ptr<arrow::DataType>& dtype) {
+    arrow::Result<std::shared_ptr<arrow::Scalar>> res;
+
+    if (dtype->id() == arrow::Type::FLOAT) {
+        res = arrow::MakeScalar(dtype, static_cast<float>(std::nan("")));
+    } else if (dtype->id() == arrow::Type::DOUBLE) {
+        res = arrow::MakeScalar(dtype, static_cast<double>(std::nan("")));
+    } else if (dtype->id() == arrow::Type::HALF_FLOAT) {
+        res = arrow::MakeScalar(dtype, static_cast<float>(std::nan("")));
+    } else {
+        throw std::runtime_error("DataType does not support NaN");
+    }
+
+    if (!res.ok()) {
+        throw std::runtime_error("MakeScalar failed: " +
+                                 res.status().ToString());
+    }
+
+    return arrow::Datum(res.ValueOrDie());
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
@@ -191,11 +260,11 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     // a != a is a way of checking for NaN.  If op is != and
     // input data type can have a NaN then convert NA to NaN.
     if (comparator == "not_equal" && canHoldNan(src1_dtype)) {
-        arrow::Datum null_scalar = arrow::MakeScalar(std::nan(""));
+        arrow::Datum null_scalar = MakeNanScalar(src1_dtype);
         src1 = fill_null(src1, null_scalar);
     }
     if (comparator == "not_equal" && canHoldNan(src2_dtype)) {
-        arrow::Datum null_scalar = arrow::MakeScalar(std::nan(""));
+        arrow::Datum null_scalar = MakeNanScalar(src2_dtype);
         src2 = fill_null(src2, null_scalar);
     }
 
@@ -203,7 +272,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
         arrow::compute::CallFunction(comparator, {src1, src2});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_binary: Error in Arrow compute: " +
+            "do_arrow_compute_binary cmp_res: Error in Arrow compute: " +
             cmp_res.status().message());
     }
     auto cmp_datum = cmp_res.ValueOrDie();
@@ -216,7 +285,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
         auto mask_result = arrow::compute::IsNan(cmp_datum);
         if (!mask_result.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
+                "do_arrow_compute_binary mask_result: Error in Arrow "
+                "compute: " +
                 mask_result.status().message());
         }
         arrow::Datum mask = mask_result.ValueOrDie();
@@ -227,7 +297,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
                                                   arrow::Datum(null_scalar));
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
+                "do_arrow_compute_binary post replacewithmask: Error in Arrow "
+                "compute: " +
                 cmp_res.status().message());
         }
     }
