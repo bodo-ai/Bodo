@@ -115,6 +115,10 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     return array;
 }
 
+/**
+ * @brief Change nulls in arrow Datum to given val.
+ *
+ */
 arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
     auto mask_result = arrow::compute::IsNull(src);
     if (!mask_result.ok()) [[unlikely]] {
@@ -134,6 +138,10 @@ arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
     return src_res.ValueOrDie();
 }
 
+/**
+ * @brief Returns true if arrow datatype can hold a NaN.
+ *
+ */
 bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
     return type->id() == arrow::Type::FLOAT ||
            type->id() == arrow::Type::DOUBLE;
@@ -180,6 +188,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<arrow::DataType> src1_dtype = src1.type();
     std::shared_ptr<arrow::DataType> src2_dtype = src2.type();
 
+    // a != a is a way of checking for NaN.  If op is != and
+    // input data type can have a NaN then convert NA to NaN.
     if (comparator == "not_equal" && canHoldNan(src1_dtype)) {
         arrow::Datum null_scalar = arrow::MakeScalar(std::nan(""));
         src1 = fill_null(src1, null_scalar);
@@ -199,6 +209,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     auto cmp_datum = cmp_res.ValueOrDie();
 
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
+    // Bodo checks is_na with NULL but NaN in Pandas considered NA
+    // so convert all NaN into NA.
     if (canHoldNan(cmp_dtype)) {
         // Convert NaN into NULLs.
         auto mask_result = arrow::compute::IsNan(cmp_datum);
