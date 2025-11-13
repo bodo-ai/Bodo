@@ -2965,8 +2965,8 @@ def test_drop_duplicates(index_val):
                 "B": pd.array([2, 3, 4, 5] * 25, "Float64"),
             }
         )
-        # TODO: Add groupby dropna flag to DuckDB's aggregate node so the flag is
-        # preserved when the exprs are optimized out.
+        # TODO[BSE-5201]: Add groupby dropna flag to DuckDB's aggregate node so the flag
+        # is preserved when the exprs are optimized out.
         # df.loc[99, "B"] = np.nan
         df.index = index_val[:100]
         bdf = bd.from_pandas(df).drop_duplicates()
