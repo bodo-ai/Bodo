@@ -40,10 +40,8 @@ variables:
   bodo_2p_total: 30
   bodo_df_1p_each: "1,2"
   bodo_df_1p_total: 2
-  bodo_spawn_2p_each: "1,2"
-  bodo_spawn_2p_total: 2
-  bodo_df_2p_each: "1,2,3,4"
-  bodo_df_2p_total: 4
+  bodo_df_2p_each: "1,2,3"
+  bodo_df_2p_total: 3
   bodosql_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12"
   bodosql_1p_total: 12
   bodosql_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
@@ -89,10 +87,9 @@ stages:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "spawn_mode"
-        ${{ each slice in split(variables.bodo_spawn_2p_each, ',') }}:
-          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_spawn_2p_total) }}:
-            NP: 2
-            PYTEST_MARKER: "spawn_mode and ${{ format('bodo_spawn_{0}of{1} and ({2})', slice, variables.bodo_spawn_2p_total, parameters.PYTEST_MARKER) }}"
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: "spawn_mode"
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -120,7 +117,7 @@ stages:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BodoSQL_Streaming_Tests
-      test_type: NORMAL
+      test_type: COMPILER
       pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:

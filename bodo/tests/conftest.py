@@ -241,15 +241,11 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_df_3of3,
     ]
 
-    # Spawn NP=2
-    azure_spawn_2p_markers = [pytest.mark.bodo_spawn_1of2, pytest.mark.bodo_spawn_2of2]
-
     test_splits = [
         azure_1p_markers,
         azure_2p_markers,
         azure_df_1p_markers,
         azure_df_2p_markers,
-        azure_spawn_2p_markers,
     ]
 
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want

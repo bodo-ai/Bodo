@@ -24,6 +24,7 @@ from bodo.tests.utils import (
 pytestmark = pytest_spawn_mode
 
 VALUE = 1
+print("INVOKING WITH NUM WORKERS: ", get_num_workers())
 
 
 def test_propogate_same_exception_all_ranks():
