@@ -179,12 +179,10 @@ void LogicalOperatorDeepCopy::VisitOperator(LogicalOperator &op) {
 		ReplaceTableIndex<LogicalUpdate>(op);
 		break;
 	}
-    /*
 	case LogicalOperatorType::LOGICAL_MERGE_INTO: {
 		ReplaceTableIndex<LogicalMergeInto>(op);
 		break;
 	}
-    */
 
 	default:
 		break;
@@ -198,7 +196,6 @@ TableBindingReplacer::TableBindingReplacer(std::unordered_map<idx_t, idx_t> &tab
 
 void TableBindingReplacer::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
-    /*
 	case LogicalOperatorType::LOGICAL_DEPENDENT_JOIN: {
 		// The visitor does not catch the correlated_column vector of DEPENDENT_JOINs,
 		// therefore we need to special case it.
@@ -211,7 +208,6 @@ void TableBindingReplacer::VisitOperator(LogicalOperator &op) {
 		}
 		break;
 	}
-    */
 	case LogicalOperatorType::LOGICAL_RECURSIVE_CTE:
 	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE: {
 		// The visitor does not catch the correlated_column vector,

@@ -104,6 +104,7 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
 
               "bodo_read_df({})", schemaColumnNamesToString(arrow_schema))) {
         projection_pushdown = true;
+        limit_pushdown = false;
     }
 };
 

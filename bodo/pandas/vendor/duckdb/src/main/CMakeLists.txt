@@ -1,3 +1,9 @@
+if(NOT CLANG_TIDY)
+    # Bodo Change don't add capi
+    #add_subdirectory(capi)
+endif()
+# Bodo Change remove relation and extension subdirectories
+add_subdirectory(http)
 add_subdirectory(secret)
 add_subdirectory(settings)
 add_subdirectory(buffered_data)
@@ -23,10 +29,15 @@ add_library_unity(
   config.cpp
   connection.cpp
   database.cpp
+  database_file_path_manager.cpp
   database_path_and_type.cpp
   database_manager.cpp
   db_instance_cache.cpp
   error_manager.cpp
+  # Bodo Change: Remove extension related files
+  #extension.cpp
+  #extension_install_info.cpp
+  #extension_manager.cpp
   materialized_query_result.cpp
   pending_query_result.cpp
   prepared_statement.cpp

@@ -191,9 +191,24 @@ jobs:
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
+  narwhals-ci-single-worker:
+    needs: [compile-bodo, get_version]
+    name: Test Narwhals Bodo Integration (1 Worker)
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: ""
+      collect-coverage: false
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NARWHALS
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+      bodo-num-workers: "1"
+    secrets: inherit
+
   narwhals-ci:
     needs: [compile-bodo, get_version]
-    name: Test Narwhals Bodo Integration
+    name: Test Narwhals Bodo Integration (Multiple Worker)
     uses: ./.github/workflows/_test_python_source.yml
     with:
       batch: 1

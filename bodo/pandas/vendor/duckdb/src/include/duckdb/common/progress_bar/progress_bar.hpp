@@ -51,7 +51,7 @@ public:
 	//! Updates the progress bar and prints it to the screen
 	void Update(bool final);
 	QueryProgress GetDetailedQueryProgress();
-	void PrintProgress(int percentage);
+	void PrintProgress(double percentage);
 	void FinishProgressBarPrint();
 	bool ShouldPrint(bool final) const;
 	bool PrintEnabled() const;
