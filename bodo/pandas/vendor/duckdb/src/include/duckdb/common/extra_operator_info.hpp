@@ -23,14 +23,32 @@ class ExtraOperatorInfo {
 public:
 	ExtraOperatorInfo() : file_filters(""), sample_options(nullptr), limit_val(nullptr), offset_val(nullptr) {
 	}
-	ExtraOperatorInfo(ExtraOperatorInfo &extra_info)
-	    : file_filters(extra_info.file_filters), sample_options(std::move(extra_info.sample_options)) {
+	ExtraOperatorInfo(ExtraOperatorInfo &&extra_info) noexcept
+	    : file_filters(std::move(extra_info.file_filters)), sample_options(std::move(extra_info.sample_options)) {
 		if (extra_info.total_files.IsValid()) {
 			total_files = extra_info.total_files.GetIndex();
 		}
 		if (extra_info.filtered_files.IsValid()) {
 			filtered_files = extra_info.filtered_files.GetIndex();
 		}
+	}
+	ExtraOperatorInfo &operator=(ExtraOperatorInfo &&extra_info) noexcept {
+		if (this != &extra_info) {
+			file_filters = extra_info.file_filters;
+			if (extra_info.total_files.IsValid()) {
+				total_files = extra_info.total_files.GetIndex();
+			}
+			if (extra_info.filtered_files.IsValid()) {
+				filtered_files = extra_info.filtered_files.GetIndex();
+			}
+			sample_options = std::move(extra_info.sample_options);
+		}
+		return *this;
+	}
+
+	bool operator==(const ExtraOperatorInfo &other) const {
+		return file_filters == other.file_filters && total_files == other.total_files &&
+		       filtered_files == other.filtered_files && sample_options == other.sample_options;
 	}
 
 	//! Filters that have been pushed down into the main file list
@@ -45,6 +63,9 @@ public:
     //! Limit options that have been pushed down into the table scan
     unique_ptr<BoundLimitNode> limit_val;
     unique_ptr<BoundLimitNode> offset_val;
+
+	void Serialize(Serializer &serializer) const;
+	static ExtraOperatorInfo Deserialize(Deserializer &deserializer);
 };
 
 } // namespace duckdb

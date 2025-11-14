@@ -14,46 +14,93 @@ WriteOverflowStringsToDisk::~WriteOverflowStringsToDisk() {
 	D_ASSERT(Exception::UncaughtException() || offset == 0);
 }
 
-void WriteOverflowStringsToDisk::WriteString(string_t string,
-                                             block_id_t &result_block, int32_t &result_offset) {
-	auto &block_manager = partial_block_manager.GetBlockManager();
-	auto &buffer_manager = block_manager.buffer_manager;
-	if (!handle.IsValid()) {
-		handle = buffer_manager.Allocate(MemoryTag::OVERFLOW_STRINGS, block_manager.GetBlockSize());
+shared_ptr<BlockHandle> UncompressedStringSegmentState::GetHandle(BlockManager &manager_p, block_id_t block_id) {
+	lock_guard<mutex> lock(block_lock);
+	auto entry = handles.find(block_id);
+	if (entry != handles.end()) {
+		return entry->second;
 	}
-	// first write the length of the string
-	if (block_id == INVALID_BLOCK || offset + 2 * sizeof(uint32_t) >= GetStringSpace()) {
-		// AllocateNewBlock(state, block_manager.GetFreeBlockId());
-	}
-	result_block = block_id;
-	result_offset = UnsafeNumericCast<int32_t>(offset);
-
-	// write the length field
-	auto data_ptr = handle.Ptr();
-	auto string_length = string.GetSize();
-	Store<uint32_t>(UnsafeNumericCast<uint32_t>(string_length), data_ptr + offset);
-	offset += sizeof(uint32_t);
-
-	// now write the remainder of the string
-	auto strptr = string.GetData();
-	auto remaining = UnsafeNumericCast<uint32_t>(string_length);
-	while (remaining > 0) {
-		uint32_t to_write = MinValue<uint32_t>(remaining, UnsafeNumericCast<uint32_t>(GetStringSpace() - offset));
-		if (to_write > 0) {
-			memcpy(data_ptr + offset, strptr, to_write);
-
-			remaining -= to_write;
-			offset += to_write;
-			strptr += to_write;
-		}
-		if (remaining > 0) {
-			D_ASSERT(offset == GetStringSpace());
-			// there is still remaining stuff to write
-			// now write the current block to disk and allocate a new block
-			// AllocateNewBlock(state, block_manager.GetFreeBlockId());
-		}
-	}
+	auto &manager = block_manager ? *block_manager : manager_p;
+	auto result = manager.RegisterBlock(block_id);
+	handles.insert(make_pair(block_id, result));
+	return result;
 }
+
+void UncompressedStringSegmentState::RegisterBlock(BlockManager &manager_p, block_id_t block_id) {
+	lock_guard<mutex> lock(block_lock);
+	auto entry = handles.find(block_id);
+	if (entry != handles.end()) {
+		throw InternalException("UncompressedStringSegmentState::RegisterBlock - block id %llu already exists",
+		                        block_id);
+	}
+	auto &manager = block_manager ? *block_manager : manager_p;
+	auto result = manager.RegisterBlock(block_id);
+	handles.insert(make_pair(block_id, std::move(result)));
+	on_disk_blocks.push_back(block_id);
+}
+
+string UncompressedStringSegmentState::GetSegmentInfo() const {
+	if (on_disk_blocks.empty()) {
+		return "";
+	}
+	string result = StringUtil::Join(on_disk_blocks, on_disk_blocks.size(), ", ",
+	                                 [&](block_id_t block) { return to_string(block); });
+	return "Overflow String Block Ids: " + result;
+}
+
+vector<block_id_t> UncompressedStringSegmentState::GetAdditionalBlocks() const {
+	return on_disk_blocks;
+}
+
+void UncompressedStringSegmentState::Cleanup(BlockManager &manager_p) {
+	auto &manager = block_manager ? *block_manager : manager_p;
+	for (auto &block_id : on_disk_blocks) {
+		manager.MarkBlockAsModified(block_id);
+	}
+	on_disk_blocks.clear();
+}
+
+// Bodo Change: Remove compression code
+//void WriteOverflowStringsToDisk::WriteString(UncompressedStringSegmentState &state, string_t string,
+//                                             block_id_t &result_block, int32_t &result_offset) {
+//	auto &block_manager = partial_block_manager.GetBlockManager();
+//	auto &buffer_manager = block_manager.buffer_manager;
+//	if (!handle.IsValid()) {
+//		handle = buffer_manager.Allocate(MemoryTag::OVERFLOW_STRINGS, &block_manager);
+//	}
+//	// first write the length of the string
+//	if (block_id == INVALID_BLOCK || offset + 2 * sizeof(uint32_t) >= GetStringSpace()) {
+//		// AllocateNewBlock(state, block_manager.GetFreeBlockId());
+//	}
+//	result_block = block_id;
+//	result_offset = UnsafeNumericCast<int32_t>(offset);
+//
+//	// write the length field
+//	auto data_ptr = handle.Ptr();
+//	auto string_length = string.GetSize();
+//	Store<uint32_t>(UnsafeNumericCast<uint32_t>(string_length), data_ptr + offset);
+//	offset += sizeof(uint32_t);
+//
+//	// now write the remainder of the string
+//	auto strptr = string.GetData();
+//	auto remaining = UnsafeNumericCast<uint32_t>(string_length);
+//	while (remaining > 0) {
+//		uint32_t to_write = MinValue<uint32_t>(remaining, UnsafeNumericCast<uint32_t>(GetStringSpace() - offset));
+//		if (to_write > 0) {
+//			memcpy(data_ptr + offset, strptr, to_write);
+//
+//			remaining -= to_write;
+//			offset += to_write;
+//			strptr += to_write;
+//		}
+//		if (remaining > 0) {
+//			D_ASSERT(offset == GetStringSpace());
+//			// there is still remaining stuff to write
+//			// now write the current block to disk and allocate a new block
+//			// AllocateNewBlock(state, block_manager.GetFreeBlockId());
+//		}
+//	}
+//}
 
 void WriteOverflowStringsToDisk::Flush() {
 	if (block_id != INVALID_BLOCK && offset > 0) {
@@ -63,7 +110,7 @@ void WriteOverflowStringsToDisk::Flush() {
 		}
 		// write to disk
 		auto &block_manager = partial_block_manager.GetBlockManager();
-		block_manager.Write(handle.GetFileBuffer(), block_id);
+		block_manager.Write(QueryContext(), handle.GetFileBuffer(), block_id);
 	}
 	block_id = INVALID_BLOCK;
 	offset = 0;

@@ -188,6 +188,9 @@ bool BoundCastExpression::CastIsInvertible(const LogicalType &source_type, const
 			return false;
 		}
 	}
+	if (source_type.IsSigned() && target_type.IsUnsigned()) {
+		return false;
+	}
 	return true;
 }
 

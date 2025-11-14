@@ -13,6 +13,27 @@ struct DefaultCompressionMethod {
 	compression_supports_type_t supports_type;
 };
 
+// Bodo Change: Remove compression files
+//static const DefaultCompressionMethod internal_compression_methods[] = {
+//    {CompressionType::COMPRESSION_CONSTANT, ConstantFun::GetFunction, ConstantFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_UNCOMPRESSED, UncompressedFun::GetFunction, UncompressedFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_RLE, RLEFun::GetFunction, RLEFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_BITPACKING, BitpackingFun::GetFunction, BitpackingFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_DICTIONARY, DictionaryCompressionFun::GetFunction,
+//     DictionaryCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_CHIMP, ChimpCompressionFun::GetFunction, ChimpCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_PATAS, PatasCompressionFun::GetFunction, PatasCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_ALP, AlpCompressionFun::GetFunction, AlpCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_ALPRD, AlpRDCompressionFun::GetFunction, AlpRDCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_FSST, FSSTFun::GetFunction, FSSTFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_ZSTD, ZSTDFun::GetFunction, ZSTDFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_ROARING, RoaringCompressionFun::GetFunction, RoaringCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_EMPTY, EmptyValidityCompressionFun::GetFunction,
+//     EmptyValidityCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_DICT_FSST, DictFSSTCompressionFun::GetFunction,
+//     DictFSSTCompressionFun::TypeIsSupported},
+//    {CompressionType::COMPRESSION_AUTO, nullptr, nullptr}};
+
 static optional_ptr<CompressionFunction> FindCompressionFunction(CompressionFunctionSet &set, CompressionType type,
                                                                  const PhysicalType physical_type) {
 	auto &functions = set.functions;
@@ -58,6 +79,7 @@ vector<reference<CompressionFunction>> DBConfig::GetCompressionFunctions(const P
 	TryLoadCompression(*this, result, CompressionType::COMPRESSION_FSST, physical_type);
 	TryLoadCompression(*this, result, CompressionType::COMPRESSION_ZSTD, physical_type);
 	TryLoadCompression(*this, result, CompressionType::COMPRESSION_ROARING, physical_type);
+	TryLoadCompression(*this, result, CompressionType::COMPRESSION_DICT_FSST, physical_type);
 	return result;
 }
 
