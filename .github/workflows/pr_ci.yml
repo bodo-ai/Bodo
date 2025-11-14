@@ -306,7 +306,6 @@ jobs:
       - collect-results
       - df-lib-ci
       - df-lib-non-jit-ci
-      - narwhals-ci
       - bodosql-cpp-ci
       - validate
     runs-on: ubuntu-latest
