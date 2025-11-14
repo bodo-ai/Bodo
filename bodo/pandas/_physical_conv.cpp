@@ -122,13 +122,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             auto physical_op = std::make_shared<PhysicalCountStar>();
             // Finish the pipeline at this point so that Finalize can run
             // to reduce the number of collected rows to the desired amount.
-            finished_pipelines.emplace_back(
-                this->active_pipeline->Build(physical_op));
             // The same operator will exist in both pipelines.  The sink of the
             // previous pipeline and the source of the next one.
             // We record the pipeline dependency between these two pipelines.
-            this->active_pipeline =
-                std::make_shared<PipelineBuilder>(physical_op);
+            FinishPipelineOneOperator(physical_op);
             return;
         }
         // bind_info in every expression stores the same schema for the entire
@@ -168,10 +165,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         auto physical_op =                                                  \
             std::make_shared<PhysicalQuantile<dtype_to_type<dtype>::type>>( \
                 bodo_schema, quantiles);                                    \
-        finished_pipelines.emplace_back(                                    \
-            this->active_pipeline->Build(physical_op));                     \
-        this->active_pipeline =                                             \
-            std::make_shared<PipelineBuilder>(physical_op);                 \
+        FinishPipelineOneOperator(physical_op);                             \
         return;                                                             \
     }
             // Tried to roughly order by how common the types are
@@ -194,9 +188,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         // Otherwise, create a PhysicalReduce operator
         auto physical_op =
             std::make_shared<PhysicalReduce>(bodo_schema, function_names);
-        finished_pipelines.emplace_back(
-            this->active_pipeline->Build(physical_op));
-        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+        FinishPipelineOneOperator(physical_op);
         return;
     }
 
@@ -204,9 +196,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     auto physical_agg =
         std::make_shared<PhysicalAggregate>(in_table_schema, op);
     // Finish the current pipeline with groupby build sink
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_agg));
     // Create a new pipeline with groupby output as source
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
+    FinishPipelineOneOperator(physical_agg);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
@@ -218,9 +209,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
 
     auto physical_sort =
         std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
-    finished_pipelines.emplace_back(
-        this->active_pipeline->Build(physical_sort));
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
+    FinishPipelineOneOperator(physical_sort);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
@@ -234,8 +223,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
-    std::vector<std::shared_ptr<Pipeline>> build_pipelines =
-        std::move(rhs_builder.finished_pipelines);
 
     // Create pipelines for the probe side of the join (left child)
     this->Visit(*op.children[0]);
@@ -245,17 +232,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     auto physical_join = std::make_shared<PhysicalJoin>(
         op, op.conditions, build_table_schema, probe_table_schema);
 
-    (*this->join_filter_states)[op.join_id] = physical_join->getJoinStatePtr();
-
-    build_pipelines.push_back(
-        rhs_builder.active_pipeline->Build(physical_join));
-    // Build pipelines need to execute before probe pipeline (recursively
-    // handles multiple joins)
-    this->finished_pipelines.insert(this->finished_pipelines.begin(),
-                                    build_pipelines.begin(),
-                                    build_pipelines.end());
-
+    std::shared_ptr<Pipeline> done_pipeline =
+        rhs_builder.active_pipeline->Build(physical_join);
+    (*this->join_filter_states)[op.join_id] = {physical_join->getJoinStatePtr(),
+                                               done_pipeline};
     this->active_pipeline->AddOperator(physical_join);
+    // Build side pipeline runs before probe side.
+    this->active_pipeline->addRunBefore(done_pipeline);
 }
 
 void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
@@ -268,6 +251,17 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
         std::make_shared<PhysicalJoinFilter>(op, in_table_schema,
                                              this->join_filter_states);
     this->active_pipeline->AddOperator(physical_op);
+
+    // Make sure all filter generators used by this
+    // join filter run before this pipeline.
+    for (size_t i = 0; i < op.filter_ids.size(); i++) {
+        int filter_id = op.filter_ids[i];
+        std::shared_ptr<Pipeline> filter_pipeline =
+            (*join_filter_states)[filter_id].second;
+        // Make sure generator of the filter runs before
+        // this consumer of the filter.
+        this->active_pipeline->addRunBefore(filter_pipeline);
+    }
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
@@ -276,22 +270,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
     auto physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_cte));
+    std::shared_ptr<Pipeline> done_pipeline =
+        this->active_pipeline->Build(physical_cte);
 
     // Save the physical_cte node away so that cte ref's on the non-duplicate
     // side can find it.
-    ctes.insert({op.table_index, physical_cte});
+    ctes.insert({op.table_index, {physical_cte, done_pipeline}});
     // The active pipeline finishes after the duplicate side.
     this->active_pipeline = nullptr;
-    /*
-     * The build side of joins want to insert at the front of the finished
-     * pipelines but that causes a problem with CTEs because the use of a
-     * CTE can then preceed its calculation.  When we are done with a CTE,
-     * we now lock the current set of finished pipelines so the ordering
-     * cannot be changed.
-     */
-    this->lock_finished();
-
     // Create pipelines for the side that uses the duplicate side.
     this->Visit(*op.children[1]);
 }
@@ -304,9 +290,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
         throw std::runtime_error(
             "LogicalCTERef couldn't find matching table_index.");
     }
+    auto& cte_index_info = table_index_iter->second;
     auto physical_cte_ref =
-        std::make_shared<PhysicalCTERef>(table_index_iter->second);
+        std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
+    this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
@@ -317,8 +305,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
-    std::vector<std::shared_ptr<Pipeline>> build_pipelines =
-        std::move(rhs_builder.finished_pipelines);
 
     // Create pipelines for the probe side of the join (left child)
     this->Visit(*op.children[0]);
@@ -328,15 +314,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
                                                         probe_table_schema);
 
-    build_pipelines.push_back(
-        rhs_builder.active_pipeline->Build(physical_join));
-    // Build pipelines need to execute before probe pipeline (recursively
-    // handles multiple joins)
-    this->finished_pipelines.insert(this->finished_pipelines.begin(),
-                                    build_pipelines.begin(),
-                                    build_pipelines.end());
-
+    std::shared_ptr<Pipeline> done_pipeline =
+        rhs_builder.active_pipeline->Build(physical_join);
     this->active_pipeline->AddOperator(physical_join);
+    // Build side pipeline runs before probe side.
+    this->active_pipeline->addRunBefore(done_pipeline);
 }
 
 /*
@@ -368,17 +350,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
             rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();
-            std::vector<std::shared_ptr<Pipeline>> build_pipelines =
-                std::move(rhs_builder.finished_pipelines);
             ::arrow::Schema rhs_arrow = *(rhs_table_schema->ToArrowSchema());
 
             auto physical_union_all =
                 std::make_shared<PhysicalUnionAll>(rhs_table_schema);
-            build_pipelines.push_back(
-                rhs_builder.active_pipeline->Build(physical_union_all));
-            this->finished_pipelines.insert(this->finished_pipelines.begin(),
-                                            build_pipelines.begin(),
-                                            build_pipelines.end());
+            std::shared_ptr<Pipeline> done_pipeline =
+                rhs_builder.active_pipeline->Build(physical_union_all);
+            this->active_pipeline->addRunBefore(done_pipeline);
 
             // Left-child will feed into the same table.
             this->Visit(*op.children[0]);
@@ -457,11 +435,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     auto physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
     // The same operator will exist in both pipelines.  The sink of the
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+    FinishPipelineOneOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
@@ -475,9 +452,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
 
     auto physical_sort = std::make_shared<PhysicalSort>(
         op, in_table_schema, source_cols, op.limit, op.offset);
-    finished_pipelines.emplace_back(
-        this->active_pipeline->Build(physical_sort));
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
+    FinishPipelineOneOperator(physical_sort);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
@@ -489,7 +464,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
         op.bind_data->Cast<BodoWriteFunctionData>();
     auto physical_op = write_data.CreatePhysicalOperator(in_table_schema);
 
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
+    this->terminal_pipeline = this->active_pipeline->Build(physical_op);
     this->active_pipeline = nullptr;
 }
 
@@ -507,7 +482,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
     auto physical_agg =
         std::make_shared<PhysicalAggregate>(in_table_schema, op);
     // Finish the current pipeline with groupby build sink
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_agg));
     // Create a new pipeline with groupby output as source
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
+    FinishPipelineOneOperator(physical_agg);
 }
