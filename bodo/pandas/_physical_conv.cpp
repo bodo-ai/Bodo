@@ -356,7 +356,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 std::make_shared<PhysicalUnionAll>(rhs_table_schema);
             std::shared_ptr<Pipeline> done_pipeline =
                 rhs_builder.active_pipeline->Build(physical_union_all);
-            this->active_pipeline->addRunBefore(done_pipeline);
 
             // Left-child will feed into the same table.
             this->Visit(*op.children[0]);
@@ -371,6 +370,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
             }
 
             this->active_pipeline->AddOperator(physical_union_all);
+            this->active_pipeline->addRunBefore(done_pipeline);
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union "
