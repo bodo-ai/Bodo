@@ -10,9 +10,9 @@ parameters:
   default: 'ScalingVMSet'
 - name: test_type
   type: string
-  default: NORMAL
+  default: COMPILER
   values:
-    - NORMAL
+    - COMPILER
     - SPAWN
     - CACHE
     - DF_LIB
