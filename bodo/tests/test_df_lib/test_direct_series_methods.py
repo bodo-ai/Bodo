@@ -34,7 +34,7 @@ def test_series_isin(index_val, use_index1, use_index2):
         check_pandas_types=False,
         sort_output=True,
         # We don't track RangeIndex in output
-        reset_index=isinstance(S2.index, pd.RangeIndex),
+        reset_index=True,
     )
 
 
