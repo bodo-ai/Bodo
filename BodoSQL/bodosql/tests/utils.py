@@ -446,7 +446,7 @@ def check_query(
 
             # Compute the expected output
             # We need to convert to arrow and then Pandas to maintain some types (decimal, timestamp)
-            expected_output = conn.sql(q).arrow().to_pandas()
+            expected_output = conn.sql(q).arrow().read_pandas()
 
         # Distribute the expected output and handle errors
         comm = MPI.COMM_WORLD

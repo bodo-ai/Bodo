@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "bodo"
 channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
@@ -70,9 +70,8 @@ macos = "12.0"
 python = "3.13.*"
 pip = "*"
 # Core Python Deps
-# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
-# TODO upgrade to numba 0.62.0
-numba = ">=0.60,<0.62.0"
+# Numba 0.60 is required for Python 3.9
+numba = ">=0.60,<0.63.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
