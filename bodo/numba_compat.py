@@ -1195,6 +1195,9 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         if isinstance(a, numba.core.dispatcher.OmittedArg):
             argtypes.append(types.Omitted(a.value))
         else:
+            # Bodo Change: import bodosql.compiler for BodoSQLContextType
+            if type(a).__name__ == "BodoSQLContext":
+                import bodosql.compiler # isort:skip # noqa
             argtypes.append(self.typeof_pyval(a))
     return_val = None
     try:
