@@ -76,7 +76,7 @@ jobs:
 
       # Upload notebook result to check in case previous step failed
     - name: Upload Notebook Outputs
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: notebook-outputs
         path: ./notebooks/

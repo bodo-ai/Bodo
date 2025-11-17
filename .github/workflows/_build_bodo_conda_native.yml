@@ -97,7 +97,7 @@ jobs:
         shell: bash
 
       - name: Upload Conda Package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
           path: ${{ env.CONDA_BLD_PATH }}
