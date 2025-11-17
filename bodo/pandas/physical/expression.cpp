@@ -257,13 +257,12 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<arrow::DataType> src1_dtype = src1.type();
     std::shared_ptr<arrow::DataType> src2_dtype = src2.type();
 
-    // a != a is a way of checking for NaN.  If op is != and
-    // input data type can have a NaN then convert NA to NaN.
-    if (comparator == "not_equal" && canHoldNan(src1_dtype)) {
+    // If type is float then match Pandas and convert NA to NaN.
+    if (canHoldNan(src1_dtype)) {
         arrow::Datum null_scalar = MakeNanScalar(src1_dtype);
         src1 = fill_null(src1, null_scalar);
     }
-    if (comparator == "not_equal" && canHoldNan(src2_dtype)) {
+    if (canHoldNan(src2_dtype)) {
         arrow::Datum null_scalar = MakeNanScalar(src2_dtype);
         src2 = fill_null(src2, null_scalar);
     }
