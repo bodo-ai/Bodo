@@ -236,10 +236,11 @@ def pytest_collection_modifyitems(items):
 
     # DataFrame library NP=2
     azure_df_2p_markers = [
-        pytest.mark.bodo_df_1of4,
-        pytest.mark.bodo_df_2of4,
-        pytest.mark.bodo_df_3of4,
-        pytest.mark.bodo_df_4of4,
+        pytest.mark.bodo_df_1of5,
+        pytest.mark.bodo_df_2of5,
+        pytest.mark.bodo_df_3of5,
+        pytest.mark.bodo_df_4of5,
+        pytest.mark.bodo_df_5of5,
     ]
 
     # Spawn NP=2
