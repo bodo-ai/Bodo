@@ -110,8 +110,10 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         time_pt start_filtering = start_timer();
 
         // Allocate bitmask initialized to all true
-        std::shared_ptr<array_info> row_bitmask = alloc_nullable_array_no_nulls(
-            input_batch->nrows(), Bodo_CTypes::_BOOL);
+        if (!row_bitmask || row_bitmask->length < input_batch->nrows()) {
+            row_bitmask = alloc_nullable_array_no_nulls(input_batch->nrows(),
+                                                        Bodo_CTypes::_BOOL);
+        }
         memset(
             row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
             0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
@@ -188,6 +190,8 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     std::vector<bool> can_apply_bloom_filters;
 
     bool materialize_after_each_filter;
+
+    std::shared_ptr<array_info> row_bitmask;
 
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
