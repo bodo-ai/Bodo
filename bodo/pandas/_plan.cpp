@@ -44,6 +44,7 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
+#include "optimizer/runtime_join_filter.h"
 #include "physical/project.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -82,6 +83,13 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
 
     duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
         optimizer->Optimize(std::move(in_plan));
+
+    // Insert and pushdown runtime join filters after optimization since they
+    // aren't relational
+    RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer(
+        *optimizer);
+    runtime_join_filter_pushdown_optimizer.VisitOperator(*out_plan);
+
     return out_plan;
 }
 
