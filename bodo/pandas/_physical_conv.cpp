@@ -37,6 +37,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
             selected_columns.push_back(ci.GetPrimaryIndex());
         }
     }
+    if (op.dynamic_filters) {
+        throw std::runtime_error(
+            "PhysicalPlanBuilder::Visit LogicalGet: dynamic filters not "
+            "supported");
+    }
 
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
