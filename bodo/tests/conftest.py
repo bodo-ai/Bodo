@@ -293,10 +293,6 @@ def pytest_collection_modifyitems(items):
             ):
                 item.fixturenames = ["jit_import_check"] + item.fixturenames
 
-    for item in items:
-        if hasattr(item, "fixturenames"):
-            item.fixturenames = ["track_mem"] + item.fixturenames
-
 
 def group_from_hash(testname, num_groups):
     """
