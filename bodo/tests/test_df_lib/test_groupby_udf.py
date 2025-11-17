@@ -191,6 +191,7 @@ def test_agg_mix_udf_builtin(groupby_df):
         pytest.param(
             lambda df, func: df.groupby(by=["A"]).apply(func, include_groups=False),
             id="apply",
+            marks=pytest.mark.weekly,
         ),
     ],
 )
