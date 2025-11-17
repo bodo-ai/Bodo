@@ -3258,7 +3258,6 @@ def test_bcast_intercomm():
 
 
 @pytest_mark_spawn_mode
-# @pytest.mark.skip(reason="TODO: fix standalone test")
 def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     """Test scatterv's intercomm support in spawn mode"""
     import bodo.decorators  # isort:skip # noqa

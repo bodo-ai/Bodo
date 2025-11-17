@@ -130,15 +130,6 @@ def jit_import_check():
     )
 
 
-@pytest.fixture(scope="function")
-def track_mem():
-    yield
-    used_gb = (psutil.virtual_memory().total - psutil.virtual_memory().available) / (
-        1024**3
-    )
-    print(f"System RAM used: {used_gb:.2f} GB")
-
-
 def item_file_name(item):
     """Get the name of a pytest item. Uses the default pytest implementation, except for C++ tests, where we return the cached name"""
     if isinstance(item, (CppTestFile, CppTestItem)):
