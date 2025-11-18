@@ -20,6 +20,7 @@ class Pipeline {
     std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
     bool executed;
+    // A vector of pipelines that needs to run before the current pipeline.
     std::vector<std::shared_ptr<Pipeline>> run_before;
 
     /**
