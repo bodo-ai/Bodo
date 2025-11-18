@@ -13,28 +13,49 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     : arrow_schema(std::move(arrow_schema)),
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
-      internal_reader(this->create_internal_reader(
-          catalog, table_id, iceberg_filter, iceberg_schema, snapshot_id,
-          filter_exprs, this->arrow_schema, selected_columns, limit_val)),
-
       out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
-      out_column_names(this->create_out_column_names(selected_columns,
-                                                     this->arrow_schema)) {}
+      out_column_names(
+          this->create_out_column_names(selected_columns, this->arrow_schema)) {
+    time_pt start_init = start_timer();
+
+    this->internal_reader = this->create_internal_reader(
+        catalog, table_id, iceberg_filter, iceberg_schema, snapshot_id,
+        filter_exprs, this->arrow_schema, selected_columns, limit_val,
+        this->getOpId());
+
+    this->metrics.init_time += end_timer(start_init);
+}
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
     uint64_t total_rows;
     bool is_last;
+    time_pt start_produce = start_timer();
 
     table_info *batch = internal_reader->read_batch(is_last, total_rows, true);
     auto result =
         is_last ? OperatorResult::FINISHED : OperatorResult::HAVE_MORE_OUTPUT;
+    this->metrics.produce_time += end_timer(start_produce);
+    this->metrics.rows_read += total_rows;
 
     batch->column_names = out_column_names;
     batch->metadata = out_metadata;
     return std::make_pair(std::shared_ptr<table_info>(batch), result);
+}
+
+void PhysicalReadIceberg::FinalizeSource() {
+    QueryProfileCollector::Default().SubmitOperatorName(getOpId(), ToString());
+    QueryProfileCollector::Default().SubmitOperatorStageTime(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+        this->metrics.init_time);
+    QueryProfileCollector::Default().SubmitOperatorStageTime(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+        this->metrics.produce_time);
+    QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+        this->metrics.rows_read);
 }
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
@@ -64,7 +85,7 @@ PhysicalReadIceberg::create_internal_reader(
     duckdb::TableFilterSet &filter_exprs,
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val, int64_t op_id) {
     // Pipeline buffers assume everything is nullable
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
@@ -161,7 +182,7 @@ PhysicalReadIceberg::create_internal_reader(
         catalog, table_id.c_str(), true, total_rows_to_read,
         py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
-        get_streaming_batch_size(), -1, snapshot_id);
+        get_streaming_batch_size(), op_id, snapshot_id);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;

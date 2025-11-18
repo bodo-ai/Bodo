@@ -69,6 +69,7 @@ class Executor {
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
+        QueryProfileCollector::Default().Init();
         // Convert the logical plan to a physical plan
         PhysicalPlanBuilder builder(ctes);
         builder.Visit(*plan);
@@ -105,7 +106,6 @@ class Executor {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         DEBUG_PIPELINE_CONTENTS(rank, pipelines);
 
-        QueryProfileCollector::Default().Init();
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
             DEBUG_PIPELINE_PRE_EXECUTE(rank);
