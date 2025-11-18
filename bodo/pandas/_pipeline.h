@@ -89,7 +89,10 @@ class PipelineBuilder {
     }
 
     void addRunBefore(std::shared_ptr<Pipeline> pipeline) {
-        run_before.emplace_back(pipeline);
+        if (!pipeline) {
+            throw std::runtime_error("Adding null pipeline to run before.");
+        }
+        run_before.push_back(pipeline);
     }
 
     /// @brief Build the pipeline and return it

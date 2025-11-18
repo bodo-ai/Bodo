@@ -218,24 +218,49 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
+    auto physical_join = std::make_shared<PhysicalJoin>(op);
+
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder(ctes, join_filter_states);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
 
+    /*
+     * Originally in this code there was a chicken-and-egg problem.
+     * We needed probe and build schemas to construct the PhysicalJoin
+     * and needed the PhysicalJoin to make the build-side pipeline and
+     * that pipeline needed to fill in the filter_states and the
+     * filter states needed by the probe side of the join but that was
+     * impossible since you had to process the probe side before you
+     * could get the probe-side schema needed for the PhysicalJoin.
+     *
+     * So, the initialization of PhysicalJoin has been broken up into
+     * the duckdb operation and then separately later the providing of
+     * the schemas and all the usage of that to configure the join.
+     * This later function is buildProbeSchemas below.  So now, we can
+     * make the PhysicalJoin object as the first thing and then use
+     * that to store the build-side pipeline in join_filter_states so
+     * that it is accessible when processin the probe side.
+     */
+    std::shared_ptr<Pipeline> done_pipeline =
+        rhs_builder.active_pipeline->Build(physical_join);
+    if (!done_pipeline) {
+        throw std::runtime_error("done_pipeline null in ComparisonJoin.");
+    }
+    // Visit children[0] only need the pipeline portion.
+    (*this->join_filter_states)[op.join_id] = {nullptr, done_pipeline};
+
     // Create pipelines for the probe side of the join (left child)
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_join = std::make_shared<PhysicalJoin>(
-        op, op.conditions, build_table_schema, probe_table_schema);
-
-    std::shared_ptr<Pipeline> done_pipeline =
-        rhs_builder.active_pipeline->Build(physical_join);
+    physical_join->buildProbeSchemas(op, op.conditions, build_table_schema,
+                                     probe_table_schema);
     (*this->join_filter_states)[op.join_id] = {physical_join->getJoinStatePtr(),
                                                done_pipeline};
+
     this->active_pipeline->AddOperator(physical_join);
     // Build side pipeline runs before probe side.
     this->active_pipeline->addRunBefore(done_pipeline);
@@ -258,6 +283,11 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
         int filter_id = op.filter_ids[i];
         std::shared_ptr<Pipeline> filter_pipeline =
             (*join_filter_states)[filter_id].second;
+        if (!filter_pipeline) {
+            throw std::runtime_error(
+                "Pipeline for given filter id not found in "
+                "join_filter_states.");
+        }
         // Make sure generator of the filter runs before
         // this consumer of the filter.
         this->active_pipeline->addRunBefore(filter_pipeline);
