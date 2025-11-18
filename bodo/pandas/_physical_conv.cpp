@@ -221,7 +221,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     auto physical_join = std::make_shared<PhysicalJoin>(op);
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states);
+    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
+                                    join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -249,7 +250,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         throw std::runtime_error("done_pipeline null in ComparisonJoin.");
     }
     // Visit children[0] only need the pipeline portion.
-    (*this->join_filter_states)[op.join_id] = {nullptr, done_pipeline};
+    (*this->join_filter_pipelines)[op.join_id] = done_pipeline;
 
     // Create pipelines for the probe side of the join (left child)
     this->Visit(*op.children[0]);
@@ -258,8 +259,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 
     physical_join->buildProbeSchemas(op, op.conditions, build_table_schema,
                                      probe_table_schema);
-    (*this->join_filter_states)[op.join_id] = {physical_join->getJoinStatePtr(),
-                                               done_pipeline};
+    (*this->join_filter_states)[op.join_id] = physical_join->getJoinStatePtr();
 
     this->active_pipeline->AddOperator(physical_join);
     // Build side pipeline runs before probe side.
@@ -282,7 +282,7 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     for (size_t i = 0; i < op.filter_ids.size(); i++) {
         int filter_id = op.filter_ids[i];
         std::shared_ptr<Pipeline> filter_pipeline =
-            (*join_filter_states)[filter_id].second;
+            (*join_filter_pipelines)[filter_id];
         if (!filter_pipeline) {
             throw std::runtime_error(
                 "Pipeline for given filter id not found in "
@@ -331,7 +331,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     // Same as LogicalComparisonJoin, but without conditions.
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states);
+    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
+                                    join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -376,7 +377,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
         // UNION ALL
         if (op.setop_all) {
             // Right-child will feed into a table.
-            PhysicalPlanBuilder rhs_builder(ctes, join_filter_states);
+            PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
+                                            join_filter_pipelines);
             rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();

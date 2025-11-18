@@ -25,8 +25,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     explicit PhysicalJoinFilter(
         bodo::LogicalJoinFilter& logical_filter,
         std::shared_ptr<bodo::Schema>& input_schema,
-        std::shared_ptr<std::unordered_map<
-            int, std::pair<JoinState*, std::shared_ptr<Pipeline>>>>&
+        std::shared_ptr<std::unordered_map<int, JoinState*>>&
             join_filter_states)
         : filter_ids(std::move(logical_filter.filter_ids)),
           filter_columns(std::move(logical_filter.filter_columns)),
@@ -125,7 +124,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 continue;
             }
 
-            JoinState* join_state_ = (*join_filter_states)[filter_id].first;
+            JoinState* join_state_ = (*join_filter_states)[filter_id];
             if (join_state_->IsNestedLoopJoin()) {
                 continue;
             }
@@ -193,9 +192,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
-    std::shared_ptr<std::unordered_map<
-        int, std::pair<JoinState*, std::shared_ptr<Pipeline>>>>
-        join_filter_states;
+    std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
 
     PhysicalJoinFilterMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
