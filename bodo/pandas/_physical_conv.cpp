@@ -242,7 +242,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
      * This later function is buildProbeSchemas below.  So now, we can
      * make the PhysicalJoin object as the first thing and then use
      * that to store the build-side pipeline in join_filter_states so
-     * that it is accessible when processin the probe side.
+     * that it is accessible when processing the probe side.
      */
     std::shared_ptr<Pipeline> done_pipeline =
         rhs_builder.active_pipeline->Build(physical_join);
