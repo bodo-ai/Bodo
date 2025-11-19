@@ -30,7 +30,9 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
     import pyiceberg.utils.config
     from pyiceberg.catalog import URI, WAREHOUSE_LOCATION
+    from pyiceberg.catalog.glue import GLUE_ID, GLUE_REGION
     from pyiceberg.catalog.rest import OAUTH2_SERVER_URI
+    from pyiceberg.io import AWS_REGION
     from pyiceberg.typedef import RecursiveDict
 
     parse_res = urlparse(conn_str)
@@ -54,8 +56,14 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
         from pyiceberg.catalog.glue import GlueCatalog
 
         catalog = GlueCatalog
-        # Every instance of the Glue catalog can be used to access all Glue resources
+
+        glue_id = properties.get(GLUE_ID)
+        region = properties.get(GLUE_REGION, properties.get(AWS_REGION))
         cache_key = "glue"
+        if glue_id:
+            cache_key += f"_{glue_id}"
+        if region:
+            cache_key += f"_{region}"
 
     else:
         if parse_res.scheme in (

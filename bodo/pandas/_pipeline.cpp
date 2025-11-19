@@ -302,6 +302,7 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(
     pipeline->between_ops = std::move(between_ops);
     pipeline->sink = sink;
     pipeline->executed = false;
+    pipeline->run_before = std::move(run_before);
     return pipeline;
 }
 
