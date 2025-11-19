@@ -154,45 +154,10 @@ arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
  * @brief Returns true if arrow datatype can hold a NaN.
  *
  */
-bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
-    return type->id() == arrow::Type::FLOAT ||
+inline bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
+    return type->id() == arrow::Type::HALF_FLOAT ||
+           type->id() == arrow::Type::FLOAT ||
            type->id() == arrow::Type::DOUBLE;
-}
-
-int64_t DatumLength(const arrow::Datum& d) {
-    switch (d.kind()) {
-        case arrow::Datum::ARRAY:
-            return d.make_array()->length();
-        case arrow::Datum::CHUNKED_ARRAY:
-            return d.chunked_array()->length();
-        case arrow::Datum::SCALAR:
-            return 1;
-        case arrow::Datum::RECORD_BATCH:
-            return d.record_batch()->num_rows();
-        case arrow::Datum::TABLE:
-            return d.table()->num_rows();
-        default:
-            return 0;  // NONE or unsupported
-    }
-}
-
-std::string DatumKindToString(arrow::Datum::Kind kind) {
-    switch (kind) {
-        case arrow::Datum::NONE:
-            return "NONE";
-        case arrow::Datum::SCALAR:
-            return "SCALAR";
-        case arrow::Datum::ARRAY:
-            return "ARRAY";
-        case arrow::Datum::CHUNKED_ARRAY:
-            return "CHUNKED_ARRAY";
-        case arrow::Datum::RECORD_BATCH:
-            return "RECORD_BATCH";
-        case arrow::Datum::TABLE:
-            return "TABLE";
-        default:
-            return "UNKNOWN";
-    }
 }
 
 arrow::Datum MakeNanScalar(const std::shared_ptr<arrow::DataType>& dtype) {
