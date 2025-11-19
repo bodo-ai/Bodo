@@ -31,11 +31,7 @@ void RuntimeJoinFilterPushdownOptimizer::VisitOperator(
                         duckdb::ExpressionType::BOUND_COLUMN_REF) {
                     auto &left_colref =
                         cond.left->Cast<duckdb::BoundColumnRefExpression>();
-                    // auto &right_colref =
-                    // cond.right->Cast<duckdb::BoundColumnRefExpression>();
-                    left_eq_cols.push_back(
-                        colref_map[{left_colref.binding.table_index,
-                                    left_colref.binding.column_index}]);
+                    left_eq_cols.push_back(left_colref.binding.column_index);
                 } else {
                     // Only support simple column references for now
                     continue;
