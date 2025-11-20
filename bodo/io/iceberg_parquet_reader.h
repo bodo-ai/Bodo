@@ -130,6 +130,14 @@ class IcebergParquetReader : public ArrowReader {
 
     IcebergParquetReaderMetrics iceberg_reader_metrics;
 
+    /**
+     * @brief Report Read Stage metrics if they haven't already been reported.
+     * Note that this will only report the metrics to the QueryProfileCollector
+     * the first time it's called.
+     *
+     */
+    void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) override;
+
    protected:
     bool force_row_level_read() const override;
 
@@ -167,14 +175,6 @@ class IcebergParquetReader : public ArrowReader {
      *
      */
     void ReportInitStageMetrics(std::vector<MetricBase>& metrics_out) override;
-
-    /**
-     * @brief Report Read Stage metrics if they haven't already been reported.
-     * Note that this will only report the metrics to the QueryProfileCollector
-     * the first time it's called.
-     *
-     */
-    void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) override;
 
    private:
     // Pyiceberg catalog to read table metadata

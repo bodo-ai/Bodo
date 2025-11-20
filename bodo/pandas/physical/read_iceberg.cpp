@@ -46,6 +46,13 @@ PhysicalReadIceberg::ProduceBatch() {
 }
 
 void PhysicalReadIceberg::FinalizeSource() {
+    std::vector<MetricBase> metrics;
+    this->internal_reader->ReportReadStageMetrics(metrics);
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(this->op_id, 1),
+        std::move(metrics));
+
     QueryProfileCollector::Default().SubmitOperatorName(getOpId(), ToString());
     QueryProfileCollector::Default().SubmitOperatorStageTime(
         QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
