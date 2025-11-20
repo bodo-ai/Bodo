@@ -10,20 +10,22 @@ struct JoinColumnInfo {
 
 class RuntimeJoinFilterPushdownOptimizer {
    public:
-    explicit RuntimeJoinFilterPushdownOptimizer(
-        bododuckdb::Optimizer &optimizer);
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> VisitOperator(
-        bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op);
+    // explicit RuntimeJoinFilterPushdownOptimizer(
+    //     duckdb::Optimizer &optimizer);
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitOperator(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 
    private:
-    [[maybe_unused]] bododuckdb::Optimizer &optimizer;
+    //[[maybe_unused]] duckdb::Optimizer &optimizer;
     size_t cur_join_filter_id = 0;
     using JoinFilterProgramState = std::unordered_map<int, JoinColumnInfo>;
     JoinFilterProgramState join_state_map;
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> insert_join_filters(
-        bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op,
+    duckdb::unique_ptr<duckdb::LogicalOperator> insert_join_filters(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op,
         JoinFilterProgramState &join_state_map);
 
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> VisitCompJoin(
-        bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op);
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitCompJoin(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitProjection(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

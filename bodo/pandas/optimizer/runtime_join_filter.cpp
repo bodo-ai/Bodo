@@ -1,26 +1,34 @@
 #include "optimizer/runtime_join_filter.h"
 #include <algorithm>
 #include <iostream>
-#include <memory>
+#include <numeric>
 #include "_plan.h"
 #include "_util.h"
-#include "duckdb/common/typedefs.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
 
-RuntimeJoinFilterPushdownOptimizer::RuntimeJoinFilterPushdownOptimizer(
-    bododuckdb::Optimizer &_optimizer)
-    : optimizer(_optimizer) {}
+// RuntimeJoinFilterPushdownOptimizer::RuntimeJoinFilterPushdownOptimizer(
+//     duckdb::Optimizer &_optimizer)
+//     : optimizer(_optimizer) {}
 
-bododuckdb::unique_ptr<bododuckdb::LogicalOperator>
+duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op) {
-    if (op->type == duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
-        return this->VisitCompJoin(op);
-    } else {
-        op = this->insert_join_filters(op, this->join_state_map);
-        this->join_state_map.clear();
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    switch (op->type) {
+        case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
+            return this->VisitCompJoin(op);
+        } break;
+        case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
+            op = this->VisitProjection(op);
+        } break;
+        default: {
+            // If we don't know how to handle this operator, insert any pending
+            // join filters and clear the state
+            op = this->insert_join_filters(op, this->join_state_map);
+            this->join_state_map.clear();
+        }
     }
     for (auto &i : op->children) {
         i = VisitOperator(i);
@@ -28,9 +36,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
     return std::move(op);
 }
 
-bododuckdb::unique_ptr<bododuckdb::LogicalOperator>
+duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::insert_join_filters(
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op,
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op,
     JoinFilterProgramState &join_state_map) {
     if (this->join_state_map.size() == 0) {
         return std::move(op);
@@ -52,9 +60,9 @@ RuntimeJoinFilterPushdownOptimizer::insert_join_filters(
     return std::move(join_filter);
 }
 
-bododuckdb::unique_ptr<bododuckdb::LogicalOperator>
+duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
-    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op) {
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
     JoinFilterProgramState out_join_state_map;
     JoinFilterProgramState left_join_state_map;
     JoinFilterProgramState right_join_state_map;
@@ -164,7 +172,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
 
     if (join_op.join_type == duckdb::JoinType::RIGHT ||
         join_op.join_type == duckdb::JoinType::INNER) {
-        // Insert runtime join filter
+        // Insert runtime join filter on the probe side
         std::vector<int64_t> left_eq_cols;
         for (duckdb::JoinCondition &cond : join_op.conditions) {
             // TODO Support non-equalities for pushing to I/O
@@ -182,7 +190,6 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     cond.left->Cast<duckdb::BoundColumnRefExpression>();
                 left_eq_cols.push_back(left_colref.binding.column_index);
             } else {
-                // Only support simple column references for now
                 continue;
             }
         }
@@ -199,4 +206,42 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
     // Visit build side
     op->children[1] = VisitOperator(op->children[1]);
     return this->insert_join_filters(op, out_join_state_map);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitProjection(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    duckdb::LogicalProjection &proj_op = op->Cast<duckdb::LogicalProjection>();
+    // Remap the columns from join_state through the projection
+    // then propagate down
+    JoinFilterProgramState new_join_state_map;
+    for (const auto &[join_id, join_info] : this->join_state_map) {
+        std::vector<int64_t> new_filter_columns;
+        std::vector<bool> new_is_first_locations;
+        for (long long col_idx : join_info.filter_columns) {
+            if (col_idx == -1) {
+                new_filter_columns.push_back(-1);
+                new_is_first_locations.push_back(false);
+                continue;
+            }
+            auto &expr = proj_op.expressions[col_idx];
+            if (expr->GetExpressionType() ==
+                duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                auto &colref_expr =
+                    expr->Cast<duckdb::BoundColumnRefExpression>();
+                new_filter_columns.push_back(colref_expr.binding.column_index);
+                new_is_first_locations.push_back(true);
+            } else {
+                // Projection expression is not a column ref, cannot push down
+                new_filter_columns.push_back(-1);
+                new_is_first_locations.push_back(false);
+            }
+        }
+        new_join_state_map[join_id] = {
+            .filter_columns = new_filter_columns,
+            .is_first_locations = new_is_first_locations};
+    }
+    this->join_state_map = new_join_state_map;
+
+    return std::move(op);
 }
