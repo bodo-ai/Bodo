@@ -1,5 +1,6 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
+#include <iostream>
 #include "../../libs/_utils.h"
 #include "../_util.h"
 #include "physical/operator.h"
@@ -37,11 +38,11 @@ PhysicalReadIceberg::ProduceBatch() {
     table_info *batch = internal_reader->read_batch(is_last, total_rows, true);
     auto result =
         is_last ? OperatorResult::FINISHED : OperatorResult::HAVE_MORE_OUTPUT;
-    this->metrics.produce_time += end_timer(start_produce);
-    this->metrics.rows_read += total_rows;
 
     batch->column_names = out_column_names;
     batch->metadata = out_metadata;
+    this->metrics.produce_time += end_timer(start_produce);
+    this->metrics.rows_read += total_rows;
     return std::make_pair(std::shared_ptr<table_info>(batch), result);
 }
 
