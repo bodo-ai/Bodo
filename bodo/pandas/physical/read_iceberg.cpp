@@ -1,6 +1,5 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
-#include <iostream>
 #include "../../libs/_utils.h"
 #include "../_util.h"
 #include "physical/operator.h"
