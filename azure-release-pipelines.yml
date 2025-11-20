@@ -40,8 +40,10 @@ variables:
   bodo_2p_total: 30
   bodo_df_1p_each: "1,2"
   bodo_df_1p_total: 2
-  bodo_df_2p_each: "1,2,3"
-  bodo_df_2p_total: 3
+  bodo_spawn_2p_each: "1,2"
+  bodo_spawn_2p_total: 2
+  bodo_df_2p_each: "1,2,3,4,5"
+  bodo_df_2p_total: 5
   bodosql_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12"
   bodosql_1p_total: 12
   bodosql_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
@@ -56,7 +58,7 @@ stages:
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Bodo_Tests
-      test_type: NORMAL
+      test_type: COMPILER
       pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
@@ -87,9 +89,10 @@ stages:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "spawn_mode"
-        TEST_2P:
-          NP: 2
-          PYTEST_MARKER: "spawn_mode"
+        ${{ each slice in split(variables.bodo_spawn_2p_each, ',') }}:
+          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_spawn_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: "spawn_mode and ${{ format('bodo_spawn_{0}of{1} and ({2})', slice, variables.bodo_spawn_2p_total, parameters.PYTEST_MARKER) }}"
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -100,11 +103,11 @@ stages:
         ${{ each slice in split(variables.bodo_df_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_df_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: "df_lib and not weekly and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
+            PYTEST_MARKER: "df_lib and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
         ${{ each slice in split(variables.bodo_df_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_df_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: "df_lib and not weekly and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
+            PYTEST_MARKER: "df_lib and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
 
 
 - stage: Test_BodoSQL

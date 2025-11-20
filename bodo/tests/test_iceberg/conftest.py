@@ -66,7 +66,8 @@ def polaris_server():
     enabling "Allow the default Docker socket to be used" in
     advanced settings of Docker Desktop.
     """
-    from testcontainers.core.container import DockerContainer, wait_for_logs
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.waiting_utils import wait_for_logs
 
     # Can't use run_rank0 because containers aren't pickelable
     err = None
