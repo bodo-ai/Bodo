@@ -88,7 +88,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // aren't relational
     RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer(
         *optimizer);
-    runtime_join_filter_pushdown_optimizer.VisitOperator(*out_plan);
+    out_plan = runtime_join_filter_pushdown_optimizer.VisitOperator(out_plan);
 
     return out_plan;
 }
