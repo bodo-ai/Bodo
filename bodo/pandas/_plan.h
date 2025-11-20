@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
+#include "duckdb/common/insertion_order_preserving_map.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/attached_database.hpp"
@@ -46,6 +47,28 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
         return children[0]->GetColumnBindings();
+    }
+
+    duckdb::string GetName() const override { return "LogicalJoinFilter"; }
+    duckdb::InsertionOrderPreservingMap<duckdb::string> ParamsToString()
+        const override {
+        duckdb::InsertionOrderPreservingMap<duckdb::string> map;
+
+        map["filter_ids"] =
+            fmt::format("{}", fmt::join(this->filter_ids, ", "));
+        map["filter_columns"] = "[";
+        for (const auto &cols : this->filter_columns) {
+            map["filter_columns"] +=
+                fmt::format("[{}], ", fmt::join(cols, ", "));
+        }
+        map["filter_columns"] += "]";
+        map["is_first_locations"] = "[";
+        for (const auto &locs : this->is_first_locations) {
+            map["is_first_locations"] +=
+                fmt::format("[{}], ", fmt::join(locs, ", "));
+        }
+        map["is_first_locations"] += "]";
+        return map;
     }
 
     // IDs of joins creating each filter

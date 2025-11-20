@@ -23,4 +23,7 @@ class RuntimeJoinFilterPushdownOptimizer {
     bododuckdb::unique_ptr<bododuckdb::LogicalOperator> insert_join_filters(
         bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op,
         JoinFilterProgramState &join_state_map);
+
+    bododuckdb::unique_ptr<bododuckdb::LogicalOperator> VisitCompJoin(
+        bododuckdb::unique_ptr<bododuckdb::LogicalOperator> &op);
 };
