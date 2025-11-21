@@ -76,9 +76,7 @@ def _construct_parquet_infos(
         if manifest_evaluators[manifest_file.partition_spec_id](manifest_file)
     ]
 
-    n_fests = 0
     for manifest_file in manifests:
-        n_fests += 1
         # Similar to PyIceberg's fetch_manifest_entry here:
         # https://github.com/apache/iceberg-python/blob/38ebb19a39407f52fe439289af8be81268932b0b/pyiceberg/manifest.py#L696
         input_file = table.io.new_input(manifest_file.manifest_path)
@@ -92,8 +90,6 @@ def _construct_parquet_infos(
             for entry in reader:
                 file_path = entry.data_file.file_path
                 file_path_to_schema_id[file_path] = schema_id
-
-    print("manifest files opened", n_fests)
 
     get_file_to_schema_us = time.monotonic_ns() - s
 
