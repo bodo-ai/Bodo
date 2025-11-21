@@ -85,6 +85,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_scalar_udf_result_type,
     insert_bodo_scalar,
+    scalarOutputNACheck,
     wrap_module_functions_and_methods,
     wrap_plan,
 )
@@ -576,6 +577,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the first n rows of the series. If head_s is present and n < len(head_s) we call head on head_s.
         Otherwise we use the data fetched from the workers.
         """
+        if n < 0:
+            # Convert the negative number of the number not to include to a positive number so the rest of the
+            # code can run normally.  Unfortunately, this will likely require a plan execution here.
+            n = self.shape[0] + n
+
         if n == 0 and self._head_s is not None:
             if self._exec_state == ExecState.COLLECTED:
                 return self.iloc[:0].copy()
@@ -935,7 +941,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = _compute_series_reduce(self, ["min"])
         if df.is_lazy_plan():
             return BodoScalar(df["0"])
-        return df["0"][0]
+        ser = df["0"]
+        return scalarOutputNACheck(ser[0], ser.dtype)
 
     @check_args_fallback(unsupported="all")
     def max(
@@ -946,7 +953,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = _compute_series_reduce(self, ["max"])
         if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
-        return df["0"][0]
+        ser = df["0"]
+        return scalarOutputNACheck(ser[0], ser.dtype)
 
     @check_args_fallback(unsupported="all")
     def sum(

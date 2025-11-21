@@ -227,16 +227,22 @@ def pytest_collection_modifyitems(items):
 
     # DataFrame library NP=2
     azure_df_2p_markers = [
-        pytest.mark.bodo_df_1of3,
-        pytest.mark.bodo_df_2of3,
-        pytest.mark.bodo_df_3of3,
+        pytest.mark.bodo_df_1of5,
+        pytest.mark.bodo_df_2of5,
+        pytest.mark.bodo_df_3of5,
+        pytest.mark.bodo_df_4of5,
+        pytest.mark.bodo_df_5of5,
     ]
+
+    # Spawn NP=2
+    azure_spawn_2p_markers = [pytest.mark.bodo_spawn_1of2, pytest.mark.bodo_spawn_2of2]
 
     test_splits = [
         azure_1p_markers,
         azure_2p_markers,
         azure_df_1p_markers,
         azure_df_2p_markers,
+        azure_spawn_2p_markers,
     ]
 
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want

@@ -3260,6 +3260,9 @@ def test_bcast_intercomm():
 @pytest_mark_spawn_mode
 def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     """Test scatterv's intercomm support in spawn mode"""
+    import bodo.decorators  # isort:skip # noqa
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
@@ -3271,6 +3274,9 @@ def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
 @pytest_mark_spawn_mode
 def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     """Test gatherv's intercomm support in spawn mode"""
+    import bodo.decorators  # isort:skip # noqa
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     # Scatter the data to workers then gather
     spawner = bodo.spawn.spawner.get_spawner()

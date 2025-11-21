@@ -736,7 +736,7 @@ def test_describe_args(memory_leak_check):
         return df.describe(include="all")
 
     def impl_exclude(df):
-        return df.describe(exclude=[np.number])
+        return df.describe(exclude=[np.int32])
 
     df = pd.DataFrame(
         {
