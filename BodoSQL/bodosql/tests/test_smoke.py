@@ -391,6 +391,7 @@ def test_smoke_groupby_aggregation(smoke_ctx, spark_info, memory_leak_check):
 
 
 @pytest.mark.smoke
+@pytest.mark.timeout(2000)
 def test_smoke_nogroup_aggregation(smoke_ctx, spark_info, memory_leak_check):
     """
     Tests only no-groupby aggregation
