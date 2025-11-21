@@ -59,12 +59,42 @@
 class Executor {
    private:
     std::vector<std::shared_ptr<Pipeline>> pipelines;
+    /*
+     * @brief Do topological sort and fill in the pipelines vector.
+     *
+     * @param cur - the current Pipeline to examine for inclusion in pipelines.
+     * @param seen - used for recursion stack cycle detection
+     */
+    void fillPipelinesTopoSort(std::shared_ptr<Pipeline> cur,
+                               std::set<std::shared_ptr<Pipeline>> seen =
+                                   std::set<std::shared_ptr<Pipeline>>()) {
+        // Check if cur is already in seen
+        if (seen.find(cur) != seen.end()) {
+            throw std::runtime_error(
+                "Cycle detected during fillPipelinesTopoSort.");
+        }
+
+        // Otherwise, mark it as seen
+        seen.insert(cur);
+
+        for (auto it = cur->run_before_begin(); it != cur->run_before_end();
+             ++it) {
+            fillPipelinesTopoSort(*it, seen);
+        }
+
+        pipelines.emplace_back(cur);
+
+        // Remove it from seen so if it occurs in other parts of the tree
+        // (which can happen for CTE pipelines) that it won't falsely
+        // think there is a cycle and throw an exception.
+        seen.erase(cur);
+    }
 
    public:
     // Holds table_index to PhysicalCTE mapping during physical plan
     // construction. Executor only active for one plan execution so ctes cleaned
     // up by destructor.
-    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>> ctes;
+    std::map<duckdb::idx_t, CTEInfo> ctes;
 
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
@@ -74,25 +104,18 @@ class Executor {
         PhysicalPlanBuilder builder(ctes);
         builder.Visit(*plan);
 
-        // Move frozen/locked pipelines from builder to Executor pipelines.
-        pipelines.insert(
-            pipelines.end(),
-            std::make_move_iterator(builder.locked_pipelines.begin()),
-            std::make_move_iterator(builder.locked_pipelines.end()));
-
-        // Move normal pipelines from builder to Executor pipelines.
-        pipelines.insert(
-            pipelines.end(),
-            std::make_move_iterator(builder.finished_pipelines.begin()),
-            std::make_move_iterator(builder.finished_pipelines.end()));
-
         // Write finalizes the active pipeline but others need result collection
+        std::shared_ptr<Pipeline> root_pipeline;
         if (builder.active_pipeline != nullptr) {
             std::shared_ptr<bodo::Schema> in_schema =
                 builder.active_pipeline->getPrevOpOutputSchema();
-            pipelines.push_back(builder.active_pipeline->BuildEnd(
-                in_schema, bodo::Schema::FromArrowSchema(out_schema)));
+            root_pipeline = builder.active_pipeline->BuildEnd(
+                in_schema, bodo::Schema::FromArrowSchema(out_schema));
+        } else {
+            assert(builder.terminal_pipeline);
+            root_pipeline = builder.terminal_pipeline;
         }
+        fillPipelinesTopoSort(root_pipeline);
     }
 
     /**

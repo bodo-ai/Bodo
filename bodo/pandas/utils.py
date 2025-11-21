@@ -9,6 +9,7 @@ import types as pytypes
 import typing as pt
 import warnings
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 
@@ -1612,3 +1613,19 @@ def wrap_module_functions_and_methods(module):
                         elif isinstance(attr, staticmethod):
                             wrapped = staticmethod(wrapped)
                         setattr(obj, attr_name, wrapped)
+
+
+def scalarOutputNACheck(out, dtype):
+    """Pandas will convert some types to float and return NaN
+    if there is no data.
+    """
+    if isinstance(out, pd._libs.missing.NAType):
+        if isinstance(dtype, pd.ArrowDtype):
+            dtype = dtype.numpy_dtype
+
+        if np.issubdtype(dtype, np.floating):
+            return np.nan
+        elif np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
+            # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
+            return np.nan
+    return out

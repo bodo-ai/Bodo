@@ -12,38 +12,50 @@
 #include "_pipeline.h"
 #include "physical/cte.h"
 
+struct CTEInfo {
+    std::shared_ptr<PhysicalCTE> physical_node;
+    std::shared_ptr<Pipeline> cte_pipeline_root;
+};
+
 class PhysicalPlanBuilder {
    public:
-    std::vector<std::shared_ptr<Pipeline>> locked_pipelines;
-    // TODO: Make private properties later
-    std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
     std::shared_ptr<PipelineBuilder> active_pipeline;
-    std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& ctes;
+    std::shared_ptr<Pipeline> terminal_pipeline;
+    std::map<duckdb::idx_t, CTEInfo>& ctes;
 
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
     std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
+    // Mapping of join ids to the pipeline for build side of the join.
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+        join_filter_pipelines;
 
     PhysicalPlanBuilder(
-        std::map<duckdb::idx_t, std::shared_ptr<PhysicalCTE>>& _ctes,
+        std::map<duckdb::idx_t, CTEInfo>& _ctes,
         std::shared_ptr<std::unordered_map<int, JoinState*>>
             _join_filter_states =
-                std::make_shared<std::unordered_map<int, JoinState*>>())
+                std::make_shared<std::unordered_map<int, JoinState*>>(),
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            _join_filter_pipelines = std::make_shared<
+                std::unordered_map<int, std::shared_ptr<Pipeline>>>())
         : active_pipeline(nullptr),
           ctes(_ctes),
-          join_filter_states(_join_filter_states) {}
+          join_filter_states(_join_filter_states),
+          join_filter_pipelines(_join_filter_pipelines) {}
 
-    /**
-     * @brief Move finshed_pipelines into locked category
-     * so that nothing can be inserted before them.
-     */
-    void lock_finished() {
-        locked_pipelines.insert(
-            locked_pipelines.end(),
-            std::make_move_iterator(finished_pipelines.begin()),
-            std::make_move_iterator(finished_pipelines.end()));
-        finished_pipelines.clear();
+    template <typename T>
+    void FinishPipelineOneOperator(std::shared_ptr<T> obj) {
+        static_assert(std::is_base_of<PhysicalSink, T>::value,
+                      "T must derive from PhysicalSink");
+        static_assert(std::is_base_of<PhysicalSource, T>::value,
+                      "T must derive from PhysicalSource");
+
+        std::shared_ptr<Pipeline> done_pipeline =
+            active_pipeline->Build(std::static_pointer_cast<PhysicalSink>(obj));
+        active_pipeline = std::make_shared<PipelineBuilder>(
+            std::static_pointer_cast<PhysicalSource>(obj));
+        active_pipeline->addRunBefore(done_pipeline);
     }
 
     void Visit(duckdb::LogicalGet& op);

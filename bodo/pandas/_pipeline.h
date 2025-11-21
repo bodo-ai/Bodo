@@ -20,6 +20,8 @@ class Pipeline {
     std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
     bool executed;
+    // A vector of pipelines that needs to run before the current pipeline.
+    std::vector<std::shared_ptr<Pipeline>> run_before;
 
     /**
      * @brief Execute the pipeline starting at a certain point.
@@ -48,6 +50,16 @@ class Pipeline {
     // returns a PyObject* of Iceberg files infos.
     std::variant<std::shared_ptr<table_info>, PyObject *> GetResult();
 
+    // Const iterator accessors
+    std::vector<std::shared_ptr<Pipeline>>::const_iterator run_before_begin()
+        const {
+        return run_before.begin();
+    }
+    std::vector<std::shared_ptr<Pipeline>>::const_iterator run_before_end()
+        const {
+        return run_before.end();
+    }
+
 #ifdef DEBUG_PIPELINE
     void printPipeline(void) {
         int rank;
@@ -66,6 +78,7 @@ class PipelineBuilder {
    private:
     std::shared_ptr<PhysicalSource> source;
     std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
+    std::vector<std::shared_ptr<Pipeline>> run_before;
 
    public:
     explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
@@ -74,6 +87,13 @@ class PipelineBuilder {
     // Add a physical operator to the pipeline
     void AddOperator(std::shared_ptr<PhysicalProcessBatch> op) {
         between_ops.emplace_back(op);
+    }
+
+    void addRunBefore(std::shared_ptr<Pipeline> pipeline) {
+        if (!pipeline) {
+            throw std::runtime_error("Adding null pipeline to run before.");
+        }
+        run_before.push_back(pipeline);
     }
 
     /// @brief Build the pipeline and return it
