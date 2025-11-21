@@ -65,7 +65,7 @@ def _construct_parquet_infos(
     snap = table.current_snapshot()
     assert snap is not None
 
-    # Filter manifest files based on partition spec
+    # Filter manifest files based on partition summaries, similar to:
     # https://github.com/apache/iceberg-python/blob/59dc8d13ad4e1500fff12946f1bfaddb5484f90e/pyiceberg/table/__init__.py#L1942
     manifest_evaluators: dict[int, pt.Callable[[ManifestFile], bool]] = KeyDefaultDict(
         table_scan._build_manifest_evaluator
