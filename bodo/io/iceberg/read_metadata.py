@@ -34,11 +34,11 @@ if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
     from pyiceberg.expressions import BooleanExpression
     from pyiceberg.io import FileIO
-    from pyiceberg.table import FileScanTask, Table
+    from pyiceberg.table import DataScan, FileScanTask, ManifestFile, Table
 
 
 def _construct_parquet_infos(
-    table: Table, tasks: pt.Iterable[FileScanTask]
+    table: Table, table_scan: DataScan
 ) -> tuple[list[IcebergParquetInfo], int]:
     """
     Construct IcebergParquetInfo objects for each file
@@ -55,15 +55,28 @@ def _construct_parquet_infos(
         ManifestEntry,
         ManifestEntryStatus,
     )
+    from pyiceberg.typedef import KeyDefaultDict
 
     file_path_to_schema_id = {}
+    tasks: pt.Iterable[FileScanTask] = table_scan.plan_files()
 
     s = time.monotonic_ns()
     # Construct a mapping from file path to schema ID
     snap = table.current_snapshot()
     assert snap is not None
 
-    for manifest_file in snap.manifests(table.io):
+    # Filter manifest files based on partition summaries, similar to:
+    # https://github.com/apache/iceberg-python/blob/59dc8d13ad4e1500fff12946f1bfaddb5484f90e/pyiceberg/table/__init__.py#L1942
+    manifest_evaluators: dict[int, pt.Callable[[ManifestFile], bool]] = KeyDefaultDict(
+        table_scan._build_manifest_evaluator
+    )
+    manifests = [
+        manifest_file
+        for manifest_file in snap.manifests(table.io)
+        if manifest_evaluators[manifest_file.partition_spec_id](manifest_file)
+    ]
+
+    for manifest_file in manifests:
         # Similar to PyIceberg's fetch_manifest_entry here:
         # https://github.com/apache/iceberg-python/blob/38ebb19a39407f52fe439289af8be81268932b0b/pyiceberg/manifest.py#L696
         input_file = table.io.new_input(manifest_file.manifest_path)
@@ -172,14 +185,12 @@ def get_iceberg_file_list_parallel(
         ev_iceberg_fl.add_attribute("g_filters", filters)
     try:
         table = catalog.load_table(table_id)
-        pq_infos, get_file_to_schema_us = _construct_parquet_infos(
-            table,
-            table.scan(
-                filters,
-                snapshot_id=snapshot_id if snapshot_id > -1 else None,
-                limit=limit if limit > -1 else None,
-            ).plan_files(),
+        table_scan = table.scan(
+            filters,
+            snapshot_id=snapshot_id if snapshot_id > -1 else None,
+            limit=limit if limit > -1 else None,
         )
+        pq_infos, get_file_to_schema_us = _construct_parquet_infos(table, table_scan)
 
         if tracing.is_tracing():  # pragma: no cover
             ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
