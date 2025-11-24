@@ -3964,3 +3964,26 @@ def test_timezone_merge(timezone_timestamp_df):
 def test_empty_df(datapath, index_val):
     """Make sure creating an empty dataframe works"""
     _test_equal(bd.DataFrame(), pd.DataFrame())
+
+
+def test_np_ufunc(index_val):
+    """Test for np.ufunc(Series) case."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([0, 1] * 50, "Int32"),
+                "B": pd.array([2, 3, 4, 5] * 25, "Float64"),
+            }
+        )
+        df.index = index_val[:100]
+        bdf = bd.from_pandas(df)
+        bdf["C"] = np.log(bdf["B"] + 1e-8)
+        pdf = df.copy()
+        pdf["C"] = np.log(pdf["B"] + 1e-8)
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+    )
