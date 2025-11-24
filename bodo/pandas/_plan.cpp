@@ -81,7 +81,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
 
     // Insert and pushdown runtime join filters after optimization since they
@@ -90,7 +90,8 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // runtime_join_filter_pushdown_optimizer(
     //    *optimizer);
     RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer;
-    out_plan = runtime_join_filter_pushdown_optimizer.VisitOperator(out_plan);
+    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+        runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
 
     return out_plan;
 }
