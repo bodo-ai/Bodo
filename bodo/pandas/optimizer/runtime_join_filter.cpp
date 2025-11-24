@@ -209,9 +209,12 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         }
 
         join_op.join_id = this->cur_join_filter_id++;
-        left_join_state_map[join_op.join_id] = {
-            .filter_columns = left_eq_cols,
-            .is_first_locations = std::vector<bool>(true, left_eq_cols.size())};
+        if (left_eq_cols.size()) {
+            left_join_state_map[join_op.join_id] = {
+                .filter_columns = left_eq_cols,
+                .is_first_locations =
+                    std::vector<bool>(true, left_eq_cols.size())};
+        }
     }
     this->join_state_map = left_join_state_map;
     // Visit probe side
