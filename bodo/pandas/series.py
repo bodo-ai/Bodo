@@ -507,7 +507,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         if method != "__call__" or len(inputs) != 1 or inputs[0] is not self or kwargs:
-            raise NotImplementedError("ufunc not implemented for BodoSeries yet")
+            raise BodoLibNotImplementedException(
+                "ufunc not implemented for BodoSeries yet"
+            )
 
         new_metadata = _get_empty_series_arrow(ufunc(_empty_like(self)))
 
