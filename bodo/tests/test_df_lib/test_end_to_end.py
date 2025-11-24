@@ -3964,3 +3964,44 @@ def test_timezone_merge(timezone_timestamp_df):
 def test_empty_df(datapath, index_val):
     """Make sure creating an empty dataframe works"""
     _test_equal(bd.DataFrame(), pd.DataFrame())
+
+
+def test_join_projection_join():
+    """Test for joins with projections on both sides."""
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([0, 1, 2, 3], "Int32"),
+            "B": pd.array([2, 3, 4, 5], "Float64"),
+            "C": pd.array([5, 6, 7, 8], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "D": pd.array([0, 1, 5, 6], "Int32"),
+            "E": pd.array([2, 3, 4, 5], "Float64"),
+            "F": pd.array([7, 8, 9, 10], "Int32"),
+        }
+    )
+
+    # df3 = df1.merge(
+    #    df2[["D", "E"]], left_on="C", right_on="D", how="inner"
+    # )
+    df4 = df2.merge(df1[["B", "A"]], left_on="E", right_on="A", how="inner")
+    # df4 = df3.merge(df1, left_on="D", right_on="C", how="inner")
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    # bdf3 = bdf1.merge(
+    #    bdf2[["D", "E"]], left_on="C", right_on="D", how="inner"
+    # )
+    bdf4 = bdf2.merge(bdf1[["B", "A"]], left_on="E", right_on="A", how="inner")
+    # bdf4 = bdf3.merge(bdf1, left_on="D", right_on="C", how="inner")
+
+    _test_equal(
+        bdf4,
+        df4,
+        check_pandas_types=False,
+        reset_index=True,
+        sort_output=True,
+    )

@@ -20,7 +20,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
     duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
     switch (op->type) {
         case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
-            return this->VisitCompJoin(op);
+            if (op->type !=
+                duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+                // Inserted join filters replaced this operator
+                break;
+            }
+            op = this->VisitCompJoin(op);
+            return std::move(op);
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
             op = this->VisitProjection(op);
@@ -175,10 +181,12 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     // Both sides dropped some columns so insert a filter on top
                     // of this join to apply the bloom filter since the the
                     // bloom filter requires all columns
-                    JoinColumnInfo join_info_copy = join_info;
-                    join_info_copy.is_first_locations = std::vector<bool>(
-                        false, join_info.filter_columns.size());
-                    out_join_state_map[join_id] = join_info_copy;
+                    if (join_info.filter_columns.size()) {
+                        JoinColumnInfo join_info_copy = join_info;
+                        join_info_copy.is_first_locations = std::vector<bool>(
+                            false, join_info.filter_columns.size());
+                        out_join_state_map[join_id] = join_info_copy;
+                    }
                 }
             }
         }
@@ -246,17 +254,28 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &colref_expr =
                     expr->Cast<duckdb::BoundColumnRefExpression>();
-                new_filter_columns.push_back(colref_expr.binding.column_index);
-                new_is_first_locations.push_back(true);
+                int64_t child_col = colref_expr.binding.column_index;
+                if (std::ranges::find(new_filter_columns, child_col) ==
+                    new_filter_columns.end()) {
+                    new_filter_columns.push_back(
+                        colref_expr.binding.column_index);
+                    new_is_first_locations.push_back(true);
+                } else {
+                    // Duplicate column reference in projection, cannot push
+                    new_filter_columns.push_back(-1);
+                    new_is_first_locations.push_back(false);
+                }
             } else {
                 // Projection expression is not a column ref, cannot push down
                 new_filter_columns.push_back(-1);
                 new_is_first_locations.push_back(false);
             }
         }
-        new_join_state_map[join_id] = {
-            .filter_columns = new_filter_columns,
-            .is_first_locations = new_is_first_locations};
+        if (new_join_state_map.size()) {
+            new_join_state_map[join_id] = {
+                .filter_columns = new_filter_columns,
+                .is_first_locations = new_is_first_locations};
+        }
     }
     this->join_state_map = new_join_state_map;
 
