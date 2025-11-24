@@ -229,7 +229,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
   if (NOT WIN32)
     add_compile_options(
       "-g"
-      "-O1"
+      "-O0"
       "-fno-omit-frame-pointer"
     )
   else()
