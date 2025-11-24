@@ -4,6 +4,8 @@
 #include <numeric>
 #include "_plan.h"
 #include "_util.h"
+#include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -68,12 +70,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
     JoinFilterProgramState right_join_state_map;
     auto &join_op = op->Cast<duckdb::LogicalComparisonJoin>();
 
-    const size_t numLeftColumns = op->children[0]->GetColumnBindings().size();
+    auto colRefMap = getColRefMap(op->GetColumnBindings());
 
-    std::vector<int64_t> left_key_indices;
-    std::vector<int64_t> right_key_indices;
+    std::vector<duckdb::ColumnBinding> left_keys;
+    std::vector<duckdb::ColumnBinding> right_keys;
     for (const auto &cond : join_op.conditions) {
-        if (cond.left->GetExpressionType() ==
+        if (cond.comparison == bododuckdb::ExpressionType::COMPARE_EQUAL &&
+            cond.left->GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF &&
             cond.right->GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF) {
@@ -81,81 +84,92 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 cond.left->Cast<duckdb::BoundColumnRefExpression>();
             auto &right_colref =
                 cond.right->Cast<duckdb::BoundColumnRefExpression>();
-            left_key_indices.push_back(left_colref.binding.column_index);
-            right_key_indices.push_back(right_colref.binding.column_index);
+            left_keys.push_back(left_colref.binding);
+            right_keys.push_back(right_colref.binding);
         }
     }
 
     for (const auto &[join_id, join_info] : this->join_state_map) {
-        std::vector<int64_t> leftKeys;
-        std::vector<bool> leftIsFirstLocations;
-        std::vector<int64_t> rightKeys;
-        std::vector<bool> rightIsFirstLocations;
+        std::vector<int64_t> left_filter_cols;
+        std::vector<bool> left_is_first_locations;
+        std::vector<int64_t> right_filter_cols;
+        std::vector<bool> right_is_first_locations;
         for (const int64_t &col_idx : join_info.filter_columns) {
+            duckdb::ColumnBinding col_binding =
+                col_idx == -1 ? duckdb::ColumnBinding()
+                              : join_op.GetColumnBindings()[col_idx];
+
+            auto &left_child = *join_op.children[0];
+            duckdb::unordered_set<duckdb::idx_t> left_table_indices;
+            join_op.GetTableReferences(left_child, left_table_indices);
+
             if (col_idx == -1) {
                 // Column is -1 so propagate, these filters were already
                 // evaluated
-                leftKeys.push_back(-1);
-                leftIsFirstLocations.push_back(false);
-                rightKeys.push_back(-1);
-                rightIsFirstLocations.push_back(false);
-            } else if (col_idx < numLeftColumns) {
+                left_filter_cols.push_back(-1);
+                left_is_first_locations.push_back(false);
+                right_filter_cols.push_back(-1);
+                right_is_first_locations.push_back(false);
+            } else if (left_table_indices.find(col_binding.table_index) !=
+                       left_table_indices.end()) {
                 // Column is on the left
-                leftKeys.push_back(col_idx);
-                leftIsFirstLocations.push_back(true);
+                left_filter_cols.push_back(col_binding.column_index);
+                left_is_first_locations.push_back(true);
 
                 // If the column is a join key, push to right side
-                if (int64_t key_idx =
-                        std::ranges::find(left_key_indices, col_idx) !=
-                        left_key_indices.end()) {
-                    rightKeys.push_back(right_key_indices[key_idx]);
-                    rightIsFirstLocations.push_back(true);
+                auto key_iter = std::ranges::find(left_keys, col_binding);
+                if (key_iter != left_keys.end()) {
+                    int64_t key_idx =
+                        std::distance(left_keys.begin(), key_iter);
+                    right_filter_cols.push_back(
+                        right_keys[key_idx].column_index);
+                    right_is_first_locations.push_back(true);
                 } else {
-                    rightKeys.push_back(-1);
-                    rightIsFirstLocations.push_back(false);
+                    right_filter_cols.push_back(-1);
+                    right_is_first_locations.push_back(false);
                 }
             } else {
                 // Column is on the right
-                int64_t right_col_idx = col_idx - numLeftColumns;
-                rightKeys.push_back(right_col_idx);
-                rightIsFirstLocations.push_back(true);
+                right_filter_cols.push_back(col_binding.column_index);
+                right_is_first_locations.push_back(true);
 
                 // If the column is a join key, push to left side
-                if (int64_t key_idx =
-                        std::ranges::find(right_key_indices, right_col_idx) !=
-                        right_key_indices.end()) {
-                    leftKeys.push_back(left_key_indices[key_idx]);
-                    leftIsFirstLocations.push_back(true);
+                auto key_iter = std::ranges::find(right_keys, col_binding);
+                if (key_iter != right_keys.end()) {
+                    int64_t key_idx =
+                        std::distance(right_keys.begin(), key_iter);
+                    left_filter_cols.push_back(left_keys[key_idx].column_index);
+                    left_is_first_locations.push_back(true);
                 } else {
-                    leftKeys.push_back(-1);
-                    leftIsFirstLocations.push_back(false);
+                    left_filter_cols.push_back(-1);
+                    left_is_first_locations.push_back(false);
                 }
             }
         }
         bool keep_left_equality =
-            std::ranges::find(leftIsFirstLocations, true) !=
-            leftIsFirstLocations.end();
+            std::ranges::find(left_is_first_locations, true) !=
+            left_is_first_locations.end();
         bool keep_right_equality =
-            std::ranges::find(rightIsFirstLocations, true) !=
-            rightIsFirstLocations.end();
+            std::ranges::find(right_is_first_locations, true) !=
+            right_is_first_locations.end();
 
         if (keep_left_equality) {
             left_join_state_map[join_id] = {
-                .filter_columns = leftKeys,
-                .is_first_locations = leftIsFirstLocations};
+                .filter_columns = left_filter_cols,
+                .is_first_locations = left_is_first_locations};
         }
         if (keep_right_equality) {
             right_join_state_map[join_id] = {
-                .filter_columns = rightKeys,
-                .is_first_locations = rightIsFirstLocations};
+                .filter_columns = right_filter_cols,
+                .is_first_locations = right_is_first_locations};
         }
         if (keep_left_equality && keep_right_equality) {
             bool all_cols = std::ranges::all_of(join_info.is_first_locations,
                                                 [](bool v) { return v; });
             if (all_cols) {
-                bool all_left = std::ranges::all_of(leftIsFirstLocations,
+                bool all_left = std::ranges::all_of(left_is_first_locations,
                                                     [](bool v) { return v; });
-                bool all_right = std::ranges::all_of(rightIsFirstLocations,
+                bool all_right = std::ranges::all_of(right_is_first_locations,
                                                      [](bool v) { return v; });
                 if (!all_left && !all_right) {
                     // Both sides dropped some columns so insert a filter on top
