@@ -857,7 +857,8 @@ void PhysicalExpression::join_expr_batch(
     int64_t right_index_start, int64_t right_index_end) {
     for (int64_t j = right_index_start; j < right_index_end; j++) {
         for (int64_t i = left_index_start; i < left_index_end; i++) {
-            SetBitTo(match_arr, i + j,
+            SetBitTo(match_arr,
+                     (i - left_index_start) + (j - right_index_start),
                      join_expr(left_table, right_table, left_data, right_data,
                                left_null_bitmap, right_null_bitmap, i, j));
         }
