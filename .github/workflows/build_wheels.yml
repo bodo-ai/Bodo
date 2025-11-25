@@ -175,7 +175,7 @@ jobs:
     strategy:
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os: [ubuntu-latest]
+        os: [ubuntu-latest] #, macos-15-intel, macos-14]
       # Test all combinations to completion
       fail-fast: false
     runs-on: ${{ matrix.os }}
