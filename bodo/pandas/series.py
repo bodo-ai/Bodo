@@ -3088,8 +3088,8 @@ def sig_bind(name, accessor_type, *args, **kwargs):
             func = getattr(sample_series, name)
             signature = inspect.signature(func)
 
-        signature.bind(*args, **kwargs)
-        return
+        bound_sig = signature.bind(*args, **kwargs)
+        return bound_sig
     # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
@@ -3184,6 +3184,17 @@ def is_bodo_string_series(self):
     return type(self) is BodoSeries and self.dtype in allowed_types_map["str_default"]
 
 
+def validate_method_args(name, bound_sig):
+    """Validates args and kwargs for Series.<name> methods.
+    TODO: validate other methods as needed.
+    """
+    if name == "str.replace":
+        repl = bound_sig.arguments.get("repl", None)
+        # Same as Pandas validation
+        if not (isinstance(repl, str) or callable(repl)):
+            raise TypeError("repl must be a string or callable")
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -3214,7 +3225,9 @@ def gen_method(
         validate_dtype(accessor_type + name, self)
 
         if is_method:
-            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
+            # Argument validation
+            bound_sig = sig_bind(name, accessor_type, *args, **kwargs)
+            validate_method_args(accessor_type + name, bound_sig)
 
         series = self._series if accessor_type else self
         dtype = series.dtype if not return_type else return_type
