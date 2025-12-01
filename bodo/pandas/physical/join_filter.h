@@ -113,10 +113,12 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         if (!row_bitmask || row_bitmask->length < input_batch->nrows()) {
             row_bitmask = alloc_nullable_array_no_nulls(input_batch->nrows(),
                                                         Bodo_CTypes::_BOOL);
+            // Initialize all bits to true
             memset(row_bitmask
                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
                    0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
         }
+
         bool applied_any_filter = false;
 
         // Apply filters
@@ -140,11 +142,17 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
 
             if (this->materialize_after_each_filter && applied_any_filter) {
                 input_batch = RetrieveTable(input_batch, row_bitmask);
-                // Reset row_bitmask for next filter
+                // Reset the bitmask for the next filter
+                // we could potentially do something smarter here if
+                // row_bitmask's length is way bigger than input batch by only
+                // resetting the first input_batch->nrows() bits and then
+                // resetting the whole thing at the end but this should be good
+                // enough for now, we don't always want to do that because it's
+                // an extra reset
                 memset(
                     row_bitmask
                         ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
-                    0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
+                    0xff, arrow::bit_util::BytesForBits(row_bitmask->length));
 
                 applied_any_filter = false;
             }
@@ -152,6 +160,10 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
 
         if (applied_any_filter) {
             input_batch = RetrieveTable(input_batch, row_bitmask);
+            // Reset the bitmask for the next batch
+            memset(row_bitmask
+                       ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
+                   0xff, arrow::bit_util::BytesForBits(row_bitmask->length));
         }
 
         this->metrics.filtering_time += end_timer(start_filtering);
