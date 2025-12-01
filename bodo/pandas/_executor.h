@@ -65,7 +65,7 @@ class Executor {
      * @param cur - the current Pipeline to examine for inclusion in pipelines.
      * @param seen - used for recursion stack cycle detection
      */
-    void fillPipelinesTopoSort(std::shared_ptr<Pipeline> cur,
+    bool fillPipelinesTopoSort(std::shared_ptr<Pipeline> cur,
                                std::set<std::shared_ptr<Pipeline>> seen =
                                    std::set<std::shared_ptr<Pipeline>>()) {
         // Check if cur is already in seen
@@ -77,17 +77,32 @@ class Executor {
         // Otherwise, mark it as seen
         seen.insert(cur);
 
+        std::vector<std::shared_ptr<Pipeline>> inserted_dependents;
         for (auto it = cur->run_before_begin(); it != cur->run_before_end();
              ++it) {
-            fillPipelinesTopoSort(*it, seen);
+            if (fillPipelinesTopoSort(*it, seen)) {
+                // Dependent was added so remove it from run_before
+                inserted_dependents.emplace_back(*it);
+            }
         }
-
-        pipelines.emplace_back(cur);
+        for (auto &dep : inserted_dependents) {
+            cur->removeRunBefore(dep);
+        }
 
         // Remove it from seen so if it occurs in other parts of the tree
         // (which can happen for CTE pipelines) that it won't falsely
         // think there is a cycle and throw an exception.
         seen.erase(cur);
+        // If all dependents have been added, add this one
+        if (cur->run_before_begin() == cur->run_before_end()) {
+            // No dependents so leaf node
+            // insert it if it isn't already present
+            if (std::ranges::find(pipelines, cur) == pipelines.end()) {
+                pipelines.emplace_back(cur);
+            }
+            return true;
+        }
+        return false;
     }
 
    public:
@@ -121,7 +136,7 @@ class Executor {
     /**
      * @brief Execute the plan and return the result.
      */
-    std::variant<std::shared_ptr<table_info>, PyObject*> ExecutePipelines() {
+    std::variant<std::shared_ptr<table_info>, PyObject *> ExecutePipelines() {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).

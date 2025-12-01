@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -72,6 +73,13 @@ class Pipeline {
         std::cout << "Rank " << rank << " " << sink->ToString() << std::endl;
     }
 #endif
+
+    void removeRunBefore(std::shared_ptr<Pipeline> pipeline) {
+        auto it = std::ranges::find(run_before, pipeline);
+        if (it != run_before.end()) {
+            run_before.erase(it);
+        }
+    }
 };
 
 class PipelineBuilder {
