@@ -64,6 +64,7 @@ class Executor {
      *
      * @param cur - the current Pipeline to examine for inclusion in pipelines.
      * @param seen - used for recursion stack cycle detection
+     * @return true if cur was added to pipelines, false otherwise.
      */
     bool fillPipelinesTopoSort(std::shared_ptr<Pipeline> cur,
                                std::set<std::shared_ptr<Pipeline>> seen =
