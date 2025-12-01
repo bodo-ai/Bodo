@@ -28,7 +28,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         default: {
             // If we don't know how to handle this operator, insert any pending
             // join filters and clear the state
-            op = this->insert_join_filters(op, this->join_state_map);
+            // op = this->insert_join_filters(op, this->join_state_map);
             this->join_state_map.clear();
         }
     }

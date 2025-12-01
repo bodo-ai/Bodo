@@ -113,10 +113,10 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         if (!row_bitmask || row_bitmask->length < input_batch->nrows()) {
             row_bitmask = alloc_nullable_array_no_nulls(input_batch->nrows(),
                                                         Bodo_CTypes::_BOOL);
+            memset(row_bitmask
+                       ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
+                   0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
         }
-        memset(
-            row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
-            0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
         bool applied_any_filter = false;
 
         // Apply filters
@@ -140,14 +140,11 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
 
             if (this->materialize_after_each_filter && applied_any_filter) {
                 input_batch = RetrieveTable(input_batch, row_bitmask);
-                // Reset row_bitmask for next filter if not last iteration
-                if (i < this->filter_ids.size() - 1) {
-                    memset(
-                        row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL,
-                                           uint8_t*>(),
-                        0xff,
-                        arrow::bit_util::BytesForBits(input_batch->nrows()));
-                }
+                // Reset row_bitmask for next filter
+                memset(
+                    row_bitmask
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
+                    0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
 
                 applied_any_filter = false;
             }

@@ -8,7 +8,7 @@
 #include "physical/operator.h"
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_PIPELINE 1   // 1 for control flow, 2 adds data
+#define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds data
 #ifdef DEBUG_PIPELINE
 #include <iostream>
 #endif
