@@ -265,7 +265,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 new_is_first_locations.push_back(false);
             }
         }
-        if (new_join_state_map.size()) {
+        if (new_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = new_filter_columns,
                 .is_first_locations = new_is_first_locations};
