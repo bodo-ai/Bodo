@@ -1,7 +1,6 @@
 #include "optimizer/runtime_join_filter.h"
 #include <algorithm>
 #include <iostream>
-#include <numeric>
 #include "_plan.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
@@ -69,8 +68,10 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
     JoinFilterProgramState left_join_state_map;
     JoinFilterProgramState right_join_state_map;
     auto &join_op = op->Cast<duckdb::LogicalComparisonJoin>();
-
-    auto colRefMap = getColRefMap(op->GetColumnBindings());
+    auto left_child_colref_map =
+        getColRefMap(join_op.children[0]->GetColumnBindings());
+    auto right_child_colref_map =
+        getColRefMap(join_op.children[1]->GetColumnBindings());
 
     std::vector<duckdb::ColumnBinding> left_keys;
     std::vector<duckdb::ColumnBinding> right_keys;
@@ -113,7 +114,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             } else if (left_table_indices.find(col_binding.table_index) !=
                        left_table_indices.end()) {
                 // Column is on the left
-                left_filter_cols.push_back(col_binding.column_index);
+                left_filter_cols.push_back(left_child_colref_map[{
+                    col_binding.table_index, col_binding.column_index}]);
                 left_is_first_locations.push_back(true);
 
                 // If the column is a join key, push to right side
@@ -121,8 +123,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 if (key_iter != left_keys.end()) {
                     int64_t key_idx =
                         std::distance(left_keys.begin(), key_iter);
-                    right_filter_cols.push_back(
-                        right_keys[key_idx].column_index);
+                    right_filter_cols.push_back(right_child_colref_map[{
+                        right_keys[key_idx].table_index,
+                        right_keys[key_idx].column_index}]);
                     right_is_first_locations.push_back(true);
                 } else {
                     right_filter_cols.push_back(-1);
@@ -130,7 +133,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 }
             } else {
                 // Column is on the right
-                right_filter_cols.push_back(col_binding.column_index);
+                right_filter_cols.push_back(right_child_colref_map[{
+                    col_binding.table_index, col_binding.column_index}]);
                 right_is_first_locations.push_back(true);
 
                 // If the column is a join key, push to left side
@@ -138,7 +142,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 if (key_iter != right_keys.end()) {
                     int64_t key_idx =
                         std::distance(right_keys.begin(), key_iter);
-                    left_filter_cols.push_back(left_keys[key_idx].column_index);
+                    left_filter_cols.push_back(left_child_colref_map[{
+                        left_keys[key_idx].table_index,
+                        left_keys[key_idx].column_index}]);
                     left_is_first_locations.push_back(true);
                 } else {
                     left_filter_cols.push_back(-1);
@@ -204,7 +210,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &left_colref =
                     cond.left->Cast<duckdb::BoundColumnRefExpression>();
-                left_eq_cols.push_back(left_colref.binding.column_index);
+                left_eq_cols.push_back(
+                    left_child_colref_map[{left_colref.binding.table_index,
+                                           left_colref.binding.column_index}]);
             } else {
                 continue;
             }
@@ -234,6 +242,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
     // Remap the columns from join_state through the projection
     // then propagate down
     JoinFilterProgramState new_join_state_map;
+    auto child_colref_map =
+        getColRefMap(proj_op.children[0]->GetColumnBindings());
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> new_filter_columns;
         std::vector<bool> new_is_first_locations;
@@ -248,19 +258,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &colref_expr =
                     expr->Cast<duckdb::BoundColumnRefExpression>();
-                int64_t child_col = colref_expr.binding.column_index;
+                int64_t child_col =
+                    child_colref_map[{colref_expr.binding.table_index,
+                                      colref_expr.binding.column_index}];
                 if (std::ranges::find(new_filter_columns, child_col) ==
                     new_filter_columns.end()) {
-                    for (size_t i = 0;
-                         i < proj_op.children[0]->GetColumnBindings().size();
-                         ++i) {
-                        if (proj_op.children[0]->GetColumnBindings()[i] ==
-                            colref_expr.binding) {
-                            new_filter_columns.push_back(i);
-                            new_is_first_locations.push_back(true);
-                            break;
-                        }
-                    }
+                    new_filter_columns.push_back(child_col);
+                    new_is_first_locations.push_back(true);
                 } else {
                     // Duplicate column reference in projection, cannot push
                     new_filter_columns.push_back(-1);
