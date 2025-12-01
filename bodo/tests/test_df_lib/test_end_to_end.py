@@ -1329,7 +1329,8 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    _test_equal(post, 4)
+    # The filter node gets pushed into join and then a join filter is inserted
+    _test_equal(post, 5)
 
     _test_equal(
         bdf4.copy(),
@@ -1354,7 +1355,8 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    _test_equal(post, 4)
+    # The filter node gets pushed into join and then a join filter is inserted
+    _test_equal(post, 5)
 
     _test_equal(
         nan_bdf4.copy(),

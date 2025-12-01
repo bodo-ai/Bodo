@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <utility>
 #include "../../libs/_query_profile_collector.h"
 #include "../libs/_array_utils.h"
@@ -99,9 +100,9 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         this->metrics.input_row_count += input_batch->nrows();
 
         // No filters can be applied, just pass through
-        if (std::all_of(this->can_apply_bloom_filters.begin(),
-                        this->can_apply_bloom_filters.end(),
-                        [](bool v) { return !v; })) {
+        if (std::ranges::all_of(this->can_apply_bloom_filters,
+                                [](bool v) { return !v; }) ||
+            input_batch->nrows() == 0) {
             return {input_batch, prev_op_result == OperatorResult::FINISHED
                                      ? OperatorResult::FINISHED
                                      : OperatorResult::NEED_MORE_INPUT};
