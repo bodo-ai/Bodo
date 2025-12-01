@@ -20,13 +20,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
     duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
     switch (op->type) {
         case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
-            if (op->type !=
-                duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
-                // Inserted join filters replaced this operator
-                break;
-            }
-            op = this->VisitCompJoin(op);
-            return std::move(op);
+            return this->VisitCompJoin(op);
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
             op = this->VisitProjection(op);
