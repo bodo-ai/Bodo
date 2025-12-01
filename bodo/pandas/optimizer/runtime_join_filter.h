@@ -1,7 +1,5 @@
 #pragma once
-#include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/logical_operator.hpp"
-#include "duckdb/planner/logical_operator_visitor.hpp"
 
 struct JoinColumnInfo {
     std::vector<int64_t> filter_columns;

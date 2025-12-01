@@ -215,7 +215,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             left_join_state_map[join_op.join_id] = {
                 .filter_columns = left_eq_cols,
                 .is_first_locations =
-                    std::vector<bool>(true, left_eq_cols.size())};
+                    std::vector<bool>(left_eq_cols.size(), true)};
         }
     }
     this->join_state_map = left_join_state_map;
@@ -251,9 +251,16 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 int64_t child_col = colref_expr.binding.column_index;
                 if (std::ranges::find(new_filter_columns, child_col) ==
                     new_filter_columns.end()) {
-                    new_filter_columns.push_back(
-                        colref_expr.binding.column_index);
-                    new_is_first_locations.push_back(true);
+                    for (size_t i = 0;
+                         i < proj_op.children[0]->GetColumnBindings().size();
+                         ++i) {
+                        if (proj_op.children[0]->GetColumnBindings()[i] ==
+                            colref_expr.binding) {
+                            new_filter_columns.push_back(i);
+                            new_is_first_locations.push_back(true);
+                            break;
+                        }
+                    }
                 } else {
                     // Duplicate column reference in projection, cannot push
                     new_filter_columns.push_back(-1);
