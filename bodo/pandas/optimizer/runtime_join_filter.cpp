@@ -6,8 +6,8 @@
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
+#include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
-#include "duckdb/planner/operator/logical_projection.hpp"
 
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
@@ -21,6 +21,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
             op = this->VisitProjection(op);
+        } break;
+        case duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
+            return this->VisitAggregate(op);
         } break;
         default: {
             // If we don't know how to handle this operator, insert any pending
@@ -326,4 +329,77 @@ RuntimeJoinFilterPushdownOptimizer::VisitFilter(
     this->join_state_map = new_join_state_map;
 
     return std::move(op);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    auto &agg_op = op->Cast<duckdb::LogicalAggregate>();
+    JoinFilterProgramState new_join_state_map;
+    JoinFilterProgramState out_join_state_map;
+    auto child_colref_map = getColRefMap(op->children[0]->GetColumnBindings());
+    for (const auto &[join_id, join_info] : this->join_state_map) {
+        std::vector<int64_t> push_filter_columns;
+        std::vector<bool> push_is_first_locations;
+        std::vector<int64_t> out_filter_columns;
+        std::vector<bool> out_is_first_locations;
+
+        for (long long col_idx : join_info.filter_columns) {
+            if (col_idx == -1) {
+                push_filter_columns.push_back(-1);
+                push_is_first_locations.push_back(false);
+                continue;
+            }
+            size_t group_idx = std::distance(
+                agg_op.groups.begin(),
+                std::ranges::find(
+                    agg_op.groups, agg_op.GetColumnBindings()[col_idx],
+                    [](auto &expr) {
+                        assert(expr->GetExpressionType() ==
+                               duckdb::ExpressionType::BOUND_COLUMN_REF);
+                        auto &colref_expr = expr->template Cast<
+                            duckdb::BoundColumnRefExpression>();
+                        return colref_expr.binding;
+                    }));
+
+            if (group_idx < agg_op.groups.size()) {
+                auto &expr = agg_op.groups[group_idx];
+                assert(expr->GetExpressionType() ==
+                       duckdb::ExpressionType::BOUND_COLUMN_REF);
+                auto &colref_expr =
+                    expr->template Cast<duckdb::BoundColumnRefExpression>();
+                int64_t child_col =
+                    child_colref_map[{colref_expr.binding.table_index,
+                                      colref_expr.binding.column_index}];
+                if (std::ranges::find(push_filter_columns, child_col) ==
+                    push_filter_columns.end()) {
+                    push_filter_columns.push_back(child_col);
+                    push_is_first_locations.push_back(true);
+                } else {
+                    // Duplicate column reference in projection, cannot push
+                    push_filter_columns.push_back(-1);
+                    push_is_first_locations.push_back(false);
+                }
+            } else {
+                // Aggregate expression is not a group key, cannot push down
+                out_filter_columns.push_back(col_idx);
+                out_is_first_locations.push_back(false);
+            }
+        }
+        if (push_filter_columns.size()) {
+            new_join_state_map[join_id] = {
+                .filter_columns = push_filter_columns,
+                .is_first_locations = push_is_first_locations};
+        }
+        if (out_filter_columns.size()) {
+            out_join_state_map[join_id] = {
+                .filter_columns = out_filter_columns,
+                .is_first_locations = out_is_first_locations};
+        }
+    }
+
+    this->join_state_map = new_join_state_map;
+    op->children[0] = VisitOperator(op->children[0]);
+
+    return this->insert_join_filters(op, out_join_state_map);
 }
