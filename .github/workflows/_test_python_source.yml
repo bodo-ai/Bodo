@@ -47,7 +47,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     steps:
         # Setup
-        - uses: actions/checkout@v5
+        - uses: actions/checkout@v6
         - name: Build from Source
           uses: ./.github/actions/build-source
           with:
@@ -66,7 +66,7 @@ jobs:
             rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
           shell: bash
         - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
+          uses: aws-actions/configure-aws-credentials@v5
           with:
             aws-region: us-east-2
             role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
@@ -190,7 +190,7 @@ jobs:
             mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
           shell: bash
         - name: Upload Timings and Coverage
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v5
           if: inputs.collect-coverage && (success() || failure())
           with:
             name: output-${{ inputs.batch }}-${{ inputs.test-type }}
