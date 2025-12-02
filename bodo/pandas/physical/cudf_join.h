@@ -11,6 +11,12 @@
 #include "expression.h"
 #include "operator.h"
 
+#include <cudf/column/column.hpp>
+#include <cudf/interop.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+#include <cudf/types.hpp>
+
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(                                                   \
     build_table_outer, probe_table_outer, has_non_equi_cond, use_bloom_filter, \
@@ -530,27 +536,32 @@ class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> cudf_table_to_arrow_recordbatch(
+    std::shared_ptr<table_info> cudf_table_to_bodo_arrow(
         cudf::table_view tv,
         const std::vector<cudf::column_metadata>& md = {}) {
-        // 1) Produce ArrowSchema and ArrowArray via libcudf interop
-        cudf::unique_schema_t schema;
-        cudf::unique_array_t array;  // ArrowArray with custom deleter
+        std::vector<std::shared_ptr<array_info>> bodo_columns;
 
-        // The metadata vector maps column names; if omitted, names default.
+        // Convert cuDF table_view to ArrowSchema + ArrowArray
+        cudf::unique_schema_t schema;
+        cudf::unique_array_t array;
         std::tie(schema, array) = cudf::to_arrow(tv, md);
 
-        auto maybe_schema = arrow::ImportSchema(schema.get());
-        if (!maybe_schema.ok())
-            throw std::runtime_error(maybe_schema.status().ToString());
-        std::shared_ptr<arrow::Schema> arr_schema = *maybe_schema;
-
+        // Import as Arrow RecordBatch
         auto maybe_rb = arrow::ImportRecordBatch(array.get(), schema.get());
-        if (!maybe_rb.ok())
+        if (!maybe_rb.ok()) {
             throw std::runtime_error(maybe_rb.status().ToString());
+        }
         std::shared_ptr<arrow::RecordBatch> rb = *maybe_rb;
 
-        return rb;
+        // Convert each Arrow column to Bodo array_info
+        std::vector<std::shared_ptr<array_info>> bodo_columns;
+        for (int i = 0; i < rb->num_columns(); ++i) {
+            std::shared_ptr<arrow::Array> arr = rb->column(i);
+            auto bodo_col =
+                arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+            bodo_columns.push_back(bodo_col);
+        }
+        return std::make_shared<table_info>(bodo_columns);
     }
 
     /**
@@ -563,18 +574,24 @@ class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
         time_pt start_produce = start_timer();
-#if 0
+
+        bool is_last = prev_op_result == OperatorResult::FINISHED;
+
+#if 1
         cudaStreamSynchronize(tx_stream);
         auto probe_view = bodo_arrow_to_cudf_table(input_batch);
         cudaEvent_t probe_ready;
         cudaEventCreateWithFlags(&probe_ready, cudaEventDisableTiming);
         cudaEventRecord(probe_ready, tx_stream);
         cudaStreamWaitEvent(compute_stream, probe_ready, 0);
-        std::unique_ptr<cudf::cudf_table> result = dispatch_join(probe_view, build_view,
-                                   {0}, {0});
+        std::unique_ptr<cudf::cudf_table> result =
+            dispatch_join(probe_view, build_view, {0}, {0});
+        out_table->column_names = this->output_schema->column_names;
+        return {out_table,
+                is_last ? OperatorResult::FINISHED
+                        : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                         : OperatorResult::HAVE_MORE_OUTPUT)};
 #else
-        bool is_last = prev_op_result == OperatorResult::FINISHED;
-
         if (has_non_equi_cond) {
             PhysicalExpression::cur_join_expr = physExprTree.get();
         }
