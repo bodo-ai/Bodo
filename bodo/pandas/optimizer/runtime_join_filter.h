@@ -23,4 +23,6 @@ class RuntimeJoinFilterPushdownOptimizer {
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitProjection(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitFilter(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

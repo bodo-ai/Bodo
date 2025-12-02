@@ -16,6 +16,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
             return this->VisitCompJoin(op);
         } break;
+        case duckdb::LogicalOperatorType::LOGICAL_FILTER: {
+            op = this->VisitFilter(op);
+        } break;
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
             op = this->VisitProjection(op);
         } break;
@@ -234,12 +237,10 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitProjection(
     duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
-    duckdb::LogicalProjection &proj_op = op->Cast<duckdb::LogicalProjection>();
     // Remap the columns from join_state through the projection
     // then propagate down
     JoinFilterProgramState new_join_state_map;
-    auto child_colref_map =
-        getColRefMap(proj_op.children[0]->GetColumnBindings());
+    auto child_colref_map = getColRefMap(op->children[0]->GetColumnBindings());
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> new_filter_columns;
         std::vector<bool> new_is_first_locations;
@@ -249,7 +250,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 new_is_first_locations.push_back(false);
                 continue;
             }
-            auto &expr = proj_op.expressions[col_idx];
+            auto &expr = op->expressions[col_idx];
             if (expr->GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &colref_expr =
@@ -268,6 +269,46 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 }
             } else {
                 // Projection expression is not a column ref, cannot push down
+                new_filter_columns.push_back(-1);
+                new_is_first_locations.push_back(false);
+            }
+        }
+        if (new_filter_columns.size()) {
+            new_join_state_map[join_id] = {
+                .filter_columns = new_filter_columns,
+                .is_first_locations = new_is_first_locations};
+        }
+    }
+    this->join_state_map = new_join_state_map;
+
+    return std::move(op);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitFilter(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    // Remap the columns from join_state through the filter
+    // then propagate down
+    JoinFilterProgramState new_join_state_map;
+    auto child_colref_map = getColRefMap(op->children[0]->GetColumnBindings());
+    for (const auto &[join_id, join_info] : this->join_state_map) {
+        std::vector<int64_t> new_filter_columns;
+        std::vector<bool> new_is_first_locations;
+        for (long long col_idx : join_info.filter_columns) {
+            if (col_idx == -1) {
+                new_filter_columns.push_back(-1);
+                new_is_first_locations.push_back(false);
+                continue;
+            }
+            duckdb::ColumnBinding &binding = op->GetColumnBindings()[col_idx];
+            int64_t child_col =
+                child_colref_map[{binding.table_index, binding.column_index}];
+            if (std::ranges::find(new_filter_columns, child_col) ==
+                new_filter_columns.end()) {
+                new_filter_columns.push_back(child_col);
+                new_is_first_locations.push_back(true);
+            } else {
+                // Duplicate column reference in filter, cannot push
                 new_filter_columns.push_back(-1);
                 new_is_first_locations.push_back(false);
             }
