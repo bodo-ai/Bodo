@@ -98,3 +98,105 @@ In the **Cluster Nodes and Instances** step, choose the same instance type for b
 
 Attach [pyspark_notebook.ipynb](./pyspark_notebook.ipynb) to your EMR cluster following the examples in the [AWS documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-notebooks-create.html)
 
+
+## Running TPCH Benchmarks
+
+### Software versions
+
+Below are the version of the software used:
+
+| Package      | Version      |
+|----------------|----------------|
+| bodo   | 2025.12   |
+| bodosdk | |
+| polars | |
+| pandas | |
+| duckdb | |
+| dask   |  |
+| dask-cloudprovider  | |
+| PySpark  | |
+<!-- TODO: Daft -->
+<!-- TODO: Modin -->
+
+<!-- You can install these packages into a single environment using the provided `requirements.txt`. -->
+
+### Single Node
+
+<!-- TODO: describe final cluster settings -->
+
+Single-node only libraries include Polars, DuckDB, Pandas. In addition to these we also Dask, PySpark and Bodo, which are distributed engine that can be run on a single node as well. Single Node implementations can be found in the `pds-benchmark/queries` folder, which was copied from the [Polars Decision Support Benchmark](https://github.com/pola-rs/polars-benchmark) and extended to include Bodo.
+
+To reproduce the results for this benchmark, start by cd'ing into the benchmark folder and running
+To run a specific query from a specific implementation, you can use:
+
+``` shell
+SCALE_FACTOR=SF PATH_DATA_FOLDER=/path/to/you/tpch/data python -m queries.<IMPL>.q<Q_NUM>
+```
+Note that this should be run from the `pds-benchmark/` directory. To run all queries from a specific implementation, you can use:
+``` shell
+SCALE_FACTOR=SF PATH_DATA_FOLDER=/path/to/you/tpch/data python -m queries.<IMPL>
+```
+These scripts will run each query (as a separate Python process) and measures the query time, which includes reading from IO. Note that each query will be run twice and only the "hot start" time will be logged. Both the cold and hot start run will be included as part of total time.
+
+Because Bodo is a drop-in Pandas replacement, we reuse the Bodo queries for the Pandas baseline. To run the Bodo queries with a Pandas backend run the Bodo script with `BODO_USE_PANDAS_BACKEND=1`.
+
+Note that Bodo hangs when running back-to-back queries on Mac, to get around this you can use the `./run_bodo.sh` script, which runs each query with sleeps to prevent hangs.
+
+### Multi-node benchmark
+
+<!-- TODO: describe final cluster settings -->
+
+Distributed libraries like Bodo, Dask, PySpark also have the option of being multi-node. Because of the different infrastructure requirements for running these libraries, the scripts for reproducing multi-node results can be found in separate `impl/` directories.
+
+#### Bodo
+
+Follow [the instructions here](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi#bodo) to set up a Bodo Platform account through AWS marketplace and set up access tokens. You can then run the script:
+
+``` shell
+python run_bodo.py --folder s3://path/to/data --scale_factor SF --queries 1 2 ...
+```
+
+Or omit the `queries` argument to run all queries.
+
+#### Dask
+
+We use [Dask Cloudprovider](https://cloudprovider.dask.org/en/latest/) to create a Dask cluster with a scheduler instance (which doesn't do any compute) and worker instances. To ensure that the local environment matches the environment running the script, we provide an `env.yml` file in the same directory:
+
+``` shell
+cd dask
+conda create --file env.yml
+conda activate dask_tpch
+python dask_queries.py --folder s3://path/to/data --scale_factor SF --queries 1 2 ...
+```
+
+#### PySpark
+
+We used AWS EMR to create the PySpark cluster. You will need the following additional dependencies install on your local machine:
+
+* [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (Installed and configured with access keys.)
+* [**Terraform**](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
+* [**jq**](https://jqlang.github.io/jq/download/) (for viewing logs locally)
+* [**gzip**](https://www.gnu.org/software/gzip/) (for viewing logs locally)
+
+You can then run the terraform script:
+
+``` shell
+cd pyspark
+terraform apply \
+  -var="scale_factor=SF" \
+  -var='queries=[1,2,...]' \
+  -var="data_folder=s3://path/to/data "
+```
+
+This will run the script and write logs to an S3 bucket. You can either view the logs in the AWS console or copy them directly using the following scripts:
+
+``` shell
+./wait_for_steps.sh
+
+aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
+
+# View step logs with execution time result
+gzip -d ./emr-logs/steps/*/*
+cat ./emr-logs/steps/*/stdout
+```
+
