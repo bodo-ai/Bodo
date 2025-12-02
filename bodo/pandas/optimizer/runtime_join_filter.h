@@ -63,6 +63,27 @@ class RuntimeJoinFilterPushdownOptimizer {
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitProjection(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalFilter operator, remapping join filter columns
+     * through the filter's columns and propagating the join filter program
+     * state down to the child.
+     *
+     * @param op - the LogicalFilter operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitFilter(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalAggregate operator, pushing columns that are
+     * groupby keys, otherwise inserting join filters above the aggregate.
+     *
+     * @param op - the LogicalAggregate operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitAggregate(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

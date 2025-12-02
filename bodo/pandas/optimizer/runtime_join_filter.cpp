@@ -42,7 +42,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::insert_join_filters(
     duckdb::unique_ptr<duckdb::LogicalOperator> &op,
     JoinFilterProgramState &join_state_map) {
-    if (this->join_state_map.size() == 0) {
+    if (join_state_map.size() == 0) {
         return std::move(op);
     }
     std::vector<int> filter_ids;
@@ -186,7 +186,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     if (join_info.filter_columns.size()) {
                         JoinColumnInfo join_info_copy = join_info;
                         join_info_copy.is_first_locations = std::vector<bool>(
-                            false, join_info.filter_columns.size());
+                            join_info.filter_columns.size(), false);
                         out_join_state_map[join_id] = join_info_copy;
                     }
                 }
