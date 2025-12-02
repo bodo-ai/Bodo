@@ -307,7 +307,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitFilter(
                 new_is_first_locations.push_back(false);
                 continue;
             }
-            duckdb::ColumnBinding &binding = op->GetColumnBindings()[col_idx];
+            duckdb::ColumnBinding binding = op->GetColumnBindings()[col_idx];
             int64_t child_col =
                 child_colref_map[{binding.table_index, binding.column_index}];
             if (std::ranges::find(new_filter_columns, child_col) ==
