@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import datetime
 import warnings
+from datetime import datetime
 
 import pandas as pd
 from queries.dask import utils

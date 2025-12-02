@@ -20,25 +20,25 @@ def q() -> None:
         var1 = "BUILDING"
         var2 = date(1995, 3, 15)
 
-        fcustomer = customer_ds[customer_ds["c_mktsegment"] == var1]
-
-        jn1 = fcustomer.merge(orders_ds, left_on="c_custkey", right_on="o_custkey")
-        jn2 = jn1.merge(line_item_ds, left_on="o_orderkey", right_on="l_orderkey")
-
-        jn2 = jn2[jn2["o_orderdate"] < var2]
-        jn2 = jn2[jn2["l_shipdate"] > var2]
+        lsel = line_item_ds.l_shipdate > var2
+        osel = orders_ds.o_orderdate < var2
+        csel = customer_ds.c_mktsegment == var1
+        flineitem = line_item_ds[lsel]
+        forders = orders_ds[osel]
+        fcustomer = customer_ds[csel]
+        jn1 = fcustomer.merge(forders, left_on="c_custkey", right_on="o_custkey")
+        jn2 = jn1.merge(flineitem, left_on="o_orderkey", right_on="l_orderkey")
         jn2["revenue"] = jn2.l_extendedprice * (1 - jn2.l_discount)
-
-        gb = jn2.groupby(["o_orderkey", "o_orderdate", "o_shippriority"])
-        agg = gb["revenue"].sum().reset_index()
-
-        sel = agg.loc[:, ["o_orderkey", "revenue", "o_orderdate", "o_shippriority"]]
-        sel = sel.rename(columns={"o_orderkey": "l_orderkey"})
-
-        sorted = sel.sort_values(by=["revenue", "o_orderdate"], ascending=[False, True])
-        result_df = sorted.head(10)
-
-        return result_df  # type: ignore[no-any-return]
+        total = jn2.groupby(["l_orderkey", "o_orderdate", "o_shippriority"])[
+            "revenue"
+        ].sum()
+        return (
+            total.reset_index()
+            .sort_values(["revenue"], ascending=False)
+            .head(10, compute=True)[
+                ["l_orderkey", "revenue", "o_orderdate", "o_shippriority"]
+            ]
+        )
 
     utils.run_query(Q_NUM, query)
 

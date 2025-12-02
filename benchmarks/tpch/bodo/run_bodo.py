@@ -20,7 +20,6 @@ import argparse
 from bodosdk import BodoWorkspaceClient
 
 NUM_WORKERS = 2
-
 WORKER_INSTANCE = "r6i.8xlarge"
 
 

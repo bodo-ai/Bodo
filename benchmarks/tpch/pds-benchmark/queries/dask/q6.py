@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 
 import pandas as pd
 from queries.dask import utils
@@ -12,21 +12,21 @@ def q() -> None:
     def query() -> pd.DataFrame:
         line_item_ds = utils.get_line_item_ds()
 
-        var1 = date(1994, 1, 1)
-        var2 = date(1995, 1, 1)
-        var3 = 0.05
-        var4 = 0.07
-        var5 = 24
+        date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
+        date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+        var3 = 24
 
-        filt = line_item_ds[
-            (line_item_ds["l_shipdate"] >= var1) & (line_item_ds["l_shipdate"] < var2)
-        ]
-        filt = filt[(filt["l_discount"] >= var3) & (filt["l_discount"] <= var4)]
-        filt = filt[filt["l_quantity"] < var5]
-        result_value = (filt["l_extendedprice"] * filt["l_discount"]).sum().compute()
-        result_df = pd.DataFrame({"revenue": [result_value]})
+        sel = (
+            (line_item_ds.l_shipdate >= date1)
+            & (line_item_ds.l_shipdate < date2)
+            & (line_item_ds.l_discount >= 0.05)
+            & (line_item_ds.l_discount <= 0.07)
+            & (line_item_ds.l_quantity < var3)
+        )
 
-        return result_df
+        flineitem = line_item_ds[sel]
+        revenue = (flineitem.l_extendedprice * flineitem.l_discount).to_frame()
+        return revenue.sum().to_frame("revenue").compute()
 
     utils.run_query(Q_NUM, query)
 

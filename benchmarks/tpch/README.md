@@ -47,120 +47,88 @@ This script assumes `tpch-dbgen` is in the same directory. If you downloaded it 
 
 - If using S3 bucket, install `s3fs` and add your AWS credentials.
 
-## Bodo
+## 3. Running the Benchmarks
 
-### Installation
-
-Follow the instructions [here](https://docs.bodo.ai/installation_and_setup/install/).
-
-For best performance we also recommend using Intel-MPI and EFA Network Interfaces (on AWS) as described [here](https://docs.bodo.ai/installation_and_setup/recommended_cluster_config/).
-
-### Running queries
-
-Use
-
-`mpiexec -n N python bodo_queries.py --folder folder_path`
-
-```
-usage: python bodo_queries.py [-h] --folder FOLDER
-
-arguments:
-  -h, --help       Show this help message and exit
-  --folder FOLDER  The folder containing TPCH data
-
-```
-
-Example:
-
-Run with 4 cores on a local data
-
-`export BODO_NUM_WORKERS=4; python bodo_queries.py --folder SF1`
-
-Run with 288 cores on S3 bucket data
-
-`export BODO_NUM_WORKERS=288; bodo_queries.py --folder s3://bucket-name/`
-
-## Spark
-
-### Installation
-
-Here, we show the instructions for using PySpark with an EMR cluster.
-
-For other cluster configurations, please follow corresponding vendor's instructions.
-
-Follow the steps outlined in the "Launch an Amazon EMR cluster" section of the [AWS guide](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-gs-launch-sample-cluster.html)
-
-In the **Software configuration** step, select `Hadoop`, `Hive`, `JupyterEnterpriseGateway`, and `Spark`.
-
-In the **Cluster Nodes and Instances** step, choose the same instance type for both master and workers. Don't create any task instances.
-
-### Running queries
-
-Attach [pyspark_notebook.ipynb](./pyspark_notebook.ipynb) to your EMR cluster following the examples in the [AWS documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-notebooks-create.html)
-
-
-## Running TPCH Benchmarks
+This section describes how to reproduce benchmark results for both single node and multi-node configurations for the libraries listed below:
 
 ### Software versions
-
-Below are the version of the software used:
 
 | Package      | Version      |
 |----------------|----------------|
 | bodo   | 2025.12   |
-| bodosdk | |
-| polars | |
-| pandas | |
-| duckdb | |
-| dask   |  |
-| dask-cloudprovider  | |
-| PySpark  | |
+| bodosdk | 2.3.2 |
+| polars | 1.35.2 |
+| pandas | 2.3.3 |
+| duckdb | 1.4.2 |
+| dask   | 2025.11.0 |
+| dask-cloudprovider  | 2025.9.0 |
+| PySpark  | 4.0.1 |
 <!-- TODO: Daft -->
 <!-- TODO: Modin -->
 
-<!-- You can install these packages into a single environment using the provided `requirements.txt`. -->
+You can install the required libraries with the correct versions using the provided `env.yml` file:
+
+``` shell
+conda env create -n tpch_bodo --file env.yml
+conda activate tpch_bodo
+```
 
 ### Single Node
 
 <!-- TODO: describe final cluster settings -->
 
-Single-node only libraries include Polars, DuckDB, Pandas. In addition to these we also Dask, PySpark and Bodo, which are distributed engine that can be run on a single node as well. Single Node implementations can be found in the `pds-benchmark/queries` folder, which was copied from the [Polars Decision Support Benchmark](https://github.com/pola-rs/polars-benchmark) and extended to include Bodo.
+Single-node libraries include Polars, DuckDB, and Pandas. In addition to these options, the distributed engines Dask, PySpark and Bodo can be run on a single node as well. Single node implementations can be found in the `pds-benchmark/queries` directory, which contains Polars, DuckDB and PySpark queries from the [Polars Decision Support Benchmark repo](https://github.com/pola-rs/polars-benchmark) as well as Dask queries from [here](https://github.com/coiled/benchmarks/blob/main/tests/tpch/dask_queries.py) and Bodo queries.
 
-To reproduce the results for this benchmark, start by cd'ing into the benchmark folder and running
-To run a specific query from a specific implementation, you can use:
+To run a specific query for a specific library, you can use the command below (note all commands should be run from the `pds-benchmark` directory):
 
 ``` shell
 SCALE_FACTOR=SF PATH_DATA_FOLDER=/path/to/you/tpch/data python -m queries.<IMPL>.q<Q_NUM>
 ```
-Note that this should be run from the `pds-benchmark/` directory. To run all queries from a specific implementation, you can use:
+
+To run all queries for a specific library, you can use:
 ``` shell
 SCALE_FACTOR=SF PATH_DATA_FOLDER=/path/to/you/tpch/data python -m queries.<IMPL>
 ```
-These scripts will run each query (as a separate Python process) and measures the query time, which includes reading from IO. Note that each query will be run twice and only the "hot start" time will be logged. Both the cold and hot start run will be included as part of total time.
 
-Because Bodo is a drop-in Pandas replacement, we reuse the Bodo queries for the Pandas baseline. To run the Bodo queries with a Pandas backend run the Bodo script with `BODO_USE_PANDAS_BACKEND=1`.
+When running all queries, each query will be run as a separate Python process and measured based on end-to-end time including IO. Each query will be run at least twice, the first time is considered a "cold start" and will not be logged when reporting the specific query time, although both hot and cold runs will be included in the "total time" reported at the end.
 
-Note that Bodo hangs when running back-to-back queries on Mac, to get around this you can use the `./run_bodo.sh` script, which runs each query with sleeps to prevent hangs.
+Some implementations like Polars may have multiple modes (streaming, eager, etc) to run Polars with their new streaming mode:
 
-### Multi-node benchmark
+``` shell
+RUN_POLARS_STREAMING=1 python -m queries.polars
+```
+
+For a complete list of configuration options see `pds-benchmark/settings.py`. These settings can be configured using a `.env` file.
+
+Because Bodo is a drop-in Pandas replacement, we have reused the Bodo queries for the Pandas baseline. You can run the Bodo queries with a Pandas backend using:
+
+``` shell
+BODO_USE_PANDAS_BACKEND=1 python -m queries.bodo
+```
+
+There is a known issue where Bodo sometimes will hang when running back-to-back queries on Mac, to get around this you can use the `./run_bodo.sh` script, which runs each query's script separately with sleeps in between.
+
+### Multi-Node
 
 <!-- TODO: describe final cluster settings -->
 
-Distributed libraries like Bodo, Dask, PySpark also have the option of being multi-node. Because of the different infrastructure requirements for running these libraries, the scripts for reproducing multi-node results can be found in separate `impl/` directories.
+Distributed libraries like Bodo, Dask, and PySpark also have the option running on multiple nodes. Because of the different infrastructure requirements for running these libraries, the scripts for reproducing the multi-node results can be found in separate `impl/` directories.
 
 #### Bodo
 
-Follow [the instructions here](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi#bodo) to set up a Bodo Platform account through AWS marketplace and set up access tokens. You can then run the script:
+We use Bodo Platform to create the Bodo cluster. Follow [the instructions here](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi#bodo) to set up a Bodo Platform account through AWS marketplace and set up access tokens. You can then run the benchmark using the command below (note that bodosdk will have to be installed separately):
 
 ``` shell
-python run_bodo.py --folder s3://path/to/data --scale_factor SF --queries 1 2 ...
+cd bodo
+pip install bodosdk
+BODO_CLIENT_ID=... BODO_SECRET_KEY=... python run_bodo.py --folder s3://path/to/data --scale_factor SF --queries 1 2 ...
 ```
 
-Or omit the `queries` argument to run all queries.
+Or omit the `queries` argument to run all queries back-to-back.
 
 #### Dask
 
-We use [Dask Cloudprovider](https://cloudprovider.dask.org/en/latest/) to create a Dask cluster with a scheduler instance (which doesn't do any compute) and worker instances. To ensure that the local environment matches the environment running the script, we provide an `env.yml` file in the same directory:
+We use [Dask Cloudprovider](https://cloudprovider.dask.org/en/latest/) to create the Dask cluster. To ensure that the local environment matches the cluster environment, we provide an additional `env.yml` file in the same directory:
 
 ``` shell
 cd dask
@@ -171,7 +139,7 @@ python dask_queries.py --folder s3://path/to/data --scale_factor SF --queries 1 
 
 #### PySpark
 
-We used AWS EMR to create the PySpark cluster. You will need the following additional dependencies install on your local machine:
+We use AWS EMR to create the PySpark cluster. To run, you will need the following additional dependencies installed on your local machine:
 
 * [**AWS CLI**](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (Installed and configured with access keys.)
 * [**Terraform**](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
@@ -200,3 +168,6 @@ gzip -d ./emr-logs/steps/*/*
 cat ./emr-logs/steps/*/stdout
 ```
 
+## 4. Results
+
+TODO

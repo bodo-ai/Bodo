@@ -33,20 +33,21 @@ def read_ds(table_name: str) -> DataFrame:
     path = get_table_path(table_name)
 
     if settings.run.io_type == "parquet":
-        df = dd.read_parquet(path, dtype_backend="pyarrow").rename(columns=str.lower)
-        return df  # type: ignore[no-any-return]
+        # Bodo Change: use default dtype backend
+        df = dd.read_parquet(path).rename(columns=str.lower)
     elif settings.run.io_type == "csv":
         df = dd.read_csv(path, dtype_backend="pyarrow")
-        for c in df.columns:
-            if c.endswith("date"):
-                df[c] = df[c].astype("date32[day][pyarrow]")
-        return df  # type: ignore[no-any-return]
     else:
         msg = f"unsupported file type: {settings.run.io_type!r}"
         raise ValueError(msg)
 
+    for c in df.columns:
+        if c.endswith("date"):
+            df[c] = df[c].astype("date32[day][pyarrow]")
+    return df  # type: ignore[no-any-return]
 
-# Bodo Change: Removed decorators
+
+# Bodo Change: Removed decorators (always include IO)
 def get_line_item_ds() -> DataFrame:
     return read_ds("lineitem")
 

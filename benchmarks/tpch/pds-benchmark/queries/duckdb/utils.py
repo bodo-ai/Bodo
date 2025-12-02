@@ -25,6 +25,7 @@ def _scan_ds(table_name: str) -> str:
     elif settings.run.io_type == "duckdb":
         return table_name
     elif settings.run.io_type == "parquet" or settings.run.io_type == "csv":
+        # Bodo Change: read parquet
         return f"read_parquet('{path_str}')"
     else:
         msg = f"unsupported file type: {settings.run.io_type!r}"

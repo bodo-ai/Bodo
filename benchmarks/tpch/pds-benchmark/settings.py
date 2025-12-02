@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_base_dir(self) -> str:
-        # BODO Change: override computed path with S3 path.
+        # BODO Change: override computed path if provided.
         if self.paths.data_folder is not None:
             return self.paths.data_folder
         return os.path.join(self.paths.tables, f"scale-{self.scale_factor}")
