@@ -268,6 +268,10 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
                 }
             } else {
                 // Projection expression is not a column ref, cannot push down
+                // TODO: Potentiually we could create the inverse expression
+                // here and push that down but the cost to evaluate would need
+                // to be weighed against the extra filtered rows, probably a
+                // hard decision to make correctly
                 new_filter_columns.push_back(-1);
                 new_is_first_locations.push_back(false);
             }
