@@ -61,6 +61,12 @@ class Executor {
     std::vector<std::shared_ptr<Pipeline>> pipelines;
     /*
      * @brief Do topological sort and fill in the pipelines vector.
+     * https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
+     * with the modification that when a dependency is removed it is only
+     * removed from one of its parents' run_before list since we don't have an
+     * easy reference to remove it from all parents. As a result we have to
+     * check that a pipeline hasn't akready been inserted since it can be
+     * visited from multiple parents (e.g. Join Filters).
      *
      * @param cur - the current Pipeline to examine for inclusion in pipelines.
      * @param seen - used for recursion stack cycle detection
