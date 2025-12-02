@@ -217,7 +217,7 @@ def _empty_like(val):
     if type(val) is BodoScalar:
         return val.wrapped_series.head(0).dtype.type()
 
-    is_series = isinstance(val, BodoSeries)
+    is_series = isinstance(val, (BodoSeries, pd.Series))
 
     if isinstance(val, (BodoDataFrame, BodoSeries)):
         # Avoid triggering data collection
