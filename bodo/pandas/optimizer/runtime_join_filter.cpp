@@ -1,6 +1,5 @@
 #include "optimizer/runtime_join_filter.h"
 #include <algorithm>
-#include <iostream>
 #include "_plan.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
@@ -9,10 +8,6 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
-
-// RuntimeJoinFilterPushdownOptimizer::RuntimeJoinFilterPushdownOptimizer(
-//     duckdb::Optimizer &_optimizer)
-//     : optimizer(_optimizer) {}
 
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
@@ -95,6 +90,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         std::vector<bool> left_is_first_locations;
         std::vector<int64_t> right_filter_cols;
         std::vector<bool> right_is_first_locations;
+
         for (const int64_t &col_idx : join_info.filter_columns) {
             duckdb::ColumnBinding col_binding =
                 col_idx == -1 ? duckdb::ColumnBinding()

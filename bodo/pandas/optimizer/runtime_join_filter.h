@@ -8,13 +8,10 @@ struct JoinColumnInfo {
 
 class RuntimeJoinFilterPushdownOptimizer {
    public:
-    // explicit RuntimeJoinFilterPushdownOptimizer(
-    //     duckdb::Optimizer &optimizer);
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitOperator(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 
    private:
-    //[[maybe_unused]] duckdb::Optimizer &optimizer;
     size_t cur_join_filter_id = 0;
     using JoinFilterProgramState = std::unordered_map<int, JoinColumnInfo>;
     JoinFilterProgramState join_state_map;
