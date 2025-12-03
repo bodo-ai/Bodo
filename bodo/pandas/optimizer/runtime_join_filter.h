@@ -98,4 +98,14 @@ class RuntimeJoinFilterPushdownOptimizer {
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitCrossProduct(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalDistinct operator, propagating join filter
+     * program state down to the child.
+     * @param op - the LogicalDistinct operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitDistinct(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

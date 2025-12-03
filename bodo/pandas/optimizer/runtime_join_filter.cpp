@@ -8,7 +8,7 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
-#include "duckdb/planner/operator/logical_cross_product.hpp"
+#include "duckdb/planner/operator/logical_distinct.hpp"
 
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
@@ -28,6 +28,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT: {
             return this->VisitCrossProduct(op);
+        } break;
+        case duckdb::LogicalOperatorType::LOGICAL_DISTINCT: {
+            return this->VisitDistinct(op);
         } break;
         default: {
             // If we don't know how to handle this operator, insert any pending
@@ -274,7 +277,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> new_filter_columns;
         std::vector<bool> new_is_first_locations;
-        for (long long col_idx : join_info.filter_columns) {
+        for (const int64_t &col_idx : join_info.filter_columns) {
             if (col_idx == -1) {
                 new_filter_columns.push_back(-1);
                 new_is_first_locations.push_back(false);
@@ -328,7 +331,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitFilter(
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> new_filter_columns;
         std::vector<bool> new_is_first_locations;
-        for (long long col_idx : join_info.filter_columns) {
+        for (const int64_t &col_idx : join_info.filter_columns) {
             if (col_idx == -1) {
                 new_filter_columns.push_back(-1);
                 new_is_first_locations.push_back(false);
@@ -371,7 +374,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
         std::vector<int64_t> out_filter_columns;
         std::vector<bool> out_is_first_locations;
 
-        for (long long col_idx : join_info.filter_columns) {
+        for (const int64_t &col_idx : join_info.filter_columns) {
             if (col_idx == -1) {
                 push_filter_columns.push_back(-1);
                 push_is_first_locations.push_back(false);
@@ -527,5 +530,72 @@ RuntimeJoinFilterPushdownOptimizer::VisitCrossProduct(
     this->join_state_map = right_join_state_map;
     op->children[1] = VisitOperator(op->children[1]);
 
+    return this->insert_join_filters(op, out_join_state_map);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    duckdb::LogicalDistinct &dist_op = op->Cast<duckdb::LogicalDistinct>();
+    // We don't generate "distinct on" nodes right now but in case we do
+    // this may need to be updated to handle that case
+    assert(dist_op.distinct_type == duckdb::DistinctType::DISTINCT);
+
+    JoinFilterProgramState new_join_state_map;
+    JoinFilterProgramState out_join_state_map;
+
+    auto child_colref_map = getColRefMap(op->children[0]->GetColumnBindings());
+    for (const auto &[join_id, join_info] : this->join_state_map) {
+        std::vector<int64_t> push_filter_columns;
+        std::vector<bool> push_is_first_locations;
+        std::vector<int64_t> out_filter_columns;
+        std::vector<bool> out_is_first_locations;
+
+        for (const int64_t &col_idx : join_info.filter_columns) {
+            if (col_idx == -1) {
+                push_filter_columns.push_back(-1);
+                push_is_first_locations.push_back(false);
+                continue;
+            }
+
+            duckdb::ColumnBinding binding = op->GetColumnBindings()[col_idx];
+
+            // Check if the distinct target contains this column
+            auto distinct_target_iter = std::ranges::find(
+                dist_op.distinct_targets, binding,
+                [](const duckdb::unique_ptr<duckdb::Expression> &expr) {
+                    assert(expr->GetExpressionType() ==
+                           duckdb::ExpressionType::BOUND_COLUMN_REF);
+                    auto &colref_expr =
+                        expr->template Cast<duckdb::BoundColumnRefExpression>();
+                    return colref_expr.binding;
+                });
+            if (distinct_target_iter != dist_op.distinct_targets.end()) {
+                // Column is in distinct targets, push down
+                auto &colref_expr =
+                    (*distinct_target_iter)
+                        ->Cast<duckdb::BoundColumnRefExpression>();
+
+                int64_t child_col =
+                    child_colref_map[{colref_expr.binding.table_index,
+                                      colref_expr.binding.column_index}];
+                if (std::ranges::find(push_filter_columns, child_col) ==
+                    push_filter_columns.end()) {
+                    push_filter_columns.push_back(child_col);
+                    push_is_first_locations.push_back(true);
+                } else {
+                    // Duplicate column reference in projection, cannot push
+                    push_filter_columns.push_back(-1);
+                    push_is_first_locations.push_back(false);
+                }
+            } else {
+                // Column is not in distinct targets, cannot push down
+                out_filter_columns.push_back(col_idx);
+                out_is_first_locations.push_back(true);
+            }
+        }
+    }
+
+    op->children[0] = VisitOperator(op->children[0]);
     return this->insert_join_filters(op, out_join_state_map);
 }
