@@ -3989,3 +3989,46 @@ def test_np_ufunc(index_val):
         pdf,
         check_pandas_types=False,
     )
+
+
+def test_join_filter_push_cross_join():
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int32"),
+            "B": pd.array([4, 5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([7, 8], "Int32"),
+            "D": pd.array([9, 10], "Int32"),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "E": pd.array(
+                [
+                    1,
+                    1,
+                ],
+                "Int32",
+            ),
+        }
+    )
+    df4 = df1.merge(df2, how="cross")
+    df5 = df4.merge(df3, left_on="A", right_on="E", how="inner")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bd.from_pandas(df3)
+        bdf4 = bdf1.merge(bdf2, how="cross")
+        bdf5 = bdf4.merge(bdf3, left_on="A", right_on="E", how="inner")
+
+    _test_equal(
+        bdf5,
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

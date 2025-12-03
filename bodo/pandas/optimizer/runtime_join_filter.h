@@ -86,4 +86,16 @@ class RuntimeJoinFilterPushdownOptimizer {
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitAggregate(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalCrossProduct operator, propagating join filter
+     * program state down to both children. Very similar to VisitCompJoin but
+     * without any ability to create new filters or push based on join keys
+     * since there are no keys.
+     * @param op - the LogicalCrossProduct operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitCrossProduct(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

@@ -8,6 +8,7 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/planner/operator/logical_cross_product.hpp"
 
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
@@ -24,6 +25,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
             return this->VisitAggregate(op);
+        } break;
+        case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT: {
+            return this->VisitCrossProduct(op);
         } break;
         default: {
             // If we don't know how to handle this operator, insert any pending
@@ -93,6 +97,12 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         }
     }
 
+    // Get the table indices of the left child so we can
+    // check whether a column binding belongs to the left or right child
+    auto &left_child = *join_op.children[0];
+    duckdb::unordered_set<duckdb::idx_t> left_table_indices;
+    join_op.GetTableReferences(left_child, left_table_indices);
+
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> left_filter_cols;
         std::vector<bool> left_is_first_locations;
@@ -105,12 +115,6 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             duckdb::ColumnBinding col_binding =
                 col_idx == -1 ? duckdb::ColumnBinding()
                               : join_op.GetColumnBindings()[col_idx];
-
-            // Get the table indices of the left child so we can
-            // check whether a column binding belongs to the left or right child
-            auto &left_child = *join_op.children[0];
-            duckdb::unordered_set<duckdb::idx_t> left_table_indices;
-            join_op.GetTableReferences(left_child, left_table_indices);
 
             if (col_idx == -1) {
                 // Column is -1 so propagate, these filters were already
@@ -412,6 +416,116 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
 
     this->join_state_map = new_join_state_map;
     op->children[0] = VisitOperator(op->children[0]);
+
+    return this->insert_join_filters(op, out_join_state_map);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitCrossProduct(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    JoinFilterProgramState left_join_state_map;
+    JoinFilterProgramState right_join_state_map;
+    JoinFilterProgramState out_join_state_map;
+
+    auto left_child_colref_map =
+        getColRefMap(op->children[0]->GetColumnBindings());
+    auto right_child_colref_map =
+        getColRefMap(op->children[1]->GetColumnBindings());
+
+    // Get the table indices of the left child so we can
+    // check whether a column binding belongs to the left or right child
+    auto &left_child = *op->children[0];
+    duckdb::unordered_set<duckdb::idx_t> left_table_indices;
+    for (auto &b : left_child.GetColumnBindings()) {
+        left_table_indices.insert(b.table_index);
+    }
+
+    for (const auto &[join_id, join_info] : this->join_state_map) {
+        std::vector<int64_t> left_filter_cols;
+        std::vector<bool> left_is_first_locations;
+        std::vector<int64_t> right_filter_cols;
+        std::vector<bool> right_is_first_locations;
+
+        for (const int64_t &col_idx : join_info.filter_columns) {
+            // Remap each filter column to left/right child based on column
+            // binding
+            duckdb::ColumnBinding col_binding =
+                col_idx == -1 ? duckdb::ColumnBinding()
+                              : op->GetColumnBindings()[col_idx];
+
+            if (col_idx == -1) {
+                // Column is -1 so propagate, these filters were already
+                // evaluated
+                left_filter_cols.push_back(-1);
+                left_is_first_locations.push_back(false);
+                right_filter_cols.push_back(-1);
+                right_is_first_locations.push_back(false);
+            } else if (left_table_indices.find(col_binding.table_index) !=
+                       left_table_indices.end()) {
+                // Column is on the left, remap to the left child
+                left_filter_cols.push_back(left_child_colref_map[{
+                    col_binding.table_index, col_binding.column_index}]);
+                left_is_first_locations.push_back(true);
+
+            } else {
+                // Column is on the right, remap to the right child
+                right_filter_cols.push_back(right_child_colref_map[{
+                    col_binding.table_index, col_binding.column_index}]);
+                right_is_first_locations.push_back(true);
+            }
+        }
+        bool keep_left_equality =
+            std::ranges::find(left_is_first_locations, true) !=
+            left_is_first_locations.end();
+        bool keep_right_equality =
+            std::ranges::find(right_is_first_locations, true) !=
+            right_is_first_locations.end();
+
+        // If we have any live columns, add to the respective child join state
+        // map
+        if (keep_left_equality) {
+            left_join_state_map[join_id] = {
+                .filter_columns = left_filter_cols,
+                .is_first_locations = left_is_first_locations};
+        }
+        if (keep_right_equality) {
+            right_join_state_map[join_id] = {
+                .filter_columns = right_filter_cols,
+                .is_first_locations = right_is_first_locations};
+        }
+        // If we're pushing into both sides, we may need to add a filter on top
+        // of the join to evaluate the bloom filter if some columns were dropped
+        // on either side since bloom filters require all key columns
+        if (keep_left_equality && keep_right_equality) {
+            bool all_cols = std::ranges::all_of(join_info.is_first_locations,
+                                                [](bool v) { return v; });
+            if (all_cols) {
+                bool all_left = std::ranges::all_of(left_is_first_locations,
+                                                    [](bool v) { return v; });
+                bool all_right = std::ranges::all_of(right_is_first_locations,
+                                                     [](bool v) { return v; });
+                if (!all_left && !all_right) {
+                    // Both sides dropped some columns so insert a filter on top
+                    // of this join to apply the bloom filter since the the
+                    // bloom filter requires all columns
+                    if (join_info.filter_columns.size()) {
+                        JoinColumnInfo join_info_copy = join_info;
+                        // Is first is false since they were remapped into the
+                        // children so this isn't the first time the column will
+                        // be filtered at a column level
+                        join_info_copy.is_first_locations = std::vector<bool>(
+                            join_info.filter_columns.size(), false);
+                        out_join_state_map[join_id] = join_info_copy;
+                    }
+                }
+            }
+        }
+    }
+
+    this->join_state_map = left_join_state_map;
+    op->children[0] = VisitOperator(op->children[0]);
+    this->join_state_map = right_join_state_map;
+    op->children[1] = VisitOperator(op->children[1]);
 
     return this->insert_join_filters(op, out_join_state_map);
 }
