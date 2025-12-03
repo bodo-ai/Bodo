@@ -1756,6 +1756,8 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.types.timedelta_array_type
     if isinstance(first_val, bodo.types.Time):
         return TimeArrayType(first_val.precision)
+    if isinstance(first_val, datetime.time):
+        return TimeArrayType(9)
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)

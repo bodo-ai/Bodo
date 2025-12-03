@@ -5,7 +5,7 @@ import pyarrow.parquet as pq
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import _test_equal_guard, check_func
 from bodo.utils.testing import ensure_clean
 
 
@@ -300,7 +300,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
             return pd.read_parquet(fname2)
 
         df = reader()
-        assert df.equals(df_orig)
+        _test_equal_guard(df, df_orig)
 
 
 @pytest.fixture

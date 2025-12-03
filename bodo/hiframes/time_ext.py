@@ -3,7 +3,6 @@
 import datetime
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -28,7 +27,6 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
@@ -300,10 +298,6 @@ def parse_time_string(time_str):  # pragma: no cover
         return hr, mi, sc, ns, True
     # Any other case is malformed
     return 0, 0, 0, 0, False
-
-
-ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)
-ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
 
 
 # bodo.types.Time implementation that uses a single int to store hour/minute/second/microsecond/nanosecond
@@ -677,76 +671,13 @@ def overload_time_arr_dtype(A):
 @unbox(TimeArrayType)
 def unbox_time_array(typ, val, c):
     """Unbox a numpy array of time objects to a TimeArrayType"""
-    n = bodo.utils.utils.object_length(c, val)
-    arr_typ = types.Array(types.intp, 1, "C")
-    data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
-
-    # function signature of unbox_time_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="unbox_time_array")
-    c.builder.call(fn, [val, n, data_arr.data, bitmap_arr.data])
-
-    out_dt_time_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    out_dt_time_arr.data = data_arr._getvalue()
-    out_dt_time_arr.null_bitmap = bitmap_arr._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(out_dt_time_arr._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(TimeArrayType)
 def box_time_array(typ, val, c):
     """Box a TimeArrayType to a numpy array of time objects"""
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-
-    data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.data
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
-
-    n = c.builder.extract_value(data_arr.shape, 0)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(8),
-        ],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_time_array"
-    )
-    obj_arr = c.builder.call(
-        fn_get,
-        [
-            n,
-            data_arr.data,
-            bitmap_arr_data,
-            lir.Constant(lir.IntType(8), typ.precision),
-        ],
-    )
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic(prefer_literal=True)
