@@ -4077,3 +4077,41 @@ def test_join_filter_pushdown_union():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_join_filter_pushdown_aggregate_split_keys():
+    """Test that a join filter that is partially pushed through an aggregate also generates a filter above it with all keys."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 1], "Int64"),
+            "B": pd.array([4, 5, 6, 4], "Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([1, 2], "Int64"),
+            "D": pd.array([7, 8], "Int64"),
+        }
+    )
+    df3 = df1.groupby("A", as_index=False).sum()
+    df4 = df3.merge(df2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bdf1.groupby("A", as_index=False).sum()
+        bdf4 = bdf3.merge(bdf2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    assert pre == 5
+    # One join filter gets inserted above the aggregate to have both keys
+    # and one filter gets pushed below the aggregate with only one key
+    assert post == 7
+
+    _test_equal(
+        bdf4,
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

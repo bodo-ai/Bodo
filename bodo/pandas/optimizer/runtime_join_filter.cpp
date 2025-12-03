@@ -35,7 +35,6 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         case duckdb::LogicalOperatorType::LOGICAL_UNION: {
             return this->VisitUnion(op);
         } break;
-
         default: {
             // If we don't know how to handle this operator, insert any pending
             // join filters and clear the state
@@ -375,8 +374,6 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> push_filter_columns;
         std::vector<bool> push_is_first_locations;
-        std::vector<int64_t> out_filter_columns;
-        std::vector<bool> out_is_first_locations;
 
         for (const int64_t &col_idx : join_info.filter_columns) {
             if (col_idx == -1) {
@@ -405,19 +402,35 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
                 }
             } else {
                 // Aggregate expression is not a group key, cannot push down
-                out_filter_columns.push_back(col_idx);
-                out_is_first_locations.push_back(true);
+                push_filter_columns.push_back(-1);
+                push_is_first_locations.push_back(false);
+            }
+        }
+        // If any columns could be pushed down, add all to the out join state
+        // map since the join filter needs all columns to evaluate the bloom
+        // filter
+        bool all_start_cols = std::ranges::all_of(join_info.is_first_locations,
+                                                  [](bool v) { return v; });
+        bool all_new_cols = std::ranges::all_of(push_is_first_locations,
+                                                [](bool v) { return v; });
+
+        if (all_start_cols && !all_new_cols) {
+            // Some columns were dropped so we need to add a filter on top of
+            // this distinct to evaluate the bloom filter
+            if (join_info.filter_columns.size()) {
+                JoinColumnInfo join_info_copy = join_info;
+                // Is first is false since they were remapped into the
+                // children so this isn't the first time the column will
+                // be filtered at a column level
+                join_info_copy.is_first_locations =
+                    std::vector<bool>(join_info.filter_columns.size(), false);
+                out_join_state_map[join_id] = join_info_copy;
             }
         }
         if (push_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = push_filter_columns,
                 .is_first_locations = push_is_first_locations};
-        }
-        if (out_filter_columns.size()) {
-            out_join_state_map[join_id] = {
-                .filter_columns = out_filter_columns,
-                .is_first_locations = out_is_first_locations};
         }
     }
 
@@ -552,8 +565,6 @@ RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
     for (const auto &[join_id, join_info] : this->join_state_map) {
         std::vector<int64_t> push_filter_columns;
         std::vector<bool> push_is_first_locations;
-        std::vector<int64_t> out_filter_columns;
-        std::vector<bool> out_is_first_locations;
 
         for (const int64_t &col_idx : join_info.filter_columns) {
             if (col_idx == -1) {
@@ -594,9 +605,36 @@ RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
                 }
             } else {
                 // Column is not in distinct targets, cannot push down
-                out_filter_columns.push_back(col_idx);
-                out_is_first_locations.push_back(true);
+                push_filter_columns.push_back(-1);
+                push_is_first_locations.push_back(false);
             }
+        }
+        // If any columns could be pushed down, add all to the out join state
+        // map since the join filter needs all columns to evaluate the bloom
+        // filter
+        bool all_start_cols = std::ranges::all_of(join_info.is_first_locations,
+                                                  [](bool v) { return v; });
+        bool all_new_cols = std::ranges::all_of(push_is_first_locations,
+                                                [](bool v) { return v; });
+
+        if (all_start_cols && !all_new_cols) {
+            // Some columns were dropped so we need to add a filter on top of
+            // this distinct to evaluate the bloom filter
+            if (join_info.filter_columns.size()) {
+                JoinColumnInfo join_info_copy = join_info;
+                // Is first is false since they were remapped into the
+                // children so this isn't the first time the column will
+                // be filtered at a column level
+                join_info_copy.is_first_locations =
+                    std::vector<bool>(join_info.filter_columns.size(), false);
+                out_join_state_map[join_id] = join_info_copy;
+            }
+        }
+
+        if (push_filter_columns.size()) {
+            new_join_state_map[join_id] = {
+                .filter_columns = push_filter_columns,
+                .is_first_locations = push_is_first_locations};
         }
     }
 
