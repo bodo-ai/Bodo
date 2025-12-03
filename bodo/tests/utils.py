@@ -1326,6 +1326,7 @@ def _test_equal(
                 pa.types.is_map(pa_type)
                 or pa.types.is_struct(pa_type)
                 or pa.types.is_large_list(pa_type)
+                or pa.types.is_time(pa_type)
             ):
                 py_out = pd.Series(
                     _to_pa_array(
