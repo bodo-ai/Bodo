@@ -513,9 +513,6 @@ def test_to_date_valid_datetime_types(
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
 
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
-
     if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
