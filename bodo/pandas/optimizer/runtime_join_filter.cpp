@@ -374,7 +374,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
                 continue;
             }
 
-            if (col_idx < agg_op.groups.size()) {
+            if (static_cast<size_t>(col_idx) < agg_op.groups.size()) {
                 auto &expr = agg_op.groups[col_idx];
                 assert(expr->GetExpressionType() ==
                        duckdb::ExpressionType::BOUND_COLUMN_REF);
