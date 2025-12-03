@@ -3991,8 +3991,8 @@ def test_np_ufunc(index_val):
     )
 
 
-def test_join_filter_push_cross_join():
-    """Test for join filter pushdown through cross join."""
+def test_join_filter_push_cross_product():
+    """Test for join filter pushdown through cross product."""
     df1 = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3], "Int32"),
