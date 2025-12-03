@@ -101,11 +101,24 @@ class RuntimeJoinFilterPushdownOptimizer {
 
     /**
      * @brief Visits a LogicalDistinct operator, propagating join filter
-     * program state down to the child.
+     * program state down to the child if the distinct keys cover all join
+     * filters.
      * @param op - the LogicalDistinct operator to visit
      * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
      * operator
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitDistinct(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalUnion operator, remapping join filter columns
+     * through the union mappings and propagating the join filter program state
+     * down to both children.
+     *
+     * @param op - the LogicalUnion operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitUnion(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

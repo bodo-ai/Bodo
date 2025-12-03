@@ -32,6 +32,10 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         case duckdb::LogicalOperatorType::LOGICAL_DISTINCT: {
             return this->VisitDistinct(op);
         } break;
+        case duckdb::LogicalOperatorType::LOGICAL_UNION: {
+            return this->VisitUnion(op);
+        } break;
+
         default: {
             // If we don't know how to handle this operator, insert any pending
             // join filters and clear the state
@@ -598,4 +602,14 @@ RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
 
     op->children[0] = VisitOperator(op->children[0]);
     return this->insert_join_filters(op, out_join_state_map);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitUnion(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    JoinFilterProgramState join_state_map_copy = this->join_state_map;
+    op->children[0] = VisitOperator(op->children[0]);
+    this->join_state_map = join_state_map_copy;
+    op->children[1] = VisitOperator(op->children[1]);
+    return std::move(op);
 }
