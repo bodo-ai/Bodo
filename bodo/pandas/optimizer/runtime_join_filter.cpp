@@ -70,6 +70,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
 
     std::vector<duckdb::ColumnBinding> left_keys;
     std::vector<duckdb::ColumnBinding> right_keys;
+    // Get the column bindings for join equality keys. If a filter column is an
+    // equality key, we can push the filter to the other side of the join.
     for (const auto &cond : join_op.conditions) {
         if (cond.comparison == bododuckdb::ExpressionType::COMPARE_EQUAL &&
             cond.left->GetExpressionType() ==
@@ -92,10 +94,14 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         std::vector<bool> right_is_first_locations;
 
         for (const int64_t &col_idx : join_info.filter_columns) {
+            // Remap each filter column to left/right child based on column
+            // binding
             duckdb::ColumnBinding col_binding =
                 col_idx == -1 ? duckdb::ColumnBinding()
                               : join_op.GetColumnBindings()[col_idx];
 
+            // Get the table indices of the left child so we can
+            // check whether a column binding belongs to the left or right child
             auto &left_child = *join_op.children[0];
             duckdb::unordered_set<duckdb::idx_t> left_table_indices;
             join_op.GetTableReferences(left_child, left_table_indices);
@@ -109,7 +115,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 right_is_first_locations.push_back(false);
             } else if (left_table_indices.find(col_binding.table_index) !=
                        left_table_indices.end()) {
-                // Column is on the left
+                // Column is on the left, remap to the left child
                 left_filter_cols.push_back(left_child_colref_map[{
                     col_binding.table_index, col_binding.column_index}]);
                 left_is_first_locations.push_back(true);
@@ -117,8 +123,11 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 // If the column is a join key, push to right side
                 auto key_iter = std::ranges::find(left_keys, col_binding);
                 if (key_iter != left_keys.end()) {
+                    // This column is a key so figure out which right key this
+                    // matches to
                     int64_t key_idx =
                         std::distance(left_keys.begin(), key_iter);
+                    // Remap the right key column onto the right child
                     right_filter_cols.push_back(right_child_colref_map[{
                         right_keys[key_idx].table_index,
                         right_keys[key_idx].column_index}]);
@@ -128,7 +137,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     right_is_first_locations.push_back(false);
                 }
             } else {
-                // Column is on the right
+                // Column is on the right, remap to the right child
                 right_filter_cols.push_back(right_child_colref_map[{
                     col_binding.table_index, col_binding.column_index}]);
                 right_is_first_locations.push_back(true);
@@ -136,8 +145,11 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 // If the column is a join key, push to left side
                 auto key_iter = std::ranges::find(right_keys, col_binding);
                 if (key_iter != right_keys.end()) {
+                    // This column is a key so figure out which left key this
+                    // matches to
                     int64_t key_idx =
                         std::distance(right_keys.begin(), key_iter);
+                    // Remap the left key column onto the left child
                     left_filter_cols.push_back(left_child_colref_map[{
                         left_keys[key_idx].table_index,
                         left_keys[key_idx].column_index}]);
@@ -155,6 +167,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             std::ranges::find(right_is_first_locations, true) !=
             right_is_first_locations.end();
 
+        // If we have any live columns, add to the respective child join state
+        // map
         if (keep_left_equality) {
             left_join_state_map[join_id] = {
                 .filter_columns = left_filter_cols,
@@ -165,6 +179,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                 .filter_columns = right_filter_cols,
                 .is_first_locations = right_is_first_locations};
         }
+        // If we're pushing into both sides, we may need to add a filter on top
+        // of the join to evaluate the bloom filter if some columns were dropped
+        // on either side since bloom filters require all key columns
         if (keep_left_equality && keep_right_equality) {
             bool all_cols = std::ranges::all_of(join_info.is_first_locations,
                                                 [](bool v) { return v; });
@@ -179,6 +196,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     // bloom filter requires all columns
                     if (join_info.filter_columns.size()) {
                         JoinColumnInfo join_info_copy = join_info;
+                        // Is first is false since they were remapped into the
+                        // children so this isn't the first time the column will
+                        // be filtered at a column level
                         join_info_copy.is_first_locations = std::vector<bool>(
                             false, join_info.filter_columns.size());
                         out_join_state_map[join_id] = join_info_copy;
@@ -188,6 +208,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         }
     }
 
+    // If we have a right or inner join we can add a join filter on the probe
+    // (left) side based on the join equality keys
     if (join_op.join_type == duckdb::JoinType::RIGHT ||
         join_op.join_type == duckdb::JoinType::INNER) {
         // Insert runtime join filter on the probe side
@@ -222,12 +244,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     std::vector<bool>(left_eq_cols.size(), true)};
         }
     }
-    this->join_state_map = left_join_state_map;
     // Visit probe side
+    this->join_state_map = left_join_state_map;
     op->children[0] = VisitOperator(op->children[0]);
-    this->join_state_map = right_join_state_map;
     // Visit build side
+    this->join_state_map = right_join_state_map;
     op->children[1] = VisitOperator(op->children[1]);
+    // Insert any join filters needed on top of this join
     return this->insert_join_filters(op, out_join_state_map);
 }
 

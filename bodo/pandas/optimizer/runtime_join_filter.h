@@ -27,7 +27,7 @@ class RuntimeJoinFilterPushdownOptimizer {
     /**
      * @brief Inserts join filters for all entries in join_state_map above the
      * given operator op. Returns the resulting top operator, either op or the
-     * join filters. params
+     * join filters.
      *
      * @param op - the operator above which to insert join filters
      * @param join_state_map - mapping of join IDs to join column info to create
