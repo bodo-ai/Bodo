@@ -373,20 +373,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
                 push_is_first_locations.push_back(false);
                 continue;
             }
-            size_t group_idx = std::distance(
-                agg_op.groups.begin(),
-                std::ranges::find(
-                    agg_op.groups, agg_op.GetColumnBindings()[col_idx],
-                    [](auto &expr) {
-                        assert(expr->GetExpressionType() ==
-                               duckdb::ExpressionType::BOUND_COLUMN_REF);
-                        auto &colref_expr = expr->template Cast<
-                            duckdb::BoundColumnRefExpression>();
-                        return colref_expr.binding;
-                    }));
 
-            if (group_idx < agg_op.groups.size()) {
-                auto &expr = agg_op.groups[group_idx];
+            if (col_idx < agg_op.groups.size()) {
+                auto &expr = agg_op.groups[col_idx];
                 assert(expr->GetExpressionType() ==
                        duckdb::ExpressionType::BOUND_COLUMN_REF);
                 auto &colref_expr =
@@ -406,7 +395,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
             } else {
                 // Aggregate expression is not a group key, cannot push down
                 out_filter_columns.push_back(col_idx);
-                out_is_first_locations.push_back(false);
+                out_is_first_locations.push_back(true);
             }
         }
         if (push_filter_columns.size()) {
