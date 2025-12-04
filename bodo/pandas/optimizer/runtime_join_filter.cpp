@@ -419,11 +419,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
             // this distinct to evaluate the bloom filter
             if (join_info.filter_columns.size()) {
                 JoinColumnInfo join_info_copy = join_info;
-                // Is first is false since they were remapped into the
-                // children so this isn't the first time the column will
-                // be filtered at a column level
-                join_info_copy.is_first_locations =
-                    std::vector<bool>(join_info.filter_columns.size(), false);
+                // Is first is false if they were pushed since they were
+                // remapped into the children so this isn't the first time the
+                // column will be filtered at a column level
+                join_info_copy.is_first_locations.clear();
+                for (const auto &v : push_is_first_locations) {
+                    join_info_copy.is_first_locations.push_back(!v);
+                }
                 out_join_state_map[join_id] = join_info_copy;
             }
         }
@@ -622,11 +624,13 @@ RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
             // this distinct to evaluate the bloom filter
             if (join_info.filter_columns.size()) {
                 JoinColumnInfo join_info_copy = join_info;
-                // Is first is false since they were remapped into the
-                // children so this isn't the first time the column will
-                // be filtered at a column level
-                join_info_copy.is_first_locations =
-                    std::vector<bool>(join_info.filter_columns.size(), false);
+                // Is first is false if they were pushed since they were
+                // remapped into the children so this isn't the first time the
+                // column will be filtered at a column level
+                join_info_copy.is_first_locations.clear();
+                for (const auto &v : push_is_first_locations) {
+                    join_info_copy.is_first_locations.push_back(!v);
+                }
                 out_join_state_map[join_id] = join_info_copy;
             }
         }
