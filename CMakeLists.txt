@@ -855,6 +855,17 @@ else()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 
+option(USE_LIBCUDF "Enable libcudf integration" OFF)
+
+if(USE_LIBCUDF)
+  find_package(CUDAToolkit REQUIRED)
+  find_package(cudf REQUIRED CONFIG)
+  find_package(Arrow REQUIRED CONFIG)
+  target_link_libraries(ext PRIVATE cudf::cudf CUDA::cudart)
+  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS})
+  find_package(Arrow REQUIRED CONFIG)
+  target_link_libraries(ext PRIVATE arrow_cuda)
+endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
 # set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")

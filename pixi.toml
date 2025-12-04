@@ -1,20 +1,52 @@
 [workspace]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge"]
+channels = ["rapidsai", "bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
+[feature.cudf]
+platforms = ["linux-64"]
+
+[feature.cudf.dependencies]
+python = "3.12.*"
+libcudf = "*"
+cuda-toolkit = "*"
+cudatoolkit-dev = "*"
+#libcudf = "25.10"
+#cuda-toolkit = "13.0.0"
+#cudatoolkit-dev = "11.7"
+
+[feature.cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+
+[feature.cpu.dependencies]
+python = "3.13.*"
+
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
+default =      { features = ["rcpp", "dev", "local-mpi", "cpu"],          solve-group = "313" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "313" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
-pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-win" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-mac" }
 
+default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "313-linux" }
+# azure-cuda =        { features = ["rcpp", "dev", "local-mpi", "azure", "cudf"], solve-group = "313-linux" }
+# platform-cuda =     { features = ["rcpp", "platform", "platform-mpi", "cudf"],  solve-group = "313-platform-linux" }
+# platform-dev-cuda = { features = ["rcpp", "dev", "platform-mpi", "cudf"],       solve-group = "313-platform-linux" }
+
+[tasks.build-libcudf]
+cmd = "conda install -y -c conda-forge setuptools; conda install -y -c rapidsai -c conda-forge cuda-toolkit; ls -l deps/cudf/cudf-install; ls -l $CONDA_PREFIX/lib; conda list"
+#cmd = """
+#git clone --branch branch-23.08 https://github.com/rapidsai/cudf.git deps/cudf
+#cd deps/cudf/cpp && mkdir -p build && cd build
+#cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/../../cudf-install -DCMAKE_BUILD_TYPE=Release
+#cmake .. -DCMAKE_INSTALL_PREFIX=$PWD/../../cudf-install -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$CONDA_PREFIX/bin/gcc -DCMAKE_CXX_COMPILER=$CONDA_PREFIX/bin/g++ -DCUDAToolkit_ROOT=$CONDA_PREFIX -DCMAKE_CUDA_HOST_COMPILER=$CONDA_PREFIX/bin/g++ -DCMAKE_CUDA_FLAGS="-I$CONDA_PREFIX/include -L$CONDA_PREFIX/lib"
+#make -j && make install
+#"""
 
 # Build Commands
 [tasks.build-bodo]
@@ -25,6 +57,23 @@ SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+# Build Commands
+[tasks.build-bodo-cudf]
+depends-on = ["build-libcudf"]
+#cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.CMAKE_PREFIX_PATH=deps/cudf/cudf-install --config-settings=cmake.define.CMAKE_INCLUDE_PATH=deps/cudf/cudf-install/include"
+cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=build.verbose=true --config-settings=cmake.define.CUDAToolkit_ROOT=$CONDA_PREFIX --config-settings=cmake.define.USE_LIBCUDF=ON --config-settings=cmake.define.CMAKE_PREFIX_PATH=deps/cudf/cudf-install"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-cudf.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+#CPPFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/include"
+#CXXFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/include"
+#LDFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/lib"
+#CMAKE_ARGS = "-DCMAKE_PREFIX_PATH=${PROJECT_ROOT}/deps/cudf/cudf-install -DCMAKE_INCLUDE_PATH=${PROJECT_ROOT}/deps/cudf/cudf-install/include"
+#CMAKE_PREFIX_PATH = "${PROJECT_ROOT}/deps/cudf/cudf-install"
 
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
@@ -67,7 +116,6 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.13.*"
 pip = "*"
 # Core Python Deps
 numba = ">=0.62,<0.63.0"
@@ -114,6 +162,9 @@ pyzmq = "*"
 [target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+
+[feature.cudf.target.linux-64.dependencies]
+libarrow = { version = "==22.0.0", channel = "conda-forge", build = "*cuda*" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
