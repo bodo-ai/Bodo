@@ -63,4 +63,62 @@ class RuntimeJoinFilterPushdownOptimizer {
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitProjection(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalFilter operator, remapping join filter columns
+     * through the filter's columns and propagating the join filter program
+     * state down to the child.
+     *
+     * @param op - the LogicalFilter operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitFilter(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalAggregate operator, pushing columns that are
+     * groupby keys, otherwise inserting join filters above the aggregate.
+     *
+     * @param op - the LogicalAggregate operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitAggregate(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalCrossProduct operator, propagating join filter
+     * program state down to both children. Very similar to VisitCompJoin but
+     * without any ability to create new filters or push based on join keys
+     * since there are no keys.
+     * @param op - the LogicalCrossProduct operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitCrossProduct(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalDistinct operator, propagating join filter
+     * program state down to the child if the distinct keys cover all join
+     * filters.
+     * @param op - the LogicalDistinct operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitDistinct(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalUnion operator, remapping join filter columns
+     * through the union mappings and propagating the join filter program state
+     * down to both children.
+     *
+     * @param op - the LogicalUnion operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitUnion(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };

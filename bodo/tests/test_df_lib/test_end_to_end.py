@@ -3989,3 +3989,129 @@ def test_np_ufunc(index_val):
         pdf,
         check_pandas_types=False,
     )
+
+
+def test_join_filter_push_cross_product():
+    """Test for join filter pushdown through cross product."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int32"),
+            "B": pd.array([4, 5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([7, 8], "Int32"),
+            "D": pd.array([9, 10], "Int32"),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "E": pd.array(
+                [
+                    1,
+                    1,
+                ],
+                "Int32",
+            ),
+        }
+    )
+    df4 = df1.merge(df2, how="cross")
+    df5 = df4.merge(df3, left_on="A", right_on="E", how="inner")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bd.from_pandas(df3)
+        bdf4 = bdf1.merge(bdf2, how="cross")
+        bdf5 = bdf4.merge(bdf3, left_on="A", right_on="E", how="inner")
+
+    _test_equal(
+        bdf5,
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_join_filter_pushdown_union():
+    """Test for join filter pushdown through union."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int32"),
+            "B": pd.array([4, 5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.array([7, 8], "Int32"),
+            "B": pd.array([9, 10], "Int32"),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "C": pd.array(
+                [
+                    1,
+                    7,
+                ],
+                "Int32",
+            ),
+        }
+    )
+    df4 = pd.concat([df1, df2])
+    df5 = df4.merge(df3, left_on="A", right_on="C", how="inner")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bd.from_pandas(df3)
+        bdf4 = bd.concat([bdf1, bdf2])
+        bdf5 = bdf4.merge(bdf3, left_on="A", right_on="C", how="inner")
+
+    _test_equal(
+        bdf5,
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_join_filter_pushdown_aggregate_split_keys():
+    """Test that a join filter that is partially pushed through an aggregate also generates a filter above it with all keys."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 1], "Int64"),
+            "B": pd.array([4, 5, 6, 4], "Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([1, 2], "Int64"),
+            "D": pd.array([7, 8], "Int64"),
+        }
+    )
+    df3 = df1.groupby("A", as_index=False).sum()
+    df4 = df3.merge(df2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bdf1.groupby("A", as_index=False).sum()
+        bdf4 = bdf3.merge(bdf2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    assert pre == 5
+    # One join filter gets inserted above the aggregate to have both keys
+    # and one filter gets pushed below the aggregate with only one key
+    assert post == 7
+
+    _test_equal(
+        bdf4,
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
