@@ -18,9 +18,10 @@ def q() -> None:
 
         jn1["REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
 
-        agg = jn1.groupby("L_SUPPKEY", as_index=False).agg(
+        agg = jn1.groupby("L_SUPPKEY").agg(
             TOTAL_REVENUE=pd.NamedAgg(column="REVENUE", aggfunc="sum")
         )
+        agg = agg.reset_index()
         revenue = agg.rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
 
         jn2 = supplier.merge(

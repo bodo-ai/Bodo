@@ -534,15 +534,14 @@ def tpch_q18(data_folder: str, scale_factor: float = 1.0):
 
     var1 = 300
 
-    agg1 = lineitem.groupby("L_ORDERKEY")["L_QUANTITY"].sum()
-    agg1 = agg1.reset_index()
+    agg1 = lineitem.groupby("L_ORDERKEY", as_index=False)["L_QUANTITY"].sum()
     filt = agg1[agg1.L_QUANTITY > var1]
     jn1 = filt.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
     jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
     agg2 = jn2.groupby(
         ["C_NAME", "C_CUSTKEY", "O_ORDERKEY", "O_ORDERDATE", "O_TOTALPRICE"],
+        as_index=False,
     )["L_QUANTITY"].sum()
-    agg2 = agg2.reset_index()
     total = agg2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
     return total.head(100)
 

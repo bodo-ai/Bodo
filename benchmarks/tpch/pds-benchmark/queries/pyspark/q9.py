@@ -34,8 +34,9 @@ def q() -> None:
             - jn5["PS_SUPPLYCOST"] * jn5["L_QUANTITY"]
         )
 
-        gb = jn5.groupby(["NATION", "O_YEAR"], as_index=False)
+        gb = jn5.groupby(["NATION", "O_YEAR"])
         agg = gb.agg(SUM_PROFIT=pd.NamedAgg(column="AMOUNT", aggfunc="sum"))
+        agg = agg.reset_index()
         agg["SUM_PROFIT"] = agg.SUM_PROFIT.round(2)
         result_df = agg.sort_values(by=["NATION", "O_YEAR"], ascending=[True, False])
 

@@ -46,8 +46,9 @@ def q() -> None:
         total["VOLUME"] = total["L_EXTENDEDPRICE"] * (1.0 - total["L_DISCOUNT"])
         total["L_YEAR"] = total["L_SHIPDATE"].dt.year
 
-        gb = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"], as_index=False)
+        gb = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"])
         agg = gb.agg(REVENUE=pd.NamedAgg(column="VOLUME", aggfunc="sum"))
+        agg = agg.reset_index()
 
         result_df = agg.sort_values(by=["SUPP_NATION", "CUST_NATION", "L_YEAR"])
         return result_df

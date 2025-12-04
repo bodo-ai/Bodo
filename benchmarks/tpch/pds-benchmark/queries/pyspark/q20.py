@@ -20,9 +20,10 @@ def q() -> None:
         flineitem = lineitem[
             (lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)
         ]
-        agg = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"], as_index=False).agg(
+        agg = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"]).agg(
             SUM_QUANTITY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum")
         )
+        agg = agg.reset_index()
         agg["SUM_QUANTITY"] = agg["SUM_QUANTITY"] * 0.5
 
         fnation = nation[nation["N_NAME"] == var3]

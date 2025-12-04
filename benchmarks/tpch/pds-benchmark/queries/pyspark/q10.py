@@ -30,8 +30,8 @@ def q() -> None:
                 "C_ADDRESS",
                 "C_COMMENT",
             ],
-            as_index=False,
         )["REVENUE"].sum()
+        agg = agg.reset_index()
         agg["REVENUE"] = agg.REVENUE.round(2)
         total = agg.sort_values("REVENUE", ascending=False)
         return total.head(20)

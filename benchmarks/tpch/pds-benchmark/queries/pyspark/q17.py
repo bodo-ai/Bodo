@@ -15,9 +15,10 @@ def q() -> None:
         jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
         jn1 = jn1[((jn1["P_BRAND"] == var1) & (jn1["P_CONTAINER"] == var2))]
 
-        agg = jn1.groupby("L_PARTKEY", as_index=False).agg(
+        agg = jn1.groupby("L_PARTKEY").agg(
             L_QUANTITY_AVG=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean")
         )
+        agg = agg.reset_index()
 
         jn4 = jn1.merge(agg, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
         jn4 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]

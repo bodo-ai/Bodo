@@ -35,7 +35,7 @@ def get_or_create_spark() -> SparkSession:
             "spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1"
         )
         if settings.dataset_base_dir.startswith("s3a://"):
-            builder.config(
+            builder = builder.config(
                 "spark.hadoop.fs.s3a.aws.credentials.provider",
                 "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider",
             )
