@@ -89,7 +89,7 @@ def test_window_df():
                 for i in range(15)
             ],
             "O": [
-                None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
+                None if i % 8 == 4 else bodo.types.Time(microsecond=10**i)
                 for i in range(15)
             ],
             "P": pd.Series(
@@ -1225,7 +1225,7 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
                         "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
                         "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [bodo.types.Time(nanosecond=1)] * 12
+                        "AGG_OUTPUT_5": [bodo.types.Time(microsecond=1)] * 12
                         + [None] * 3,
                         "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
                     }
@@ -1377,7 +1377,7 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
                         # This answer is identical to the input column
                         "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
+                            None if i % 8 == 4 else bodo.types.Time(microsecond=10**i)
                             for i in range(15)
                         ],
                         "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
