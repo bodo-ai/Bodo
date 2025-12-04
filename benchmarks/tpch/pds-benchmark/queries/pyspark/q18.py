@@ -4,49 +4,29 @@ Q_NUM = 18
 
 
 def q() -> None:
-    query_str = """
-    select
-        c_name,
-        c_custkey,
-        o_orderkey,
-        to_date(o_orderdate) as o_orderdat,
-        o_totalprice,
-        DOUBLE(sum(l_quantity)) as col6
-    from
-        customer,
-        orders,
-        lineitem
-    where
-        o_orderkey in (
-            select
-                l_orderkey
-            from
-                lineitem
-            group by
-                l_orderkey having
-                    sum(l_quantity) > 300
+    def query_func():
+        lineitem = utils.get_line_item_ds()
+        orders = utils.get_orders_ds()
+        customer = utils.get_customer_ds()
+
+        var1 = 300
+
+        agg1 = lineitem.groupby("L_ORDERKEY", as_index=False)["L_QUANTITY"].sum()
+        filt = agg1[agg1.L_QUANTITY > var1]
+        jn1 = filt.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+        jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
+        agg2 = jn2.groupby(
+            ["C_NAME", "C_CUSTKEY", "O_ORDERKEY", "O_ORDERDATE", "O_TOTALPRICE"],
+            as_index=False,
+        )["L_QUANTITY"].sum()
+        total = agg2.sort_values(
+            ["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True]
         )
-        and c_custkey = o_custkey
-        and o_orderkey = l_orderkey
-    group by
-        c_name,
-        c_custkey,
-        o_orderkey,
-        o_orderdate,
-        o_totalprice
-    order by
-        o_totalprice desc,
-        o_orderdate
-    limit 100
-	"""
+        return total.head(100)
 
-    utils.get_line_item_ds()
-    utils.get_customer_ds()
-    utils.get_orders_ds()
+    _ = utils.get_or_create_spark()
 
-    q_final = utils.get_or_create_spark().sql(query_str)
-
-    utils.run_query(Q_NUM, q_final)
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

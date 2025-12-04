@@ -62,7 +62,7 @@ This section describes how to reproduce benchmark results for both single node a
 | duckdb | 1.4.2 |
 | dask   | 2025.11.0 |
 | dask-cloudprovider  | 2025.9.0 |
-| PySpark  | 4.0.1 |
+| PySpark  | 3.5.2 |
 <!-- TODO: Daft -->
 <!-- TODO: Modin -->
 
@@ -77,7 +77,7 @@ conda activate tpch_bodo
 
 <!-- TODO: describe final cluster settings -->
 
-Single-node libraries include Polars, DuckDB, and Pandas. In addition to these options, the distributed engines Dask, PySpark and Bodo can be run on a single node as well. Single node implementations can be found in the `pds-benchmark/queries` directory, which contains Polars, DuckDB and PySpark queries from the [Polars Decision Support Benchmark repo](https://github.com/pola-rs/polars-benchmark) as well as Dask queries from [here](https://github.com/coiled/benchmarks/blob/main/tests/tpch/dask_queries.py) and Bodo queries.
+Single-node libraries include Polars, DuckDB, and Pandas. In addition to these options, the distributed engines Dask, PySpark and Bodo can be run on a single node as well. Single node implementations can be found in the `pds-benchmark/queries` directory, which contains Polars, DuckDB queries from the [Polars Decision Support Benchmark repo](https://github.com/pola-rs/polars-benchmark) as well as Dask queries from [here](https://github.com/coiled/benchmarks/blob/main/tests/tpch/dask_queries.py), Bodo and PySpark (Pandas API) queries.
 
 To run a specific query for a specific library, you can use the command below (note all commands should be run from the `pds-benchmark` directory):
 
@@ -137,7 +137,7 @@ conda activate dask_tpch
 python dask_queries.py --folder s3://path/to/data --scale_factor SF --queries 1 2 ...
 ```
 
-#### PySpark
+#### PySpark (Pandas API on Spark)
 
 We use AWS EMR to create the PySpark cluster. To run, you will need the following additional dependencies installed on your local machine:
 
@@ -150,6 +150,7 @@ You can then run the terraform script:
 
 ``` shell
 cd pyspark
+terraform init
 terraform apply \
   -var="scale_factor=SF" \
   -var='queries=[1,2,...]' \
@@ -166,6 +167,12 @@ aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"
 # View step logs with execution time result
 gzip -d ./emr-logs/steps/*/*
 cat ./emr-logs/steps/*/stdout
+```
+
+Finally, to clean up resources:
+
+``` shell
+terraform destroy
 ```
 
 ## 4. Results

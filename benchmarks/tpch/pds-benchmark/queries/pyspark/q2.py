@@ -4,62 +4,57 @@ Q_NUM = 2
 
 
 def q() -> None:
-    query_str = """
-    select
-        s_acctbal,
-        s_name,
-        n_name,
-        p_partkey,
-        p_mfgr,
-        s_address,
-        s_phone,
-        s_comment
-    from
-        part,
-        supplier,
-        partsupp,
-        nation,
-        region
-    where
-        p_partkey = ps_partkey
-        and s_suppkey = ps_suppkey
-        and p_size = 15
-        and p_type like '%BRASS'
-        and s_nationkey = n_nationkey
-        and n_regionkey = r_regionkey
-        and r_name = 'EUROPE'
-        and ps_supplycost = (
-            select
-                min(ps_supplycost)
-            from
-                partsupp,
-                supplier,
-                nation,
-                region
-            where
-                p_partkey = ps_partkey
-                and s_suppkey = ps_suppkey
-                and s_nationkey = n_nationkey
-                and n_regionkey = r_regionkey
-                and r_name = 'EUROPE'
+    def query_func():
+        part = utils.get_part_ds()
+        partsupp = utils.get_part_supp_ds()
+        supplier = utils.get_supplier_ds()
+        nation = utils.get_nation_ds()
+        region = utils.get_region_ds()
+
+        var1 = 15
+        var2 = "BRASS"
+        var3 = "EUROPE"
+
+        jn = (
+            part.merge(partsupp, left_on="P_PARTKEY", right_on="PS_PARTKEY")
+            .merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+            .merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+            .merge(region, left_on="N_REGIONKEY", right_on="R_REGIONKEY")
         )
-    order by
-        s_acctbal desc,
-        n_name,
-        s_name,
-        p_partkey
-    limit 100
-    """
 
-    utils.get_region_ds()
-    utils.get_nation_ds()
-    utils.get_supplier_ds()
-    utils.get_part_ds()
-    utils.get_part_supp_ds()
+        jn = jn[jn["P_SIZE"] == var1]
+        jn = jn[jn["P_TYPE"].str.endswith(var2)]
+        jn = jn[jn["R_NAME"] == var3]
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        gb = jn.groupby("P_PARTKEY", as_index=False)
+        agg = gb["PS_SUPPLYCOST"].min()
+        jn2 = agg.merge(jn, on=["P_PARTKEY", "PS_SUPPLYCOST"])
 
-    utils.run_query(Q_NUM, q_final)
+        sel = jn2.loc[
+            :,
+            [
+                "S_ACCTBAL",
+                "S_NAME",
+                "N_NAME",
+                "P_PARTKEY",
+                "P_MFGR",
+                "S_ADDRESS",
+                "S_PHONE",
+                "S_COMMENT",
+            ],
+        ]
+
+        sort = sel.sort_values(
+            by=["S_ACCTBAL", "N_NAME", "S_NAME", "P_PARTKEY"],
+            ascending=[False, True, True, True],
+        )
+        result_df = sort.head(100)
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

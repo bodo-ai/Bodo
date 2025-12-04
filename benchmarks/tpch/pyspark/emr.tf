@@ -17,7 +17,7 @@ variable "scale_factor" {
 variable "queries" {
   description = "List of TPCH queries to run."
   type        = list(number)
-  default     = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
+  default     = [2,3,5,6,7,8,9,10,11,14,15,17,18,19,20]
 }
 
 locals {
@@ -35,8 +35,8 @@ resource "random_id" "bucket_id" {
 
 resource "aws_s3_object" "python_script" {
   bucket = aws_s3_bucket.emr_bucket.id
-  key    = "scripts/pyspark_queries.py"
-  source = "./pyspark_queries.py"
+  key    = "scripts/pandas_on_spark_queries.py"
+  source = "./pandas_on_spark_queries.py"
 }
 
 resource "aws_s3_object" "bootstrap_script" {
@@ -89,7 +89,7 @@ resource "aws_emr_cluster" "emr_cluster" {
       jar  = "command-runner.jar"
       args = concat([
       "spark-submit",
-      "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pyspark_queries.py",
+      "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pandas_on_spark_queries.py",
       "--folder", "${var.data_folder}",
       "--scale_factor", tostring(var.scale_factor),
       "--queries"
@@ -203,7 +203,7 @@ EOF
 }
 
 resource "aws_iam_instance_profile" "emr_profile" {
-  name = "EMR_EC2_Instance_Profile"
+  name = "EMR_EC2_InstanceProfile"
   role = aws_iam_role.emr_instance_role.name
 }
 

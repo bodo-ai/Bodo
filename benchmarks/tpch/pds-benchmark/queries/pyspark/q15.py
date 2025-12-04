@@ -1,55 +1,44 @@
+import pandas as pd
 from queries.pyspark import utils
 
 Q_NUM = 15
 
 
 def q() -> None:
-    spark = utils.get_or_create_spark()
+    def query_func():
+        lineitem = utils.get_line_item_ds()
+        supplier = utils.get_supplier_ds()
 
-    ddl = """
-    create temp view revenue (supplier_no, total_revenue) as
-        select
-            l_suppkey,
-            sum(l_extendedprice * (1 - l_discount))
-        from
-            lineitem
-        where
-            l_shipdate >= date '1996-01-01'
-            and l_shipdate < date '1996-01-01' + interval '3' month
-        group by
-            l_suppkey
-    """
+        var1 = pd.Timestamp("1996-01-01")
+        var2 = var1 + pd.DateOffset(months=3)
 
-    query_str = """
-    select
-        s_suppkey,
-        s_name,
-        s_address,
-        s_phone,
-        total_revenue
-    from
-        supplier,
-        revenue
-    where
-        s_suppkey = supplier_no
-        and total_revenue = (
-            select
-                max(total_revenue)
-            from
-                revenue
+        jn1 = lineitem[
+            (lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)
+        ]
+
+        jn1["REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
+
+        agg = jn1.groupby("L_SUPPKEY", as_index=False).agg(
+            TOTAL_REVENUE=pd.NamedAgg(column="REVENUE", aggfunc="sum")
         )
-    order by
-        s_suppkey
-	"""
+        revenue = agg.rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
 
-    utils.get_line_item_ds()
-    utils.get_supplier_ds()
+        jn2 = supplier.merge(
+            revenue, left_on="S_SUPPKEY", right_on="SUPPLIER_NO", how="inner"
+        )
 
-    spark.sql(ddl)
-    q_final = spark.sql(query_str)
+        max_revenue = revenue["TOTAL_REVENUE"].max()
+        jn2 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
 
-    utils.run_query(Q_NUM, q_final)
-    spark.sql("drop view revenue")
+        result_df = jn2[
+            ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
+        ].sort_values(by="S_SUPPKEY")
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

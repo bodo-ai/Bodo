@@ -1,52 +1,44 @@
+import pandas as pd
 from queries.pyspark import utils
 
 Q_NUM = 10
 
 
 def q() -> None:
-    query_str = """
-    select
-        c_custkey,
-        c_name,
-        round(sum(l_extendedprice * (1 - l_discount)), 2) as revenue,
-        c_acctbal,
-        n_name,
-        c_address,
-        c_phone,
-        c_comment
-    from
-        customer,
-        orders,
-        lineitem,
-        nation
-    where
-        c_custkey = o_custkey
-        and l_orderkey = o_orderkey
-        and o_orderdate >= date '1993-10-01'
-        and o_orderdate < date '1993-10-01' + interval '3' month
-        and l_returnflag = 'R'
-        and c_nationkey = n_nationkey
-    group by
-        c_custkey,
-        c_name,
-        c_acctbal,
-        c_phone,
-        n_name,
-        c_address,
-        c_comment
-    order by
-        revenue desc
-    limit 20
-	"""
+    def query_func():
+        customer = utils.get_customer_ds()
+        orders = utils.get_orders_ds()
+        lineitem = utils.get_line_item_ds()
+        nation = utils.get_nation_ds()
 
-    utils.get_customer_ds()
-    utils.get_orders_ds()
-    utils.get_line_item_ds()
-    utils.get_nation_ds()
+        var1 = pd.Timestamp("1994-11-01")
+        var2 = pd.Timestamp("1995-02-01")
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
+        flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
+        jn1 = flineitem.merge(forders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+        jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
+        jn3 = jn2.merge(nation, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
+        jn3["REVENUE"] = jn3.L_EXTENDEDPRICE * (1.0 - jn3.L_DISCOUNT)
+        agg = jn3.groupby(
+            [
+                "C_CUSTKEY",
+                "C_NAME",
+                "C_ACCTBAL",
+                "C_PHONE",
+                "N_NAME",
+                "C_ADDRESS",
+                "C_COMMENT",
+            ],
+            as_index=False,
+        )["REVENUE"].sum()
+        agg["REVENUE"] = agg.REVENUE.round(2)
+        total = agg.sort_values("REVENUE", ascending=False)
+        return total.head(20)
 
-    utils.run_query(Q_NUM, q_final)
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

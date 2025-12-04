@@ -1,58 +1,52 @@
+import pandas as pd
 from queries.pyspark import utils
 
 Q_NUM = 20
 
 
 def q() -> None:
-    query_str = """
-    select
-        s_name,
-        s_address
-    from
-        supplier,
-        nation
-    where
-        s_suppkey in (
-            select
-                ps_suppkey
-            from
-                partsupp
-            where
-                ps_partkey in (
-                    select
-                        p_partkey
-                    from
-                        part
-                    where
-                        p_name like 'forest%'
-                )
-                and ps_availqty > (
-                    select
-                        0.5 * sum(l_quantity)
-                    from
-                        lineitem
-                    where
-                        l_partkey = ps_partkey
-                        and l_suppkey = ps_suppkey
-                        and l_shipdate >= date '1994-01-01'
-                        and l_shipdate < date '1994-01-01' + interval '1' year
-                )
+    def query_func():
+        lineitem = utils.get_line_item_ds()
+        supplier = utils.get_supplier_ds()
+        partsupp = utils.get_part_supp_ds()
+        part = utils.get_part_ds()
+        nation = utils.get_nation_ds()
+
+        var1 = pd.Timestamp("1996-01-01")
+        var2 = pd.Timestamp("1997-01-01")
+        var3 = "JORDAN"
+        var4 = "azure"
+
+        flineitem = lineitem[
+            (lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)
+        ]
+        agg = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"], as_index=False).agg(
+            SUM_QUANTITY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum")
         )
-        and s_nationkey = n_nationkey
-        and n_name = 'CANADA'
-    order by
-        s_name
-	"""
+        agg["SUM_QUANTITY"] = agg["SUM_QUANTITY"] * 0.5
 
-    utils.get_line_item_ds()
-    utils.get_nation_ds()
-    utils.get_supplier_ds()
-    utils.get_part_ds()
-    utils.get_part_supp_ds()
+        fnation = nation[nation["N_NAME"] == var3]
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        jn1 = supplier.merge(fnation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
 
-    utils.run_query(Q_NUM, q_final)
+        fpart = part[part["P_NAME"].str.startswith(var4)]
+
+        jn2 = partsupp.merge(fpart, left_on="PS_PARTKEY", right_on="P_PARTKEY")
+        jn3 = jn2.merge(
+            agg,
+            left_on=["PS_SUPPKEY", "PS_PARTKEY"],
+            right_on=["L_SUPPKEY", "L_PARTKEY"],
+        )
+        jn3 = jn3[jn3["PS_AVAILQTY"] > jn3["SUM_QUANTITY"]]
+        jn4 = jn1.merge(jn3, left_on="S_SUPPKEY", right_on="PS_SUPPKEY")
+
+        result_df = jn4[["S_NAME", "S_ADDRESS"]].sort_values("S_NAME", ascending=True)
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

@@ -1,52 +1,40 @@
 from queries.pyspark import utils
 from settings import Settings
 
-settings = Settings()
-
 Q_NUM = 11
+
+settings = Settings()
 
 
 def q() -> None:
-    scale_factor = settings.scale_factor
-    fraction = 0.0001 / scale_factor
+    def query_func():
+        partsupp = utils.get_part_supp_ds()
+        supplier = utils.get_supplier_ds()
+        nation = utils.get_nation_ds()
 
-    query_str = f"""
-    select
-        ps_partkey,
-        round(sum(ps_supplycost * ps_availqty), 2) as value
-    from
-        partsupp,
-        supplier,
-        nation
-    where
-        ps_suppkey = s_suppkey
-        and s_nationkey = n_nationkey
-        and n_name = 'GERMANY'
-    group by
-        ps_partkey having
-                sum(ps_supplycost * ps_availqty) > (
-            select
-                sum(ps_supplycost * ps_availqty) * {fraction}
-            from
-                partsupp,
-                supplier,
-                nation
-            where
-                ps_suppkey = s_suppkey
-                and s_nationkey = n_nationkey
-                and n_name = 'GERMANY'
-            )
-        order by
-            value desc
-	"""
+        var1 = "GERMANY"
+        var2 = 0.0001 / settings.scale_factor
 
-    utils.get_supplier_ds()
-    utils.get_part_supp_ds()
-    utils.get_nation_ds()
+        jn1 = partsupp.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        jn2 = jn1.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        jn2 = jn2[jn2["N_NAME"] == var1]
 
-    utils.run_query(Q_NUM, q_final)
+        threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum() * var2
+
+        jn2["VALUE"] = jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]
+
+        gb = jn2.groupby("PS_PARTKEY", as_index=False)["VALUE"].sum()
+
+        filt = gb[gb["VALUE"] > threshold]
+        filt["VALUE"] = filt.VALUE.round(2)
+        result_df = filt.sort_values(by="VALUE", ascending=False)
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

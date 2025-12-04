@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pandas as pd
+import pyspark.pandas as ps
 from pyspark.sql import SparkSession
 from queries.common_utils import (
     check_query_result_pd,
@@ -17,14 +19,31 @@ settings = Settings()
 
 
 def get_or_create_spark() -> SparkSession:
-    spark = (
+    builder = (
         SparkSession.builder.appName("spark_queries")
         .master("local[*]")
         .config("spark.driver.memory", settings.run.spark_driver_memory)
         .config("spark.executor.memory", settings.run.spark_executor_memory)
         .config("spark.log.level", settings.run.spark_log_level)
-        .getOrCreate()
+        .config("spark.sql.ansi.enabled", "false")
+        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
     )
+    if settings.dataset_base_dir.startswith(
+        "s3://"
+    ) or settings.dataset_base_dir.startswith("s3a://"):
+        builder = builder.config(
+            "spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1"
+        )
+        if settings.dataset_base_dir.startswith("s3a://"):
+            builder.config(
+                "spark.hadoop.fs.s3a.aws.credentials.provider",
+                "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider",
+            )
+
+    spark = builder.getOrCreate()
+
+    ps.set_option("compute.default_index_type", "distributed-sequence")
+
     return spark
 
 
@@ -37,14 +56,14 @@ def _read_ds(table_name: str) -> DataFrame:
     path = get_table_path(table_name)
 
     if settings.run.io_type == "parquet":
-        df = get_or_create_spark().read.parquet(str(path))
-    elif settings.run.io_type == "csv":
-        df = get_or_create_spark().read.csv(str(path), header=True, inferSchema=True)
+        df = ps.read_parquet(path)
+        for c in df.columns:
+            if c.endswith("DATE"):
+                df[c] = ps.to_datetime(df[c], format="%Y-%m-%d")
     else:
         msg = f"unsupported file type: {settings.run.io_type!r}"
         raise ValueError(msg)
 
-    df.createOrReplaceTempView(table_name)
     return df
 
 
@@ -80,8 +99,13 @@ def get_part_supp_ds() -> DataFrame:
     return _read_ds("partsupp")
 
 
-def run_query(query_number: int, df: DataFrame) -> None:
-    query = df.toPandas
+def run_query(query_number: int, query_func) -> None:
+    def query_final():
+        res = query_func()
+        if not isinstance(res, pd.DataFrame):
+            res = res.to_pandas()
+        return res
+
     run_query_generic(
-        query, query_number, "pyspark", query_checker=check_query_result_pd
+        query_final, query_number, "pyspark", query_checker=check_query_result_pd
     )

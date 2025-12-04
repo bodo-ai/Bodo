@@ -1,54 +1,49 @@
+import pandas as pd
 from queries.pyspark import utils
 
 Q_NUM = 9
 
 
 def q() -> None:
-    query_str = """
-    select
-        nation,
-        o_year,
-        round(sum(amount), 2) as sum_profit
-    from
-        (
-            select
-                n_name as nation,
-                year(o_orderdate) as o_year,
-                l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
-            from
-                part,
-                supplier,
-                lineitem,
-                partsupp,
-                orders,
-                nation
-            where
-                s_suppkey = l_suppkey
-                and ps_suppkey = l_suppkey
-                and ps_partkey = l_partkey
-                and p_partkey = l_partkey
-                and o_orderkey = l_orderkey
-                and s_nationkey = n_nationkey
-                and p_name like '%green%'
-        ) as profit
-    group by
-        nation,
-        o_year
-    order by
-        nation,
-        o_year desc
-	"""
+    def query_func():
+        part = utils.get_part_ds()
+        partsupp = utils.get_part_supp_ds()
+        supplier = utils.get_supplier_ds()
+        lineitem = utils.get_line_item_ds()
+        orders = utils.get_orders_ds()
+        nation = utils.get_nation_ds()
 
-    utils.get_part_ds()
-    utils.get_supplier_ds()
-    utils.get_line_item_ds()
-    utils.get_part_supp_ds()
-    utils.get_orders_ds()
-    utils.get_nation_ds()
+        var1 = "ghost"
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        part = part[part.P_NAME.str.contains(var1)]
 
-    utils.run_query(Q_NUM, q_final)
+        jn1 = part.merge(partsupp, left_on="P_PARTKEY", right_on="PS_PARTKEY")
+        jn2 = jn1.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        jn3 = jn2.merge(
+            lineitem,
+            left_on=["PS_PARTKEY", "PS_SUPPKEY"],
+            right_on=["L_PARTKEY", "L_SUPPKEY"],
+        )
+        jn4 = jn3.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+        jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+        jn5["O_YEAR"] = jn5["O_ORDERDATE"].dt.year
+        jn5["NATION"] = jn5["N_NAME"]
+        jn5["AMOUNT"] = (
+            jn5["L_EXTENDEDPRICE"] * (1 - jn5["L_DISCOUNT"])
+            - jn5["PS_SUPPLYCOST"] * jn5["L_QUANTITY"]
+        )
+
+        gb = jn5.groupby(["NATION", "O_YEAR"], as_index=False)
+        agg = gb.agg(SUM_PROFIT=pd.NamedAgg(column="AMOUNT", aggfunc="sum"))
+        agg["SUM_PROFIT"] = agg.SUM_PROFIT.round(2)
+        result_df = agg.sort_values(by=["NATION", "O_YEAR"], ascending=[True, False])
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":

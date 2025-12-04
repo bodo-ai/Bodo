@@ -1,53 +1,55 @@
+import pandas as pd
 from queries.pyspark import utils
 
 Q_NUM = 19
 
 
 def q() -> None:
-    query_str = """
-    select
-        round(sum(l_extendedprice* (1 - l_discount)), 2) as revenue
-    from
-        lineitem,
-        part
-    where
-        (
-            p_partkey = l_partkey
-            and p_brand = 'Brand#12'
-            and p_container in ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')
-            and l_quantity >= 1 and l_quantity <= 1 + 10
-            and p_size between 1 and 5
-            and l_shipmode in ('AIR', 'AIR REG')
-            and l_shipinstruct = 'DELIVER IN PERSON'
-        )
-        or
-        (
-            p_partkey = l_partkey
-            and p_brand = 'Brand#23'
-            and p_container in ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
-            and l_quantity >= 10 and l_quantity <= 20
-            and p_size between 1 and 10
-            and l_shipmode in ('AIR', 'AIR REG')
-            and l_shipinstruct = 'DELIVER IN PERSON'
-        )
-        or
-        (
-            p_partkey = l_partkey
-            and p_brand = 'Brand#34'
-            and p_container in ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')
-            and l_quantity >= 20 and l_quantity <= 30
-            and p_size between 1 and 15
-            and l_shipmode in ('AIR', 'AIR REG')
-            and l_shipinstruct = 'DELIVER IN PERSON'
-        )
-	"""
+    def query_func():
+        lineitem = utils.get_line_item_ds()
+        part = utils.get_part_ds()
 
-    utils.get_line_item_ds()
-    utils.get_part_ds()
+        jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+        jn1 = jn1[
+            (
+                (jn1["P_BRAND"] == "Brand#31")
+                & (jn1["P_CONTAINER"].isin(("SM CASE", "SM BOX", "SM PACK", "SM PKG")))
+                & ((jn1["L_QUANTITY"] >= 4) & (jn1["L_QUANTITY"] <= 14))
+                & (jn1["P_SIZE"] <= 5)
+                & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+                & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
+            )
+            | (
+                (jn1["P_BRAND"] == "Brand#43")
+                & (
+                    jn1["P_CONTAINER"].isin(
+                        ("MED BAG", "MED BOX", "MED PKG", "MED PACK")
+                    )
+                )
+                & ((jn1["L_QUANTITY"] >= 15) & (jn1["L_QUANTITY"] <= 25))
+                & ((jn1["P_SIZE"] >= 1) & (jn1["P_SIZE"] <= 10))
+                & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+                & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
+            )
+            | (
+                (jn1["P_BRAND"] == "Brand#43")
+                & (jn1["P_CONTAINER"].isin(("LG CASE", "LG BOX", "LG PACK", "LG PKG")))
+                & ((jn1["L_QUANTITY"] >= 26) & (jn1["L_QUANTITY"] <= 36))
+                & (jn1["P_SIZE"] <= 15)
+                & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+                & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
+            )
+        ]
 
-    q_final = utils.get_or_create_spark().sql(query_str)
+        total = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
-    utils.run_query(Q_NUM, q_final)
+        result_df = pd.DataFrame({"REVENUE": [round(total, 2)]})
+
+        return result_df
+
+    _ = utils.get_or_create_spark()
+
+    utils.run_query(Q_NUM, query_func)
 
 
 if __name__ == "__main__":
