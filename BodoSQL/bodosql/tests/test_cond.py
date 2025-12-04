@@ -565,7 +565,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
                 [
                     None,
                     bodo.types.Time(13, 37, 45),
-                    bodo.types.Time(1, 47, 59, 290, 574, 817),
+                    bodo.types.Time(1, 47, 59, 290, 574),
                 ]
                 * 4
             )
@@ -1010,15 +1010,15 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
                 [
                     bodo.types.Time(5, 13, 29),
                     bodo.types.Time(13, 37, 45),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(5, 13, 29),
                     bodo.types.Time(13, 37, 45),
                     bodo.types.Time(22, 7, 16),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(13, 37, 45),
                     bodo.types.Time(22, 7, 16),
                     bodo.types.Time(5, 13, 29),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(22, 7, 16),
                 ]
             )
