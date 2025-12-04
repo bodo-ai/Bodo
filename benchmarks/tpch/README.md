@@ -92,7 +92,7 @@ SCALE_FACTOR=SF PATH_DATA_FOLDER=/path/to/you/tpch/data python -m queries.<IMPL>
 
 When running all queries, each query will be run as a separate Python process and measured based on end-to-end time including IO. Each query will be run at least twice, the first time is considered a "cold start" and will not be logged when reporting the specific query time, although both hot and cold runs will be included in the "total time" reported at the end.
 
-Some implementations like Polars may have multiple modes (streaming, eager, etc) to run Polars with their new streaming mode:
+Some implementations like Polars may have multiple modes (streaming, eager, etc). To run Polars with their new streaming mode:
 
 ``` shell
 RUN_POLARS_STREAMING=1 python -m queries.polars
