@@ -548,8 +548,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
                 ColumnBinding cte_binding(cte_id, i);
                 if (column_references.find(cte_binding) != column_references.end()) {
                     ColumnBinding child_binding(use_cte_root_table_index, i);
-                    BoundColumnRefExpression tempcolref(use_cte_op.types[i], child_binding);
-                    AddBinding(tempcolref);
+                    pass.temp_column_refs.push_back(make_uniq<BoundColumnRefExpression>(use_cte_op.types[i], child_binding));
+                    AddBinding(*(pass.temp_column_refs.back()));
                     ++count_col_found;
                 }
             }
@@ -586,8 +586,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
                     binding = ColumnBinding(aggr.aggregate_index, agg_col);
                 }
 
-                BoundColumnRefExpression tempcolref(cte_op.types[col_idx], binding);
-                cte_side.AddBinding(tempcolref);
+                pass.temp_column_refs.push_back(make_uniq<BoundColumnRefExpression>(cte_op.types[col_idx], binding));
+                cte_side.AddBinding(*(pass.temp_column_refs.back()));
             }
         } else {
             vector<idx_t> cte_root_table_indices = cte_op.GetTableIndex();
@@ -600,8 +600,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
             // For each column needed by a CTERef.
             for (auto col_idx : cte_it->second) {
                 ColumnBinding binding(cte_root_table_index, col_idx);
-                BoundColumnRefExpression tempcolref(cte_op.types[col_idx], binding);
-                cte_side.AddBinding(tempcolref);
+                pass.temp_column_refs.push_back(make_uniq<BoundColumnRefExpression>(cte_op.types[col_idx], binding));
+                cte_side.AddBinding(*(pass.temp_column_refs.back()));
             }
         }
         // Now process the duplicated (CTE) side of the CTE.

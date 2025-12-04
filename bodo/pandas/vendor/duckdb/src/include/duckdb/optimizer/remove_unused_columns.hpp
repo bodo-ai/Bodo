@@ -84,6 +84,7 @@ private:
     // same CTE index by storing the addresses of the CTERef nodes
     // that we've seen for each CTE index thus far.
     unordered_map<idx_t, unordered_set<void *>> cte_ref_check;
+    vector<unique_ptr<BoundColumnRefExpression>> temp_column_refs;
 };
 // Bodo Change End
 

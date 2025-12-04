@@ -12,6 +12,7 @@ from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -496,6 +497,29 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             empty_data.reset_index(drop=True, inplace=True)
         return wrap_plan(
             plan=LogicalFilter(empty_data, self._plan, key_plan),
+        )
+
+    @check_args_fallback(unsupported="none")
+    def __array_ufunc__(
+        self, ufunc: np.ufunc, method: str, *inputs: pt.Any, **kwargs: pt.Any
+    ):
+        """Adds support for simple numpy ufuncs on BodoSeries like np.func(Series)."""
+        from bodo.pandas.base import _empty_like
+
+        if method != "__call__" or len(inputs) != 1 or inputs[0] is not self or kwargs:
+            raise BodoLibNotImplementedException(
+                "ufunc not implemented for BodoSeries yet"
+            )
+
+        new_metadata = _get_empty_series_arrow(ufunc(_empty_like(self)))
+
+        return _get_series_func_plan(
+            self._plan,
+            new_metadata,
+            ufunc,
+            (),
+            {},
+            is_method=False,
         )
 
     @staticmethod
@@ -3064,8 +3088,8 @@ def sig_bind(name, accessor_type, *args, **kwargs):
             func = getattr(sample_series, name)
             signature = inspect.signature(func)
 
-        signature.bind(*args, **kwargs)
-        return
+        bound_sig = signature.bind(*args, **kwargs)
+        return bound_sig
     # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
@@ -3160,6 +3184,17 @@ def is_bodo_string_series(self):
     return type(self) is BodoSeries and self.dtype in allowed_types_map["str_default"]
 
 
+def validate_method_args(name, bound_sig):
+    """Validates args and kwargs for Series.<name> methods.
+    TODO: validate other methods as needed.
+    """
+    if name == "str.replace":
+        repl = bound_sig.arguments.get("repl", None)
+        # Same as Pandas validation
+        if not (isinstance(repl, str) or callable(repl)):
+            raise TypeError("repl must be a string or callable")
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -3190,7 +3225,9 @@ def gen_method(
         validate_dtype(accessor_type + name, self)
 
         if is_method:
-            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
+            # Argument validation
+            bound_sig = sig_bind(name, accessor_type, *args, **kwargs)
+            validate_method_args(accessor_type + name, bound_sig)
 
         series = self._series if accessor_type else self
         dtype = series.dtype if not return_type else return_type

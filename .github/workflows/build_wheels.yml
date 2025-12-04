@@ -53,7 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os: [{os: macos-13, name: macos-x86}, {os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
+        os: [{os: macos-15-intel, name: macos-x86}, {os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
           # Don't publish linux arm until we can get nightly fixed
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
@@ -175,7 +175,7 @@ jobs:
     strategy:
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os: [ubuntu-latest] #, macos-13, macos-14]
+        os: [ubuntu-latest] #, macos-15-intel, macos-14]
       # Test all combinations to completion
       fail-fast: false
     runs-on: ${{ matrix.os }}
