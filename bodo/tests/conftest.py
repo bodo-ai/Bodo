@@ -692,9 +692,9 @@ def time_df():
             {
                 "A": pd.Series(
                     [
-                        bodo.types.Time(17, 33, 26, 91, 8, 79),
-                        bodo.types.Time(0, 24, 43, 365, 18, 74),
-                        bodo.types.Time(3, 59, 6, 25, 757, 3),
+                        bodo.types.Time(17, 33, 26, 91, 8),
+                        bodo.types.Time(0, 24, 43, 365, 18),
+                        bodo.types.Time(3, 59, 6, 25, 757),
                         bodo.types.Time(),
                         bodo.types.Time(4),
                         bodo.types.Time(6, 41),
@@ -706,8 +706,8 @@ def time_df():
                 ),
                 "B": pd.Series(
                     [
-                        bodo.types.Time(20, 6, 26, 324, 4, 79),
-                        bodo.types.Time(3, 59, 6, 25, 57, 3),
+                        bodo.types.Time(20, 6, 26, 324, 4),
+                        bodo.types.Time(3, 59, 6, 25, 57),
                         bodo.types.Time(7, 3, 45, 876, 234),
                         bodo.types.Time(17, 34, 29, 90),
                         bodo.types.Time(22, 13, 57),
@@ -715,7 +715,7 @@ def time_df():
                         bodo.types.Time(4),
                         bodo.types.Time(),
                         None,
-                        bodo.types.Time(0, 24, 4, 512, 18, 74),
+                        bodo.types.Time(0, 24, 4, 512, 18),
                     ]
                 ),
             }

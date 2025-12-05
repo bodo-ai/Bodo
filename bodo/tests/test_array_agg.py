@@ -108,7 +108,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             lambda: (
                 pd.Series(
                     [
-                        None if i % 7 < 2 else bodo.types.Time(nanosecond=3**i)
+                        None if i % 7 < 2 else bodo.types.Time(microsecond=3**i)
                         for i in range(45)
                     ]
                 ),
