@@ -582,6 +582,17 @@ std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
 arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
 
 /**
+ * @brief Convert DuckDB types to an Arrow schema
+ *
+ * @param types vector of DuckDB LogicalTypes
+ * @param names optional column names
+ * @return arrow schema
+ */
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names = {});
+
+/**
  * @brief Convert an Arrow field to a DuckDB column name and data type.
  *
  * @param field input Arrow field

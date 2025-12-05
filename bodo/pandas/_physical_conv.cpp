@@ -15,6 +15,7 @@
 #include "physical/limit.h"
 #include "physical/project.h"
 #include "physical/quantile.h"
+#include "physical/read_empty.h"
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
@@ -44,6 +45,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
+    }
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalEmptyResult& op) {
+    auto physical_op = std::make_shared<PhysicalReadEmpty>(op.return_types);
+    if (this->active_pipeline != nullptr) {
+        throw std::runtime_error(
+            "LogicalEmptyResult operator should be the first operator in the "
+            "pipeline");
     }
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
 }

@@ -73,6 +73,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalDistinct& op);
     void Visit(duckdb::LogicalMaterializedCTE& op);
     void Visit(duckdb::LogicalCTERef& op);
+    void Visit(duckdb::LogicalEmptyResult& op);
     void Visit(bodo::LogicalJoinFilter& op);
 
     void Visit(duckdb::LogicalOperator& op) {
@@ -111,6 +112,9 @@ class PhysicalPlanBuilder {
             Visit(op.Cast<duckdb::LogicalMaterializedCTE>());
         } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_CTE_REF) {
             Visit(op.Cast<duckdb::LogicalCTERef>());
+        } else if (op.type ==
+                   duckdb::LogicalOperatorType::LOGICAL_EMPTY_RESULT) {
+            Visit(op.Cast<duckdb::LogicalEmptyResult>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR) {
             // TODO: add join filter to DuckDB operator types to allow more

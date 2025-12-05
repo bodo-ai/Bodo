@@ -1547,6 +1547,28 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     return {return_names, logical_types};
 }
 
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names) {
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(types.size());
+
+    for (size_t i = 0; i < types.size(); ++i) {
+        std::string name;
+        if (!names.empty()) {
+            if (i >= names.size()) {
+                throw std::invalid_argument("names.size() < types.size()");
+            }
+            name = names[i];
+        } else {
+            name = "col_" + std::to_string(i);
+        }
+        auto dtype = duckdbTypeToArrow(types[i]);
+        fields.push_back(arrow::field(name, std::move(dtype)));
+    }
+    return arrow::schema(std::move(fields));
+}
+
 std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     const std::shared_ptr<arrow::Field> &field) {
     // Convert Arrow type to DuckDB LogicalType
