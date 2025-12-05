@@ -3987,3 +3987,19 @@ def test_np_ufunc(index_val):
         pdf,
         check_pandas_types=False,
     )
+
+
+def test_empty_result(datapath):
+    """Test for projection and head pushed down to read parquet."""
+
+    with assert_executed_plan_count(0):
+        df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        pdf = df1[(df1.D > 3) & (df1.D < 2)]
+        bdf = bodo_df1[(bodo_df1.D > 3) & (bodo_df1.D < 2)]
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=True,
+    )
