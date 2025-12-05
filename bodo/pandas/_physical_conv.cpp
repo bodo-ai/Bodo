@@ -37,6 +37,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
             selected_columns.push_back(ci.GetPrimaryIndex());
         }
     }
+    if (op.dynamic_filters) {
+        throw std::runtime_error(
+            "PhysicalPlanBuilder::Visit LogicalGet: dynamic filters not "
+            "supported");
+    }
 
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
@@ -279,8 +284,7 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
 
     // Make sure all filter generators used by this
     // join filter run before this pipeline.
-    for (size_t i = 0; i < op.filter_ids.size(); i++) {
-        int filter_id = op.filter_ids[i];
+    for (int filter_id : op.filter_ids) {
         std::shared_ptr<Pipeline> filter_pipeline =
             (*join_filter_pipelines)[filter_id];
         if (!filter_pipeline) {
@@ -305,7 +309,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
 
     // Save the physical_cte node away so that cte ref's on the non-duplicate
     // side can find it.
-    ctes.insert({op.table_index, {physical_cte, done_pipeline}});
+    ctes.insert(
+        {op.table_index,
+         {.physical_node = physical_cte, .cte_pipeline_root = done_pipeline}});
     // The active pipeline finishes after the duplicate side.
     this->active_pipeline = nullptr;
     // Create pipelines for the side that uses the duplicate side.
