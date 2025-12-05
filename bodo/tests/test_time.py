@@ -423,7 +423,7 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 3, 10, precision=precision),
                 None,
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [
                 None,
@@ -431,7 +431,7 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(1, 11, 3, 1, precision=precision),
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(14, 0, 50, 10, 100, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
                 bodo.types.Time(9, 1, 30, 10, precision=precision),
             ],
         }
@@ -456,8 +456,8 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(9, precision=precision),
                 bodo.types.Time(14, 10, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 30, 10, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 1000, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 1000, precision=precision),
             ],
         }
     )
