@@ -17,7 +17,6 @@ class PhysicalReadEmpty : public PhysicalSource {
 
    public:
     explicit PhysicalReadEmpty(std::vector<duckdb::LogicalType> return_types)
-        // std::shared_ptr<arrow::Schema> arrow_schema)
         : output_schema(initOutputSchema(return_types)) {}
 
     /**
