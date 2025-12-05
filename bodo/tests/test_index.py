@@ -1289,7 +1289,7 @@ def test_index_argminmax(index, memory_leak_check):
             id="decimal",
         ),
         pytest.param(
-            lambda: pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]),
+            lambda: pd.Index([bodo.types.Time(microsecond=10**i) for i in range(12)]),
             id="time",
         ),
         pytest.param(
@@ -1342,7 +1342,7 @@ def test_index_argminmax(index, memory_leak_check):
         ),
         pytest.param(
             lambda: pd.CategoricalIndex(
-                [bodo.types.Time(nanosecond=10**i) for i in range(12)], ordered=True
+                [bodo.types.Time(microsecond=10**i) for i in range(12)], ordered=True
             ),
             id="ord_cat_time",
         ),

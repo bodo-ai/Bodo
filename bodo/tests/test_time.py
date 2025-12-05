@@ -5,7 +5,7 @@ import pyarrow.parquet as pq
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import _test_equal_guard, check_func
 from bodo.utils.testing import ensure_clean
 
 
@@ -300,7 +300,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
             return pd.read_parquet(fname2)
 
         df = reader()
-        assert df.equals(df_orig)
+        _test_equal_guard(df, df_orig)
 
 
 @pytest.fixture
@@ -394,7 +394,7 @@ def test_time_sort(precision, memory_leak_check):
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 3, 10, precision=precision),
                 None,
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ]
         }
     )
@@ -423,7 +423,7 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 3, 10, precision=precision),
                 None,
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [
                 None,
@@ -431,7 +431,7 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(1, 11, 3, 1, precision=precision),
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(14, 0, 50, 10, 100, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
                 bodo.types.Time(9, 1, 30, 10, precision=precision),
             ],
         }
@@ -456,8 +456,8 @@ def test_time_merge(precision, memory_leak_check):
                 bodo.types.Time(9, precision=precision),
                 bodo.types.Time(14, 10, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 30, 10, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 1000, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 1000, precision=precision),
             ],
         }
     )
@@ -502,7 +502,7 @@ def test_time_groupby(precision, memory_leak_check):
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 3, 10, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [0, 0, 1, 0, 0, 1],
         }
@@ -519,13 +519,13 @@ def test_time_groupby(precision, memory_leak_check):
             "A": [
                 bodo.types.Time(12, 0, precision=precision),
                 None,
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(12, 0, precision=precision),
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 None,
                 bodo.types.Time(2, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [0, 0, 1, 0, 0, 1, 2, 1, -1],
         }

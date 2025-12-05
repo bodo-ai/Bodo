@@ -1435,7 +1435,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                         [
                             None
                             if i % 3 == 1
-                            else bodo.types.Time(nanosecond=int(1.5**i))
+                            else bodo.types.Time(microsecond=int(1.5**i))
                             for i in range(127)
                         ],
                     ),
@@ -1445,10 +1445,10 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                 {
                     "IDX": range(127),
                     "WIN": pd.array(
-                        [bodo.types.Time(nanosecond=1)]
+                        [bodo.types.Time(microsecond=1)]
                         + [None] * 6
-                        + [bodo.types.Time(nanosecond=291)] * 8
-                        + [bodo.types.Time(nanosecond=985)] * 16
+                        + [bodo.types.Time(microsecond=291)] * 8
+                        + [bodo.types.Time(microsecond=985)] * 16
                         + [None] * 96,
                     ),
                 }

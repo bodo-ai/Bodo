@@ -126,9 +126,22 @@ class PhysicalReadPandas : public PhysicalSource {
         PyObject* pa_table =
             PyObject_CallMethod(table_func, "from_pandas", "O", batch);
 
+        if (!pa_table) {
+            PyErr_Print();
+            throw std::runtime_error("Failed to convert pandas to Arrow table");
+        }
+
+        arrow::Result<std::shared_ptr<arrow::Table>> pa_table_result =
+            arrow::py::unwrap_table(pa_table);
+
+        if (!pa_table_result.status().ok()) {
+            throw std::runtime_error(
+                "Failed to convert pandas DataFrame to Arrow Table: " +
+                pa_table_result.status().ToString());
+        }
+
         // Unwrap Arrow table from Python object
-        std::shared_ptr<arrow::Table> table =
-            arrow::py::unwrap_table(pa_table).ValueOrDie();
+        std::shared_ptr<arrow::Table> table = pa_table_result.ValueOrDie();
 
         std::shared_ptr<table_info> out_table;
         if (table->num_rows() == 0) {
