@@ -502,7 +502,7 @@ def test_time_groupby(precision, memory_leak_check):
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 bodo.types.Time(9, 1, 3, 10, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [0, 0, 1, 0, 0, 1],
         }
@@ -519,13 +519,13 @@ def test_time_groupby(precision, memory_leak_check):
             "A": [
                 bodo.types.Time(12, 0, precision=precision),
                 None,
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
                 bodo.types.Time(2, precision=precision),
                 bodo.types.Time(12, 0, precision=precision),
                 bodo.types.Time(15, 0, 50, 10, 100, precision=precision),
                 None,
                 bodo.types.Time(2, precision=precision),
-                bodo.types.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.types.Time(11, 59, 59, 100, 100, precision=precision),
             ],
             "B": [0, 0, 1, 0, 0, 1, 2, 1, -1],
         }
