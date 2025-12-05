@@ -4005,8 +4005,8 @@ def test_empty_result(datapath):
         pdf,
         check_pandas_types=True,
     )
-    
-    
+
+
 def test_join_filter_push_cross_product():
     """Test for join filter pushdown through cross product."""
     df1 = pd.DataFrame(
