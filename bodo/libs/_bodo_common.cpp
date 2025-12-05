@@ -968,8 +968,14 @@ std::shared_ptr<Schema> Schema::FromArrowSchema(
         auto bodo_type = arrow_type_to_bodo_data_type(field->type());
         column_types.push_back(bodo_type->copy());
     }
-    std::shared_ptr<TableMetadata> metadata = std::make_shared<TableMetadata>(
-        schema->metadata()->keys(), schema->metadata()->values());
+    std::shared_ptr<TableMetadata> metadata;
+    if (schema->metadata()) {
+        metadata = std::make_shared<TableMetadata>(
+            schema->metadata()->keys(), schema->metadata()->values());
+    } else {
+        metadata = std::make_shared<TableMetadata>(std::vector<std::string>{},
+                                                   std::vector<std::string>{});
+    }
     return std::make_shared<Schema>(std::move(column_types),
                                     schema->field_names(), metadata);
 }
