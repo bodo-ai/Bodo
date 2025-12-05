@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import benchmarks.tpch.dataframe_lib as tpch
+import benchmarks.tpch.bodo.dataframe_queries as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal

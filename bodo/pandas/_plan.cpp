@@ -33,7 +33,6 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_subquery_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -43,8 +42,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
-#include "duckdb/transaction/duck_transaction_manager.hpp"
-#include "physical/project.h"
+#include "optimizer/runtime_join_filter.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -80,8 +78,15 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
+
+    // Insert and pushdown runtime join filters after optimization since they
+    // aren't relational
+    RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer;
+    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+        runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
+
     return out_plan;
 }
 

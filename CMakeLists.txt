@@ -591,6 +591,7 @@ set(sources_list
   "bodo/pandas/physical/operator.cpp"
   "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/pandas/physical/reduce.cpp"
+  "bodo/pandas/optimizer/runtime_join_filter.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
