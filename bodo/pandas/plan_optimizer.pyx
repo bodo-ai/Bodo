@@ -9,6 +9,7 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
+import datetime
 from libc.stdint cimport int64_t, uint64_t, int32_t
 import pandas as pd
 import pyarrow.parquet as pq
@@ -717,6 +718,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, datetime.datetime):
+        return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
         return move(make_const_date32_expr(val.value))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
