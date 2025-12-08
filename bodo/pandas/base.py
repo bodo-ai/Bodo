@@ -61,6 +61,7 @@ from bodo.pandas.utils import (
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
+    get_scalar_udf_result_type,
     wrap_module_functions_and_methods,
     wrap_plan,
 )
@@ -497,13 +498,6 @@ def to_datetime(
             "to_datetime() is not supported for arg that is not an instance of BodoSeries or BodoDataFrame. Falling back to Pandas."
         )
 
-    # Initialize shared metadata
-    dtype = pd.ArrowDtype(pa.timestamp("ns"))
-    index = arg.head(0).index
-    new_metadata = pd.Series(
-        dtype=dtype,
-        index=index,
-    )
     in_kwargs = {
         "errors": errors,
         "dayfirst": dayfirst,
@@ -516,6 +510,10 @@ def to_datetime(
         "origin": origin,
         "cache": cache,
     }
+
+    # Need to sample the data for output type inference similar to UDFs since the data
+    # can have different timezones.
+    new_metadata = get_scalar_udf_result_type(arg, None, pd.to_datetime, **in_kwargs)
 
     # 1. DataFrame Case
     if isinstance(arg, BodoDataFrame):
@@ -530,39 +528,14 @@ def to_datetime(
         )
 
     # 2. Series Case
-    if (
-        errors == "raise"
-        and dayfirst is False
-        and yearfirst is False
-        and utc is False
-        and unit is None
-        and origin == "unix"
-        and cache is True
-    ):
-        # If only options supported by Bodo JIT then run as cfunc over map.
-        import bodo.decorators  # isort:skip # noqa
-
-        if format is None:
-
-            def bodo_df_lib_to_datetime(x):
-                return pd.to_datetime(x)
-
-            return arg.map(bodo_df_lib_to_datetime, na_action="ignore")
-        else:
-
-            def bodo_df_lib_to_datetime_format(x):
-                return pd.to_datetime(x, format=format)
-
-            return arg.map(bodo_df_lib_to_datetime_format, na_action="ignore")
-    else:
-        return _get_series_func_plan(
-            arg._plan,
-            new_metadata,
-            "pandas.to_datetime",
-            (),
-            in_kwargs,
-            is_method=False,
-        )
+    return _get_series_func_plan(
+        arg._plan,
+        new_metadata,
+        "pandas.to_datetime",
+        (),
+        in_kwargs,
+        is_method=False,
+    )
 
 
 @check_args_fallback(unsupported="all")

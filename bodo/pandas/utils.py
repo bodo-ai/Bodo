@@ -1090,8 +1090,9 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
     Args:
         obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
-        method_name ({"apply", "map", "map_parititons"}): The name of the method
-            applying the UDF.
+        method_name ({"apply", "map", "map_parititons", None}): The name of the method
+            applying the UDF. None means it's a function being called directly and not
+            a method.
         func (Any): The UDF argument to pass to apply/map.
         kwargs (dict): Optional keyword arguments to pass to apply/map.
 
@@ -1108,8 +1109,9 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
         "map_partitions",
         "map_with_state",
         "map_partitions_with_state",
+        None,
     }, (
-        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state'}"
+        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state', None}"
     )
 
     base_class = obj.__class__.__bases__[0]

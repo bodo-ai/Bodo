@@ -1452,6 +1452,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return bodo.pandas.utils.convert_to_bodo(py_res)
         return py_res
 
+    @check_args_fallback(supported=["dtype_backend"])
+    def convert_dtypes(
+        self,
+        infer_objects: bool = True,
+        convert_string: bool = True,
+        convert_integer: bool = True,
+        convert_boolean: bool = True,
+        convert_floating: bool = True,
+        dtype_backend: str = "numpy_nullable",
+    ):
+        if dtype_backend == "pyarrow":
+            # Pandas is buggy for this case and drops timezone info from timestamps
+            return self
+
+        raise BodoLibNotImplementedException(
+            "convert_dtypes() only supports dtype_backend='pyarrow' in Bodo Series."
+        )
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
