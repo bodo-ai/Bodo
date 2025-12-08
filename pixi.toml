@@ -50,6 +50,7 @@ cmd = "conda install -y -c conda-forge setuptools; conda install -y -c rapidsai 
 
 # Build Commands
 [tasks.build-bodo]
+depends-on = ["install-pyspark"]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo.env]  # SCcache Envs
@@ -58,22 +59,22 @@ SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
+[tasks.install-pyspark]
+cmd = "pip install pyspark==4.0.1 --no-deps"
+
 # Build Commands
 [tasks.build-bodo-cudf]
-depends-on = ["build-libcudf"]
-#cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.CMAKE_PREFIX_PATH=deps/cudf/cudf-install --config-settings=cmake.define.CMAKE_INCLUDE_PATH=deps/cudf/cudf-install/include"
-cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=build.verbose=true --config-settings=cmake.define.CUDAToolkit_ROOT=$CONDA_PREFIX --config-settings=cmake.define.USE_LIBCUDF=ON --config-settings=cmake.define.CMAKE_PREFIX_PATH=deps/cudf/cudf-install"
+depends-on = ["build-libcudf", "install-pyspark"]
+cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=build.verbose=true --config-settings=cmake.define.CUDAToolkit_ROOT=$CONDA_PREFIX --config-settings=cmake.define.USE_LIBCUDF=ON --config-settings=cmake.define.CMAKE_PREFIX_PATH='/home/taanders/arrow-dist-cuda;deps/cudf/cudf-install'"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-cudf.env]  # SCcache Envs
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
-#CPPFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/include"
-#CXXFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/include"
-#LDFLAGS = "-I${PROJECT_ROOT}/deps/cudf/cudf-install/lib"
-#CMAKE_ARGS = "-DCMAKE_PREFIX_PATH=${PROJECT_ROOT}/deps/cudf/cudf-install -DCMAKE_INCLUDE_PATH=${PROJECT_ROOT}/deps/cudf/cudf-install/include"
-#CMAKE_PREFIX_PATH = "${PROJECT_ROOT}/deps/cudf/cudf-install"
+ARROW_HOME = "/home/taanders/arrow-dist-cuda"
+LD_LIBRARY_PATH = "/home/taanders/arrow-dist-cuda/lib:${LD_LIBRARY_PATH}"
+PYTHONPATH = "/home/taanders/arrow-dist-cuda/lib/python3.13/site-packages:${PYTHONPATH}"
 
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
@@ -121,7 +122,7 @@ pip = "*"
 numba = ">=0.62,<0.63.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+#pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -160,8 +161,11 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
-libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libutf8proc = "*"
+
+#[feature.cpu.target.linux-64.dependencies]
+#pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+#libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 [feature.cudf.target.linux-64.dependencies]
 libarrow = { version = "==22.0.0", channel = "conda-forge", build = "*cuda*" }
@@ -202,7 +206,8 @@ sqlglot = "*"
 # Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
 duckdb = "!=1.2.1"
 
-pyspark = "4.*"
+#pyspark = "4.*"
+zlib = "*"
 matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
