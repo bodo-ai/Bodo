@@ -19,6 +19,8 @@ class PhysicalReadEmpty : public PhysicalSource {
     explicit PhysicalReadEmpty(std::vector<duckdb::LogicalType> return_types)
         : output_schema(initOutputSchema(return_types)) {}
 
+    virtual ~PhysicalReadEmpty() = default;
+
     /**
      * @brief Initialize the output schema based on the selected columns and
      * Arrow schema.
