@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 240
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
@@ -39,7 +39,7 @@ jobs:
               pkg_format: 2
 
       - name: 'Download the Bodo conda'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: bodo-conda-3.13-linux-x86
           run-id: ${{ github.event.workflow_run.id }}
@@ -63,7 +63,7 @@ jobs:
           BODO_NUM_WORKERS: 1
 
       - name: Upload Conda Package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bodosql-conda-noarch
           path: /home/ec2-user/conda-bld/
