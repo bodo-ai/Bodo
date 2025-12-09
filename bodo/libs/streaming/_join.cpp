@@ -3696,7 +3696,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     probe_idxs.clear();
 
     if (shuffle_possible) {
-        std::cout << "Shuffling probe side data" << std::endl;
         std::optional<std::shared_ptr<table_info>> new_data_ =
             join_state->probe_shuffle_state.ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
