@@ -475,6 +475,15 @@ def read_csv(
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
+def _is_not_tz_format(format: str) -> bool:
+    """Check if the given datetime format string does not contain timezone info."""
+    tz_indicators = ["%z", "%Z", "%:z", "%::z", "%:::z"]
+    for indicator in tz_indicators:
+        if indicator in format:
+            return False
+    return True
+
+
 @check_args_fallback("none")
 def to_datetime(
     arg,
@@ -511,9 +520,29 @@ def to_datetime(
         "cache": cache,
     }
 
-    # Need to sample the data for output type inference similar to UDFs since the data
-    # can have different timezones.
-    new_metadata = get_scalar_udf_result_type(arg, None, pd.to_datetime, **in_kwargs)
+    if utc:
+        dtype = pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+        index = arg.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            index=index,
+        )
+    # Format specified without timezone info or DataFrame case (cannot have timezone)
+    elif (format is not None and _is_not_tz_format(format)) or isinstance(
+        arg, BodoDataFrame
+    ):
+        dtype = pd.ArrowDtype(pa.timestamp("ns"))
+        index = arg.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            index=index,
+        )
+    else:
+        # Need to sample the data for output type inference similar to UDFs since the data
+        # can have different timezones.
+        new_metadata = get_scalar_udf_result_type(
+            arg, None, pd.to_datetime, **in_kwargs
+        )
 
     # 1. DataFrame Case
     if isinstance(arg, BodoDataFrame):
