@@ -641,7 +641,9 @@ def concat(
             b_plan = b._plan
 
         # DuckDB Union operator requires schema to already be matching.
-        planUnion = LogicalSetOperation(empty_data, a_plan, b_plan, "union all")
+        # Reverse the order of operands to be more likely to match Pandas output order
+        # in SQL.
+        planUnion = LogicalSetOperation(empty_data, b_plan, a_plan, "union all")
 
         return wrap_plan(planUnion)
 

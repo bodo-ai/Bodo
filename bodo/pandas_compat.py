@@ -210,6 +210,17 @@ if _check_pandas_change:
 pd.core.arrays.arrow.array.ArrowExtensionArray._explode = _explode
 
 
+if pandas_version < (3, 0):
+    # Fixes iloc Indexing for ArrowExtensionArray (see test_slice_with_series in Narwhals tests)
+    # Pandas 3.0+ has a fix already: https://github.com/pandas-dev/pandas/pull/61924
+    pd.core.arrays.arrow.array.ArrowExtensionArray.max = lambda self: self._reduce(
+        "max"
+    )
+    pd.core.arrays.arrow.array.ArrowExtensionArray.min = lambda self: self._reduce(
+        "min"
+    )
+
+
 # Bodo change: add missing str_map() for ArrowExtensionArray that is used in operations
 # like zfill.
 def arrow_arr_str_map(self, f, na_value=None, dtype=None, convert=True):
