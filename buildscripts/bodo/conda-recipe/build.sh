@@ -18,7 +18,7 @@ $PYTHON -m pip install \
     --no-deps --no-build-isolation -vv \
     --config-settings=build.verbose=true \
     --config-settings=logging.level="DEBUG" \
-    --config-settings=cmake.args="-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
+    --config-settings=cmake.args="-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY;-DCMAKE_OSX_SYSROOT=/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk" \
     .
 
 sccache --show-stats
