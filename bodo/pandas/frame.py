@@ -98,6 +98,10 @@ class BodoDataFrameLocIndexer(_LocIndexer):
         if isinstance(key, tuple) and len(key) == 2:
             row_sel, col_sel = key
             if row_sel == slice(None, None, None):
+                # Handle tuple columns like df.loc[:, ("B", "C")] which are not
+                # supported in regular getitem
+                if isinstance(col_sel, tuple):
+                    col_sel = list(col_sel)
                 return self.df.__getitem__(col_sel)
             else:
                 fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
