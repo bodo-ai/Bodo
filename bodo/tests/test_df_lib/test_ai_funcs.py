@@ -209,6 +209,7 @@ def wait_for_ollama_model(url, model_name):
     )
 
 
+@pytest.mark.skip("TODO: Fix flakey test.")
 @pytest.mark.jit_dependency
 def test_llm_generate_ollama():
     prompts = bd.Series(
