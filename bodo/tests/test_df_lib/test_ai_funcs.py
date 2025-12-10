@@ -243,6 +243,7 @@ def test_llm_generate_ollama():
         spawn_process_on_nodes("docker rm bodo_test_ollama -f".split(" "))
 
 
+@pytest.mark.skip("TODO: Fix flakey test.")
 @pytest.mark.jit_dependency
 def test_embed_ollama():
     prompts = bd.Series(

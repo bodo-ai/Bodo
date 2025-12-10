@@ -27,7 +27,7 @@ from bodo.tests.utils import (
 from bodo.tests.utils_jit import reduce_sum
 from bodosql.tests.utils import assert_equal_par, gen_unique_id
 
-pytestmark = pytest_polaris
+pytestmark = [pytest_polaris, pytest.mark.slow]
 
 
 def check_view_exists(polaris_connection, view_name, schema_name) -> bool:
