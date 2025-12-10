@@ -2586,6 +2586,23 @@ def test_loc(datapath):
         reset_index=False,
     )
 
+    # Tuple column selection
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+            :, ("A", "F")
+        ]
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+            :, ("A", "F")
+        ]
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=False,
+    )
+
 
 @pytest.mark.parametrize(
     "percentiles",
