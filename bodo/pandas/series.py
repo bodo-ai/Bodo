@@ -2248,7 +2248,11 @@ class BodoDatetimeProperties:
             )
 
         series = self._series
-        dtype = pd.ArrowDtype(pa.timestamp("ns", tz))
+        if _is_pd_pa_timestamp(series.dtype):
+            unit = series.dtype.pyarrow_dtype.unit
+        else:
+            unit = "ns"
+        dtype = pd.ArrowDtype(pa.timestamp(unit, tz))
 
         index = series.head(0).index
         new_metadata = pd.Series(
