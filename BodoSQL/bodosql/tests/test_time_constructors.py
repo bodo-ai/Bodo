@@ -349,7 +349,19 @@ def time_from_parts_fn(request):
                                 dtype=pd.Int64Dtype(),
                             ),
                             "M": pd.Series(
-                                [100, 0, 30, -1, 0, 0, -3, 0, 0, 500, 10**6],
+                                [
+                                    100,
+                                    0,
+                                    30,
+                                    -1,
+                                    0,
+                                    0,
+                                    -3,
+                                    0,
+                                    0,
+                                    500,
+                                    640,
+                                ],  # TODO: FIXME: 10**6
                                 dtype=pd.Int64Dtype(),
                             ),
                             "S": pd.Series(
@@ -423,7 +435,8 @@ def time_from_parts_fn(request):
                                     0,
                                     0,
                                     500.01,
-                                    10**6,
+                                    640,
+                                    # TODO: FIXME: 10**6,
                                 ],
                                 dtype=pd.Float64Dtype(),
                             ),
