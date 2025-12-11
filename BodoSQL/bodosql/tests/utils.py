@@ -799,15 +799,12 @@ def check_query_python(
 
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
-    import pyarrow as pa
 
     bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
     jit_options = {}
     if bodo.tests.utils.test_spawn_mode_enabled:
         jit_options["spawn"] = True
-    print("Running query: ", query, named_params, bind_variables, jit_options)
     bodosql_output = bc.sql(query, named_params, bind_variables, **jit_options)
-    print(bodosql_output.A.array._pa_array.cast(pa.int64()))
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -1269,7 +1266,6 @@ def _check_query_equal(
                 pass
 
     # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
-    print(bodosql_output.A.array._pa_array.cast(pa.int64()))
     bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)

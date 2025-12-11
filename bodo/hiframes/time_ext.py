@@ -65,13 +65,10 @@ class Time:
         precision=9,
     ):
         self.precision = precision
-
         assert all(
             np.issubdtype(type(val), np.integer) or pd.api.types.is_int64_dtype(val)
             for val in (hour, minute, second, millisecond, microsecond, nanosecond)
-        ), (
-            f"All time components must be integers: printed types are {type(hour)},{type(minute)},{type(second)},{type(millisecond)},{type(microsecond)},{type(nanosecond)}"
-        )
+        ), "All time components must be integers"
 
         self.value = np.int64(
             (
