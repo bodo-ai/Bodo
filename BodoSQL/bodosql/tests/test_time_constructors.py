@@ -360,7 +360,7 @@ def time_from_parts_fn(request):
                                     0,
                                     0,
                                     500,
-                                    640,
+                                    10**6,
                                 ],  # TODO: FIXME: 10**6
                                 dtype=pd.Int64Dtype(),
                             ),
@@ -435,7 +435,7 @@ def time_from_parts_fn(request):
                                     0,
                                     0,
                                     500.01,
-                                    640,
+                                    10**6,
                                     # TODO: FIXME: 10**6,
                                 ],
                                 dtype=pd.Float64Dtype(),
