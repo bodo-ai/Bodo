@@ -774,8 +774,24 @@ def python_arith_dunder_to_duckdb(str opstr):
         return "/"
     elif opstr == "__mod__" or opstr == "__rmod__":
         return "%"
+    elif opstr == "__floordiv__" or opstr == "__rfloordiv__":
+        # NOTE: only used for integers since "//" is integer division in duckdb
+        return "//"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
+
+
+def is_integer_expr(object expr):
+    """
+    Check if the expression's output schema is of integer type.
+    """
+    if isinstance(expr, Expression):
+        return pa.types.is_integer(expr.out_schema[0].type)
+
+    if isinstance(expr, int):
+        return True
+
+    return False
 
 
 cdef class ArithOpExpression(Expression):
@@ -792,7 +808,8 @@ cdef class ArithOpExpression(Expression):
         self.out_schema = out_schema
         # The // operator in Python we have to implement as a truediv followed by a floor.
         # Do the semantics work here for negative divisors?
-        if opstr in ["__floordiv__", "__rfloordiv__"]:
+        if opstr in ["__floordiv__", "__rfloordiv__"] and not (is_integer_expr(lhs) and is_integer_expr(rhs)):
+            # "//" is integer division in duckdb, so we need to handle float floor division separately
             truediv_expression = make_arithop_expr(
                 lhs_expr,
                 rhs_expr,

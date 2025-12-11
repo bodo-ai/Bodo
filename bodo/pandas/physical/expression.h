@@ -758,6 +758,10 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             comparator = "multiply";
         } else if (opstr == "/") {
             comparator = "divide";
+        } else if (opstr == "//") {
+            // "//" is integer division in DuckDB which is handled by divide
+            // function of Arrow
+            comparator = "divide";
         } else if (opstr == "floor") {
             comparator = "floor";
         } else if (opstr == "%") {
