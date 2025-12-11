@@ -310,6 +310,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 assert self._head_df is not None
                 return self._head_df.head(0).copy()
 
+        # Negative n like -1 is equivalent to df.iloc[:-1]
+        if n < 0:
+            n = max(0, len(self) + n)
+
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             if bodo.dataframe_library_enabled and isinstance(
                 self._mgr, LazyMetadataMixin

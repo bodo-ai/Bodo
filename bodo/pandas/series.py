@@ -604,7 +604,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if n < 0:
             # Convert the negative number of the number not to include to a positive number so the rest of the
             # code can run normally.  Unfortunately, this will likely require a plan execution here.
-            n = self.shape[0] + n
+            n = max(0, len(self) + n)
 
         if n == 0 and self._head_s is not None:
             if self._exec_state == ExecState.COLLECTED:
