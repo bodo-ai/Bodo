@@ -65,10 +65,13 @@ class Time:
         precision=9,
     ):
         self.precision = precision
+
         assert all(
             np.issubdtype(type(val), np.integer) or pd.api.types.is_int64_dtype(val)
             for val in (hour, minute, second, millisecond, microsecond, nanosecond)
-        ), "All time components must be integers"
+        ), (
+            f"All time components must be integers: printed types are {type(hour)},{type(minute)},{type(second)},{type(millisecond)},{type(microsecond)},{type(nanosecond)}"
+        )
 
         self.value = np.int64(
             (
@@ -90,7 +93,7 @@ class Time:
         )
 
     def __str__(self):
-        return f"{self.hour}:{self.minute}:{self.second}.{self.millisecond}{self.microsecond}{self.nanosecond}"
+        return f"{self.hour:02}:{self.minute:02}:{self.second:02}.{self.millisecond:03}{self.microsecond:03}{self.nanosecond:03}"
 
     def __hash__(self):
         return int(self.value)
