@@ -361,7 +361,7 @@ def time_from_parts_fn(request):
                                     0,
                                     500,
                                     10**6,
-                                ],  # TODO: FIXME: 10**6
+                                ],
                                 dtype=pd.Int64Dtype(),
                             ),
                             "S": pd.Series(
@@ -436,7 +436,6 @@ def time_from_parts_fn(request):
                                     0,
                                     500.01,
                                     10**6,
-                                    # TODO: FIXME: 10**6,
                                 ],
                                 dtype=pd.Float64Dtype(),
                             ),
