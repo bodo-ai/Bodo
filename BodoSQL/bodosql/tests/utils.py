@@ -799,7 +799,6 @@ def check_query_python(
 
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
-
     bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
     jit_options = {}
     if bodo.tests.utils.test_spawn_mode_enabled:

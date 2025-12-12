@@ -349,19 +349,7 @@ def time_from_parts_fn(request):
                                 dtype=pd.Int64Dtype(),
                             ),
                             "M": pd.Series(
-                                [
-                                    100,
-                                    0,
-                                    30,
-                                    -1,
-                                    0,
-                                    0,
-                                    -3,
-                                    0,
-                                    0,
-                                    500,
-                                    10**6,
-                                ],
+                                [100, 0, 30, -1, 0, 0, -3, 0, 0, 500, 10**6],
                                 dtype=pd.Int64Dtype(),
                             ),
                             "S": pd.Series(
