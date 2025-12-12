@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/util/bit_util.h>
+#include <unordered_set>
 #include "../_bodo_common.h"
 #include "../_distributed.h"
 #include "../_query_profile_collector.h"
@@ -10,6 +11,8 @@
 #define MIN_SHUFFLE_THRESHOLD 50 * 1024 * 1024      // 50MiB
 #define MAX_SHUFFLE_THRESHOLD 200 * 1024 * 1024     // 200MiB
 #define DEFAULT_SHUFFLE_THRESHOLD_PER_MiB 12800     // 12.5KiB
+
+#define SHUFFLE_SEND_STATE_TAG_OFFSET 10000
 
 // Factor in determining whether shuffle buffer is large enough to need cleared
 constexpr float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
@@ -901,6 +904,12 @@ class IncrementalShuffleState {
     }
 
    protected:
+    // Keep track of inflight tags to avoid tag collisions
+    // See:
+    // https://github.com/bodo-ai/Bodo/blob/3d5621629e95486bbc9bd4e6b45f85f22835f515/bodo/libs/streaming/_sort.cpp#L1633
+    // For more details.
+    std::unordered_set<int> inflight_tags;
+
     /**
      * @brief Helper function for ShuffleIfRequired. In this base class,
      * this simply returns the shuffle-table and its hashes.
