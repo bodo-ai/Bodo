@@ -154,9 +154,7 @@ class Executor {
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
             DEBUG_PIPELINE_PRE_EXECUTE(rank);
-            std::cout << "executing pipeline " << i << std::endl;
             uint64_t batches_processed = pipelines[i]->Execute();
-            std::cout << "finished pipeline " << i << std::endl;
 
             // Free pipeline resources as early as possible to reduce memory
             // pressure.
