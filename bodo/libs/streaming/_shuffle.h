@@ -331,6 +331,20 @@ class AsyncShuffleSendState {
             const void* buff =
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
+
+            int max_tag;
+            int flag;
+            CHECK_MPI(
+                MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &max_tag, &flag),
+                "AsyncShuffleSendState::send_shuffle_data: MPI error on "
+                "MPI_Comm_get_attr:");
+
+            if (flag && curr_tags[p]++ >= max_tag) {
+                throw std::runtime_error(
+                    "AsyncShuffleSendState::send_shuffle_data: Exceeded "
+                    "maximum MPI tag value");
+            }
+
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
