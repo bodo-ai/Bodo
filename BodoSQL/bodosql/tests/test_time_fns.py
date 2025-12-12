@@ -193,9 +193,9 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             {
                 "T": pd.Series(
                     [
-                        bodo.types.Time(12, 30, 15, precision=0),
-                        bodo.types.Time(1, 2, 3, 4, precision=3),
-                        bodo.types.Time(9, 59, 0, 100, 250, precision=6),
+                        bodo.types.Time(12, 30, 15, precision=9),
+                        bodo.types.Time(1, 2, 3, 4, precision=9),
+                        bodo.types.Time(9, 59, 0, 100, 250, precision=9),
                         bodo.types.Time(20, 45, 1, 123, 456, 789, precision=9),
                         bodo.types.Time(23, 50, 59, 500, 0, 999, precision=9),
                     ]
