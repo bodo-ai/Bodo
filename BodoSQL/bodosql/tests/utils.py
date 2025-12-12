@@ -1167,6 +1167,7 @@ def _run_jit_query(
             )
         else:
             args.append(dataframe_dict[key])
+        print(args)
         func_text += f"            '{key}': e{i},\n"
     args = args + values_list + list(bind_variables)
     func_text += "        }\n"
