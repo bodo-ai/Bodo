@@ -117,6 +117,16 @@ def run_query_generic(
             name=f"Run {library_name} query {query_number}", unit="s"
         ) as timer:
             result = query()
+            if settings.paths.output_dir is not None:
+                import pandas as pd
+                import polars as pl
+
+                path = settings.paths.output_dir + f"/{library_name}_q{query_number}.pq"
+
+                if isinstance(result, pd.DataFrame):
+                    result.to_parquet(path)
+                elif isinstance(result, pl.DataFrame):
+                    result.write_parquet(path)
 
         if settings.run.log_timings:
             log_query_timing(

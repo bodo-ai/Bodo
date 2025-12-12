@@ -14,6 +14,7 @@ class Paths(BaseSettings):
     tables: Path = Path("data/tables").absolute()
     # BODO Change: override computed path
     data_folder: str | None = None
+    output_dir: str | None = None
 
     timings: Path = Path("output/run")
     timings_filename: str = "timings.csv"
