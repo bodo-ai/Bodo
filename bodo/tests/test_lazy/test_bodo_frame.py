@@ -440,7 +440,6 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_df._lazy
     pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[2:3])
 
-    # Slicing with negative step (does not trigger a data fetch)
     lam = lazy_manager(
         [],
         [],
@@ -451,9 +450,6 @@ def test_slice(pandas_managers, head_df, collect_func):
         del_func=del_func,
     )
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
-    lam_sliced_head_df = lam_df.iloc[3::-1]
-    assert lam_df._lazy
-    pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[3::-1])
 
     # Trigger a fetch
     lam_sliced_head_df = lam_df.iloc[-3:]

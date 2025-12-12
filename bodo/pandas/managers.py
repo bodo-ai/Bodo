@@ -572,7 +572,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
-            and (stop is None or stop <= len(self._md_head))
+            and stop is not None
+            and stop <= len(self._md_head)
             and axis == 0
         ):
             slobj = slice(start, stop, step)
