@@ -339,6 +339,9 @@ class AsyncShuffleSendState {
                 "AsyncShuffleSendState::send_shuffle_data: MPI error on "
                 "MPI_Comm_get_attr:");
 
+            if (flag) {
+                printf("Maximum tag value queried %d\n", *(int*)max_tag);
+            }
             if (flag && curr_tags[p]++ >= *(int*)max_tag) {
                 throw std::runtime_error(
                     "AsyncShuffleSendState::send_shuffle_data: Exceeded "
