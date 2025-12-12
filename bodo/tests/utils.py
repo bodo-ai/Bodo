@@ -1281,7 +1281,7 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
         # NaN/None values.
         py_out = pd.array(py_out, str(pa_type).capitalize())
 
-    if pd.Series(py_out).isna().all():
+    if pd.Series(py_out).isna().all() and len(py_out) > 0:
         # Avoid all pd.NA inputs since pa.array() fails for them
         py_out = np.array([None] * len(py_out))
 

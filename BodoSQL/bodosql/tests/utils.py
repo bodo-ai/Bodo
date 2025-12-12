@@ -1264,6 +1264,8 @@ def _check_query_equal(
             except Exception:
                 pass
 
+    # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
+    bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
@@ -1447,6 +1449,31 @@ def convert_nullable_object(df):
             ):
                 S = df.iloc[:, i]
                 df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
+    return df
+
+
+def convert_arrow_time_to_bodo_time(df):
+    """Convert a DataFrame with potentially Arrow Time64[ns] columns to bodo.types.Time objects.
+    Imports the compiler for bodo.types.Time"""
+    import bodo.decorators  # noqa
+
+    if not isinstance(df, pd.DataFrame):
+        return df
+
+    for col in df.columns:
+        if df[col].dtype == pd.ArrowDtype(pa.time64("ns")):
+            col_as_int = pd.array(
+                df[col].array._pa_array.cast(pa.int64()),
+                dtype=pd.ArrowDtype(pa.int64()),
+            )
+            bodo_times = []
+            for x in col_as_int:
+                if pd.isna(x):
+                    bodo_times.append(None)
+                else:
+                    bodo_times.append(bodo.types.Time(nanosecond=x, precision=9))
+            df[col] = pd.Series(bodo_times, dtype=object)
+
     return df
 
 
