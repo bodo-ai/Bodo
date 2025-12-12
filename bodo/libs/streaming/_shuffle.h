@@ -52,7 +52,7 @@ using len_iter_t = std::vector<uint64_t>::const_iterator;
             MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &max_tag, &flag), \
             "AsyncShuffleSendState::send_shuffle_data: MPI error on "       \
             "MPI_Comm_get_attr:");                                          \
-        if (true) {                                                         \
+        if (tag >= *(int*)max_tag) {                                        \
             std::cerr << "MPI message tag " << (tag) << " for " << (msg)    \
                       << " may exceed the maximum allowed tag value."       \
                       << std::endl;                                         \
