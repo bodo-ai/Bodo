@@ -3563,136 +3563,148 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                         shuffle_possible, true, dict_hashes);
     join_state->metrics.probe_part_hashing_time += end_timer(start_part_hash);
 
-    bodo::vector<int64_t> group_ids;
-    bodo::vector<int64_t> build_idxs;
-    bodo::vector<int64_t> probe_idxs;
+    bool did_gpu_offload = false;
 
-    // Fetch the raw array pointers from the arrays for passing
-    // to the non-equijoin condition
-    std::vector<array_info*> build_table_info_ptrs, probe_table_info_ptrs;
-    // Vectors for data
-    std::vector<void*> build_col_ptrs, probe_col_ptrs;
-    // Vectors for null bitmaps for fast null checking from the cfunc
-    std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
-    if constexpr (non_equi_condition) {
-        std::tie(build_table_info_ptrs, build_col_ptrs, build_null_bitmaps) =
-            get_gen_cond_data_ptrs(
-                active_partition->build_table_buffer->data_table);
-        std::tie(probe_table_info_ptrs, probe_col_ptrs, probe_null_bitmaps) =
-            get_gen_cond_data_ptrs(active_partition->probe_table);
-    }
+#ifdef GPU_OFFLOAD
 
-    // probe hash table
-    std::vector<bool> append_to_probe_shuffle_buffer(in_table->nrows(), false);
-    std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
+#endif  // GPU_OFFLOAD
+
+    if (!did_gpu_offload) {
+        bodo::vector<int64_t> group_ids;
+        bodo::vector<int64_t> build_idxs;
+        bodo::vector<int64_t> probe_idxs;
+
+        // Fetch the raw array pointers from the arrays for passing
+        // to the non-equijoin condition
+        std::vector<array_info*> build_table_info_ptrs, probe_table_info_ptrs;
+        // Vectors for data
+        std::vector<void*> build_col_ptrs, probe_col_ptrs;
+        // Vectors for null bitmaps for fast null checking from the cfunc
+        std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
+        if constexpr (non_equi_condition) {
+            std::tie(build_table_info_ptrs, build_col_ptrs,
+                     build_null_bitmaps) =
+                get_gen_cond_data_ptrs(
+                    active_partition->build_table_buffer->data_table);
+            std::tie(probe_table_info_ptrs, probe_col_ptrs,
+                     probe_null_bitmaps) =
+                get_gen_cond_data_ptrs(active_partition->probe_table);
+        }
+
+        // probe hash table
+        std::vector<bool> append_to_probe_shuffle_buffer(in_table->nrows(),
                                                          false);
-    std::shared_ptr<std::vector<bool>> append_to_mark_output = nullptr;
+        std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
+                                                             false);
+        std::shared_ptr<std::vector<bool>> append_to_mark_output = nullptr;
 
-    time_pt start_ht_probe = start_timer();
-    group_ids.resize(in_table->nrows());
-    const auto& active_partition_ht =
-        active_partition.get()->build_hash_table_guard.value();
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        // If just build_parallel = False then we have a broadcast join on
-        // the build side. So process all rows.
-        // If just probe_parallel = False and build_parallel = True then we
-        // still need to check batch_hashes_partition to know which rows to
-        // process.
-        bool process_on_rank =
-            !join_state->build_parallel ||
-            hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
-        // Check the bloom filter if we would need to shuffle data
-        // or if we would process the row.
-        bool check_bloom_filter = shuffle_possible || process_on_rank;
-        // Check bloom filter.
-        // NOTE: We only need to do this in the probe_outer case since in the
-        // inner case, the optimizer generates RuntimeFilter calls before the
-        // probe step (and pushes them down as far as possible). It won't do so
-        // in the outer case since the rows need to be preserved, so we need to
-        // apply it here.
-        if (use_bloom_filter && check_bloom_filter && probe_table_outer &&
-            // We use batch_hashes_partition to use consistent hashing
-            // across ranks for dict-encoded string arrays
-            (!join_state->global_bloom_filter->Find(
-                batch_hashes_partition[i_row]))) {
-            join_state->metrics.probe_outer_bloom_filter_misses++;
-            group_ids[i_row] = 0;
-        } else if (process_on_rank) {
-            join_state->metrics.num_processed_probe_table_rows++;
-            if (active_partition->is_in_partition(
-                    batch_hashes_partition[i_row])) {
-                group_ids[i_row] = handle_probe_input_for_partition(
-                    active_partition_ht, i_row);
+        time_pt start_ht_probe = start_timer();
+        group_ids.resize(in_table->nrows());
+        const auto& active_partition_ht =
+            active_partition.get()->build_hash_table_guard.value();
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            // If just build_parallel = False then we have a broadcast join on
+            // the build side. So process all rows.
+            // If just probe_parallel = False and build_parallel = True then we
+            // still need to check batch_hashes_partition to know which rows to
+            // process.
+            bool process_on_rank =
+                !join_state->build_parallel ||
+                hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
+            // Check the bloom filter if we would need to shuffle data
+            // or if we would process the row.
+            bool check_bloom_filter = shuffle_possible || process_on_rank;
+            // Check bloom filter.
+            // NOTE: We only need to do this in the probe_outer case since in
+            // the inner case, the optimizer generates RuntimeFilter calls
+            // before the probe step (and pushes them down as far as possible).
+            // It won't do so in the outer case since the rows need to be
+            // preserved, so we need to apply it here.
+            if (use_bloom_filter && check_bloom_filter && probe_table_outer &&
+                // We use batch_hashes_partition to use consistent hashing
+                // across ranks for dict-encoded string arrays
+                (!join_state->global_bloom_filter->Find(
+                    batch_hashes_partition[i_row]))) {
+                join_state->metrics.probe_outer_bloom_filter_misses++;
+                group_ids[i_row] = 0;
+            } else if (process_on_rank) {
+                join_state->metrics.num_processed_probe_table_rows++;
+                if (active_partition->is_in_partition(
+                        batch_hashes_partition[i_row])) {
+                    group_ids[i_row] = handle_probe_input_for_partition(
+                        active_partition_ht, i_row);
+                } else {
+                    append_to_probe_inactive_partition[i_row] = true;
+                    group_ids[i_row] = -1;
+                }
+            } else if (shuffle_possible) {
+                append_to_probe_shuffle_buffer[i_row] = true;
+                group_ids[i_row] = -1;
             } else {
-                append_to_probe_inactive_partition[i_row] = true;
                 group_ids[i_row] = -1;
             }
-        } else if (shuffle_possible) {
-            append_to_probe_shuffle_buffer[i_row] = true;
-            group_ids[i_row] = -1;
-        } else {
-            group_ids[i_row] = -1;
         }
-    }
-    join_state->metrics.ht_probe_time += end_timer(start_ht_probe);
-    HashJoinMetrics::time_t append_time = 0;
-    time_pt start_produce_probe = start_timer();
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        produce_probe_output<build_table_outer, probe_table_outer,
-                             non_equi_condition, is_anti_join>(
-            join_state->cond_func, active_partition.get(), i_row, 0, group_ids,
-            build_idxs, probe_idxs, build_table_info_ptrs,
-            probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
-            build_null_bitmaps, probe_null_bitmaps, join_state->output_buffer,
-            active_partition->build_table_buffer->data_table, in_table,
-            build_kept_cols, probe_kept_cols, append_time,
-            join_state->is_mark_join);
-    }
-    join_state->metrics.produce_probe_out_idxs_time +=
-        end_timer(start_produce_probe) - append_time;
-    group_ids.clear();
-
-    if (join_state->partitions.size() > 1) {
-        // Skip this in the single-partition case:
-        join_state->AppendProbeBatchToInactivePartition(
-            in_table, batch_hashes_join, batch_hashes_partition,
-            append_to_probe_inactive_partition);
-    }
-
-    if (shuffle_possible) {
-        // Skip this when shuffle isn't possible.
-        join_state->probe_shuffle_state.AppendBatch(
-            in_table, append_to_probe_shuffle_buffer);
-    }
-
-    if (join_state->is_mark_join) {
-        append_to_mark_output =
-            std::make_shared<std::vector<bool>>(in_table->nrows());
-        for (size_t i = 0; i < in_table->nrows(); i++) {
-            (*append_to_mark_output)[i] =
-                !(append_to_probe_inactive_partition[i] ||
-                  append_to_probe_shuffle_buffer[i]);
+        join_state->metrics.ht_probe_time += end_timer(start_ht_probe);
+        HashJoinMetrics::time_t append_time = 0;
+        time_pt start_produce_probe = start_timer();
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            produce_probe_output<build_table_outer, probe_table_outer,
+                                 non_equi_condition, is_anti_join>(
+                join_state->cond_func, active_partition.get(), i_row, 0,
+                group_ids, build_idxs, probe_idxs, build_table_info_ptrs,
+                probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
+                build_null_bitmaps, probe_null_bitmaps,
+                join_state->output_buffer,
+                active_partition->build_table_buffer->data_table, in_table,
+                build_kept_cols, probe_kept_cols, append_time,
+                join_state->is_mark_join);
         }
+        join_state->metrics.produce_probe_out_idxs_time +=
+            end_timer(start_produce_probe) - append_time;
+        group_ids.clear();
+
+        if (join_state->partitions.size() > 1) {
+            // Skip this in the single-partition case:
+            join_state->AppendProbeBatchToInactivePartition(
+                in_table, batch_hashes_join, batch_hashes_partition,
+                append_to_probe_inactive_partition);
+        }
+
+        if (shuffle_possible) {
+            // Skip this when shuffle isn't possible.
+            join_state->probe_shuffle_state.AppendBatch(
+                in_table, append_to_probe_shuffle_buffer);
+        }
+
+        if (join_state->is_mark_join) {
+            append_to_mark_output =
+                std::make_shared<std::vector<bool>>(in_table->nrows());
+            for (size_t i = 0; i < in_table->nrows(); i++) {
+                (*append_to_mark_output)[i] =
+                    !(append_to_probe_inactive_partition[i] ||
+                      append_to_probe_shuffle_buffer[i]);
+            }
+        }
+
+        append_to_probe_inactive_partition.clear();
+        append_to_probe_shuffle_buffer.clear();
+
+        // Reset active partition state
+        active_partition->probe_table = nullptr;
+        active_partition->probe_table_hashes = nullptr;
+
+        // Free hash memory
+        batch_hashes_partition.reset();
+        batch_hashes_join.reset();
+
+        // Insert output rows into the output buffer:
+        join_state->output_buffer->AppendJoinOutput(
+            active_partition->build_table_buffer->data_table,
+            std::move(in_table), build_idxs, probe_idxs, build_kept_cols,
+            probe_kept_cols, join_state->is_mark_join, append_to_mark_output);
+        build_idxs.clear();
+        probe_idxs.clear();
     }
-
-    append_to_probe_inactive_partition.clear();
-    append_to_probe_shuffle_buffer.clear();
-
-    // Reset active partition state
-    active_partition->probe_table = nullptr;
-    active_partition->probe_table_hashes = nullptr;
-
-    // Free hash memory
-    batch_hashes_partition.reset();
-    batch_hashes_join.reset();
-
-    // Insert output rows into the output buffer:
-    join_state->output_buffer->AppendJoinOutput(
-        active_partition->build_table_buffer->data_table, std::move(in_table),
-        build_idxs, probe_idxs, build_kept_cols, probe_kept_cols,
-        join_state->is_mark_join, append_to_mark_output);
-    build_idxs.clear();
-    probe_idxs.clear();
 
     if (shuffle_possible) {
         std::optional<std::shared_ptr<table_info>> new_data_ =

@@ -11,11 +11,15 @@
 #include "expression.h"
 #include "operator.h"
 
+// #define USE_LIBCUDF
+
+#ifdef USE_LIBCUDF
 #include <cudf/column/column.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 #include <cudf/types.hpp>
+#endif  // USE_LIBCUDF
 
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(                                                   \
@@ -486,8 +490,17 @@ class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
             join_state, input_batch_reordered, has_bloom_filter, local_is_last);
 
         if (global_is_last) {
+#ifdef USE_LIBCUDF
             build_view = bodo_arrow_to_cudf_table(
                 FIX_ME_HOW_TO_GET_THE_FULL_BUILD_TABLE);
+#else
+            std::shared_ptr <
+                table_infO full_build_table;  // how to get this? FIX ME. TODO.
+            auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
+                runPythonScalarFunction(full_build_table, result_type,
+                                        scalar_func_data.args,
+                                        scalar_func_data.has_state, nullptr);
+#endif  // USE_LIBCUDF
             return OperatorResult::FINISHED;
         }
         this->metrics.consume_time += end_timer(start_consume);
