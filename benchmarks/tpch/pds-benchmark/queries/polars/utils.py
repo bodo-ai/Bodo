@@ -1,7 +1,7 @@
 import pathlib
 import tempfile
-from functools import partial
-from typing import Literal, cast
+from collections.abc import Callable
+from typing import Literal
 
 import polars as pl
 from queries.common_utils import (
@@ -134,68 +134,24 @@ def obtain_engine_config() -> (
         return pl.GPUEngine(device=device, memory_resource=mr, raise_on_fail=True)
 
 
-def run_query(query_number: int, lf: pl.LazyFrame) -> None:
+def run_query(query_number: int, query_func: Callable) -> None:
     streaming = settings.run.polars_old_streaming
     new_streaming = settings.run.polars_streaming
     eager = settings.run.polars_eager
     gpu = settings.run.polars_gpu
-    cloud = settings.run.polars_cloud
 
-    if sum([eager, streaming, new_streaming, gpu, cloud]) > 1:
-        msg = "Please specify at most one of eager, streaming, new_streaming, cloud or gpu"
+    if sum([eager, streaming, new_streaming, gpu]) > 1:
+        msg = "Please specify at most one of eager, streaming, new_streaming, or gpu"
         raise ValueError(msg)
-    if settings.run.polars_show_plan:
-        print(
-            lf.explain(  # type: ignore[call-arg]
-                streaming=streaming, new_streaming=new_streaming, optimized=eager
-            )
-        )
 
     engine = obtain_engine_config()
-    if settings.run.polars_show_plan:
-        print(lf.explain(engine=engine, optimized=not eager))  # type: ignore[arg-type]
 
     # Eager load engine backend, so we don't time that.
     _preload_engine(engine)
 
-    if cloud:
-        import os
-
-        import polars_cloud as pc
-
-        os.environ["POLARS_SKIP_CLIENT_CHECK"] = "1"
-
-        class PatchedComputeContext(pc.ComputeContext):
-            def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-                self._interactive = True
-                compute_address = "localhost:5051"
-                client_options = pc.polars_cloud.ClientOptions()
-                client_options.insecure = True
-                self._compute_id = "1"  # type: ignore[assignment]
-                self._interactive_client = pc.polars_cloud.SchedulerClient(
-                    compute_address, client_options
-                )
-
-            def get_status(self: pc.ComputeContext) -> pc.ComputeContextStatus:
-                """Get the status of the compute cluster."""
-                return pc.ComputeContextStatus.RUNNING
-
-        pc.ComputeContext.__init__ = PatchedComputeContext.__init__  # type: ignore[assignment]
-        pc.ComputeContext.get_status = PatchedComputeContext.get_status  # type: ignore[method-assign]
-
-        def query():  # type: ignore[no-untyped-def]
-            result = pc.spawn(
-                lf, dst="file:///tmp/dst/", distributed=True
-            ).await_result()
-
-            if settings.run.show_results:
-                # casting the result is necessary because in proxy mode the ProxyQuery
-                # does not support getting a plan out.
-                print(cast("pc.DirectQuery", result).plan())
-            return result.lazy().collect()
-    else:
-        query = partial(
-            lf.collect,
+    def query_final():
+        lf: pl.LazyFrame = query_func()
+        return lf.collect(
             streaming=streaming,
             new_streaming=new_streaming,
             no_optimization=eager,
@@ -206,14 +162,12 @@ def run_query(query_number: int, lf: pl.LazyFrame) -> None:
         library_name = f"polars-gpu-{settings.run.use_rmm_mr}"
     elif eager:
         library_name = "polars-eager"
-    elif cloud:
-        library_name = "polars-cloud"
     else:
         library_name = "polars"
 
     try:
         run_query_generic(
-            query,
+            query_final,
             query_number,
             library_name,
             library_version=pl.__version__,
