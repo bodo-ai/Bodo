@@ -14,7 +14,6 @@ class Paths(BaseSettings):
     tables: Path = Path("data/tables").absolute()
     # BODO Change: override computed path
     data_folder: str | None = None
-    output_dir: str | None = None
 
     timings: Path = Path("output/run")
     timings_filename: str = "timings.csv"
@@ -39,6 +38,7 @@ class Run(BaseSettings):
     polars_eager: bool = False
     polars_old_streaming: bool = False
     polars_streaming: bool = False
+    polars_cloud: bool = False
     polars_gpu: bool = False  # Use GPU engine?
     polars_gpu_device: int = 0  # The GPU device to run on for polars GPU
     # Which style of GPU memory resource to use

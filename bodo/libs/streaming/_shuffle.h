@@ -44,21 +44,6 @@ using comm_info_iter_t = std::vector<mpi_comm_info>::const_iterator;
 using str_comm_info_iter_t = std::vector<mpi_str_comm_info>::const_iterator;
 using len_iter_t = std::vector<uint64_t>::const_iterator;
 
-#define CHECK_MESSAGE_TAG(tag, msg)                                         \
-    {                                                                       \
-        void* max_tag;                                                      \
-        int flag;                                                           \
-        CHECK_MPI(                                                          \
-            MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &max_tag, &flag), \
-            "AsyncShuffleSendState::send_shuffle_data: MPI error on "       \
-            "MPI_Comm_get_attr:");                                          \
-        if (tag >= *(int*)max_tag) {                                        \
-            std::cerr << "MPI message tag " << (tag) << " for " << (msg)    \
-                      << " may exceed the maximum allowed tag value."       \
-                      << std::endl;                                         \
-        }                                                                   \
-    }
-
 /**
  * @brief Get the default shuffle threshold for all streaming operators. We
  * check the 'BODO_SHUFFLE_THRESHOLD' environment variable first. If it's not
@@ -273,7 +258,6 @@ class AsyncShuffleSendState {
             comm_info.send_disp_null[p] * numpy_item_size[Bodo_CTypes::UINT8];
 
         MPI_Request send_req_null;
-        CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_null_bitmask");
         CHECK_MPI(
             MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
                        curr_tags[p]++, shuffle_comm, &send_req_null),
@@ -309,7 +293,6 @@ class AsyncShuffleSendState {
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
             MPI_Request send_req;
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[NUMPY]");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
@@ -348,8 +331,6 @@ class AsyncShuffleSendState {
             const void* buff =
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
-            CHECK_MESSAGE_TAG(curr_tags[p],
-                              "send_shuffle_data[NULLABLE, !BOOL]");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
@@ -392,8 +373,6 @@ class AsyncShuffleSendState {
             MPI_Request send_req;
             char* buff = send_arr->template data1<arr_type>() +
                          comm_info.send_disp_null[p];
-            CHECK_MESSAGE_TAG(curr_tags[p],
-                              "send_shuffle_data[NULLABLE, BOOL]");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
@@ -435,7 +414,6 @@ class AsyncShuffleSendState {
             MPI_Request data_send_req;
             const void* data_buff = send_arr->template data1<arr_type>() +
                                     str_comm_info.send_disp_sub[p];
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[STRING]");
             CHECK_MPI(
                 MPI_Issend(data_buff, str_comm_info.send_count_sub[p],
                            data_mpi_type, p, curr_tags[p]++, shuffle_comm,
@@ -448,7 +426,6 @@ class AsyncShuffleSendState {
             const void* len_buff = send_arr->data2<arr_type>() +
                                    (sizeof(uint32_t) * comm_info.send_disp[p]);
 
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[STRING]2");
             CHECK_MPI(
                 MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &len_send_req),
@@ -498,7 +475,6 @@ class AsyncShuffleSendState {
             }
             MPI_Request data_send_req;
             const void* data_buff = dict_arr->data1<bodo_array_type::STRING>();
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[DICT]");
             CHECK_MPI(
                 MPI_Issend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &data_send_req),
@@ -509,8 +485,6 @@ class AsyncShuffleSendState {
             MPI_Request offset_send_req;
             const void* offset_buff =
                 dict_arr->data2<bodo_array_type::STRING>();
-
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[DICT]2");
             CHECK_MPI(
                 MPI_Issend(offset_buff, dict_arr->length + 1, offset_mpi_type,
                            p, curr_tags[p]++, shuffle_comm, &offset_send_req),
@@ -521,7 +495,6 @@ class AsyncShuffleSendState {
             MPI_Request null_send_req;
             const void* null_buff =
                 dict_arr->null_bitmask<bodo_array_type::STRING>();
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[DICT]3");
             CHECK_MPI(
                 MPI_Issend(null_buff,
                            arrow::bit_util::BytesForBits(dict_arr->length),
@@ -565,7 +538,6 @@ class AsyncShuffleSendState {
             MPI_Request send_req;
             const void* buff = send_arr->data1<arr_type>() +
                                (sizeof(uint32_t) * comm_info.send_disp[p]);
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[ARRAY_ITEM]");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], lens_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
@@ -615,7 +587,6 @@ class AsyncShuffleSendState {
             const void* buff =
                 send_arr->data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[TIMESTAMPTZ]");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_datetime_type, p,
                            curr_tags[p]++, shuffle_comm, &datetime_send_req),
@@ -626,7 +597,6 @@ class AsyncShuffleSendState {
             MPI_Request tz_offset_send_req;
             buff = send_arr->data2<arr_type>() +
                    (numpy_item_size[offset_type] * comm_info.send_disp[p]);
-            CHECK_MESSAGE_TAG(curr_tags[p], "send_shuffle_data[TIMESTAMPTZ]2");
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
                            curr_tags[p]++, shuffle_comm, &tz_offset_send_req),
@@ -1095,7 +1065,6 @@ void recv_null_bitmask(std::unique_ptr<array_info>& out_arr,
     const MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
     int recv_size_null = arrow::bit_util::BytesForBits(out_arr->length);
     MPI_Request recv_req_null;
-    CHECK_MESSAGE_TAG(curr_tag, "recv_null_bitmask");
     CHECK_MPI(MPI_Irecv(out_arr->null_bitmask<arr_type>(), recv_size_null,
                         mpi_type_null, source, curr_tag++, shuffle_comm,
                         &recv_req_null),
@@ -1120,7 +1089,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
     MPI_Request recv_req;
-    CHECK_MESSAGE_TAG(curr_tag, "recv_shuffle_data[NUMPY]");
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
                         curr_tag++, shuffle_comm, &recv_req),
               "recv_shuffle_data[NUMPY]: MPI error on MPI_Irecv:");
@@ -1146,7 +1114,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request recv_req;
-    CHECK_MESSAGE_TAG(curr_tag, "recv_shuffle_data[NULLABLE][!BOOL]");
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
                         curr_tag++, shuffle_comm, &recv_req),
               "recv_shuffle_data[NULLABLE][!BOOL]: MPI error on MPI_Irecv:");
@@ -1177,7 +1144,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request recv_req;
-    CHECK_MESSAGE_TAG(curr_tag, "recv_shuffle_data[NULLABLE][BOOL]");
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(),
                         arrow::bit_util::BytesForBits(arr_len), mpi_type,
                         source, curr_tag++, shuffle_comm, &recv_req),
@@ -1210,7 +1176,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, n_chars, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request data_req;
-    CHECK_MESSAGE_TAG(curr_tag, "recv_shuffle_data[STRING]");
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), n_chars, data_mpi_type,
                         source, curr_tag++, shuffle_comm, &data_req),
               "recv_shuffle_data[STRING]: MPI error on MPI_Irecv:");
@@ -1219,7 +1184,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
     MPI_Request len_req;
     // Receive the lens, we know we can fit them in the offset buffer because
     // sizeof(offset_t) >= sizeof(uint32_t)
-    CHECK_MESSAGE_TAG(curr_tag, "recv_shuffle_data[STRING]2");
     CHECK_MPI(
         MPI_Irecv(out_arr->data2<arr_type, offset_t>(), arr_len, len_mpi_type,
                   source, curr_tag++, shuffle_comm, &len_req),
