@@ -109,6 +109,7 @@ jobs:
               pytest -s -v -Wignore \
                 --cov-report= --cov=bodo \
                 --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --splitting-algorithm least_duration \
                 --store-durations --clean-durations \
                 --durations-path=buildscripts/github/test_dur_bodo.json \
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
@@ -120,6 +121,7 @@ jobs:
               cd BodoSQL
               pytest -s -v -Wignore \
                 --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --splitting-algorithm least_duration \
                 --store-durations --clean-durations \
                 --durations-path=../buildscripts/github/test_dur_bodosql.json \
                 -m "$PYTEST_MARKER" bodosql/tests/
