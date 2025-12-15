@@ -172,7 +172,8 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-pytest = "*"
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
 pytest-xdist = "*"
