@@ -183,7 +183,8 @@ arrow::Datum MakeNanScalar(const std::shared_ptr<arrow::DataType>& dtype) {
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
-    const std::string& comparator) {
+    const std::string& comparator,
+    const std::shared_ptr<arrow::DataType> result_type) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -267,8 +268,20 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
         }
     }
 
-    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
-                               bodo::BufferPool::DefaultPtr());
+    if (result_type && cmp_dtype != result_type) {
+        // Cast to result type if available and different from current type.
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(cmp_datum, result_type);
+        if (!cast_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
+                cast_res.status().message());
+        }
+        cmp_res = cast_res;
+    }
+
+    std::shared_ptr<arrow::Array> arrow_arr = cmp_res.ValueOrDie().make_array();
+    return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
 }
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
@@ -601,6 +614,14 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
+            std::shared_ptr<arrow::DataType> result_type = nullptr;
+
+            if (bfe.bind_info) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+                result_type = scalar_func_data.out_schema->field(0)->type();
+            }
+
             if (bfe.bind_info &&
                 (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
                  !bfe.bind_info->Cast<BodoScalarFunctionData>()
@@ -613,9 +634,6 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     phys_children.emplace_back(buildPhysicalExprTree(
                         child_expr, col_ref_map, no_scalars));
                 }
-
-                const std::shared_ptr<arrow::DataType>& result_type =
-                    scalar_func_data.out_schema->field(0)->type();
 
                 if (!scalar_func_data.arrow_func_name.empty()) {
                     return std::static_pointer_cast<PhysicalExpression>(
@@ -642,7 +660,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                                       col_ref_map, no_scalars),
                                 buildPhysicalExprTree(bfe.children[1],
                                                       col_ref_map, no_scalars),
-                                bfe.function.name));
+                                bfe.function.name, result_type));
                     } break;
                     default:
                         throw std::runtime_error(
