@@ -653,8 +653,10 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
 
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
-    // Reduce MPI call overheads by communicating only every 10 iterations
-    if (!(is_last || ((this->curr_iter % 10) == 0))) {
+    // Reduce MPI call overheads by communicating only every *shuffle_freq*
+    // iterations
+    const int shuffle_freq = std::max(2, (10 * 4096) / STREAMING_BATCH_SIZE);
+    if (!(is_last || ((this->curr_iter % shuffle_freq) == 0))) {
         return std::nullopt;
     }
 
