@@ -520,12 +520,15 @@ def to_datetime(
         "cache": cache,
     }
 
+    name = arg.name if isinstance(arg, BodoSeries) else None
+
     if utc:
         dtype = pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
         index = arg.head(0).index
         new_metadata = pd.Series(
             dtype=dtype,
             index=index,
+            name=name,
         )
     # Format specified without timezone info or DataFrame case (cannot have timezone)
     elif (format is not None and _is_not_tz_format(format)) or isinstance(
@@ -536,6 +539,7 @@ def to_datetime(
         new_metadata = pd.Series(
             dtype=dtype,
             index=index,
+            name=name,
         )
     else:
         # Need to sample the data for output type inference similar to UDFs since the data
