@@ -683,7 +683,7 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
     // 2 messages at once with our 10000 offset.
     const int MAX_TAG = get_max_allowed_tag_value();
 
-    for (int tag = SHUFFLE_METADATA_MSG_TAG + 1; tag < MAX_TAG - TAG_OFFSET;
+    for (int tag = SHUFFLE_METADATA_MSG_TAG + 1; tag < (MAX_TAG - TAG_OFFSET);
          tag += TAG_OFFSET) {
         if (!inflight_tags.contains(tag)) {
             return tag;

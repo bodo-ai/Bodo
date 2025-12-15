@@ -58,10 +58,10 @@ int64_t get_shuffle_threshold();
  * @brief Find the next available starting message tag for sending concurrent
  * messages to the same rank.
  *
- * @param inflight_tags A set of currently inflight tags.
- * @return int Starting tag for the async sends. -1 if no available tag found.
- * If a valid tag is returned, then there should a sufficient amount of
- * consecutive tags after the starting tag available for the send.
+ * @param inflight_tags A set of tags currently in flight.
+ * @return int. Starting tag for the async send. -1 if no available tag is
+ * found. If a valid tag is returned, then the next 10,000 consecutive tags
+ * should also be available.
  */
 int get_next_available_tag(std::unordered_set<int>& inflight_tags);
 
