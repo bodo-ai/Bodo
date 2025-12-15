@@ -6,11 +6,11 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
+default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "314" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "314" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "314-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "314-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
@@ -67,7 +67,7 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.13.*"
+python = "3.14.*"
 pip = "*"
 # Core Python Deps
 numba = ">=0.62,<0.64.0"

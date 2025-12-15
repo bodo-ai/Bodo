@@ -98,8 +98,8 @@ jobs:
       - uses: actions/download-artifact@v5
         id: download-artifact
         with:
-          pattern: cibw-wheels-linux-x86-3.13
-          path: ./cibw-wheels-linux-x86-3.13
+          pattern: cibw-wheels-linux-x86-3.14
+          path: ./cibw-wheels-linux-x86-3.14
 
       - name: Build BodoSQL Wheels
         run: |
