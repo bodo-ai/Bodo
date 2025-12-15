@@ -18,7 +18,7 @@ from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 from BodoSQL.bodosql.bodosql_types.rest_catalog import RESTCatalog
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
-pytestmark = pytest_polaris + pytest_one_rank
+pytestmark = pytest_polaris + pytest_one_rank + [pytest.mark.slow]
 
 
 @pytest.fixture(scope="session")
