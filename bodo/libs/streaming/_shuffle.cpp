@@ -675,11 +675,16 @@ static int get_max_allowed_tag_value() {
 }
 
 int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
-    const int max_tag = get_max_allowed_tag_value();
-    const int start_tag = SHUFFLE_METADATA_MSG_TAG + 1;
+    // 10000 should be more than enough tags for a single send.
+    // TODO Use std::max(10000, req_tags) based on the table schema for full
+    // robustness.
+    constexpr int TAG_OFFSET = 10000;
+    // Even the MPI standard guaranteed value (32767) is sufficient for posting
+    // 2 messages at once with our 10000 offset.
+    const int MAX_TAG = get_max_allowed_tag_value();
 
-    for (int tag = start_tag; tag < max_tag - SHUFFLE_SEND_STATE_TAG_OFFSET;
-         tag += SHUFFLE_SEND_STATE_TAG_OFFSET) {
+    for (int tag = SHUFFLE_METADATA_MSG_TAG + 1; tag < MAX_TAG - TAG_OFFSET;
+         tag += TAG_OFFSET) {
         if (!inflight_tags.contains(tag)) {
             return tag;
         }
