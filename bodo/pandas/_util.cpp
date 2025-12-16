@@ -389,8 +389,8 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
     PyObject *result;
     if (has_state) {
         // Validate input
-        if (!PyTuple_Check(args) || PyTuple_Size(args) != 5) {
-            throw std::runtime_error("Expected a 5-tuple");
+        if (!PyTuple_Check(args) || PyTuple_Size(args) != 6) {
+            throw std::runtime_error("Expected a 6-tuple");
         }
         PyObject *args_in_func_args = PyTuple_GetItem(args, 3);  // borrowed ref
         if (!PyTuple_Check(args_in_func_args) ||

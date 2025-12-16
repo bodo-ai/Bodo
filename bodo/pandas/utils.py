@@ -648,8 +648,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """
     from bodo.ext import plan_optimizer
 
-    func, is_series, is_attr, args, kwargs = in_args[:5]
-    use_arrow_dtypes = None if len(in_args) <= 5 else in_args[5]
+    func, is_series, is_attr, args, kwargs, use_arrow_dtypes = in_args
 
     if use_arrow_dtypes is None:
         # Arrow dtypes can be very slow for UDFs in Pandas:

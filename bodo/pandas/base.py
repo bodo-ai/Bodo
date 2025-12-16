@@ -548,6 +548,11 @@ def to_datetime(
             arg, None, pd.to_datetime, **in_kwargs
         )
 
+    # Avoid using Arrow dtypes for non-timestamp inputs for better performance.
+    use_arrow_dtypes = isinstance(arg, BodoSeries) and pa.types.is_timestamp(
+        arg.head(0).dtype.pyarrow_dtype
+    )
+
     # 1. DataFrame Case
     if isinstance(arg, BodoDataFrame):
         _validate_df_to_datetime(arg)
@@ -558,14 +563,10 @@ def to_datetime(
             (),
             in_kwargs,
             is_method=False,
+            use_arrow_dtypes=use_arrow_dtypes,
         )
 
     # 2. Series Case
-    use_arrow_types = True
-    if not pa.types.is_timestamp(arg.head(0).dtype.pyarrow_dtype):
-        # Avoid using Arrow dtypes for non-timestamp inputs for better performance.
-        use_arrow_types = False
-
     return _get_series_func_plan(
         arg._plan,
         new_metadata,
@@ -573,7 +574,7 @@ def to_datetime(
         (),
         in_kwargs,
         is_method=False,
-        use_arrow_types=use_arrow_types,
+        use_arrow_dtypes=use_arrow_dtypes,
     )
 
 
