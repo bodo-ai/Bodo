@@ -1,8 +1,7 @@
 [workspace]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge"]
+channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
-conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
@@ -113,8 +112,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
-libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+libarrow = { version = "==22.0.0", channel = "conda-forge" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
@@ -136,7 +135,7 @@ setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
-mpi4py = ">=4.0,<4.1"
+mpi4py = "*"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -248,9 +247,9 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
@@ -259,7 +258,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "=4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
