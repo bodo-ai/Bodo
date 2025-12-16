@@ -123,11 +123,11 @@ boost-cpp = "*"
 aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
+hdf5 = { version = "*", build = "*mpi_impi_*" }
 
 [feature.dev.dependencies]
 # Build Python
@@ -194,7 +194,8 @@ ipython = "*"
 # Generation/Embedding Tests
 openai = "*"
 
-pytorch = ">=2.0"
+# TODO: Enable when PyTorch is available on Python 3.14
+# pytorch = ">=2.0"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
