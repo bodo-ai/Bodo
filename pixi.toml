@@ -85,7 +85,8 @@ py4j = "==0.10.9.9"
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = ">=1.4"
+# sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
+scikit-learn = ">=1.4,<1.8"
 matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
