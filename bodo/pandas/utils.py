@@ -23,9 +23,6 @@ if pt.TYPE_CHECKING:
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
-# Additional kwarg for determining whether to use Arrow dtypes for Python UDFs
-BODO_USE_ARROW_DTYPES = "_bodo_use_arrow_dtypes"
-
 
 def get_data_manager_pandas() -> str:
     """Get the value of mode.data_manager from pandas config.
