@@ -561,6 +561,11 @@ def to_datetime(
         )
 
     # 2. Series Case
+    use_arrow_types = True
+    if not pa.types.is_timestamp(arg.head(0).dtype.pyarrow_dtype):
+        # Avoid using Arrow dtypes for non-timestamp inputs for better performance.
+        use_arrow_types = False
+
     return _get_series_func_plan(
         arg._plan,
         new_metadata,
@@ -568,6 +573,7 @@ def to_datetime(
         (),
         in_kwargs,
         is_method=False,
+        use_arrow_types=use_arrow_types,
     )
 
 

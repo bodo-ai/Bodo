@@ -23,6 +23,9 @@ if pt.TYPE_CHECKING:
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
+# Additional kwarg for determining whether to use Arrow dtypes for Python UDFs
+BODO_USE_ARROW_DTYPES = "_bodo_use_arrow_dtypes"
+
 
 def get_data_manager_pandas() -> str:
     """Get the value of mode.data_manager from pandas config.
@@ -648,17 +651,18 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """
     from bodo.ext import plan_optimizer
 
-    func, is_series, is_attr, args, kwargs = in_args
+    func, is_series, is_attr, args, kwargs = in_args[:5]
+    use_arrow_dtypes = None if len(in_args) <= 5 else in_args[5]
 
-    # Arrow dtypes can be very slow for UDFs in Pandas:
-    # https://github.com/pandas-dev/pandas/issues/61747
-    # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
-    # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
-    # Arrow does not support element-wise binary operations
-    # across most scalar types. Instead, fallback logic using Pandas semantics
-    # is used to ensure consistent behavior.
-    use_arrow_dtypes = (
-        not (
+    if use_arrow_dtypes is None:
+        # Arrow dtypes can be very slow for UDFs in Pandas:
+        # https://github.com/pandas-dev/pandas/issues/61747
+        # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
+        # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
+        # Arrow does not support element-wise binary operations
+        # across most scalar types. Instead, fallback logic using Pandas semantics
+        # is used to ensure consistent behavior.
+        use_arrow_dtypes = not (
             is_attr
             and func
             in (
@@ -669,8 +673,6 @@ def run_func_on_table(cpp_table, result_type, in_args):
                 "rsub",
             )
         )
-        and func != "pandas.to_datetime"
-    )
 
     cpp_to_py_start = time.perf_counter_ns()
     if is_series:
