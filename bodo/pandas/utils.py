@@ -657,16 +657,19 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # Arrow does not support element-wise binary operations
     # across most scalar types. Instead, fallback logic using Pandas semantics
     # is used to ensure consistent behavior.
-    use_arrow_dtypes = not (
-        is_attr
-        and func
-        in (
-            "apply",
-            "add",
-            "sub",
-            "radd",
-            "rsub",
+    use_arrow_dtypes = (
+        not (
+            is_attr
+            and func
+            in (
+                "apply",
+                "add",
+                "sub",
+                "radd",
+                "rsub",
+            )
         )
+        and func != "pandas.to_datetime"
     )
 
     cpp_to_py_start = time.perf_counter_ns()
