@@ -20,6 +20,7 @@
 #include "physical/limit.h"
 #include "physical/project.h"
 #include "physical/quantile.h"
+#include "physical/read_empty.h"
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
@@ -43,12 +44,31 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
         }
     }
 
+    // Turns out duckdb is actually generating these but they should always be
+    // optional
+    // TODO: implement dynamic filters for logical get nodes
+    // if (op.dynamic_filters) {
+    //    throw std::runtime_error(
+    //        "PhysicalPlanBuilder::Visit LogicalGet: dynamic filters not "
+    //        "supported");
+    //}
+
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
             selected_columns, op.table_filters, op.extra_info.limit_val);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
+    }
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalEmptyResult& op) {
+    auto physical_op = std::make_shared<PhysicalReadEmpty>(op.return_types);
+    if (this->active_pipeline != nullptr) {
+        throw std::runtime_error(
+            "LogicalEmptyResult operator should be the first operator in the "
+            "pipeline");
     }
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
 }
@@ -284,8 +304,7 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
 
     // Make sure all filter generators used by this
     // join filter run before this pipeline.
-    for (size_t i = 0; i < op.filter_ids.size(); i++) {
-        int filter_id = op.filter_ids[i];
+    for (int filter_id : op.filter_ids) {
         std::shared_ptr<Pipeline> filter_pipeline =
             (*join_filter_pipelines)[filter_id];
         if (!filter_pipeline) {
@@ -310,7 +329,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
 
     // Save the physical_cte node away so that cte ref's on the non-duplicate
     // side can find it.
-    ctes.insert({op.table_index, {physical_cte, done_pipeline}});
+    ctes.insert(
+        {op.table_index,
+         {.physical_node = physical_cte, .cte_pipeline_root = done_pipeline}});
     // The active pipeline finishes after the duplicate side.
     this->active_pipeline = nullptr;
     // Create pipelines for the side that uses the duplicate side.

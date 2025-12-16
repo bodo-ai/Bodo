@@ -604,7 +604,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if n < 0:
             # Convert the negative number of the number not to include to a positive number so the rest of the
             # code can run normally.  Unfortunately, this will likely require a plan execution here.
-            n = self.shape[0] + n
+            n = max(0, len(self) + n)
 
         if n == 0 and self._head_s is not None:
             if self._exec_state == ExecState.COLLECTED:
@@ -1452,6 +1452,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return bodo.pandas.utils.convert_to_bodo(py_res)
         return py_res
 
+    @check_args_fallback(supported=["dtype_backend"])
+    def convert_dtypes(
+        self,
+        infer_objects: bool = True,
+        convert_string: bool = True,
+        convert_integer: bool = True,
+        convert_boolean: bool = True,
+        convert_floating: bool = True,
+        dtype_backend: str = "numpy_nullable",
+    ):
+        if dtype_backend == "pyarrow":
+            # Pandas is buggy for this case and drops timezone info from timestamps
+            return self
+
+        raise BodoLibNotImplementedException(
+            "convert_dtypes() only supports dtype_backend='pyarrow' in Bodo Series."
+        )
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -2230,7 +2248,11 @@ class BodoDatetimeProperties:
             )
 
         series = self._series
-        dtype = pd.ArrowDtype(pa.timestamp("ns", tz))
+        if _is_pd_pa_timestamp(series.dtype):
+            unit = series.dtype.pyarrow_dtype.unit
+        else:
+            unit = "ns"
+        dtype = pd.ArrowDtype(pa.timestamp(unit, tz))
 
         index = series.head(0).index
         new_metadata = pd.Series(

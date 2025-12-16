@@ -98,6 +98,10 @@ class BodoDataFrameLocIndexer(_LocIndexer):
         if isinstance(key, tuple) and len(key) == 2:
             row_sel, col_sel = key
             if row_sel == slice(None, None, None):
+                # Handle tuple columns like df.loc[:, ("B", "C")] which are not
+                # supported in regular getitem
+                if isinstance(col_sel, tuple):
+                    col_sel = list(col_sel)
                 return self.df.__getitem__(col_sel)
             else:
                 fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
@@ -305,6 +309,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 assert self._head_df is not None
                 return self._head_df.head(0).copy()
+
+        # Negative n like -1 is equivalent to df.iloc[:-1]
+        if n < 0:
+            n = max(0, len(self) + n)
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             if bodo.dataframe_library_enabled and isinstance(

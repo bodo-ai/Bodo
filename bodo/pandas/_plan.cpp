@@ -33,7 +33,6 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_subquery_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -43,8 +42,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
-#include "duckdb/transaction/duck_transaction_manager.hpp"
-#include "physical/project.h"
+#include "optimizer/runtime_join_filter.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -80,8 +78,15 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
+
+    // Insert and pushdown runtime join filters after optimization since they
+    // aren't relational
+    RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer;
+    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+        runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
+
     return out_plan;
 }
 
@@ -1545,6 +1550,28 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     }
 
     return {return_names, logical_types};
+}
+
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names) {
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(types.size());
+
+    for (size_t i = 0; i < types.size(); ++i) {
+        std::string name;
+        if (!names.empty()) {
+            if (i >= names.size()) {
+                throw std::invalid_argument("names.size() < types.size()");
+            }
+            name = names[i];
+        } else {
+            name = "col_" + std::to_string(i);
+        }
+        auto dtype = duckdbTypeToArrow(types[i]);
+        fields.push_back(arrow::field(name, std::move(dtype)));
+    }
+    return arrow::schema(std::move(fields));
 }
 
 std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(

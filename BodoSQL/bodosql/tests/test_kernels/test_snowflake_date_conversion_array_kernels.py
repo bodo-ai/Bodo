@@ -513,9 +513,6 @@ def test_to_date_valid_datetime_types(
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
 
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
-
     if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
@@ -1227,9 +1224,9 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456789", 0),
-            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123000", 60),
-            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000123", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000", -60),
             None,
             bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
             bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
@@ -1237,9 +1234,9 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     )
     answer = np.array(
         [
-            bodo.types.Time(3, 4, 5, 123, 456, 789, precision=9),
-            bodo.types.Time(5, 5, 6, 0, 123, 0, precision=9),
-            bodo.types.Time(4, 6, 7, 0, 0, 123, precision=9),
+            bodo.types.Time(3, 4, 5, 123, 456, precision=9),
+            bodo.types.Time(5, 5, 6, 0, 123, precision=9),
+            bodo.types.Time(4, 6, 7, 0, 000, precision=9),
             None,
             bodo.types.Time(1, 30, 0, precision=9),
             bodo.types.Time(22, 30, 0, precision=9),

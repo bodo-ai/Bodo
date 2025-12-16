@@ -295,6 +295,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "blocks",
             "get_slice",
             "copy",
+            "take",
             "_rebuild_blknos_and_blklocs",
             "__reduce__",
             "__setstate__",
@@ -542,7 +543,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        if name in {"blocks", "copy"}:
+        if name in {"blocks", "copy", "take"}:
             self._collect()
         return super().__getattribute__(name)
 
@@ -571,7 +572,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
-            and (stop is None or stop <= len(self._md_head))
+            and stop is not None
+            and stop <= len(self._md_head)
             and axis == 0
         ):
             slobj = slice(start, stop, step)

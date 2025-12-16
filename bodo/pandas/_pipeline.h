@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -8,7 +9,7 @@
 #include "physical/operator.h"
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_PIPELINE 1   // 1 for control flow, 2 adds data
+// #define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds data
 #ifdef DEBUG_PIPELINE
 #include <iostream>
 #endif
@@ -72,6 +73,13 @@ class Pipeline {
         std::cout << "Rank " << rank << " " << sink->ToString() << std::endl;
     }
 #endif
+
+    void removeRunBefore(std::shared_ptr<Pipeline> pipeline) {
+        auto it = std::ranges::find(run_before, pipeline);
+        if (it != run_before.end()) {
+            run_before.erase(it);
+        }
+    }
 };
 
 class PipelineBuilder {

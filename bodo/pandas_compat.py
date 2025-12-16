@@ -167,6 +167,60 @@ if _check_pandas_change:
 pd.core.arrays.arrow.array.ArrowExtensionArray._str_find = _str_find
 
 
+def _explode(self):
+    """
+    See Series.explode.__doc__.
+    """
+    # child class explode method supports only list types; return
+    # default implementation for non list types.
+    if not hasattr(self.dtype, "pyarrow_dtype") or (
+        # Bodo change: check is_large_list as well
+        not (
+            pa.types.is_list(self.dtype.pyarrow_dtype)
+            or pa.types.is_large_list(self.dtype.pyarrow_dtype)
+        )
+    ):
+        return super()._explode()
+    values = self
+    counts = pa.compute.list_value_length(values._pa_array)
+    counts = counts.fill_null(1).to_numpy()
+    fill_value = pa.scalar([None], type=self._pa_array.type)
+    mask = counts == 0
+    if mask.any():
+        values = values.copy()
+        values[mask] = fill_value
+        counts = counts.copy()
+        counts[mask] = 1
+    values = values.fillna(fill_value)
+    values = type(self)(pa.compute.list_flatten(values._pa_array))
+    return values, counts
+
+
+if _check_pandas_change:
+    lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._explode)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6c1b05ccc4da39ec3b7d7dfd79a9d9e47968db3b2eb4c615d21d490b21f9b421"
+    ):  # pragma: no cover
+        warnings.warn(
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._explode has changed"
+        )
+
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._explode = _explode
+
+
+if pandas_version < (3, 0):
+    # Fixes iloc Indexing for ArrowExtensionArray (see test_slice_with_series in Narwhals tests)
+    # Pandas 3.0+ has a fix already: https://github.com/pandas-dev/pandas/pull/61924
+    pd.core.arrays.arrow.array.ArrowExtensionArray.max = lambda self: self._reduce(
+        "max"
+    )
+    pd.core.arrays.arrow.array.ArrowExtensionArray.min = lambda self: self._reduce(
+        "min"
+    )
+
+
 # Bodo change: add missing str_map() for ArrowExtensionArray that is used in operations
 # like zfill.
 def arrow_arr_str_map(self, f, na_value=None, dtype=None, convert=True):

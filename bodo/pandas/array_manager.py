@@ -222,7 +222,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         if (
             self._md_head is not None
             and start <= self._md_head.shape[1]
-            and (stop is None or stop <= self._md_head.shape[1])
+            and stop is not None
+            and (stop <= self._md_head.shape[1])
             and axis == 0
         ):
             slobj = slice(start, stop, step)
@@ -560,7 +561,8 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
-            and (stop is None or stop <= len(self._md_head))
+            and stop is not None
+            and (stop <= len(self._md_head))
             and axis == 0
         ):
             slobj = slice(start, stop, step)

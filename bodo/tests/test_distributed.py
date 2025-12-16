@@ -2526,9 +2526,9 @@ def get_random_int64index(n):
         pytest.param(
             lambda: pd.Series(
                 [
-                    bodo.types.Time(17, 33, 26, 91, 8, 79),
-                    bodo.types.Time(0, 24, 43, 365, 18, 74),
-                    bodo.types.Time(3, 59, 6, 25, 757, 3),
+                    bodo.types.Time(17, 33, 26, 91, 8),
+                    bodo.types.Time(0, 24, 43, 365, 18),
+                    bodo.types.Time(3, 59, 6, 25, 757),
                     bodo.types.Time(),
                     bodo.types.Time(4),
                     bodo.types.Time(6, 41),

@@ -9,12 +9,11 @@
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
+#include "duckdb/common/insertion_order_preserving_map.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
@@ -46,6 +45,28 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
         return children[0]->GetColumnBindings();
+    }
+
+    duckdb::string GetName() const override { return "LogicalJoinFilter"; }
+    duckdb::InsertionOrderPreservingMap<duckdb::string> ParamsToString()
+        const override {
+        duckdb::InsertionOrderPreservingMap<duckdb::string> map;
+
+        map["filter_ids"] =
+            fmt::format("{}", fmt::join(this->filter_ids, ", "));
+        map["filter_columns"] = "[";
+        for (const auto &cols : this->filter_columns) {
+            map["filter_columns"] +=
+                fmt::format("[{}], ", fmt::join(cols, ", "));
+        }
+        map["filter_columns"] += "]";
+        map["is_first_locations"] = "[";
+        for (const auto &locs : this->is_first_locations) {
+            map["is_first_locations"] +=
+                fmt::format("[{}], ", fmt::join(locs, ", "));
+        }
+        map["is_first_locations"] += "]";
+        return map;
     }
 
     // IDs of joins creating each filter
@@ -580,6 +601,17 @@ duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
  */
 std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
 arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
+
+/**
+ * @brief Convert DuckDB types to an Arrow schema
+ *
+ * @param types vector of DuckDB LogicalTypes
+ * @param names optional column names
+ * @return arrow schema
+ */
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names = {});
 
 /**
  * @brief Convert an Arrow field to a DuckDB column name and data type.

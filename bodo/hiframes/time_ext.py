@@ -90,7 +90,7 @@ class Time:
         )
 
     def __str__(self):
-        return f"{self.hour}:{self.minute}:{self.second}.{self.millisecond}{self.microsecond}{self.nanosecond}"
+        return f"{self.hour:02}:{self.minute:02}:{self.second:02}.{self.millisecond:03}{self.microsecond:03}{self.nanosecond:03}"
 
     def __hash__(self):
         return int(self.value)
@@ -677,6 +677,10 @@ def overload_time_arr_dtype(A):
 @unbox(TimeArrayType)
 def unbox_time_array(typ, val, c):
     """Unbox a numpy array of time objects to a TimeArrayType"""
+    # PyArrow only supports microsecond and nanosecond precision
+    if typ.precision in (6, 9):
+        return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
+
     n = bodo.utils.utils.object_length(c, val)
     arr_typ = types.Array(types.intp, 1, "C")
     data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
@@ -712,6 +716,10 @@ def unbox_time_array(typ, val, c):
 @box(TimeArrayType)
 def box_time_array(typ, val, c):
     """Box a TimeArrayType to a numpy array of time objects"""
+    # PyArrow only supports microsecond and nanosecond precision
+    if typ.precision in (6, 9):
+        return bodo.libs.array.box_array_using_arrow(typ, val, c)
+
     in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
