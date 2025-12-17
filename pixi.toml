@@ -151,7 +151,8 @@ sqlglot = "*"
 # Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
 duckdb = "!=1.2.1"
 
-pyspark = "4.*"
+# Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
+pyspark = "4.0.*"
 matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
