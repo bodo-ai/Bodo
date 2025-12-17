@@ -9,8 +9,6 @@ def get_default_bedrock_request_formatter(modelId: str) -> Callable[[str], str]:
         return lambda input: json.dumps(
             {"messages": [{"role": "user", "content": [{"text": input}]}]}
         )
-    elif "amazon.titan-text" in modelId:
-        return lambda input: json.dumps({"inputText": input})
     elif "amazon.titan-embed" in modelId:
         return lambda input: json.dumps({"inputText": input})
     elif "anthropic.claude" in modelId:
