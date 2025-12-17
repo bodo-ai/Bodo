@@ -422,7 +422,7 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             throw std::runtime_error("New tuple creation failed");
         }
 
-        // New tuple will be the 5 tuple with the 4th element being yet another
+        // New tuple will be the 6 tuple with the 4th element being yet another
         // new tuple with init_state followed by the other original args in
         // func_args.
         // The original data structure can be thought of as the following:
