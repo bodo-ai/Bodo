@@ -39,7 +39,7 @@ requirements:
     - make
     - ninja
     - mpi4py >=4.0,<4.1
-    - numba >=0.62,<0.63
+    - numba >=0.62,<0.64
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
@@ -64,7 +64,7 @@ requirements:
     - pandas >=2.2
     - fsspec >=2021.09
     - pyarrow =22.0
-    - numba >=0.62,<0.63
+    - numba >=0.62,<0.64
     - mpich =4.1  # [not win]
     - requests
     - zstd

@@ -162,7 +162,7 @@ jobs:
           set -eo pipefail
 
           # for ML examples
-          pip install seaborn imblearn
+          pip install seaborn imbalanced-learn
 
           # filter file names we want to skip 
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")

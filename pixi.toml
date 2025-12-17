@@ -70,7 +70,7 @@ macos = "12.0"
 python = "3.13.*"
 pip = "*"
 # Core Python Deps
-numba = ">=0.62,<0.63.0"
+numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
@@ -85,7 +85,8 @@ py4j = "==0.10.9.9"
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = ">=1.4"
+# sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
+scikit-learn = ">=1.4,<1.8"
 matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
@@ -172,7 +173,8 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-pytest = "*"
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
 pytest-xdist = "*"
