@@ -1285,7 +1285,14 @@ def count_plan(self):
 
 
 def _get_df_python_func_plan(
-    df_plan, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
+    df_plan,
+    empty_data,
+    func,
+    args,
+    kwargs,
+    is_method=True,
+    cfunc_decorator=None,
+    use_arrow_dtypes=None,
 ):
     """Create plan for calling some function or method on a DataFrame. Creates a
     ScalarFuncExpression with provided arguments and a LogicalProjection.
@@ -1298,6 +1305,7 @@ def _get_df_python_func_plan(
             is_method,
             args,
             kwargs,
+            use_arrow_dtypes,
         )
         if cfunc_decorator is None
         else (func, cfunc_decorator)

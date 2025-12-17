@@ -648,26 +648,27 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """
     from bodo.ext import plan_optimizer
 
-    func, is_series, is_attr, args, kwargs = in_args
+    func, is_series, is_attr, args, kwargs, use_arrow_dtypes = in_args
 
-    # Arrow dtypes can be very slow for UDFs in Pandas:
-    # https://github.com/pandas-dev/pandas/issues/61747
-    # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
-    # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
-    # Arrow does not support element-wise binary operations
-    # across most scalar types. Instead, fallback logic using Pandas semantics
-    # is used to ensure consistent behavior.
-    use_arrow_dtypes = not (
-        is_attr
-        and func
-        in (
-            "apply",
-            "add",
-            "sub",
-            "radd",
-            "rsub",
+    if use_arrow_dtypes is None:
+        # Arrow dtypes can be very slow for UDFs in Pandas:
+        # https://github.com/pandas-dev/pandas/issues/61747
+        # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
+        # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
+        # Arrow does not support element-wise binary operations
+        # across most scalar types. Instead, fallback logic using Pandas semantics
+        # is used to ensure consistent behavior.
+        use_arrow_dtypes = not (
+            is_attr
+            and func
+            in (
+                "apply",
+                "add",
+                "sub",
+                "radd",
+                "rsub",
+            )
         )
-    )
 
     cpp_to_py_start = time.perf_counter_ns()
     if is_series:
