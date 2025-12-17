@@ -58,4 +58,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)
