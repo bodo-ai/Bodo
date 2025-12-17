@@ -698,7 +698,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     // iterations. This value was originally set to 10 for a batch size of 4096.
     // For larger batch sizes, we need to shuffle more frequently to avoid too
     // many inflight messages.
-    const int shuffle_freq = std::max(2, (10 * 4096) / STREAMING_BATCH_SIZE);
+    const int shuffle_freq = std::max(4, (10 * 4096) / STREAMING_BATCH_SIZE);
     if (!(is_last || ((this->curr_iter % shuffle_freq) == 0))) {
         return std::nullopt;
     }
