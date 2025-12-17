@@ -3081,6 +3081,7 @@ pytest_one_rank = [
 polaris_markers = (
     pytest.mark.polaris,
     pytest.mark.iceberg,
+    pytest.mark.slow,
 )
 
 # Decorate
