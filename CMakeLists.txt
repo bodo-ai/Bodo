@@ -181,6 +181,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
+option(USE_CUDF "Enable CUDF mode" OFF)
+if(USE_CUDF)
+    add_compile_definitions(USE_CUDF=1)
+endif()
 
 # ----------------------- Apply Compiler Flags -----------------------
 message(STATUS "\n*** Apply Compiler Flags for Targets")

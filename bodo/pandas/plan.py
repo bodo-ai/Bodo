@@ -992,6 +992,9 @@ def execute_plan(plan: LazyPlan, optimize=True):
         pd.DataFrame: output data
     """
     import bodo
+    import bodo.decorators  # isort:skip # noqa
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     PlanExecutionCounter.increment()
 

@@ -14,7 +14,7 @@
 #include "physical/filter.h"
 #include "physical/join.h"
 #ifdef GPU
-#include "physical/cudf_join.h"
+// #include "physical/cudf_join.h"
 #endif
 #include "physical/join_filter.h"
 #include "physical/limit.h"
@@ -243,7 +243,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op);
+    auto physical_join = std::make_shared<PhysicalJoin>(op, get_use_cudf());
 
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
@@ -368,8 +368,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
-                                                        probe_table_schema);
+    auto physical_join = std::make_shared<PhysicalJoin>(
+        op, get_use_cudf(), build_table_schema, probe_table_schema);
 
     std::shared_ptr<Pipeline> done_pipeline =
         rhs_builder.active_pipeline->Build(physical_join);

@@ -394,6 +394,7 @@ class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
             this->metrics.output_row_count);
     }
 
+#ifdef USE_LIBCUDF
     std::shared_ptr<cudf::table_view> bodo_arrow_to_cudf_table(
         std::shared_ptr<table_info> t) {
         // Use Arrow CUDA API to move to device
@@ -456,6 +457,7 @@ class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
         cudf::table build_table(std::move(cudf_columns));
         build_view = std::make_shared<cudf::table_view>(build_table);
     }
+#endif
 
     /**
      * @brief process input tables to build side of join (populate the hash
