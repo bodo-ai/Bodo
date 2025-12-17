@@ -426,9 +426,9 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
         // new tuple with init_state followed by the other original args in
         // func_args.
         // The original data structure can be thought of as the following:
-        // (a, b, c, (init_state_fn, row_fn, na_state), d)
+        // (a, b, c, (init_state_fn, row_fn, na_state), d, e)
         // The code below creates new tuples and looks like the following:
-        // (a, b, c, (init_state, row_fn, na_state), d)
+        // (a, b, c, (init_state, row_fn, na_state), d, e)
         for (int i = 0; i < PyTuple_Size(args); ++i) {
             // The args part of func_args.
             if (i == 3) {
