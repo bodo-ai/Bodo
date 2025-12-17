@@ -697,3 +697,17 @@ std::string cpp_table_get_first_field_name(int64_t cpp_table);
  * @param cpp_table C++ table pointer cast to int64_t
  */
 void cpp_table_delete(int64_t cpp_table);
+
+/**
+ * @brief Sets the use cudf flag.
+ *
+ * @param use_cudf bool that if true enables use of cudf in backend
+ */
+void set_use_cudf(bool use_cudf);
+
+/**
+ * @brief Gets the use cudf flag.
+ *
+ * @return bool that is true if use of cudf in backend is enabled
+ */
+bool get_use_cudf();

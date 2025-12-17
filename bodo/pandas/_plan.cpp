@@ -1808,9 +1808,13 @@ int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
 
 PyObject *cpp_table_to_pyarrow(int64_t cpp_table, bool delete_cpp_table) {
     table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    std::cout << "cpp_table_to_pyarrow " << table << " " << table->ncols()
+              << std::endl;
+    DEBUG_PrintTable(std::cout, table);
     std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
         std::shared_ptr<table_info>(new table_info(*table)));
     if (delete_cpp_table) {
+        std::cout << "cpp_table_to_pyarrow delete_cpp_table" << std::endl;
         delete table;
     }
     return arrow::py::wrap_table(arrow_table);
@@ -1842,6 +1846,12 @@ void cpp_table_delete(int64_t cpp_table) {
     table_info *table = reinterpret_cast<table_info *>(cpp_table);
     delete table;
 }
+
+bool g_use_cudf;
+
+void set_use_cudf(bool use_cudf) { g_use_cudf = use_cudf; }
+
+bool get_use_cudf() { return g_use_cudf; }
 
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

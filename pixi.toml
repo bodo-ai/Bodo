@@ -4,23 +4,65 @@ channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
+[feature.cudf]
+platforms = ["linux-64"]
+
+[feature.cudf.dependencies]
+python = "3.13.*"
+# # rapids = "25.*"
+# # libcudf = "*"
+cuda-toolkit = "13.*"
+cuda-version = "13.*"
+
+[feature.cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+
+[feature.cpu.dependencies]
+python = "3.13.*"
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
+default =      { features = ["rcpp", "dev", "local-mpi", "cpu"],          solve-group = "313" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "313" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
-pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-win" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-mac" }
 
+default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "313-linux" }
+
+[tasks.build-arrow-cuda]
+cmd = "pip install cudf-cu13==25.12 --extra-index-url https://pypi.nvidia.com"
 
 # Build Commands
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+# Build Commands
+[tasks.build-bodo-cudf]
+depends-on = ["build-arrow-cuda"]
+#depends-on = ["build-arrow-cuda", "build-libcudf", "install-pyspark"]
+cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.USE_CUDF=ON"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-cudf.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-san]
+depends-on = ["build-arrow-cuda"]
+#depends-on = ["build-arrow-cuda", "build-libcudf", "install-pyspark"]
+cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-cudf-san.env]  # SCcache Envs
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
@@ -67,13 +109,11 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.13.*"
 pip = "*"
 # Core Python Deps
 numba = ">=0.62,<0.63.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -112,6 +152,13 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
+libutf8proc = "*"
+
+[feature.cpu.target.linux-64.dependencies]
+pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+
+[feature.cudf.target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 

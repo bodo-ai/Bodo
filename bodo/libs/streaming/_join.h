@@ -936,6 +936,8 @@ class HashJoinState : public JoinState {
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
 
+    bool use_cudf = false;
+
     // Vector that stores an array for each equi-join key. Each set
     // stores the unique values encountered so far (as type int64_t). If
     // it ever goes above a certain threshold, replace with std::nullopt
@@ -957,7 +959,8 @@ class HashJoinState : public JoinState {
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
-                  bool is_na_equal_ = false, bool is_mark_join_ = false);
+                  bool is_na_equal_ = false, bool is_mark_join_ = false,
+                  bool _use_cudf = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1241,6 +1244,9 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
+
+    PyObject* cudf_build_table = nullptr;
+    // std::shared_ptr<table_info> cudf_tbl_src = nullptr;
 
    protected:
     /// Override the metric reporting helpers to report the detailed metrics

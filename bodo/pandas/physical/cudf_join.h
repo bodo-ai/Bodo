@@ -11,6 +11,16 @@
 #include "expression.h"
 #include "operator.h"
 
+// #define USE_LIBCUDF
+
+#ifdef USE_LIBCUDF
+#include <cudf/column/column.hpp>
+#include <cudf/interop.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+#include <cudf/types.hpp>
+#endif  // USE_LIBCUDF
+
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(                                                   \
     build_table_outer, probe_table_outer, has_non_equi_cond, use_bloom_filter, \
@@ -29,7 +39,7 @@
     }
 #endif
 
-struct PhysicalJoinMetrics {
+struct PhysicalCudfJoinMetrics {
     using time_t = MetricBase::TimerValue;
     using stat_t = MetricBase::StatValue;
 
@@ -44,15 +54,15 @@ struct PhysicalJoinMetrics {
  * @brief Physical node for join.
  *
  */
-class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
+class PhysicalCudfJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
-    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join,
-                          bool _use_cudf)
+    explicit PhysicalCudfJoin(duckdb::LogicalComparisonJoin& logical_join)
         : has_non_equi_cond(false),
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
-                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
-          use_cudf(_use_cudf) {}
+                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
+        prepareCuda();
+    }
 
     void buildProbeSchemas(
         duckdb::LogicalComparisonJoin& logical_join,
@@ -226,16 +236,19 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 // even though it uses it as a cond_expr_fn_batch_t.
                 join_func = (cond_expr_fn_t)PhysicalExpression::join_expr_batch;
             }
+#if 0
             // No equality keys, so we do a nested loop join.
             this->join_state_ = std::make_shared<NestedLoopJoinState>(
                 build_table_schema_reordered, probe_table_schema_reordered,
                 build_table_outer, probe_table_outer, std::vector<int64_t>(),
                 false, join_func, true, true, get_streaming_batch_size(), -1,
                 getOpId());
+#endif
         } else {
             if (has_non_equi_cond) {
                 join_func = PhysicalExpression::join_expr;
             }
+#if 0
             this->join_state_ = std::make_shared<HashJoinState>(
                 build_table_schema_reordered, probe_table_schema_reordered,
                 this->left_keys.size(), build_table_outer, probe_table_outer,
@@ -243,7 +256,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 false, join_func, true, true, get_streaming_batch_size(), -1,
                 //  TODO: support query profiling
                 getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
-                /*is_na_equal*/ true, is_mark_join, use_cudf);
+                /*is_na_equal*/ true, is_mark_join);
+#endif
         }
 
         this->initOutputSchema(build_table_schema_reordered,
@@ -332,16 +346,19 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      * @brief Physical Join constructor for cross join.
      *
      */
-    PhysicalJoin(duckdb::LogicalCrossProduct& logical_join, bool _use_cudf,
-                 const std::shared_ptr<bodo::Schema> build_table_schema,
-                 const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false), use_cudf(_use_cudf) {
+    PhysicalCudfJoin(duckdb::LogicalCrossProduct& logical_join,
+                     const std::shared_ptr<bodo::Schema> build_table_schema,
+                     const std::shared_ptr<bodo::Schema> probe_table_schema)
+        : has_non_equi_cond(false) {
+        prepareCuda();
         time_pt start_init = start_timer();
+#if 0
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
             build_table_schema, probe_table_schema, false, false,
             std::vector<int64_t>(),
             // TODO: support forcing broadcast by the planner
             false, nullptr, true, true, get_streaming_batch_size(), -1, -1);
+#endif
 
         // Cross join doesn't have any keys, so we keep all columns.
         for (uint64_t i = 0; i < probe_table_schema->ncols(); i++) {
@@ -356,7 +373,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         this->metrics.init_time += end_timer(start_init);
     }
 
-    virtual ~PhysicalJoin() = default;
+    virtual ~PhysicalCudfJoin() = default;
 
     void FinalizeSink() override {}
 
@@ -376,6 +393,71 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
     }
+
+#ifdef USE_LIBCUDF
+    std::shared_ptr<cudf::table_view> bodo_arrow_to_cudf_table(
+        std::shared_ptr<table_info> t) {
+        // Use Arrow CUDA API to move to device
+        std::vector<std::unique_ptr<cudf::column>> cudf_columns;
+
+        // For each column in Bodo table...
+        for (std::shared_ptr<array_info> bodo_col : t.columns) {
+            // Extract as arrow format.
+            std::shared_ptr<arrow::Array> as_arrow =
+                prepare_arrow_compute(bodo_col);
+            // Get raw values buffer.
+            std::shared_ptr<arrow::Buffer> as_arrow_buf = as_arrow->values();
+            // Get null values buffer.
+            std::shared_ptr<arrow::Buffer> as_arrow_buf_nulls =
+                as_arrow->null_bitmap();
+            int64_t null_count = as_arrow->null_count();
+
+#if 0
+            std::shared_ptr<arrow::cuda::CudaBuffer> col_cuda_buf;
+            cuda_ctx->CopyBuffer(as_arrow_buf, &col_cuda_buf);
+            // Wrap Arrow device buffers into rmm::device_buffer
+            rmm::device_buffer col_rmm_buf(col_cuda_buf->address(), col_cuda_buf->size(), tx_stream);
+#else
+            rmm::device_buffer col_rmm_buf(as_arrow_buf->size(), tx_stream);
+            cudaMemcpyAsync(col_rmm_buf.data(), as_arrow_buf->data(),
+                            as_arrow_buf->size(), cudaMemcpyHostToDevice,
+                            tx_stream);
+#endif
+
+            if (null_count > 0) {
+#if 0
+                std::shared_ptr<arrow::cuda::CudaBuffer> nulls_cuda_buf;
+                cuda_ctx->CopyBuffer(as_arrow_buf_nulls, &nulls_cuda_buf);
+                // Wrap Arrow device buffers into rmm::device_buffer
+                rmm::device_buffer nulls_rmm_buf(nulls_cuda_buf->address(), nulls_cuda_buf->size(), tx_stream);
+#else
+                rmm::device_buffer nulls_rmm_buf(as_arrow_buf_nulls->size(),
+                                                 tx_stream);
+                cudaMemcpyAsync(nulls_rmm_buf.data(),
+                                as_arrow_buf_nulls->data(),
+                                as_arrow_buf_nulls->size(),
+                                cudaMemcpyHostToDevice, tx_stream);
+#endif
+
+                // Construct cudf column with nulls
+                cudf_columns.emplace_back(std::make_unique<cudf::column>(
+                    cudf::data_type{
+                        cudf::type_id::INT64},  // fix arrow to cudf type
+                    t->nrows(), std::move(col_rmm_buf),
+                    std::move(nulls_rmm_buf), null_count));
+            } else {
+                // Construct cudf column
+                cudf_columns.emplace_back(std::make_unique<cudf::column>(
+                    cudf::data_type{
+                        cudf::type_id::INT64},  // fix arrow to cudf type
+                    t->nrows(), std::move(col_rmm_buf)));
+            }
+        }
+
+        cudf::table build_table(std::move(cudf_columns));
+        build_view = std::make_shared<cudf::table_view>(build_table);
+    }
+#endif
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -410,12 +492,91 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             join_state, input_batch_reordered, has_bloom_filter, local_is_last);
 
         if (global_is_last) {
+#ifdef USE_LIBCUDF
+            build_view = bodo_arrow_to_cudf_table(
+                FIX_ME_HOW_TO_GET_THE_FULL_BUILD_TABLE);
+#else
+            std::shared_ptr <
+                table_infO full_build_table;  // how to get this? FIX ME. TODO.
+            auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
+                runPythonScalarFunction(full_build_table, result_type,
+                                        scalar_func_data.args,
+                                        scalar_func_data.has_state, nullptr);
+#endif  // USE_LIBCUDF
             return OperatorResult::FINISHED;
         }
         this->metrics.consume_time += end_timer(start_consume);
         return join_state->build_shuffle_state.BuffersFull()
                    ? OperatorResult::HAVE_MORE_OUTPUT
                    : OperatorResult::NEED_MORE_INPUT;
+    }
+
+    // Dispatch function: maps DuckDB JoinType to libcudf join
+    std::unique_ptr<cudf::table> dispatch_join(
+        duckdb::JoinType jt, cudf::table_view const& left,
+        cudf::table_view const& right,
+        std::vector<cudf::size_type> const& left_on,
+        std::vector<cudf::size_type> const& right_on, cudaStream_t stream = 0) {
+        switch (jt) {
+            case duckdb::JoinType::INNER:
+                return cudf::inner_join(left, right, left_on, right_on,
+                                        cudf::null_equality::UNEQUAL,
+                                        cudf::join_kind::INNER, stream);
+
+            case duckdb::JoinType::LEFT:
+                return cudf::left_join(left, right, left_on, right_on,
+                                       cudf::null_equality::UNEQUAL, stream);
+
+            case duckdb::JoinType::RIGHT:
+                return cudf::right_join(left, right, left_on, right_on,
+                                        cudf::null_equality::UNEQUAL, stream);
+
+            case duckdb::JoinType::OUTER:
+                return cudf::full_join(left, right, left_on, right_on,
+                                       cudf::null_equality::UNEQUAL, stream);
+
+            case duckdb::JoinType::SEMI:
+                return cudf::join(left, right, left_on, right_on,
+                                  cudf::null_equality::UNEQUAL,
+                                  cudf::join_kind::LEFT_SEMI, stream);
+
+            case duckdb::JoinType::ANTI:
+                return cudf::join(left, right, left_on, right_on,
+                                  cudf::null_equality::UNEQUAL,
+                                  cudf::join_kind::LEFT_ANTI, stream);
+
+            default:
+                throw std::runtime_error(
+                    "Unsupported DuckDB JoinType for cudf");
+        }
+    }
+
+    std::shared_ptr<table_info> cudf_table_to_bodo_arrow(
+        cudf::table_view tv,
+        const std::vector<cudf::column_metadata>& md = {}) {
+        std::vector<std::shared_ptr<array_info>> bodo_columns;
+
+        // Convert cuDF table_view to ArrowSchema + ArrowArray
+        cudf::unique_schema_t schema;
+        cudf::unique_array_t array;
+        std::tie(schema, array) = cudf::to_arrow(tv, md);
+
+        // Import as Arrow RecordBatch
+        auto maybe_rb = arrow::ImportRecordBatch(array.get(), schema.get());
+        if (!maybe_rb.ok()) {
+            throw std::runtime_error(maybe_rb.status().ToString());
+        }
+        std::shared_ptr<arrow::RecordBatch> rb = *maybe_rb;
+
+        // Convert each Arrow column to Bodo array_info
+        std::vector<std::shared_ptr<array_info>> bodo_columns;
+        for (int i = 0; i < rb->num_columns(); ++i) {
+            std::shared_ptr<arrow::Array> arr = rb->column(i);
+            auto bodo_col =
+                arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+            bodo_columns.push_back(bodo_col);
+        }
+        return std::make_shared<table_info>(bodo_columns);
     }
 
     /**
@@ -428,8 +589,24 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
         time_pt start_produce = start_timer();
+
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
+#if 1
+        cudaStreamSynchronize(tx_stream);
+        auto probe_view = bodo_arrow_to_cudf_table(input_batch);
+        cudaEvent_t probe_ready;
+        cudaEventCreateWithFlags(&probe_ready, cudaEventDisableTiming);
+        cudaEventRecord(probe_ready, tx_stream);
+        cudaStreamWaitEvent(compute_stream, probe_ready, 0);
+        std::unique_ptr<cudf::cudf_table> result =
+            dispatch_join(probe_view, build_view, {0}, {0});
+        out_table->column_names = this->output_schema->column_names;
+        return {out_table,
+                is_last ? OperatorResult::FINISHED
+                        : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                         : OperatorResult::HAVE_MORE_OUTPUT)};
+#else
         if (has_non_equi_cond) {
             PhysicalExpression::cur_join_expr = physExprTree.get();
         }
@@ -604,6 +781,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 is_last ? OperatorResult::FINISHED
                         : (request_input ? OperatorResult::NEED_MORE_INPUT
                                          : OperatorResult::HAVE_MORE_OUTPUT)};
+#endif
     }
 
     /**
@@ -662,11 +840,24 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         }
     }
 
+    void prepareCuda() {
+        arrow::cuda::CudaDeviceManager::Instance()->GetContext(0, &cuda_ctx);
+        cudaStreamCreateWithFlags(&tx_stream, cudaStreamNonBlocking);
+        cudaStreamCreateWithFlags(&compute_stream, cudaStreamNonBlocking);
+    }
+
+    cudaEvent_t record_event(cudaStream_t stream) {
+        cudaEvent_t ev;
+        cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+        cudaEventRecord(ev, stream);
+        return ev;
+    }
+
     // build/probe table column indices that need to be produced in output
     std::set<int64_t> bound_left_inds;
     std::set<int64_t> bound_right_inds;
 
-    std::shared_ptr<JoinState> join_state_;
+    // std::shared_ptr<JoinState> join_state_;
 
     std::vector<uint64_t> build_kept_cols;
     std::vector<uint64_t> probe_kept_cols;
@@ -684,9 +875,12 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     bool is_mark_join = false;
     bool is_anti_join = false;
-    bool use_cudf = false;
 
-    PhysicalJoinMetrics metrics;
+    PhysicalCudfJoinMetrics metrics;
+
+    std::shared_ptr<cudf::table_view> build_view;
+    std::shared_ptr<arrow::cuda::CudaContext> cuda_ctx;
+    cudaStream_t tx_stream, compute_stream;
 };
 
 #undef CONSUME_PROBE_BATCH
