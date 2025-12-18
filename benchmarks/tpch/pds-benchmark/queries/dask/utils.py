@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import dask
 import dask.dataframe as dd
+from dask.distributed import Client
 from queries.common_utils import (
     check_query_result_pd,
     get_table_path,
@@ -17,8 +17,6 @@ if TYPE_CHECKING:
     from dask.dataframe import DataFrame
 
 settings = Settings()
-
-dask.config.set(scheduler="threads")
 
 
 def read_ds(table_name: str) -> DataFrame:
@@ -81,4 +79,6 @@ def get_part_supp_ds() -> DataFrame:
 
 
 def run_query(query_number: int, query: Callable[..., Any]) -> None:
+    Client()
+
     run_query_generic(query, query_number, "dask", query_checker=check_query_result_pd)
