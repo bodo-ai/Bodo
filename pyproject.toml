@@ -97,7 +97,7 @@ wheel.exclude = [
 ]
 
 [tool.scikit-build.cmake.define]
-MPICH_VERSION = "4.1.3"
+MPICH_VERSION = "4.3.2"
 
 # When building for Conda, set different
 # arguments for CMake
