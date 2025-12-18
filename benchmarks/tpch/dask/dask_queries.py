@@ -1320,6 +1320,9 @@ def get_query_func(q_num: int) -> Callable:
 
 def run_single_query(query_func, dataset_path, scale_factor) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
+    # Warm up run
+    query_func(dataset_path, scale_factor, ext=".pq").compute()
+
     start = time.time()
     query_func(dataset_path, scale_factor, ext=".pq").compute()
     return time.time() - start
