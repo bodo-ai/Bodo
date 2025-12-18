@@ -7,6 +7,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "fmt/core.h"
+#include "optimizer/runtime_join_filter.h"
 #include "physical/operator.h"
 
 /**
@@ -35,6 +36,11 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
+
+    // This allows pushing runtime join filter state from the optimizer to the
+    // physical read operators which can generate filters from join key
+    // statistics.
+    std::optional<JoinFilterProgramState> rtjf_state_map;
 };
 
 /**

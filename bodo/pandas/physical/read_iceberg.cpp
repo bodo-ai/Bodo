@@ -76,7 +76,7 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
     for (int i : selected_columns) {
         if (!(i >= 0 && i < schema->num_fields())) {
             throw std::runtime_error(
-                "PhysicalReadParquet(): invalid column index " +
+                "PhysicalReadIceberg(): invalid column index " +
                 std::to_string(i) + " for schema with " +
                 std::to_string(schema->num_fields()) + " fields");
         }
@@ -101,7 +101,7 @@ PhysicalReadIceberg::create_internal_reader(
         // If the limit option is present...
         if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
             throw std::runtime_error(
-                "PhysicalReadParquet unsupported limit type");
+                "PhysicalReadIceberg unsupported limit type");
         }
         // Limit the rows to read to the limit value.
         total_rows_to_read = limit_val->GetConstantValue();
@@ -204,7 +204,7 @@ std::shared_ptr<arrow::Schema> PhysicalReadIceberg::create_out_arrow_schema(
     for (int i : selected_columns) {
         if (!(i >= 0 && i < arrow_schema->num_fields())) {
             throw std::runtime_error(
-                "PhysicalReadParquet(): invalid column index " +
+                "PhysicalReadIceberg(): invalid column index " +
                 std::to_string(i) + " for schema with " +
                 std::to_string(arrow_schema->num_fields()) + " fields");
         }

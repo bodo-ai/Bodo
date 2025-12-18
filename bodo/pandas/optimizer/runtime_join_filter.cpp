@@ -1,5 +1,6 @@
 #include "optimizer/runtime_join_filter.h"
 #include <algorithm>
+#include "_bodo_scan_function.h"
 #include "_plan.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
@@ -9,6 +10,7 @@
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_distinct.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
 
 duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitOperator(
@@ -34,6 +36,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitOperator(
         } break;
         case duckdb::LogicalOperatorType::LOGICAL_UNION: {
             return this->VisitUnion(op);
+        } break;
+        case duckdb::LogicalOperatorType::LOGICAL_GET: {
+            return this->VisitGet(op);
         } break;
         default: {
             // If we don't know how to handle this operator, insert any pending
@@ -188,12 +193,14 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         if (keep_left_equality) {
             left_join_state_map[join_id] = {
                 .filter_columns = left_filter_cols,
-                .is_first_locations = left_is_first_locations};
+                .is_first_locations = left_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
         if (keep_right_equality) {
             right_join_state_map[join_id] = {
                 .filter_columns = right_filter_cols,
-                .is_first_locations = right_is_first_locations};
+                .is_first_locations = right_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
         // If we're pushing into both sides, we may need to add a filter on top
         // of the join to evaluate the bloom filter if some columns were dropped
@@ -230,6 +237,7 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
         join_op.join_type == duckdb::JoinType::INNER) {
         // Insert runtime join filter on the probe side
         std::vector<int64_t> left_eq_cols;
+        std::vector<int64_t> right_eq_cols;
         for (duckdb::JoinCondition &cond : join_op.conditions) {
             // TODO Support non-equalities for pushing to I/O
             // e.g. if T1.A < T2.B is a join conditition we can push A < the
@@ -244,9 +252,14 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
                     duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &left_colref =
                     cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                auto &right_colref =
+                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
                 left_eq_cols.push_back(
                     left_child_colref_map[{left_colref.binding.table_index,
                                            left_colref.binding.column_index}]);
+                right_eq_cols.push_back(right_child_colref_map[{
+                    right_colref.binding.table_index,
+                    right_colref.binding.column_index}]);
             } else {
                 continue;
             }
@@ -257,7 +270,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             left_join_state_map[join_op.join_id] = {
                 .filter_columns = left_eq_cols,
                 .is_first_locations =
-                    std::vector<bool>(left_eq_cols.size(), true)};
+                    std::vector<bool>(left_eq_cols.size(), true),
+                .orig_build_key_cols = right_eq_cols};
         }
     }
     // Visit probe side
@@ -316,7 +330,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitProjection(
         if (new_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = new_filter_columns,
-                .is_first_locations = new_is_first_locations};
+                .is_first_locations = new_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
     }
     this->join_state_map = new_join_state_map;
@@ -356,7 +371,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitFilter(
         if (new_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = new_filter_columns,
-                .is_first_locations = new_is_first_locations};
+                .is_first_locations = new_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
     }
     this->join_state_map = new_join_state_map;
@@ -432,7 +448,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitAggregate(
         if (push_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = push_filter_columns,
-                .is_first_locations = push_is_first_locations};
+                .is_first_locations = push_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
     }
 
@@ -508,12 +525,14 @@ RuntimeJoinFilterPushdownOptimizer::VisitCrossProduct(
         if (keep_left_equality) {
             left_join_state_map[join_id] = {
                 .filter_columns = left_filter_cols,
-                .is_first_locations = left_is_first_locations};
+                .is_first_locations = left_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
         if (keep_right_equality) {
             right_join_state_map[join_id] = {
                 .filter_columns = right_filter_cols,
-                .is_first_locations = right_is_first_locations};
+                .is_first_locations = right_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
         // If we're pushing into both sides, we may need to add a filter on top
         // of the join to evaluate the bloom filter if some columns were dropped
@@ -638,7 +657,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitDistinct(
         if (push_filter_columns.size()) {
             new_join_state_map[join_id] = {
                 .filter_columns = push_filter_columns,
-                .is_first_locations = push_is_first_locations};
+                .is_first_locations = push_is_first_locations,
+                .orig_build_key_cols = join_info.orig_build_key_cols};
         }
     }
 
@@ -654,4 +674,16 @@ RuntimeJoinFilterPushdownOptimizer::VisitUnion(
     this->join_state_map = join_state_map_copy;
     op->children[1] = VisitOperator(op->children[1]);
     return std::move(op);
+}
+
+duckdb::unique_ptr<duckdb::LogicalOperator>
+RuntimeJoinFilterPushdownOptimizer::VisitGet(
+    duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
+    auto &get_op = op->Cast<duckdb::LogicalGet>();
+    BodoScanFunctionData *scan_function_data =
+        dynamic_cast<BodoScanFunctionData *>(get_op.bind_data.get());
+    if (scan_function_data != nullptr) {
+        scan_function_data->rtjf_state_map = this->join_state_map;
+    }
+    return this->insert_join_filters(op, this->join_state_map);
 }
