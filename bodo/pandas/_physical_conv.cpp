@@ -50,7 +50,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns, op.table_filters, op.extra_info.limit_val);
+            selected_columns, op.table_filters, op.extra_info.limit_val,
+            this->join_filter_states, this->join_filter_pipelines);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");

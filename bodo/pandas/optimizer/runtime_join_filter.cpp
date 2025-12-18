@@ -682,8 +682,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitGet(
     auto &get_op = op->Cast<duckdb::LogicalGet>();
     BodoScanFunctionData *scan_function_data =
         dynamic_cast<BodoScanFunctionData *>(get_op.bind_data.get());
-    if (scan_function_data != nullptr) {
-        scan_function_data->rtjf_state_map = this->join_state_map;
-    }
+    assert(scan_function_data);
+
+    scan_function_data->rtjf_state_map = this->join_state_map;
     return this->insert_join_filters(op, this->join_state_map);
 }

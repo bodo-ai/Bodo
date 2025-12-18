@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include "_pipeline.h"
 #include "_util.h"
 
 #include "duckdb/function/function.hpp"
@@ -8,6 +9,7 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "fmt/core.h"
 #include "optimizer/runtime_join_filter.h"
+#include "physical/join.h"
 #include "physical/operator.h"
 
 /**
@@ -35,12 +37,16 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
     virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            join_pipelines) = 0;
 
     // This allows pushing runtime join filter state from the optimizer to the
     // physical read operators which can generate filters from join key
     // statistics.
-    std::optional<JoinFilterProgramState> rtjf_state_map;
+    std::optional<JoinFilterProgramState> rtjf_state_map = std::nullopt;
 };
 
 /**
@@ -89,7 +95,11 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            join_pipelines) override;
 
     // Parquet dataset path
     PyObject *path;
@@ -135,7 +145,11 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            join_pipelines) override;
 
     PyObject *df;
     const std::shared_ptr<arrow::Schema> arrow_schema;
@@ -161,7 +175,11 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            join_pipelines) override;
     std::string result_id;
     const std::shared_ptr<arrow::Schema> arrow_schema;
 };
@@ -216,7 +234,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
+            join_pipelines) override;
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;
