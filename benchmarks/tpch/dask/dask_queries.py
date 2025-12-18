@@ -15,9 +15,9 @@ ec2_config = {
     # NOTE: Setting security = False to avoid large config size
     # https://github.com/dask/dask-cloudprovider/issues/249
     "security": False,
-    "n_workers": 3,
+    "n_workers": 4,
     "scheduler_instance_type": "c6i.xlarge",
-    "worker_instance_type": "r6i.8xlarge",
+    "worker_instance_type": "c6i.16xlarge",
     "docker_image": "daskdev/dask:latest",
     # Profile with AmazonS3FullAccess
     "iam_instance_profile": {"Name": "dask-benchmark"},
