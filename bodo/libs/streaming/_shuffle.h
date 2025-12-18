@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/util/bit_util.h>
+#include <unordered_set>
 #include "../_bodo_common.h"
 #include "../_distributed.h"
 #include "../_query_profile_collector.h"
@@ -52,6 +53,17 @@ using len_iter_t = std::vector<uint64_t>::const_iterator;
  * @return int64_t Threshold (in bytes)
  */
 int64_t get_shuffle_threshold();
+
+/**
+ * @brief Find the next available starting message tag for sending concurrent
+ * messages to the same rank.
+ *
+ * @param inflight_tags A set of tags currently in flight.
+ * @return int. Starting tag for the async send. -1 if no available tag is
+ * found. If a valid tag is returned, then the next 10,000 consecutive tags
+ * should also be available.
+ */
+int get_next_available_tag(std::unordered_set<int>& inflight_tags);
 
 /**
  * @brief Struct for Shuffle metrics.
@@ -901,6 +913,11 @@ class IncrementalShuffleState {
     }
 
    protected:
+    // Keep track of inflight tags to avoid tag collisions. See:
+    // https://github.com/bodo-ai/Bodo/blob/3d5621629e95486bbc9bd4e6b45f85f22835f515/bodo/libs/streaming/_sort.cpp#L1633
+    // For more details.
+    std::unordered_set<int> inflight_tags;
+
     /**
      * @brief Helper function for ShuffleIfRequired. In this base class,
      * this simply returns the shuffle-table and its hashes.

@@ -389,8 +389,8 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
     PyObject *result;
     if (has_state) {
         // Validate input
-        if (!PyTuple_Check(args) || PyTuple_Size(args) != 5) {
-            throw std::runtime_error("Expected a 5-tuple");
+        if (!PyTuple_Check(args) || PyTuple_Size(args) != 6) {
+            throw std::runtime_error("Expected a 6-tuple");
         }
         PyObject *args_in_func_args = PyTuple_GetItem(args, 3);  // borrowed ref
         if (!PyTuple_Check(args_in_func_args) ||
@@ -422,13 +422,13 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             throw std::runtime_error("New tuple creation failed");
         }
 
-        // New tuple will be the 5 tuple with the 4th element being yet another
+        // New tuple will be the 6 tuple with the 4th element being yet another
         // new tuple with init_state followed by the other original args in
         // func_args.
         // The original data structure can be thought of as the following:
-        // (a, b, c, (init_state_fn, row_fn, na_state), d)
+        // (a, b, c, (init_state_fn, row_fn, na_state), d, e)
         // The code below creates new tuples and looks like the following:
-        // (a, b, c, (init_state, row_fn, na_state), d)
+        // (a, b, c, (init_state, row_fn, na_state), d, e)
         for (int i = 0; i < PyTuple_Size(args); ++i) {
             // The args part of func_args.
             if (i == 3) {
