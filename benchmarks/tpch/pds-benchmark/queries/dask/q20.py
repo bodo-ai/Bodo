@@ -49,7 +49,11 @@ def q() -> None:
             q_final, how="leftsemi", left_on="s_suppkey", right_on="ps_suppkey"
         )
         q_final["s_address"] = q_final["s_address"].str.strip()
-        return q_final[["s_name", "s_address"]].sort_values("s_name", ascending=True)
+        return (
+            q_final[["s_name", "s_address"]]
+            .sort_values("s_name", ascending=True)
+            .compute()
+        )
 
     utils.run_query(Q_NUM, query)
 
