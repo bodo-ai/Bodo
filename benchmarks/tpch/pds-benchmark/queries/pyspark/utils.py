@@ -32,7 +32,7 @@ def get_or_create_spark() -> SparkSession:
         "s3://"
     ) or settings.dataset_base_dir.startswith("s3a://"):
         builder = builder.config(
-            "spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1"
+            "spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4"
         )
         if settings.dataset_base_dir.startswith("s3a://"):
             builder = builder.config(

@@ -1,17 +1,53 @@
-# Extract cluster and step IDs from Terraform JSON output
+#!/usr/bin/env bash
+set -euo pipefail
+
 CLUSTER_ID="$(terraform output --json | jq -r '.emr_cluster_id.value')"
-EMR_CLUSTER_REGION="$(terraform output --json | jq -r '.emr_cluster_region.value')"
-STEP_ID="$(aws emr list-steps --cluster-id "$CLUSTER_ID" --query 'Steps[0].Id' --output text --region "$EMR_CLUSTER_REGION")"
+REGION="$(terraform output --json | jq -r '.emr_cluster_region.value')"
 
-# Wait for the last EMR step to complete
-aws emr wait step-complete --cluster-id "$CLUSTER_ID" --step-id "$STEP_ID" --region "$EMR_CLUSTER_REGION"
+echo "Fetching EMR steps..."
+STEP_IDS=$(aws emr list-steps \
+  --cluster-id "$CLUSTER_ID" \
+  --region "$REGION" \
+  --query 'reverse(Steps)[].Id' \
+  --output text)
 
-# Check the step status
-STEP_STATUS=$(aws emr describe-step --cluster-id "$CLUSTER_ID" --step-id "$STEP_ID" --query 'Step.Status.State' --output text --region "$EMR_CLUSTER_REGION")
+FAILED=0
 
-if [ "$STEP_STATUS" == "COMPLETED" ]; then
-    echo "Step completed successfully."
+for STEP_ID in $STEP_IDS; do
+  echo "Waiting for step $STEP_ID..."
+  aws emr wait step-complete \
+    --cluster-id "$CLUSTER_ID" \
+    --step-id "$STEP_ID" \
+    --region "$REGION"
+
+  STATUS=$(aws emr describe-step \
+    --cluster-id "$CLUSTER_ID" \
+    --step-id "$STEP_ID" \
+    --region "$REGION" \
+    --query 'Step.Status.State' \
+    --output text)
+
+  # Sleep to avoid rate limit
+  sleep 3
+
+  NAME=$(aws emr describe-step \
+    --cluster-id "$CLUSTER_ID" \
+    --step-id "$STEP_ID" \
+    --region "$REGION" \
+    --query 'Step.Name' \
+    --output text)
+
+  echo "Step '$NAME' finished with status: $STATUS"
+
+  if [[ "$STATUS" != "COMPLETED" ]]; then
+    FAILED=1
+  fi
+
+done
+
+if [[ "$FAILED" -eq 1 ]]; then
+  echo "One or more steps failed."
+  exit 1
 else
-    echo "Step did not complete successfully. Status: $STEP_STATUS"
+  echo "All steps completed successfully."
 fi
-

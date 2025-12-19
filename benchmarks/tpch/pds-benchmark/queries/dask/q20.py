@@ -18,7 +18,7 @@ def q() -> None:
         supplier = utils.get_supplier_ds()
         nation = utils.get_nation_ds()
         part = utils.get_part_ds()
-        partsupp = utils.get_partsupp_ds()
+        partsupp = utils.get_part_supp_ds()
         shipdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
         shipdate_to = datetime.strptime("1995-01-01", "%Y-%m-%d")
 
@@ -49,7 +49,11 @@ def q() -> None:
             q_final, how="leftsemi", left_on="s_suppkey", right_on="ps_suppkey"
         )
         q_final["s_address"] = q_final["s_address"].str.strip()
-        return q_final[["s_name", "s_address"]].sort_values("s_name", ascending=True)
+        return (
+            q_final[["s_name", "s_address"]]
+            .sort_values("s_name", ascending=True)
+            .compute()
+        )
 
     utils.run_query(Q_NUM, query)
 
