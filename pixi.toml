@@ -9,8 +9,6 @@ platforms = ["linux-64"]
 
 [feature.cudf.dependencies]
 python = "3.13.*"
-# # rapids = "25.*"
-# # libcudf = "*"
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
 

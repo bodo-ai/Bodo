@@ -3,8 +3,6 @@
 #include <string>
 #include "_bodo_scan_function.h"
 
-#define GPU
-
 #include "_bodo_write_function.h"
 #include "_plan.h"
 #include "_util.h"
@@ -13,9 +11,6 @@
 #include "physical/cte.h"
 #include "physical/filter.h"
 #include "physical/join.h"
-#ifdef GPU
-// #include "physical/cudf_join.h"
-#endif
 #include "physical/join_filter.h"
 #include "physical/limit.h"
 #include "physical/project.h"
