@@ -688,21 +688,3 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 };
 
 #undef CONSUME_PROBE_BATCH
-
-class JoinKeyStats {
-   public:
-    JoinKeyStats(
-        std::vector<std::optional<std::shared_ptr<array_info>>>& min_max_values)
-        : min_max_values(min_max_values) {}
-
-    std::vector<std::optional<std::shared_ptr<array_info>>>& min_max_values;
-
-    template <typename T>
-    T getMin(size_t col_index) {
-        return getv<T>(min_max_values[col_index], 0);
-    }
-    template <typename T>
-    T getMax(size_t col_index) {
-        return getv<T>(min_max_values[col_index], 1);
-    }
-};

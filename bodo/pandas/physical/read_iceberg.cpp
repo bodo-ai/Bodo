@@ -9,10 +9,12 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     PyObject *iceberg_schema, std::shared_ptr<arrow::Schema> arrow_schema,
     int64_t snapshot_id, std::vector<int> &selected_columns,
     duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    JoinFilterColStats join_filter_col_stats)
     : arrow_schema(std::move(arrow_schema)),
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
+      join_filter_col_stats(std::move(join_filter_col_stats)),
       out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
