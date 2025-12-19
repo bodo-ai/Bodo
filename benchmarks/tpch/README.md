@@ -62,14 +62,15 @@ This section describes how to reproduce benchmark results for both single node a
 | duckdb | 1.4.2 |
 | dask   | 2025.11.0 |
 | dask-cloudprovider  | 2025.9.0 |
-| PySpark  | 3.5.2 |
+| PySpark  | 3.5.5 |
 <!-- TODO: Daft -->
 <!-- TODO: Modin -->
 
-You can install the required libraries with the correct versions using the provided `requirements.txt` file:
+You can install the required libraries with the correct versions using the provided `env.yml` file:
 
 ``` shell
-pip install -r requirements.txt
+conda env create -n tpch_bodo --file env.yml
+conda activate tpch_bodo
 ```
 
 ### Single Node

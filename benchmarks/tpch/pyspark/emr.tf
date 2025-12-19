@@ -50,7 +50,7 @@ EOF
 
 resource "aws_emr_cluster" "emr_cluster" {
   name          = "EMR-Cluster"
-  release_label = "emr-7.5.0"
+  release_label = "emr-7.9.0"
   applications  = ["Hadoop", "Spark"]
 
   ec2_attributes {
