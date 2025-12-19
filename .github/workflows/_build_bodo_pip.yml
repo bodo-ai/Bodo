@@ -118,8 +118,7 @@ jobs:
             rm -rf {package}/build
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" --default-timeout=100
+            pip install mpich --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache

@@ -96,9 +96,6 @@ wheel.exclude = [
     "bodo/tests/*",
 ]
 
-[tool.scikit-build.cmake.define]
-MPICH_VERSION = "4.3.2"
-
 # When building for Conda, set different
 # arguments for CMake
 [[tool.scikit-build.overrides]]
