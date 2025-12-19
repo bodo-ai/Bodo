@@ -2174,13 +2174,12 @@ void HashJoinState::FinalizeBuild() {
     if (!local_empty_build && use_cudf) {
         std::cout << "cudf before cpp_table_to_cudf_cpp " << std::endl;
         auto dt = this->partitions[0]->build_table_buffer->data_table;
-        // DEBUG_PrintTable(std::cout, dt);
 
-        table_info* ti = new table_info(*dt);
-        // DEBUG_PrintTable(std::cout, ti);
-        std::cout << "ti " << ti->ncols() << " " << ti << " " << std::hex << ti
-                  << std::endl;
-        cudf_build_table = cpp_table_to_cudf_cpp(reinterpret_cast<int64_t>(ti));
+        std::shared_ptr<table_info> ti = std::make_shared<table_info>(*dt);
+        //        std::cout << "ti " << ti->ncols() << " " << std::hex <<
+        //        ti.get() << std::endl;
+        cudf_build_table =
+            cpp_table_to_cudf_cpp(reinterpret_cast<int64_t>(ti.get()));
         Py_INCREF(cudf_build_table);
     }
 #endif
@@ -3853,14 +3852,15 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     batch_hashes_join.reset();
 
     // Insert output rows into the output buffer:
-    if (!did_gpu_offload) {
+    if (did_gpu_offload) {
+        join_state->output_buffer->AppendBatch(spti);
+    } else {
         join_state->output_buffer->AppendJoinOutput(
             active_partition->build_table_buffer->data_table,
             std::move(in_table), build_idxs, probe_idxs, build_kept_cols,
             probe_kept_cols, join_state->is_mark_join, append_to_mark_output);
-    } else {
-        join_state->output_buffer->AppendBatch(spti);
     }
+
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -4965,10 +4965,6 @@ PyObject* cpp_table_to_cudf_cpp(int64_t py_cpp_table_ptr) {
 
     return result;
 }
-
-// #include <Python.h>
-// #include <vector>
-// #include <cstdint>
 
 PyObject* uint64_vector_to_pylist(const std::vector<uint64_t>& vec) {
     Py_ssize_t n = static_cast<Py_ssize_t>(vec.size());
