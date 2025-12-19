@@ -83,7 +83,7 @@ test:
   imports:
     - bodo
   source_files:
-    - examples/Misc/misc_pi.py
+    - examples/pi.py
 
 about:
   home: https://bodo.ai
