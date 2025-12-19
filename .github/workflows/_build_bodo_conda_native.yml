@@ -42,7 +42,7 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') }}
         run: ./buildscripts/setup_osx_sdk.sh
         env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-15-intel' && '10.15' || '11.0' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ '11.0' }}
 
       # Regular Setup
       - name: Create Micromamba Environment

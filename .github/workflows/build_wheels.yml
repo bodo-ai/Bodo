@@ -53,7 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os: [{os: macos-15-intel, name: macos-x86}, {os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
+        os: [{os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
           # Don't publish linux arm until we can get nightly fixed
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
