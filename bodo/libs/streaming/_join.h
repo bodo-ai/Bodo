@@ -1222,6 +1222,8 @@ class HashJoinState : public JoinState {
     // Metrics for the query profile
     HashJoinMetrics metrics;
 
+    PyObject* cudf_build_table = nullptr;
+
    private:
     /**
      * @brief Split the partition at index 'idx' into two partitions.
@@ -1244,9 +1246,6 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
-
-    PyObject* cudf_build_table = nullptr;
-    // std::shared_ptr<table_info> cudf_tbl_src = nullptr;
 
    protected:
     /// Override the metric reporting helpers to report the detailed metrics

@@ -2169,89 +2169,51 @@ def cpp_table_to_cudf(cpp_table_ptr):
 
     from bodo.pandas.utils import cpp_table_to_df
 
-    print("cpp_table_to_cudf", cpp_table_ptr, hex(cpp_table_ptr))
-    # breakpoint()
     bodo_df = cpp_table_to_df(cpp_table_ptr, use_arrow_dtypes=True, delete_input=False)
+    print("cpp_table_to_cudf", cpp_table_ptr, hex(cpp_table_ptr), bodo_df.columns)
     return cudf.DataFrame.from_pandas(bodo_df)
 
 
 def cudf_probe_join_with_build(
-    build_gdf, probe_cpp_table, build_col_idxs, probe_col_idxs, join_kind="inner"
+    build_gdf,
+    probe_cpp_table,
+    nkeys,
+    build_kept_cols,
+    probe_kept_cols,
+    join_kind="inner",
 ):
     """
     build_df: pandas DataFrame (build side)
     probe_df: pandas DataFrame (probe side)
-    build_col_idxs: list of column indices in build_df to join on
-    probe_col_idxs: list of column indices in probe_df to join on
+    nkeys: number of join keys.  both input have to have keys in
+        the same order at the beginning of the columns
     how: join type ("inner", "left", "right", "outer")
     """
 
-    import cudf
+    from bodo.pandas.utils import df_to_cpp_table
 
-    from bodo.pandas.utils import cpp_table_to_df, df_to_cpp_table
-
-    probe_df = cpp_table_to_df(probe_cpp_table, use_arrow_dtypes=True)
-    probe_gdf = cudf.DataFrame.from_pandas(probe_df)
+    print("cudf_probe_join_with_build", probe_cpp_table, hex(probe_cpp_table))
+    probe_gdf = cpp_table_to_cudf(probe_cpp_table)
 
     # Extract column names from indices
-    build_cols = [build_gdf.columns[i] for i in build_col_idxs]
-    probe_cols = [probe_df.columns[i] for i in probe_col_idxs]
+    build_cols = [build_gdf.columns[i] for i in range(nkeys)]
+    probe_cols = [probe_gdf.columns[i] for i in range(nkeys)]
 
-    # If names match exactly, we can use "on"
-    if build_cols == probe_cols:
-        result_gdf = build_gdf.merge(probe_gdf, on=build_cols, how=join_kind)
-    else:
-        # Otherwise, use left_on / right_on
-        result_gdf = build_gdf.merge(
-            probe_gdf,
-            left_on=build_cols,
-            right_on=probe_cols,
-            how=join_kind,
-        )
+    print("build", build_cols, "probe", probe_cols)
+    result_gdf = probe_gdf.merge(
+        build_gdf,
+        left_on=probe_cols,
+        right_on=build_cols,
+        how=join_kind,
+    )
+
+    print("build_kept", build_kept_cols)
+    print("probe_kept", probe_kept_cols)
+    keep_col_list = probe_kept_cols + [
+        x + len(probe_kept_cols) for x in build_kept_cols
+    ]
+    result_gdf = result_gdf.iloc[:, keep_col_list]
 
     result_df = result_gdf.to_pandas()
     out_ptr, _ = df_to_cpp_table(result_df)
     return out_ptr
-
-
-"""
-def cudf_probe_join(
-    build_cpp_table, probe_cpp_table, build_col_idxs, probe_col_idxs, join_kind="inner"
-):
-    build_df: pandas DataFrame (build side)
-    probe_df: pandas DataFrame (probe side)
-    build_col_idxs: list of column indices in build_df to join on
-    probe_col_idxs: list of column indices in probe_df to join on
-    how: join type ("inner", "left", "right", "outer")
-
-    import cudf
-
-    from bodo.pandas.utils import cpp_table_to_df
-
-    build_df = cpp_table_to_df(build_cpp_table, use_arrow_dtypes=True)
-    probe_df = cpp_table_to_df(probe_cpp_table, use_arrow_dtypes=True)
-
-    # Convert pandas → cuDF
-    build_gdf = cudf.DataFrame.from_pandas(build_df)
-    probe_gdf = cudf.DataFrame.from_pandas(probe_df)
-
-    # Extract column names from indices
-    build_cols = [build_df.columns[i] for i in build_col_idxs]
-    probe_cols = [probe_df.columns[i] for i in probe_col_idxs]
-
-    # If names match exactly, we can use "on"
-    if build_cols == probe_cols:
-        result_gdf = build_gdf.merge(probe_gdf, on=build_cols, how=join_kind)
-    else:
-        # Otherwise, use left_on / right_on
-        result_gdf = build_gdf.merge(
-            probe_gdf,
-            left_on=build_cols,
-            right_on=probe_cols,
-            how=join_kind,
-        )
-
-    result_df = result_gdf.to_pandas()
-    out_ptr, _ = df_to_cpp_table(result_df)
-    return out_ptr
-"""
