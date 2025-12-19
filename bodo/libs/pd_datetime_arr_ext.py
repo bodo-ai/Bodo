@@ -1,5 +1,7 @@
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
 
+from __future__ import annotations
+
 import datetime
 import operator
 from typing import Any
@@ -43,7 +45,7 @@ from bodo.utils.typing import (
 
 
 @register_jitable
-def build_dt_valid_bitmap(ts: npt.NDArray["np.datetime64"]):  # pragma: no cover
+def build_dt_valid_bitmap(ts: npt.NDArray[np.datetime64]):  # pragma: no cover
     nbytes = bitmap_size(len(ts))
     nulls_arr = np.empty(nbytes, np.uint8)
 
@@ -245,58 +247,7 @@ def typeof_pd_datetime_array(val, c):
 
 @unbox(DatetimeArrayType)
 def unbox_pd_datetime_array(typ, val, c):
-    n_obj = c.pyapi.call_method(val, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-
-    pd_datetime_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-
-    datetime64_str = c.pyapi.string_from_constant_string("datetime64[ns]")
-    pd_datetime_arr_obj = c.pyapi.call_method(val, "to_numpy", (datetime64_str,))
-    pd_datetime_arr.data = c.unbox(typ.data_array_type, pd_datetime_arr_obj).value
-
-    bitmap_length = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    valid_bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, null_bitmap_arr_type, [bitmap_length]
-    )
-
-    pd_str_const = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_mod = c.pyapi.import_module(pd_str_const)
-    isvalid_arr_obj = c.pyapi.call_method(pd_mod, "notna", (val,))
-    bool_arr_typ = types.Array(types.bool_, 1, "C")
-    isvalid_arr = c.pyapi.to_native_value(bool_arr_typ, isvalid_arr_obj).value
-    isvalid_arr_struct = c.context.make_array(bool_arr_typ)(
-        c.context, c.builder, isvalid_arr
-    )
-
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="bool_arr_to_bitmap"
-    )
-
-    c.builder.call(fn, [valid_bitmap_arr.data, isvalid_arr_struct.data, n])
-
-    pd_datetime_arr.null_bitmap = valid_bitmap_arr._getvalue()
-
-    # Decref the lowered notNA array
-    c.context.nrt.decref(c.builder, bool_arr_typ, isvalid_arr)
-
-    c.pyapi.decref(n_obj)
-    c.pyapi.decref(pd_mod)
-    c.pyapi.decref(isvalid_arr_obj)
-    c.pyapi.decref(pd_datetime_arr_obj)
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(pd_datetime_arr._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(DatetimeArrayType)
@@ -306,67 +257,7 @@ def box_pd_datetime_array(typ, val, c):
     creating a DatetimeTZDtype from the type string, and finally by
     calling the pandas.arrays.DatetimeArray constructor.
     """
-    pd_datetime_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
-    # Fetch the numpy data array
-    # incref since boxing functions steal a reference
-    c.context.nrt.incref(c.builder, typ.data_array_type, pd_datetime_arr.data)
-    np_arr_obj = c.pyapi.from_native_value(
-        typ.data_array_type, pd_datetime_arr.data, c.env_manager
-    )
-
-    # Create the timezone type.
-    unit_str = c.context.get_constant_generic(c.builder, types.unicode_type, "ns")
-    # No need to incref because unit_str is a constant
-    unit_str_obj = c.pyapi.from_native_value(
-        types.unicode_type, unit_str, c.env_manager
-    )
-    if isinstance(typ.tz, str):
-        tz_str = c.context.get_constant_generic(c.builder, types.unicode_type, typ.tz)
-        # No need to incref because tz_str is a constant
-        tz_arg_obj = c.pyapi.from_native_value(
-            types.unicode_type, tz_str, c.env_manager
-        )
-    elif isinstance(typ.tz, int):
-        # We store ns, but the Fixed offset constructor takes minutes.
-        offset = nanoseconds_to_offset(typ.tz)
-        tz_arg_obj = c.pyapi.unserialize(c.pyapi.serialize_object(offset))
-    else:
-        tz_arg_obj = None
-
-    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module(mod_name)
-
-    if tz_arg_obj is not None:
-        dtype_obj = c.pyapi.call_method(
-            pd_class_obj, "DatetimeTZDtype", (unit_str_obj, tz_arg_obj)
-        )
-        c.pyapi.decref(tz_arg_obj)
-    else:
-        dtype_str = c.context.get_constant_generic(
-            c.builder, types.unicode_type, "datetime64[ns]"
-        )
-        dtype_obj = c.pyapi.from_native_value(
-            types.unicode_type, dtype_str, c.env_manager
-        )
-        c.pyapi.incref(dtype_obj)
-    # Get the constructor
-    pd_array_class_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
-
-    # Call the constructor.
-    # The null bitmap is ignored at this stage because the corresponding entry in the DatetimeArray is also NaT
-    res = c.pyapi.call_method(
-        pd_array_class_obj, "DatetimeArray", (np_arr_obj, dtype_obj)
-    )
-
-    c.pyapi.decref(np_arr_obj)
-    c.pyapi.decref(unit_str_obj)
-    c.pyapi.decref(dtype_obj)
-    c.pyapi.decref(pd_class_obj)
-    c.pyapi.decref(pd_array_class_obj)
-    # decref() should be called on native value
-    # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
-    c.context.nrt.decref(c.builder, typ, val)
-    return res
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic(prefer_literal=True)
@@ -511,7 +402,7 @@ def overload_pd_datetime_dtype(A):
     if A.tz is None:
 
         def impl(A):  # pragma: no cover
-            return bodo.datetime64ns
+            return bodo.types.datetime64ns
 
         return impl
     else:
@@ -583,13 +474,13 @@ def timestamp_to_dt64(val):
 
 @overload(timestamp_to_dt64)
 def overload_timestamp_to_dt64(val):
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
 
         def impl(val):  # pragma: no cover
             return bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
 
         return impl
-    elif val == bodo.datetime64ns:  # pragma: no cover
+    elif val == bodo.types.datetime64ns:  # pragma: no cover
 
         def impl(val):  # pragma: no cover
             return val
@@ -608,8 +499,8 @@ def overload_setitem(A, ind, val):
     # Check the possible values
     if not (
         isinstance(val, DatetimeArrayType)
-        or isinstance(val, bodo.PandasTimestampType)
-        or val == bodo.datetime64ns
+        or isinstance(val, bodo.types.PandasTimestampType)
+        or val == bodo.types.datetime64ns
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
@@ -628,7 +519,7 @@ def overload_setitem(A, ind, val):
         )
 
     if isinstance(ind, types.Integer):
-        if isinstance(val, bodo.PandasTimestampType):
+        if isinstance(val, bodo.types.PandasTimestampType):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
@@ -762,12 +653,12 @@ def numpy_arr_setitem(A, idx, val):
     """Support setitem of Numpy arrays with nullable datetime arrays"""
     if not (
         isinstance(A, types.Array)
-        and (A.dtype == bodo.datetime64ns)
+        and (A.dtype == bodo.types.datetime64ns)
         and isinstance(val, DatetimeArrayType)
     ):
         return
 
-    nat = bodo.datetime64ns("NaT")
+    nat = bodo.types.datetime64ns("NaT")
 
     def impl_np_setitem_datetime_arr(A, idx, val):  # pragma: no cover
         # Make sure data elements of NA values are NaT to pass the NAs to output
@@ -817,7 +708,7 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType + Scalar tz-aware or date
         if isinstance(lhs, DatetimeArrayType) and (
-            isinstance(rhs, PandasTimestampType) or rhs == bodo.datetime_date_type
+            isinstance(rhs, PandasTimestampType) or rhs == bodo.types.datetime_date_type
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -835,7 +726,7 @@ def create_cmp_op_overload_arr(op):
 
         # Scalar tz-aware or date + DatetimeArrayType.
         elif (
-            isinstance(lhs, PandasTimestampType) or lhs == bodo.datetime_date_type
+            isinstance(lhs, PandasTimestampType) or lhs == bodo.types.datetime_date_type
         ) and isinstance(rhs, DatetimeArrayType):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -853,9 +744,11 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType or date array + DatetimeArrayType or date array
         elif (
-            isinstance(lhs, DatetimeArrayType) or lhs == bodo.datetime_date_array_type
+            isinstance(lhs, DatetimeArrayType)
+            or lhs == bodo.types.datetime_date_array_type
         ) and (
-            isinstance(rhs, DatetimeArrayType) or rhs == bodo.datetime_date_array_type
+            isinstance(rhs, DatetimeArrayType)
+            or rhs == bodo.types.datetime_date_array_type
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -876,9 +769,9 @@ def create_cmp_op_overload_arr(op):
         # Tz-Aware timestamp + Tz-Naive timestamp
         elif (
             isinstance(lhs, DatetimeArrayType)
-            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns)
+            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns)
         ) or (
-            (isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns)
+            (isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns)
             and isinstance(rhs, DatetimeArrayType)
         ):
 
@@ -921,7 +814,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     """
     if isinstance(lhs, DatetimeArrayType):
         # TODO: Support more types
-        if rhs == bodo.week_type:
+        if rhs == bodo.types.week_type:
             tz_literal = lhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -946,7 +839,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     else:
         # Note this function is only called if at least one input is a DatetimeArrayType
         # TODO: Support more types
-        if lhs == bodo.week_type:
+        if lhs == bodo.types.week_type:
             tz_literal = rhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover

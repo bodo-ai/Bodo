@@ -24,10 +24,15 @@ from bodo.utils.typing import (
     raise_bodo_error,
     unwrap_typeref,
 )
-from bodo.utils.utils import set_wrapper
+from bodo.utils.utils import (
+    bodo_exec,
+    set_wrapper,
+)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def generate_mappable_table_func(
     table, func_name, out_arr_typ, is_method, used_cols=None
 ):
@@ -90,7 +95,7 @@ def generate_mappable_table_func(
         "set_wrapper": set_wrapper,
     }
 
-    func_text = "def impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
+    func_text = "def bodo_generate_mappable_table_func(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
     if keep_input_typ:
         # We maintain the original types.
         func_text += "  out_table = bodo.hiframes.table.init_table(table, False)\n"
@@ -165,9 +170,7 @@ def generate_mappable_table_func(
     else:
         func_text += "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)\n"
 
-    local_vars = {}
-    exec(func_text, glbls, local_vars)
-    return local_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 def generate_mappable_table_func_equiv(self, scope, equiv_set, loc, args, kws):
@@ -261,7 +264,7 @@ def table_concat(table, col_nums_meta, arr_type):
         "  col_num_to_ind_in_blk = {c : i for i, c in enumerate(col_indices)}\n"
     )
     func_text += "  n = len(table)\n"
-    is_string = arr_type == bodo.string_array_type
+    is_string = arr_type == bodo.types.string_array_type
     if is_string:
         func_text += "  total_chars = 0\n"
         func_text += "  for c in col_nums:\n"

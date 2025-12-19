@@ -2,6 +2,7 @@
 
 import sys
 
+import numba
 import numpy as np
 import sklearn.feature_extraction
 from numba.core import types
@@ -13,7 +14,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
@@ -33,12 +33,14 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoFExtractHashingVectorizerType = install_py_obj_class(
-    types_name="f_extract_hashing_vectorizer_type",
-    python_type=sklearn.feature_extraction.text.HashingVectorizer,
-    module=this_module,
-    class_name="BodoFExtractHashingVectorizerType",
-    model_name="BodoFExtractHashingVectorizerModel",
+BodoFExtractHashingVectorizerType, f_extract_hashing_vectorizer_type = (
+    install_py_obj_class(
+        types_name="f_extract_hashing_vectorizer_type",
+        python_type=sklearn.feature_extraction.text.HashingVectorizer,
+        module=this_module,
+        class_name="BodoFExtractHashingVectorizerType",
+        model_name="BodoFExtractHashingVectorizerModel",
+    )
 )
 
 
@@ -66,8 +68,6 @@ def sklearn_hashing_vectorizer_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_hashing_vectorizer_impl(
         input="content",
         encoding="utf-8",
@@ -86,7 +86,7 @@ def sklearn_hashing_vectorizer_overload(
         alternate_sign=True,
         dtype=np.float64,
     ):  # pragma: no cover
-        with bodo.objmode(m="f_extract_hashing_vectorizer_type"):
+        with numba.objmode(m="f_extract_hashing_vectorizer_type"):
             m = sklearn.feature_extraction.text.HashingVectorizer(
                 input=input,
                 encoding=encoding,
@@ -129,7 +129,7 @@ def overload_hashing_vectorizer_fit_transform(
         y=None,
         _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
     ):  # pragma: no cover
-        with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
+        with numba.objmode(transformed_X="csr_matrix_float64_int64"):
             transformed_X = m.fit_transform(X, y)
             transformed_X.indices = transformed_X.indices.astype(np.int64)
             transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -147,7 +147,7 @@ def overload_hashing_vectorizer_fit_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoFExtractCountVectorizerType = install_py_obj_class(
+BodoFExtractCountVectorizerType, _ = install_py_obj_class(
     types_name="f_extract_count_vectorizer_type",
     python_type=sklearn.feature_extraction.text.CountVectorizer,
     module=this_module,
@@ -180,8 +180,6 @@ def sklearn_count_vectorizer_overload(
     Provide implementation for __init__ functions of CountVectorizer.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     # Per sklearn documentation, min_df: ignore terms that have a document
     # frequency strictly lower than the given threshold.
@@ -217,7 +215,7 @@ def sklearn_count_vectorizer_overload(
         binary=False,
         dtype=np.int64,
     ):  # pragma: no cover
-        with bodo.objmode(m="f_extract_count_vectorizer_type"):
+        with numba.objmode(m="f_extract_count_vectorizer_type"):
             m = sklearn.feature_extraction.text.CountVectorizer(
                 input=input,
                 encoding=encoding,
@@ -249,7 +247,7 @@ def get_cv_vocabulary_(m):
     types.dict_string_int = types.DictType(types.unicode_type, types.int64)
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="dict_string_int"):
+        with numba.objmode(result="dict_string_int"):
             result = m.vocabulary_
         return result
 
@@ -280,7 +278,7 @@ def overload_count_vectorizer_fit_transform(
     Then, run fit_transform with combined vocabulary
     If replicated, simply call fit_transform on each rank.
     """
-    check_sklearn_version()
+
     types.csr_matrix_int64_int64 = CSRMatrixType(types.int64, types.int64)
     if is_overload_true(_is_data_distributed):
         types.dict_str_int = types.DictType(types.unicode_type, types.int64)
@@ -291,7 +289,7 @@ def overload_count_vectorizer_fit_transform(
             y=None,
             _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
         ):  # pragma: no cover
-            with bodo.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
+            with numba.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
                 changeVoc, local_vocabulary = _cv_fit_transform_helper(m, X)
             # Gather vocabulary from each rank and generate its integer indices (alphabetical order)
             if changeVoc:
@@ -311,7 +309,7 @@ def overload_count_vectorizer_fit_transform(
             else:
                 new_data = local_vocabulary
             # Run fit_transform with generated vocabulary_
-            with bodo.objmode(transformed_X="csr_matrix_int64_int64"):
+            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
                 if changeVoc:
                     m.vocabulary = new_data
                 transformed_X = m.fit_transform(X, y)
@@ -328,7 +326,7 @@ def overload_count_vectorizer_fit_transform(
             y=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with bodo.objmode(transformed_X="csr_matrix_int64_int64"):
+            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
                 transformed_X = m.fit_transform(X, y)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -345,10 +343,8 @@ def overload_count_vectorizer_fit_transform(
 def overload_count_vectorizer_get_feature_names_out(m):
     """Array mapping from feature integer indices to feature name."""
 
-    check_sklearn_version()
-
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result=bodo.string_array_type):
+        with numba.objmode(result=bodo.types.string_array_type):
             result = m.get_feature_names_out()
         return result
 

@@ -1,9 +1,12 @@
 import os
 import subprocess
 import sys
+import time
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
+import psutil
 import pytest
 
 import bodo
@@ -77,7 +80,7 @@ def test_import_module(capfd):
     import bodo.tests.test_spawn.mymodule as mymod
 
     def impl():
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             mymod.f()
 
     fn = bodo.jit(spawn=True, cache=True)(impl)
@@ -138,7 +141,7 @@ def test_compute_return_df(datapath):
     """Simple test that reads data and computes in spawn mode, returning a
     dataframe"""
 
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
         df = pd.read_parquet(CUSTOMER_TABLE_PATH)
@@ -162,7 +165,7 @@ def test_compute_return_df(datapath):
 def test_compute_return_scalar(datapath):
     """Simple test that reads data and computes in spawn mode, returning a
     scalar"""
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
         df = pd.read_parquet(CUSTOMER_TABLE_PATH)
@@ -179,7 +182,7 @@ def test_compute_return_scalar(datapath):
 def test_environment():
     @bodo.jit(spawn=True)
     def get_from_env(env_var):
-        with bodo.no_warning_objmode(ret_val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="int64"):
             ret_val = int(os.environ[env_var])
         return ret_val
 
@@ -200,7 +203,7 @@ def test_environment():
         propagate_env=["EXTRA_ENV"],
     )
     def get_from_env_decorator(env_var):
-        with bodo.no_warning_objmode(ret_val="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="unicode_type"):
             ret_val = os.environ.get(env_var, "DOES_NOT_EXIST")
         return ret_val
 
@@ -266,6 +269,9 @@ def test_args():
     # Test BodoSQLContext if bodosql installed in test environment
     try:
         import bodosql
+        import bodosql.compiler  # isort:skip # noqa
+
+        bodo.spawn.utils.import_bodosql_compiler_on_workers()
 
         @bodo.jit(spawn=True)
         def impl3(a, bc, b):
@@ -300,6 +306,15 @@ def test_args_tuple_list_dict():
     _test_equal(impl(arg), arg)
 
 
+def test_args_empty_tuple():
+    @bodo.jit(spawn=True)
+    def impl(A):
+        return A
+
+    arg = ()
+    _test_equal(impl(arg), arg)
+
+
 def test_dist_false():
     """Make sure distributed=False disables spawn"""
 
@@ -312,7 +327,7 @@ def test_dist_false():
 
 def test_results_deleted_after_collection(datapath):
     """Test that results are deleted from workers after collection"""
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     @bodo.jit(spawn=True)
     def impl():
@@ -332,13 +347,13 @@ def test_results_deleted_after_collection(datapath):
 
 
 def test_spawn_type_register():
-    """test bodo.register_type() support in spawn mode"""
+    """test bodo.types.register_type() support in spawn mode"""
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
-    bodo.register_type("my_type1", df_type1)
+    bodo.types.register_type("my_type1", df_type1)
 
     def impl():
-        with bodo.objmode(df="my_type1"):
+        with numba.objmode(df="my_type1"):
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 
@@ -408,8 +423,90 @@ def test_spawn_globals_objmode():
 
     @bodo.jit(spawn=True)
     def f():
-        with bodo.no_warning_objmode(val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(val="int64"):
             val = VALUE
         return val
 
     assert f() == VALUE
+
+
+def test_spawn_input():
+    """
+    Tests that using input after spawn mode doesn't fail
+    """
+    sub = subprocess.Popen(
+        [
+            f"{sys.executable}",
+            "-c",
+            "'import bodo; bodo.jit(spawn=True)(lambda x: x)(1); input()'",
+        ],
+        shell=True,
+        stdin=subprocess.PIPE,
+        start_new_session=True,
+    )
+    sub.communicate(b"\n")
+    assert sub.returncode == 0
+
+
+@pytest.mark.skip("TODO [BSE-5141]: Fix flakey test on CI.")
+def test_spawn_jupyter_worker_output_redirect():
+    """
+    Make sure redirectiing worker output works in Jupyter on Windows
+    """
+    with temp_env_override(
+        {
+            "BODO_NUM_WORKERS": "1",
+            "BODO_OUTPUT_REDIRECT_TEST": "1",
+        }
+    ):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                'import bodo; bodo.jit(spawn=True)(lambda: print("Hello from worker"))()',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "Hello from worker"
+        assert result.stderr == ""
+
+
+def test_spawn_process_on_nodes():
+    """
+    Test that spawn_process works correctly on workers.
+    This is a basic test to ensure that the spawn_process function can be called
+    and that it returns the expected result.
+    """
+
+    # Test IO doesn't break spawn_process
+    proc = bodo.spawn_process_on_nodes(["python", "-c", "print(0)"])
+    bodo.stop_process_on_nodes(proc)
+    assert proc._rank_to_pid is not None, "Process should have a rank to PID mapping"
+    assert isinstance(proc._rank_to_pid, dict), (
+        "Rank to PID mapping should be a dictionary"
+    )
+    assert len(proc._rank_to_pid) == 1, (
+        "There should be one process spawned on the worker since we test on one node"
+    )
+    time.sleep(1)  # Give some time for the process to close
+    for rank, pid in proc._rank_to_pid.items():
+        # Check that the process was stopped on the worker
+        assert not psutil.pid_exists(pid), (
+            f"Process on rank {rank} with PID {pid} still exists"
+        )
+
+    # Test we can stop a process that is running
+    proc = bodo.spawn_process_on_nodes(["python", "-c", "import time; sleep(10)"])
+    # Ensure the process is running
+    assert all(psutil.pid_exists(pid) for pid in proc._rank_to_pid.values()), (
+        "Process should be running on all workers"
+    )
+    bodo.stop_process_on_nodes(proc)
+    time.sleep(1)  # Give some time for the process to close
+    for rank, pid in proc._rank_to_pid.items():
+        # Check that the process was stopped on the worker
+        assert not psutil.pid_exists(pid), (
+            f"Process on rank {rank} with PID {pid} still exists"
+        )

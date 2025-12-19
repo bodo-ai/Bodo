@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import inspect
 import warnings
@@ -140,6 +142,94 @@ if _check_pandas_change:
 pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type = _concat_same_type
 
 
+pd_str_find = pd.core.arrays.arrow.array.ArrowExtensionArray._str_find
+
+
+def _str_find(self, sub: str, start: int = 0, end: int | None = None):
+    # Bodo change: add fallback to regular Series.str.find() if args not supported by
+    # ArrowExtensionArray. See: test_df_lib/test_series_str.py::test_auto_find
+    if (start != 0 and end is not None) or (start == 0 and end is None):
+        return pd_str_find(self, sub, start, end)
+    else:
+        return pd.Series(self.to_numpy()).str.find(sub, start, end).array
+
+
+if _check_pandas_change:
+    lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._str_find)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370"
+    ):  # pragma: no cover
+        warnings.warn(
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._str_find has changed"
+        )
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_find = _str_find
+
+
+def _explode(self):
+    """
+    See Series.explode.__doc__.
+    """
+    # child class explode method supports only list types; return
+    # default implementation for non list types.
+    if not hasattr(self.dtype, "pyarrow_dtype") or (
+        # Bodo change: check is_large_list as well
+        not (
+            pa.types.is_list(self.dtype.pyarrow_dtype)
+            or pa.types.is_large_list(self.dtype.pyarrow_dtype)
+        )
+    ):
+        return super()._explode()
+    values = self
+    counts = pa.compute.list_value_length(values._pa_array)
+    counts = counts.fill_null(1).to_numpy()
+    fill_value = pa.scalar([None], type=self._pa_array.type)
+    mask = counts == 0
+    if mask.any():
+        values = values.copy()
+        values[mask] = fill_value
+        counts = counts.copy()
+        counts[mask] = 1
+    values = values.fillna(fill_value)
+    values = type(self)(pa.compute.list_flatten(values._pa_array))
+    return values, counts
+
+
+if _check_pandas_change:
+    lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._explode)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6c1b05ccc4da39ec3b7d7dfd79a9d9e47968db3b2eb4c615d21d490b21f9b421"
+    ):  # pragma: no cover
+        warnings.warn(
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._explode has changed"
+        )
+
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._explode = _explode
+
+
+if pandas_version < (3, 0):
+    # Fixes iloc Indexing for ArrowExtensionArray (see test_slice_with_series in Narwhals tests)
+    # Pandas 3.0+ has a fix already: https://github.com/pandas-dev/pandas/pull/61924
+    pd.core.arrays.arrow.array.ArrowExtensionArray.max = lambda self: self._reduce(
+        "max"
+    )
+    pd.core.arrays.arrow.array.ArrowExtensionArray.min = lambda self: self._reduce(
+        "min"
+    )
+
+
+# Bodo change: add missing str_map() for ArrowExtensionArray that is used in operations
+# like zfill.
+def arrow_arr_str_map(self, f, na_value=None, dtype=None, convert=True):
+    return pd.Series(self.to_numpy()).array._str_map(f, na_value, dtype, convert)
+
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_map = arrow_arr_str_map
+
+
 # Add support for pow() in join conditions
 pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
 
@@ -244,3 +334,109 @@ def get_conversion_factor_to_ns(in_reso: str) -> int:
     else:
         raise ValueError(f"Unsupported resolution {in_reso}")
     return factor * value
+
+
+# Class responsible for executing UDFs using Bodo as the engine in
+# newer version of Pandas. See:
+# https://github.com/pandas-dev/pandas/pull/61032
+bodo_pandas_udf_execution_engine = None
+
+
+def _prepare_function_arguments(
+    func: Callable, args: tuple, kwargs: dict, *, num_required_args: int = 1
+) -> tuple[tuple, dict]:
+    """
+    Prepare arguments for jitted function by trying to move keyword arguments inside
+    of args to eliminate kwargs.
+
+    This simplifies typing as well as catches keyword-only arguments,
+    which lead to unexpected behavior in Bodo. Copied from:
+    https://github.com/pandas-dev/pandas/blob/5fef9793dd23867e7b227a1df7aa60a283f6204e/pandas/core/util/numba_.py#L97
+    """
+    _sentinel = object()
+
+    if not kwargs:
+        return args, kwargs
+
+    # the udf should have this pattern: def udf(arg1, arg2, ..., *args, **kwargs):...
+    signature = inspect.signature(func)
+    arguments = signature.bind(*[_sentinel] * num_required_args, *args, **kwargs)
+    arguments.apply_defaults()
+    # Ref: https://peps.python.org/pep-0362/
+    # Arguments which could be passed as part of either *args or **kwargs
+    # will be included only in the BoundArguments.args attribute.
+    args = arguments.args
+    kwargs = arguments.kwargs
+
+    if kwargs:
+        # Bodo change: error message
+        raise ValueError("Bodo does not support keyword only arguments.")
+
+    args = args[num_required_args:]
+    return args, kwargs
+
+
+if pandas_version >= (3, 0):
+    from collections.abc import Callable
+    from typing import Any
+
+    from pandas._typing import AggFuncType, Axis
+    from pandas.core.apply import BaseExecutionEngine
+
+    class BodoExecutionEngine(BaseExecutionEngine):
+        @staticmethod
+        def map(
+            data: pd.Series | pd.DataFrame | np.ndarray,
+            func: AggFuncType,
+            args: tuple,
+            kwargs: dict[str, Any],
+            decorator: Callable | None,
+            skip_na: bool,
+        ):
+            if not isinstance(data, pd.Series):
+                raise ValueError(
+                    f"BodoExecutionEngine: map() expected input data to be Series, got: {type(data)}"
+                )
+
+            if isinstance(func, Callable):
+                args, _ = _prepare_function_arguments(
+                    func, args, kwargs, num_required_args=1
+                )
+
+            na_action = "ignore" if skip_na else None
+
+            def map_func(data, args):
+                return data.map(func, na_action=na_action, args=args)
+
+            map_func_jit = decorator(map_func)
+
+            return map_func_jit(data, args)
+
+        @staticmethod
+        def apply(
+            data: pd.Series | pd.DataFrame | np.ndarray,
+            func: AggFuncType,
+            args: tuple,
+            kwargs: dict[str, Any],
+            decorator: Callable,
+            axis: Axis,
+        ):
+            # raw = True converts data to ndarray first
+            if isinstance(data, np.ndarray):
+                raise ValueError(
+                    "BodoExecutionEngine: does not support the raw=True for DataFrame.apply."
+                )
+
+            if isinstance(func, Callable):
+                args, _ = _prepare_function_arguments(
+                    func, args, kwargs, num_required_args=1
+                )
+
+            def apply_func(data, axis, args):
+                return data.apply(func, axis=axis, args=args)
+
+            apply_func_jit = decorator(apply_func)
+
+            return apply_func_jit(data, axis, args)
+
+    bodo_pandas_udf_execution_engine = BodoExecutionEngine

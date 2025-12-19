@@ -264,7 +264,7 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -285,7 +285,7 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
             return gen_vectorized(
                 arg_names,

@@ -15,6 +15,15 @@ from pyarrow.lib cimport MemoryPool, _Weakrefable, check_status
 
 from pyarrow.lib import frombytes
 
+import bodo
+import bodo.memory_cpp
+
+
+# Initialize the buffer pool pointer to be the one from the main module and
+# make sure we have a single buffer pool. Necessary since memory_tester module
+# doesn't call bodo_common_init().
+init_buffer_pool_ptr(bodo.memory_cpp.default_buffer_pool_ptr())
+
 
 cdef class BufferPoolAllocation:
     """

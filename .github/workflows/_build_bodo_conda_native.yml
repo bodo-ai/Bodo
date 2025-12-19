@@ -32,7 +32,7 @@ jobs:
 
     runs-on: ${{ inputs.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -42,14 +42,22 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') }}
         run: ./buildscripts/setup_osx_sdk.sh
         env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-13' && '10.15' || '11.0' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-15-intel' && '10.15' || '11.0' }}
 
       # Regular Setup
       - name: Create Micromamba Environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: bodo_build
-          create-args: python=3.11 conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          create-args: >-
+            python=3.11 
+            conda==25.9.1
+            conda-libmamba-solver==25.4.0
+            conda-build==25.9.0 
+            anaconda-client 
+            python-libarchive-c 
+            setuptools_scm 
+            -c conda-forge
           cache-environment: true
           generate-run-shell: true
           init-shell: bash
@@ -90,6 +98,12 @@ jobs:
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
           PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
+      - name: Convert Build Path (Windows Only)
+        if: ${{ inputs.os == 'windows-latest' }}
+        run: |
+           echo "CONDA_BLD_PATH=`cygpath -w $CONDA_BLD_PATH`" >> $GITHUB_ENV 
+        shell: bash
+
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
@@ -106,8 +120,8 @@ jobs:
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
-          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release == false) && '-dev' || '') }}
-          OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || 'linux-64') }}
+          ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || 'SKIP_ARTIFACTORY' }}
+          OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || (inputs.os == 'windows-latest') && 'win-64' || 'linux-64') }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}

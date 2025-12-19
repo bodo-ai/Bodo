@@ -7,6 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.streaming.groupby import (
@@ -21,7 +23,6 @@ from bodo.tests.utils import (
     get_query_profile_location,
     temp_env_override,
 )
-from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 
 @pytest.mark.parametrize(
@@ -869,6 +870,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     """
     Tests support for streaming groupby with nested array data.
     """
+    from bodo.utils.typing import BodoError
 
     keys_inds = bodo.utils.typing.MetaType((0,))
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
@@ -919,43 +921,41 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
 
-    match fstr:
-        case "count":
-            expected_df = df.groupby(
-                "A", as_index=False, dropna=False, sort=True
-            ).count()
-        case "first":
-            expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
-                {column: "first" for column in df.columns[1:]}
-            )
+    if fstr == "count":
+        expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).count()
+    elif fstr == "first":
+        expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
+            dict.fromkeys(df.columns[1:], "first")
+        )
 
-            # We don't care if the value is actually the first element,
-            # so we set df to have the same data value for each instance of a group key.
-            cols = {"A": df["A"]}
-            cols.update(
-                {
-                    col: pd.Series(
-                        # This works because df.groupby is sorted and
-                        # the keys are 0,1,2 so we can use them as an index.
-                        # If the sequence isn't consecutive, this wouldn't work.
-                        df["A"].apply(lambda x: expected_df[col][x]),
-                        dtype=df[col].dtype,
-                    )
-                    for col in expected_df.columns[1:]
-                }
-            )
-            df = pd.DataFrame(cols)
-        case "size":
-            expected_df = df.copy(deep=True)
-            # Logically replace every column with an integer due to pyarrow
-            # issues.
-            for i in range(1, len(expected_df.columns)):
-                expected_df[expected_df.columns[i]] = 1
-            expected_df = expected_df.groupby("A", as_index=False, dropna=False).agg(
-                {column: lambda x: len(x) for column in expected_df.columns[1:]}
-            )
-        case "sum":
-            expected_df = pd.DataFrame()
+        # We don't care if the value is actually the first element,
+        # so we set df to have the same data value for each instance of a group key.
+        cols = {"A": df["A"]}
+        cols.update(
+            {
+                col: pd.Series(
+                    # This works because df.groupby is sorted and
+                    # the keys are 0,1,2 so we can use them as an index.
+                    # If the sequence isn't consecutive, this wouldn't work.
+                    df["A"].apply(lambda x: expected_df[col][x]),
+                    dtype=df[col].dtype,
+                )
+                for col in expected_df.columns[1:]
+            }
+        )
+        df = pd.DataFrame(cols)
+    elif fstr == "size":
+        expected_df = df.copy(deep=True)
+        # Logically replace every column with an integer due to pyarrow
+        # issues.
+        for i in range(1, len(expected_df.columns)):
+            expected_df[expected_df.columns[i]] = 1
+        expected_df = expected_df.groupby("A", as_index=False, dropna=False).agg(
+            {column: lambda x: len(x) for column in expected_df.columns[1:]}
+        )
+    elif fstr == "sum":
+        expected_df = pd.DataFrame()
+
     if fstr == "sum":
         with pytest.raises(
             BodoError,
@@ -1147,9 +1147,9 @@ def test_groupby_timestamptz_key(memory_leak_check):
     """
     tz_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
             None,
         ]
         * 5
@@ -1162,7 +1162,9 @@ def test_groupby_timestamptz_key(memory_leak_check):
     )
     expected_df = pd.DataFrame(
         {
-            "B": np.array([bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400), None]),
+            "B": np.array(
+                [bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400), None]
+            ),
             "A": ["ACACACACAC", "BDBDBDBDBD"],
         }
     )
@@ -1225,8 +1227,8 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     """
     Test that the window-output-redistribution works as expected.
     """
-
     from bodo.mpi4py import MPI
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

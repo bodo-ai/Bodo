@@ -7,6 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 from bodo.libs.streaming.groupby import (
     get_partition_state,
 )
@@ -901,7 +903,7 @@ def test_multi_function_repartition(capfd):
                     "IDX": range(1000),
                     "O": pd.array(
                         [
-                            bodo.TimestampTZ(
+                            bodo.types.TimestampTZ(
                                 pd.Timestamp("2018-10-1")
                                 + pd.DateOffset(months=5 * (i // 10)),
                                 i,
@@ -1431,7 +1433,9 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                     "IDX": range(127),
                     "S": pd.array(
                         [
-                            None if i % 3 == 1 else bodo.Time(nanosecond=int(1.5**i))
+                            None
+                            if i % 3 == 1
+                            else bodo.types.Time(microsecond=int(1.5**i))
                             for i in range(127)
                         ],
                     ),
@@ -1441,10 +1445,10 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                 {
                     "IDX": range(127),
                     "WIN": pd.array(
-                        [bodo.Time(nanosecond=1)]
+                        [bodo.types.Time(microsecond=1)]
                         + [None] * 6
-                        + [bodo.Time(nanosecond=291)] * 8
-                        + [bodo.Time(nanosecond=985)] * 16
+                        + [bodo.types.Time(microsecond=291)] * 8
+                        + [bodo.types.Time(microsecond=985)] * 16
                         + [None] * 96,
                     ),
                 }

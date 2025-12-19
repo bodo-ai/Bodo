@@ -1,8 +1,6 @@
 // C/C++ code for DecimalArray handling
 #include <Python.h>
 #include <arrow/util/basic_decimal.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
 #include <iostream>
 
 #include <arrow/compute/cast.h>
@@ -2801,9 +2799,6 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     if (m == nullptr) {
         return nullptr;
     }
-
-    // init numpy
-    import_array();
 
     bodo_common_init();
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import warnings
 from typing import Literal
@@ -22,7 +24,7 @@ def parse_conn_str(
     Parse catalog / metastore connection string to determine catalog type
     and potentially the warehouse location
     """
-    # TODO: To Enum or Literal["hadoop", "hive", "nessie", "glue"]?
+    # TODO: To Enum or Literal["hadoop", "hive", "glue"]?
     parsed_conn = urlparse(conn_str)
     conn_query = parse_qs(parsed_conn.query)
 
@@ -30,13 +32,13 @@ def parse_conn_str(
     catalog_type = _get_first(conn_query, "type")
     warehouse = _get_first(conn_query, "warehouse")
     if catalog_type is None:
-        if parsed_conn.scheme == "thrift":
+        if parsed_conn.scheme == "iceberg+thrift":
             catalog_type = "hive"
 
-        elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
+        elif parsed_conn.scheme == "" and parsed_conn.path == "iceberg+glue":
             catalog_type = "glue"
 
-        elif parsed_conn.scheme == "s3":
+        elif parsed_conn.scheme == "iceberg+s3":
             catalog_type = "hadoop-s3"
             if warehouse is not None:
                 warnings.warn(
@@ -45,7 +47,7 @@ def parse_conn_str(
                 )
             warehouse = f"s3://{parsed_conn.netloc}{parsed_conn.path}"
 
-        elif parsed_conn.scheme in ("abfs", "abfss"):
+        elif parsed_conn.scheme in ("iceberg+abfs", "iceberg+abfss"):
             catalog_type = "hadoop-abfs"
             if warehouse is not None:
                 warnings.warn(
@@ -54,7 +56,7 @@ def parse_conn_str(
                 )
             warehouse = f"{parsed_conn.scheme}://{parsed_conn.netloc}{parsed_conn.path}"
 
-        elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
+        elif parsed_conn.scheme == "iceberg" or parsed_conn.scheme == "iceberg+file":
             catalog_type = "hadoop"
             if warehouse is not None:
                 warnings.warn(
@@ -62,11 +64,9 @@ def parse_conn_str(
                     IcebergWarning,
                 )
             warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
-        elif parsed_conn.scheme == "snowflake":
-            catalog_type = "snowflake"
-        elif parsed_conn.scheme == "rest":
+        elif parsed_conn.scheme in {"iceberg+http", "iceberg+https"}:
             catalog_type = "rest"
-        elif parsed_conn.scheme == "arn" and "aws:s3tables" in parsed_conn.path:
+        elif parsed_conn.scheme == "iceberg+arn" and "aws:s3tables" in parsed_conn.path:
             catalog_type = "s3tables"
 
         else:
@@ -75,9 +75,7 @@ def parse_conn_str(
                     "hadoop-s3",
                     "hadoop",
                     "hive",
-                    "nessie",
                     "glue",
-                    "snowflake",
                     "rest",
                     "s3tables",
                 ]
@@ -91,17 +89,15 @@ def parse_conn_str(
         "hadoop-abfs",
         "hadoop",
         "hive",
-        "nessie",
         "glue",
-        "snowflake",
         "rest",
         "s3tables",
     ]
 
     # Get Warehouse Location
-    if catalog_type not in ("snowflake", "s3tables") and warehouse is None:
+    if catalog_type != "s3tables" and warehouse is None:
         warnings.warn(
-            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
+            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with the Glue catalog.",
             IcebergWarning,
         )
 
@@ -145,7 +141,7 @@ def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) 
         return os.path.join(db_name, table_name, "data", file_name)
 
 
-def normalize_loc(loc: str):
+def normalize_loc(loc: str) -> str:
     return loc.replace("s3a://", "s3://").removeprefix("file:")
 
 

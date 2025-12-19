@@ -1,11 +1,12 @@
 from difflib import unified_diff
 
 import pytest
-from numba.core import ir
+from numba.core import ir  # noqa TID253
 
 import bodo
 
-pytestmarker = pytest.mark.compiler
+# TODO[BSE-5071]: Re-enable native typer when its coverage improved
+pytestmark = [pytest.mark.compiler, pytest.mark.skip]
 
 
 def normalize_ir(fir: ir.FunctionIR):

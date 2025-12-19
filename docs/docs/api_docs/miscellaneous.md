@@ -426,7 +426,7 @@ supported in `jitclass` yet.
 @bodo.jitclass(
     {
         "df": bodo.typeof(pd.DataFrame({"A": [1], "B": [0.1]})),
-        "name": bodo.string_type,
+        "name": bodo.types.string_type,
     },
     distributed=["df"],
 )

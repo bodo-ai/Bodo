@@ -10,11 +10,11 @@ jobs:
     timeout-minutes: 240
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Create Micromamba Environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: iceberg_build
           create-args: boa anaconda-client setuptools_scm -c conda-forge

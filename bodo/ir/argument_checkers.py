@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt  # Any, Tuple, Dict
 from abc import ABCMeta, abstractmethod
 from types import NoneType

@@ -25,7 +25,6 @@ from sklearn.utils.extmath import (
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
@@ -52,7 +51,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_type",
     python_type=sklearn.preprocessing.OneHotEncoder,
     module=this_module,
@@ -63,7 +62,7 @@ BodoPreprocessingOneHotEncoderType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderCategoriesType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderCategoriesType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_categories_type",
     module=this_module,
     class_name="BodoPreprocessingOneHotEncoderCategoriesType",
@@ -73,7 +72,7 @@ BodoPreprocessingOneHotEncoderCategoriesType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingOneHotEncoderDropIdxType = install_py_obj_class(
+BodoPreprocessingOneHotEncoderDropIdxType, _ = install_py_obj_class(
     types_name="preprocessing_one_hot_encoder_drop_idx_type",
     module=this_module,
     class_name="BodoPreprocessingOneHotEncoderDropIdxType",
@@ -94,7 +93,7 @@ def get_one_hot_encoder_categories_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="preprocessing_one_hot_encoder_categories_type"):
+        with numba.objmode(result="preprocessing_one_hot_encoder_categories_type"):
             result = m.categories_
         return result
 
@@ -114,7 +113,7 @@ def get_one_hot_encoder_drop_idx_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="preprocessing_one_hot_encoder_drop_idx_type"):
+        with numba.objmode(result="preprocessing_one_hot_encoder_drop_idx_type"):
             result = m.drop_idx_
         return result
 
@@ -134,7 +133,7 @@ def get_one_hot_encoder_n_features_in_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="int64"):
+        with numba.objmode(result="int64"):
             result = m.n_features_in_
         return result
 
@@ -193,8 +192,6 @@ def sklearn_preprocessing_one_hot_encoder_overload(
             denoted as None.
     """
 
-    check_sklearn_version()
-
     # Because we only support dense float64 matrix output for now, check that
     # `sparse_output=False` and that `dtype=np.float64`. For compatibility with
     # check_unsupported_args, we convert `dtype` to string representation
@@ -227,7 +224,7 @@ def sklearn_preprocessing_one_hot_encoder_overload(
         max_categories=None,
         feature_name_combiner="concat",
     ):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_one_hot_encoder_type"):
+        with numba.objmode(m="preprocessing_one_hot_encoder_type"):
             m = sklearn.preprocessing.OneHotEncoder(
                 categories=categories,
                 drop=drop,
@@ -269,7 +266,7 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
         fit_result_or_err = m._fit(
             X,
             handle_unknown=m.handle_unknown,
-            force_all_finite="allow-nan",
+            ensure_all_finite="allow-nan",
         )
     except ValueError as e:  # pragma: no cover
         # Catch if any rank raises a ValueError for unknown categories,
@@ -356,7 +353,7 @@ def overload_preprocessing_one_hot_encoder_fit(
     func_text = "def _preprocessing_one_hot_encoder_fit_impl(\n"
     func_text += "    m, X, y=None, _is_data_distributed=False\n"
     func_text += "):\n"
-    func_text += "    with bodo.objmode(m='preprocessing_one_hot_encoder_type'):\n"
+    func_text += "    with numba.objmode(m='preprocessing_one_hot_encoder_type'):\n"
     # sklearn.fit() expects a 2D array as input, but Bodo does not support
     # 2D string arrays - these are instead typed as 1D arrays of object
     # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
@@ -404,7 +401,7 @@ def overload_preprocessing_one_hot_encoder_transform(
         m,
         X,
     ):  # pragma: no cover
-        with bodo.objmode(transformed_X="float64[:,:]"):
+        with numba.objmode(transformed_X="float64[:,:]"):
             # sklearn.fit() expects a 2D array as input, but Bodo does not support
             # 2D string arrays - these are instead typed as 1D arrays of object
             # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
@@ -456,7 +453,7 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
         m,
         input_features=None,
     ):  # pragma: no cover
-        with bodo.objmode(out_features="string[:]"):
+        with numba.objmode(out_features="string[:]"):
             out_features = m.get_feature_names_out(input_features)
         return out_features
 
@@ -477,7 +474,7 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingStandardScalerType = install_py_obj_class(
+BodoPreprocessingStandardScalerType, _ = install_py_obj_class(
     types_name="preprocessing_standard_scaler_type",
     python_type=sklearn.preprocessing.StandardScaler,
     module=this_module,
@@ -495,12 +492,10 @@ def sklearn_preprocessing_standard_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
     ):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_standard_scaler_type"):
+        with numba.objmode(m="preprocessing_standard_scaler_type"):
             m = sklearn.preprocessing.StandardScaler(
                 copy=copy,
                 with_mean=with_mean,
@@ -625,7 +620,7 @@ def overload_preprocessing_standard_scaler_fit(
         def _preprocessing_standard_scaler_fit_impl(
             m, X, y=None, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_standard_scaler_type"):
+            with numba.objmode(m="preprocessing_standard_scaler_type"):
                 m = sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X)
 
             return m
@@ -635,7 +630,7 @@ def overload_preprocessing_standard_scaler_fit(
         def _preprocessing_standard_scaler_fit_impl(
             m, X, y=None, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_standard_scaler_type"):
+            with numba.objmode(m="preprocessing_standard_scaler_type"):
                 m = m.fit(X, y, sample_weight)
 
             return m
@@ -661,7 +656,7 @@ def overload_preprocessing_standard_scaler_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
+            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
                 transformed_X = m.transform(X, copy=copy)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -674,7 +669,7 @@ def overload_preprocessing_standard_scaler_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with bodo.objmode(transformed_X="float64[:,:]"):
+            with numba.objmode(transformed_X="float64[:,:]"):
                 transformed_X = m.transform(X, copy=copy)
             return transformed_X
 
@@ -701,7 +696,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with bodo.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
                 inverse_transformed_X = m.inverse_transform(X, copy=copy)
                 inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
                     np.int64
@@ -718,7 +713,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with bodo.objmode(inverse_transformed_X="float64[:,:]"):
+            with numba.objmode(inverse_transformed_X="float64[:,:]"):
                 inverse_transformed_X = m.inverse_transform(X, copy=copy)
             return inverse_transformed_X
 
@@ -738,7 +733,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingMaxAbsScalerType = install_py_obj_class(
+BodoPreprocessingMaxAbsScalerType, _ = install_py_obj_class(
     types_name="preprocessing_max_abs_scaler_type",
     python_type=sklearn.preprocessing.MaxAbsScaler,
     module=this_module,
@@ -752,7 +747,7 @@ def get_max_abs_scaler_scale_(m):
     """Overload scale_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.scale_
         return result
 
@@ -764,7 +759,7 @@ def get_max_abs_scaler_max_abs_(m):
     """Overload max_abs_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.max_abs_
         return result
 
@@ -776,7 +771,7 @@ def get_max_abs_scaler_n_samples_seen_(m):
     """Overload n_samples_seen_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="int64"):
+        with numba.objmode(result="int64"):
             result = m.n_samples_seen_
         return result
 
@@ -790,10 +785,8 @@ def sklearn_preprocessing_max_abs_scaler_overload(copy=True):
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_max_abs_scaler_impl(copy=True):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
+        with numba.objmode(m="preprocessing_max_abs_scaler_type"):
             m = sklearn.preprocessing.MaxAbsScaler(copy=copy)
         return m
 
@@ -859,7 +852,7 @@ def overload_preprocessing_max_abs_scaler_fit(
         def _preprocessing_max_abs_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
                     m, X, partial=False
                 )
@@ -870,7 +863,7 @@ def overload_preprocessing_max_abs_scaler_fit(
         def _preprocessing_max_abs_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = m.fit(X, y)
             return m
 
@@ -894,7 +887,7 @@ def overload_preprocessing_max_abs_scaler_partial_fit(
         def _preprocessing_max_abs_scaler_partial_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
                     m, X, partial=True
                 )
@@ -905,7 +898,7 @@ def overload_preprocessing_max_abs_scaler_partial_fit(
         def _preprocessing_max_abs_scaler_partial_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = m.partial_fit(X, y)
             return m
 
@@ -928,7 +921,7 @@ def overload_preprocessing_max_abs_scaler_transform(
             m,
             X,
         ):  # pragma: no cover
-            with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
+            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
                 transformed_X = m.transform(X)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -940,7 +933,7 @@ def overload_preprocessing_max_abs_scaler_transform(
             m,
             X,
         ):  # pragma: no cover
-            with bodo.objmode(transformed_X="float64[:,:]"):
+            with numba.objmode(transformed_X="float64[:,:]"):
                 transformed_X = m.transform(X)
             return transformed_X
 
@@ -965,7 +958,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
             m,
             X,
         ):  # pragma: no cover
-            with bodo.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
                 inverse_transformed_X = m.inverse_transform(X)
                 inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
                     np.int64
@@ -981,7 +974,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
             m,
             X,
         ):  # pragma: no cover
-            with bodo.objmode(inverse_transformed_X="float64[:,:]"):
+            with numba.objmode(inverse_transformed_X="float64[:,:]"):
                 inverse_transformed_X = m.inverse_transform(X)
             return inverse_transformed_X
 
@@ -1004,7 +997,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingMinMaxScalerType = install_py_obj_class(
+BodoPreprocessingMinMaxScalerType, _ = install_py_obj_class(
     types_name="preprocessing_minmax_scaler_type",
     python_type=sklearn.preprocessing.MinMaxScaler,
     module=this_module,
@@ -1024,14 +1017,12 @@ def sklearn_preprocessing_minmax_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_minmax_scaler_impl(
         feature_range=(0, 1),
         copy=True,
         clip=False,
     ):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_minmax_scaler_type"):
+        with numba.objmode(m="preprocessing_minmax_scaler_type"):
             m = sklearn.preprocessing.MinMaxScaler(
                 feature_range=feature_range,
                 copy=copy,
@@ -1105,7 +1096,7 @@ def overload_preprocessing_minmax_scaler_fit(
     def _preprocessing_minmax_scaler_fit_impl(
         m, X, y=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_minmax_scaler_type"):
+        with numba.objmode(m="preprocessing_minmax_scaler_type"):
             if _is_data_distributed:
                 # If distributed, then use native implementation
                 m = sklearn_preprocessing_minmax_scaler_fit_dist_helper(m, X)
@@ -1132,7 +1123,7 @@ def overload_preprocessing_minmax_scaler_transform(
         m,
         X,
     ):  # pragma: no cover
-        with bodo.objmode(transformed_X="float64[:,:]"):
+        with numba.objmode(transformed_X="float64[:,:]"):
             transformed_X = m.transform(X)
         return transformed_X
 
@@ -1155,7 +1146,7 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
         m,
         X,
     ):  # pragma: no cover
-        with bodo.objmode(inverse_transformed_X="float64[:,:]"):
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
             inverse_transformed_X = m.inverse_transform(X)
         return inverse_transformed_X
 
@@ -1174,7 +1165,7 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingRobustScalerType = install_py_obj_class(
+BodoPreprocessingRobustScalerType, _ = install_py_obj_class(
     types_name="preprocessing_robust_scaler_type",
     python_type=sklearn.preprocessing.RobustScaler,
     module=this_module,
@@ -1188,7 +1179,7 @@ def get_robust_scaler_with_centering(m):
     """Overload with_centering attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="boolean"):
+        with numba.objmode(result="boolean"):
             result = m.with_centering
         return result
 
@@ -1200,7 +1191,7 @@ def get_robust_scaler_with_scaling(m):
     """Overload with_scaling attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="boolean"):
+        with numba.objmode(result="boolean"):
             result = m.with_scaling
         return result
 
@@ -1214,7 +1205,7 @@ def get_robust_scaler_quantile_range(m):
     typ = numba.typeof((25.0, 75.0))
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result=typ):
+        with numba.objmode(result=typ):
             result = m.quantile_range
         return result
 
@@ -1226,7 +1217,7 @@ def get_robust_scaler_unit_variance(m):
     """Overload unit_variance attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="boolean"):
+        with numba.objmode(result="boolean"):
             result = m.unit_variance
         return result
 
@@ -1238,7 +1229,7 @@ def get_robust_scaler_copy(m):
     """Overload copy attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="boolean"):
+        with numba.objmode(result="boolean"):
             result = m.copy
         return result
 
@@ -1250,7 +1241,7 @@ def get_robust_scaler_center_(m):
     """Overload center_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.center_
         return result
 
@@ -1262,7 +1253,7 @@ def get_robust_scaler_scale_(m):
     """Overload scale_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.scale_
         return result
 
@@ -1282,8 +1273,6 @@ def sklearn_preprocessing_robust_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_robust_scaler_impl(
         with_centering=True,
         with_scaling=True,
@@ -1291,7 +1280,7 @@ def sklearn_preprocessing_robust_scaler_overload(
         copy=True,
         unit_variance=False,
     ):  # pragma: no cover
-        with bodo.objmode(m="preprocessing_robust_scaler_type"):
+        with numba.objmode(m="preprocessing_robust_scaler_type"):
             m = sklearn.preprocessing.RobustScaler(
                 with_centering=with_centering,
                 with_scaling=with_scaling,
@@ -1319,8 +1308,6 @@ def overload_preprocessing_robust_scaler_fit(
     CSR matrices are not yet supported.
     """
 
-    check_sklearn_version()
-
     # TODO Add general error-checking [BE-52]
 
     if is_overload_true(_is_data_distributed):
@@ -1338,7 +1325,7 @@ def overload_preprocessing_robust_scaler_fit(
         if isinstance(X, DataFrameType):
             func_text += "  X = X.to_numpy()\n"
 
-        func_text += "  with bodo.objmode(qrange_l='float64', qrange_r='float64'):\n"
+        func_text += "  with numba.objmode(qrange_l='float64', qrange_r='float64'):\n"
         func_text += "    (qrange_l, qrange_r) = m.quantile_range\n"
         func_text += "  if not 0 <= qrange_l <= qrange_r <= 100:\n"
         # scikit-learn throws the error: `"Invalid quantile range: %s" % str(self.quantile_range)`
@@ -1384,12 +1371,12 @@ def overload_preprocessing_robust_scaler_fit(
         func_text += "    constant_mask = scales < 10 * np.finfo(scales.dtype).eps\n"
         func_text += "    scales[constant_mask] = 1.0\n"
         func_text += "    if m.unit_variance:\n"
-        func_text += "      with bodo.objmode(adjust='float64'):\n"
+        func_text += "      with numba.objmode(adjust='float64'):\n"
         func_text += (
             "        adjust = stats.norm.ppf(qrange_r) - stats.norm.ppf(qrange_l)\n"
         )
         func_text += "      scales = scales / adjust\n"
-        func_text += "  with bodo.objmode():\n"
+        func_text += "  with numba.objmode():\n"
         func_text += "    m.center_ = centers\n"
         func_text += "    m.scale_ = scales\n"
         func_text += "  return m\n"
@@ -1410,7 +1397,7 @@ def overload_preprocessing_robust_scaler_fit(
         def _preprocessing_robust_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_robust_scaler_type"):
+            with numba.objmode(m="preprocessing_robust_scaler_type"):
                 m = m.fit(X, y)
             return m
 
@@ -1427,13 +1414,11 @@ def overload_preprocessing_robust_scaler_transform(
     We simply call sklearn's transform on each rank.
     """
 
-    check_sklearn_version()
-
     def _preprocessing_robust_scaler_transform_impl(
         m,
         X,
     ):  # pragma: no cover
-        with bodo.objmode(transformed_X="float64[:,:]"):
+        with numba.objmode(transformed_X="float64[:,:]"):
             transformed_X = m.transform(X)
         return transformed_X
 
@@ -1452,13 +1437,11 @@ def overload_preprocessing_robust_scaler_inverse_transform(
     We simply call sklearn's inverse_transform on each rank.
     """
 
-    check_sklearn_version()
-
     def _preprocessing_robust_scaler_inverse_transform_impl(
         m,
         X,
     ):  # pragma: no cover
-        with bodo.objmode(inverse_transformed_X="float64[:,:]"):
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
             inverse_transformed_X = m.inverse_transform(X)
         return inverse_transformed_X
 
@@ -1474,18 +1457,18 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-def _pa_str_to_obj(a):
-    """Convert string[pyarrow] arrays to object arrays to workaround Scikit-learn issues
-    as of 1.4.0. See test_label_encoder.
+def _pa_arr_to_numpy(a):
+    """Convert Arrow arrays to Numpy arrays to workaround Scikit-learn issues
+    as of 1.7.0. See test_label_encoder.
     """
-    if isinstance(a, pd.arrays.ArrowStringArray):
-        return a.astype(object)
+    if isinstance(a, (pd.arrays.ArrowStringArray, pd.arrays.ArrowExtensionArray)):
+        return a.to_numpy()
     return a
 
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoPreprocessingLabelEncoderType = install_py_obj_class(
+BodoPreprocessingLabelEncoderType, _ = install_py_obj_class(
     types_name="preprocessing_label_encoder_type",
     python_type=sklearn.preprocessing.LabelEncoder,
     module=this_module,
@@ -1501,10 +1484,8 @@ def sklearn_preprocessing_label_encoder_overload():
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
-        with bodo.objmode(m="preprocessing_label_encoder_type"):
+        with numba.objmode(m="preprocessing_label_encoder_type"):
             m = sklearn.preprocessing.LabelEncoder()
         return m
 
@@ -1533,8 +1514,8 @@ def overload_preprocessing_label_encoder_fit(
             y_classes = bodo.libs.array_kernels.sort(
                 y_classes, ascending=True, inplace=False
             )
-            with bodo.objmode:
-                y_classes_obj = _pa_str_to_obj(y_classes)
+            with numba.objmode:
+                y_classes_obj = _pa_arr_to_numpy(y_classes)
                 m.classes_ = y_classes_obj
 
             return m
@@ -1546,7 +1527,7 @@ def overload_preprocessing_label_encoder_fit(
         def _sklearn_preprocessing_label_encoder_fit_impl(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(m="preprocessing_label_encoder_type"):
+            with numba.objmode(m="preprocessing_label_encoder_type"):
                 m = m.fit(y)
 
             return m
@@ -1568,8 +1549,8 @@ def overload_preprocessing_label_encoder_transform(
     def _preprocessing_label_encoder_transform_impl(
         m, y, _is_data_distributed=False
     ):  # pragma: no cover
-        with bodo.objmode(transformed_y="int64[:]"):
-            transformed_y = m.transform(y)
+        with numba.objmode(transformed_y="int64[:]"):
+            transformed_y = m.transform(y).astype(np.int64)
         return transformed_y
 
     return _preprocessing_label_encoder_transform_impl
@@ -1607,8 +1588,8 @@ def overload_preprocessing_label_encoder_fit_transform(
         def _preprocessing_label_encoder_fit_transform_impl(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(transformed_y="int64[:]"):
-                transformed_y = m.fit_transform(y)
+            with numba.objmode(transformed_y="int64[:]"):
+                transformed_y = m.fit_transform(y).astype(np.int64)
             return transformed_y
 
         return _preprocessing_label_encoder_fit_transform_impl

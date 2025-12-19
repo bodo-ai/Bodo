@@ -34,7 +34,6 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.decorators import WrapPythonDispatcherType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -424,8 +423,10 @@ class DistributedAnalysis:
             or (
                 is_expr(rhs, "binop")
                 and (
-                    isinstance(self.typemap[rhs.lhs.name], bodo.DecimalArrayType)
-                    or isinstance(self.typemap[rhs.rhs.name], bodo.DecimalArrayType)
+                    isinstance(self.typemap[rhs.lhs.name], bodo.types.DecimalArrayType)
+                    or isinstance(
+                        self.typemap[rhs.rhs.name], bodo.types.DecimalArrayType
+                    )
                 )
             )
         ):
@@ -554,10 +555,12 @@ class DistributedAnalysis:
                     else:
                         code_expr = "is not None"
                         pandas_fn = "notna"
-                    if isinstance(arg1_typ, (bodo.DataFrameType, bodo.SeriesType)):
+                    if isinstance(
+                        arg1_typ, (bodo.types.DataFrameType, bodo.types.SeriesType)
+                    ):
                         obj_name = (
                             "DataFrame"
-                            if isinstance(arg1_typ, bodo.DataFrameType)
+                            if isinstance(arg1_typ, bodo.types.DataFrameType)
                             else "Series"
                         )
                         warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
@@ -912,9 +915,10 @@ class DistributedAnalysis:
         return out_dist, non_concat_redvars
 
     def _analyze_call(
-        self, inst, lhs, rhs, func_var, args, kws, equiv_set, array_dists
+        self, inst, lhs, rhs: ir.Expr, func_var, args, kws, equiv_set, array_dists
     ):
         """analyze array distributions in function calls"""
+        from bodo.decorators import WrapPythonDispatcherType
         from bodo.transforms.distributed_analysis_call_registry import (
             DistributedAnalysisContext,
             call_registry,
@@ -1376,7 +1380,7 @@ class DistributedAnalysis:
 
         if fdef == (
             "iceberg_writer_fetch_theta",
-            "bodo.io.iceberg.stream_iceberg_write",
+            "bodo.io.iceberg.theta",
         ):
             # Used to obtain the current value of a theta sketch collection from
             # an Iceberg writer as an array, where each row is the current estimate
@@ -1385,7 +1389,7 @@ class DistributedAnalysis:
             _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
-        if fdef == ("read_puffin_file_ndvs", "bodo.io.iceberg.stream_iceberg_write"):
+        if fdef == ("read_puffin_file_ndvs", "bodo.io.iceberg.theta"):
             # Used to the ndvs from a puffin file for testing.
             _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
@@ -1603,7 +1607,7 @@ class DistributedAnalysis:
             return
 
         if fdef == ("random_seedless", "bodosql.kernels"):
-            if self.typemap[rhs.args[0].name] != bodo.none:
+            if self.typemap[rhs.args[0].name] != bodo.types.none:
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
@@ -1760,17 +1764,14 @@ class DistributedAnalysis:
                 )
 
             return
-        if fdef == ("get_search_regex", "bodo.libs.array"):
+
+        if fdef == ("get_search_regex", "bodo.hiframes.series_str_impl"):
             # out_arr and in_arr should have the same distribution
             new_dist = _meet_array_dists(
                 self.typemap, rhs.args[0].name, rhs.args[3].name, array_dists
             )
             array_dists[rhs.args[0].name] = new_dist
             array_dists[rhs.args[3].name] = new_dist
-            return
-        if fdef == ("get_replace_regex", "bodo.libs.array"):
-            # out_arr and in_arr should have the same distribution
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
@@ -2405,11 +2406,15 @@ class DistributedAnalysis:
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):
             # input arrays and output index have the same distribution
             tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert tup_list is not None
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
-            for v in tup_list:
-                _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+            if tup_list is not None:
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+                for v in tup_list:
+                    _meet_array_dists(self.typemap, lhs, v.name, array_dists)
+            else:
+                tup_arr_dists = array_dists[rhs.args[0].name]
+                assert all(tup_arr_dists[0] == arr_dist for arr_dist in tup_arr_dists)
+                _set_var_dist(self.typemap, lhs, array_dists, tup_arr_dists[0])
             return
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
@@ -2633,6 +2638,23 @@ class DistributedAnalysis:
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
             _meet_array_dists(self.typemap, out_arrname, in_arrname, array_dists)
+            return
+
+        if fdef == ("get_data", "bodo.libs.struct_arr_ext"):
+            in_arrname = rhs.args[0].name
+            if lhs not in array_dists:
+                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD)
+            if in_arrname not in array_dists:
+                _set_var_dist(self.typemap, in_arrname, array_dists, Distribution.OneD)
+
+            lhs_dists, rhs_dist = array_dists[lhs], array_dists[in_arrname]
+            new_dist = Distribution(
+                min(min(x.value for x in lhs_dists), rhs_dist.value)
+            )
+            new_dist = _min_dist_top(new_dist, Distribution.OneD)
+
+            array_dists[lhs] = [new_dist] * len(lhs_dists)
+            array_dists[in_arrname] = new_dist
             return
 
         if fdef == ("init_spark_df", "bodo.libs.pyspark_ext"):
@@ -3483,7 +3505,7 @@ class DistributedAnalysis:
                 array_dists[in_list] = out_dist
             return
 
-        if isinstance(in_type, bodo.NullableTupleType):
+        if isinstance(in_type, bodo.types.NullableTupleType):
             nullable_tup_def = guard(get_definition, self.func_ir, args[0])
             assert (
                 isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"
@@ -4269,7 +4291,7 @@ def _get_user_varname(metadata, v):
     return v
 
 
-def _meet_array_dists(typemap, arr1, arr2, array_dists, top_dist=None):
+def _meet_array_dists(typemap, arr1: str, arr2: str, array_dists, top_dist=None):
     """meet distributions of arrays for consistent distribution"""
 
     if top_dist is None:
@@ -4311,7 +4333,7 @@ def _get_var_dist(varname, array_dists, typemap):
     return array_dists[varname]
 
 
-def _set_var_dist(typemap, varname, array_dists, dist, check_type=True):
+def _set_var_dist(typemap, varname: str, array_dists, dist, check_type=True):
     # some non-distributable types could need to be assigned distribution
     # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
     typ = typemap[varname]

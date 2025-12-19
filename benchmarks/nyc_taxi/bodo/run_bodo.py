@@ -12,16 +12,20 @@ NOTE: This script assumes that you have the file `nyc_taxi_precipitation.py`
 copied in your current workspace.
 
 usage:
-    python run_bodo.py
+    python run_bodo.py --num_workers NUM_WORKERS [--use_jit]
 """
+
+import argparse
 
 from bodosdk import BodoWorkspaceClient
 
 
-def run_bodo_benchmark():
+def run_bodo_benchmark(num_workers, use_jit):
     bodo_workspace = BodoWorkspaceClient()
     benchmark_cluster = bodo_workspace.ClusterClient.create(
-        name="Benchmark Bodo", instance_type="r6i.16xlarge", workers_quantity=4
+        name="Benchmark Bodo",
+        instance_type="r6i.16xlarge",
+        workers_quantity=num_workers,
     )
     benchmark_cluster.wait_for_status(["RUNNING"])
 
@@ -31,6 +35,7 @@ def run_bodo_benchmark():
             code_type="PYTHON",
             source={"type": "WORKSPACE", "path": "/"},
             exec_file="nyc_taxi_precipitation.py",
+            args="--use_jit" if use_jit else None,
         )
         print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 
@@ -39,5 +44,19 @@ def run_bodo_benchmark():
     benchmark_cluster.delete(wait=True)
 
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--num_workers", type=int, default=4, help="Number of workers in cluster."
+    )
+    parser.add_argument(
+        "--use_jit",
+        action="store_true",
+        help="Whether to use Bodo JIT for running the workload. If False then run using Bodo DataFrames",
+    )
+    args = parser.parse_args()
+    run_bodo_benchmark(args.num_workers, args.use_jit)
+
+
 if __name__ == "__main__":
-    run_bodo_benchmark()
+    main()

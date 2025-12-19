@@ -25,6 +25,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,
@@ -90,7 +91,7 @@ def _typeof_pd_cat_dtype(val, c):
 def _get_cat_index_type(elem_type):
     """return the Index type that holds "categories" values given the element type"""
     # NOTE assuming data type is string if unknown (TODO: test this possibility)
-    elem_type = bodo.string_type if elem_type is None else elem_type
+    elem_type = bodo.types.string_type if elem_type is None else elem_type
     return bodo.utils.typing.get_index_type_from_dtype(elem_type)
 
 
@@ -519,6 +520,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
 @overload(pd.api.types.CategoricalDtype, no_unliteral=True)
+@overload(bd.api.types.CategoricalDtype, no_unliteral=True)
 def cat_overload_dummy(val_list):
     return lambda val_list: 1  # pragma: no cover
 
@@ -634,7 +636,7 @@ def build_replace_dicts(to_replace, value, categories):  # pragma: no cover
 def _build_replace_dicts(to_replace, value, categories):
     # Scalar case
     # TODO: replace with something that captures all scalars
-    if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
+    if isinstance(to_replace, types.Number) or to_replace == bodo.types.string_type:
 
         def impl(to_replace, value, categories):  # pragma: no cover
             return build_replace_dicts([to_replace], value, categories)
@@ -932,6 +934,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
 # NOTE: not using inline="always" since fix_arr_dtype() fails due to Bodo IR nodes.
 # Inlined in Series pass.
 @overload(pd.Categorical, no_unliteral=True)
+@overload(bd.Categorical, no_unliteral=True)
 def pd_categorical_overload(
     values,
     categories=None,

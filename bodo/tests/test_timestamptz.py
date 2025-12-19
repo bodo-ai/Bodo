@@ -4,7 +4,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
-from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 @pytest.mark.parametrize(
@@ -30,17 +29,17 @@ def test_timestamptz_sort(pattern, memory_leak_check):
 
     base_values = np.array(
         [
-            bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
-            bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
-            bodo.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
-            bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
-            bodo.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
+            bodo.types.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
             None,
         ]
     )
@@ -81,17 +80,17 @@ def test_timestamptz_sort(pattern, memory_leak_check):
 
     base_values = np.array(
         [
-            bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
-            bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
-            bodo.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
-            bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
-            bodo.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
-            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
+            bodo.types.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
+            bodo.types.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
             None,
         ]
     )
@@ -114,20 +113,20 @@ def test_timestamptz_array_creation(memory_leak_check):
 
     def f():
         arr = bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(5)
-        arr[0] = bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100)
-        arr[1] = bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
-        arr[2] = bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 300)
+        arr[0] = bodo.types.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100)
+        arr[1] = bodo.types.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
+        arr[2] = bodo.types.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 300)
         arr[3] = None
-        arr[4] = bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
+        arr[4] = bodo.types.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
         return arr
 
     expected = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 300),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 300),
             None,
-            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
         ]
     )
     check_func(f, (), py_output=expected)
@@ -139,7 +138,7 @@ def test_timestamptz_boxing_unboxing(memory_leak_check):
     def f(v):
         return v
 
-    v = bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)
+    v = bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)
     check_func(f, (v,))
 
 
@@ -151,8 +150,8 @@ def test_timestamptz_array_boxing_unboxing(memory_leak_check):
 
     arr = pd.Series(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
         * 5
     )
@@ -164,11 +163,11 @@ def test_timestamptz_array_boxing_unboxing(memory_leak_check):
 
 def test_bcast_scalar(memory_leak_check):
     """Test that a scalar is broadcasted correctly"""
-    expected = bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)
+    expected = bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)
     if bodo.get_rank() == 0:
         x = expected
     else:
-        x = bodo.TimestampTZ.fromUTC("2021-01-02 03:05:13", 100)
+        x = bodo.types.TimestampTZ.fromUTC("2021-01-02 03:05:13", 100)
     result = bodo.libs.distributed_api.bcast_scalar(x)
     # Test the values exactly to ensure no conversion occurs.
     assert result.utc_timestamp == expected.utc_timestamp
@@ -179,15 +178,15 @@ def test_scatterv(memory_leak_check):
     """Test that scatterv works correctly on a given array"""
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
-    scattered_arr = bodo.libs.distributed_api.scatterv(arr)
+    scattered_arr = bodo.scatterv(arr)
     np.testing.assert_array_equal(
         scattered_arr, _get_dist_arg(arr, False, False, False)
     )
@@ -197,12 +196,12 @@ def test_gatherv(memory_leak_check):
     """Test that gatherv works correctly on a given array"""
     expected = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     section = _get_dist_arg(expected, False, False, False)
@@ -219,12 +218,12 @@ def test_distributed_getitem(memory_leak_check):
 
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     py_output = arr[0]
@@ -239,12 +238,12 @@ def test_distributed_scalar_optional_getitem(memory_leak_check):
 
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     for i in range(len(arr)):
@@ -265,12 +264,12 @@ def test_table_builder(memory_leak_check):
 
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     check_func(impl, (arr,), py_output=bodo.hiframes.table.Table([arr]))
@@ -296,12 +295,12 @@ def timestamptz_join_data():
     key2_arr = np.arange(4, 8)
     data_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     df1 = pd.DataFrame({"A": key1_arr, "B": data_arr})
@@ -329,6 +328,8 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
     """
     Tests a streaming join when one of the data columns is TIMESTAMPTZ.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))
@@ -446,42 +447,42 @@ def timestamptz_join_keys():
     """
     key_arr_1 = np.array(
         [
-            bodo.TimestampTZ.fromLocal("2024-02-29 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 12:00:00", 0),
             None,
-            bodo.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-02-29 14:30:00", 120),
-            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-04 23:18:01.123456789", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 14:30:00", 120),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 23:18:01.123456789", 0),
             None,
-            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 30),
+            bodo.types.TimestampTZ.fromLocal("2024-07-05 00:00:00", 30),
             None,
         ]
     )
     key_arr_2 = np.array(
         [
-            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-04 11:15:00", -45),
-            bodo.TimestampTZ.fromLocal("2024-07-04 20:18:01.123456789", -180),
-            bodo.TimestampTZ.fromLocal("2024-02-29 15:30:00", -60),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 11:15:00", -45),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 20:18:01.123456789", -180),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 15:30:00", -60),
             None,
-            bodo.TimestampTZ.fromLocal("2024-07-04 20:03:01.123456789", -195),
-            None,
-            None,
-            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-02-29 11:30:00", -60),
-            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-07-04 06:00:00", 360),
-            bodo.TimestampTZ.fromLocal("2024-02-29 12:30:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
-            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 20:03:01.123456789", -195),
             None,
             None,
-            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 11:30:00", -60),
+            bodo.types.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 06:00:00", 360),
+            bodo.types.TimestampTZ.fromLocal("2024-02-29 12:30:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
+            None,
+            None,
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
             None,
             None,
             None,
@@ -532,6 +533,8 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
     """
     Tests a streaming join when the keys are TIMESTAMPTZ.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))
@@ -639,20 +642,20 @@ def test_concat(memory_leak_check):
 
     arr1 = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     arr2 = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 14:45:06", 350),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 14:45:06", 350),
         ]
     )
     py_output = np.concatenate([arr1, arr2])
@@ -677,12 +680,12 @@ def test_getitem_complex(idx, memory_leak_check):
 
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
     # Integer array indexing isn't supported on distributed data.
@@ -709,24 +712,24 @@ def test_setitem_complex(idx, memory_leak_check):
 
     arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-            bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
         ]
     )
-    scalar_val = bodo.TimestampTZ.fromUTC("2021-01-02 14:21:17", 700)
+    scalar_val = bodo.types.TimestampTZ.fromUTC("2021-01-02 14:21:17", 700)
     # Integer array indexing isn't supported on distributed data.
     only_seq = isinstance(idx, np.ndarray) and np.issubdtype(idx.dtype, np.integer)
     check_func(impl, (arr, idx, scalar_val), copy_input=True, only_seq=only_seq)
     arr_val = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 14:21:17", 700),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 14:21:17", 700),
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2024-12-17 14:45:06", 350),
+            bodo.types.TimestampTZ.fromUTC("2024-12-17 14:45:06", 350),
         ]
     )
     # arr_val cannot be distributed differently, so this only works with 1 rank.
@@ -738,11 +741,11 @@ def test_cmp_with_timestamp(memory_leak_check):
     def gt(a, b):
         return a > b
 
-    a = bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", -420)
+    a = bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", -420)
     b = pd.Timestamp("2024-01-01 00:00:00")
     assert gt(a, b)
     assert not gt(b, a)
 
-    c = bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420)
+    c = bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420)
     assert not gt(c, b)
     assert gt(b, c)

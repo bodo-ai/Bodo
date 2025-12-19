@@ -1,25 +1,20 @@
 import fractions
 import random
-import warnings
 
 import cloudpickle
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
-    DistTestPipeline,
     check_func,
     count_array_OneDs,
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError, BodoWarning
-from bodo.utils.utils import is_assign, is_expr
 
 
 @pytest.mark.slow
@@ -117,6 +112,7 @@ l2 = [1, "A", "B"]
 
 def test_list_constant_lowering_error_checking(memory_leak_check):
     """make sure value types are checked to be the same in list constant lowering"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return l2[-1]
@@ -143,6 +139,7 @@ s2 = {1, "A", "B"}
 
 def test_set_constant_lowering_error_checking(memory_leak_check):
     """make sure value types are checked to be the same in set constant lowering"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         return s2
@@ -266,7 +263,7 @@ def test_array_sum_axis(memory_leak_check):
 @pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
 def test_inline_locals(memory_leak_check):
     # make sure locals in inlined function works
-    @bodo.jit(locals={"B": bodo.float64[:]})
+    @bodo.jit(locals={"B": bodo.types.float64[:]})
     def g(S):
         B = pd.to_numeric(S, errors="coerce")
         return B
@@ -327,6 +324,7 @@ def test_reduce_init_val(memory_leak_check):
     """make sure _root_rank_select is not generated for common reductions with neutral
     init value.
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(n):
         return np.ones(n).sum()
@@ -387,6 +385,9 @@ def test_array_reduce(memory_leak_check):
 
 def _check_IR_no_getitem(test_impl, args):
     """makes sure there is no getitem/static_getitem left in the IR after optimization"""
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+    from bodo.utils.utils import is_assign, is_expr
+
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -420,6 +421,8 @@ def test_trivial_slice_getitem_opt(memory_leak_check):
 
 def _check_IR_single_label(test_impl, args):
     """makes sure the IR has a single label"""
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -709,6 +712,7 @@ def test_permuted_array_indexing(memory_leak_check):
 
 def test_func_non_jit_error(memory_leak_check):
     """make sure proper error is thrown when calling a non-JIT function"""
+    from bodo.utils.typing import BodoError
 
     def f():
         return 1
@@ -724,6 +728,7 @@ def test_func_non_jit_error(memory_leak_check):
 
 def test_func_nested_jit_error(memory_leak_check):
     """make sure proper error is thrown when calling a JIT function with errors"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def f(df):
@@ -770,6 +775,7 @@ def test_udf_nest_jit_convert():
 
 def test_updated_container_binop(memory_leak_check):
     """make sure binop of updated containers is detected and raises proper error"""
+    from bodo.utils.typing import BodoError
 
     def impl(p):
         a = []
@@ -862,6 +868,7 @@ def test_updated_container_binop(memory_leak_check):
 
 def test_updated_container_df_rename():
     """Test updated container in df.rename() input for [BE-287]"""
+    from bodo.utils.typing import BodoError
 
     def impl():
         cols = ["1", "24", "124"]
@@ -881,6 +888,7 @@ def test_updated_container_df_rename():
 
 def test_unroll_label_offset_bug():
     """Test for a bug in loop unrolling where block labels would clash"""
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         df.columns = [
@@ -940,7 +948,7 @@ def test_pure_func(datapath):
 
     # objmode
     def impl3():
-        with bodo.objmode():
+        with numba.objmode():
             impl1()
 
     # pq read
@@ -1009,25 +1017,27 @@ def test_pure_func(datapath):
 
 
 # default string type changes with _use_dict_str_type making type annotation invalid
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="cannot test with dict string type"
-)
 def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import _use_dict_str_type
+
+    if _use_dict_str_type:
+        pytest.skip("cannot test with dict string type")
 
     def impl(A):
-        with bodo.objmode(B=bodo.int64[::1]):
+        with numba.objmode(B=bodo.types.int64[::1]):
             B = 2 * A
         return B
 
     # complex type
     def impl2():
-        with bodo.objmode(
-            df=bodo.DataFrameType(
-                (bodo.float64[::1], bodo.string_array_type),
-                bodo.RangeIndexType(bodo.none),
+        with numba.objmode(
+            df=bodo.types.DataFrameType(
+                (bodo.types.float64[::1], bodo.types.string_array_type),
+                bodo.types.RangeIndexType(bodo.types.none),
                 ("A", "B"),
             )
         ):
@@ -1037,7 +1047,9 @@ def test_objmode_types():
     f = lambda A: (A.view("datetime64[ns]"), A.view("timedelta64[ns]"))
 
     def impl3(A):
-        with bodo.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
+        with numba.objmode(
+            B=bodo.types.datetime64ns[::1], C=bodo.types.timedelta64ns[::1]
+        ):
             B, C = f(A)
         return B, C
 
@@ -1121,11 +1133,12 @@ def test_reversed():
 @pytest.mark.smoke
 def test_jitclass(memory_leak_check):
     """test @bodo.jitclass decorator with various attribute/method cases"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.int64[::1], bodo.float64[::1]),
+                (bodo.types.int64[::1], bodo.types.float64[::1]),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A", "B"),
             )
@@ -1169,7 +1182,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )
@@ -1186,7 +1199,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )
@@ -1261,7 +1274,7 @@ def test_dict_scalar_to_array(memory_leak_check):
     Tests the BodoSQL kernel scalar to array works as expected
     with various inputs.
     """
-    arr_type = bodo.dict_str_arr_type
+    arr_type = bodo.types.dict_str_arr_type
 
     def impl1(arg, len):
         return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
@@ -1286,7 +1299,7 @@ def test_int_scalar_to_array(memory_leak_check):
     """
     Tests that coerce_scalar_to_array keeps integers as non-nullable.
     """
-    arr_type = bodo.IntegerArrayType(types.int64)
+    arr_type = bodo.types.IntegerArrayType(types.int64)
 
     def impl(arg, len):
         return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
@@ -1302,7 +1315,7 @@ def test_parfor_empty_entry_block(memory_leak_check):
     """make sure CFG simplification can handle empty entry block corner case properly.
     See BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
     """
-    out_arr_type = bodo.boolean_array_type
+    out_arr_type = bodo.types.boolean_array_type
 
     @bodo.jit
     def impl(arrs, n, b, c, d, e, f, g):
@@ -1367,41 +1380,6 @@ def test_df_set_col_rename_bug(memory_leak_check):
     check_func(impl, (df,), only_seq=True, copy_input=True)
 
 
-def test_objmode_warning(memory_leak_check):
-    """Test that bodo.objmode raises a warning when used
-    and that bodo.no_warning_objmode does not."""
-
-    def g():
-        return 1
-
-    @bodo.jit
-    def impl1():
-        with bodo.objmode(a="int64"):
-            a = g()
-        return a
-
-    @bodo.jit
-    def impl2():
-        with bodo.no_warning_objmode(a="int64"):
-            a = g()
-        return a
-
-    old_developer_mode = numba.core.config.DEVELOPER_MODE
-    try:
-        numba.core.config.DEVELOPER_MODE = True
-        with pytest.warns(
-            BodoWarning,
-            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
-        ):
-            assert impl1() == 1, "Incorrect output with numba.objmode"
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", BodoWarning)
-            assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
-    finally:
-        numba.core.config.DEVELOPER_MODE = old_developer_mode
-
-
 def test_wrap_python(memory_leak_check):
     """Make sure basic usage of wrap_python works"""
 
@@ -1420,10 +1398,11 @@ def test_wrap_python(memory_leak_check):
 
 def test_wrap_python_error_handling(memory_leak_check):
     """Test error handling in wrap_python"""
+    from bodo.utils.typing import BodoError
 
     with pytest.raises(BodoError, match="wrap_python requires full data types"):
 
-        @bodo.wrap_python(bodo.DataFrameType)
+        @bodo.wrap_python(bodo.types.DataFrameType)
         def g(df):
             return df
 
@@ -1436,6 +1415,7 @@ def test_wrap_python_error_handling(memory_leak_check):
 
 def test_wrap_python_type_check():
     """test type checking for JIT wrapper output values"""
+    from bodo.utils.typing import BodoError
 
     # A is specified as int but return value has strings
     df1 = pd.DataFrame({"A": [1, 2, 3]})

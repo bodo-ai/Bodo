@@ -3,6 +3,9 @@
 #include "./test.hpp"
 
 bodo::tests::suite test_framework_tests([] {
+
+// Skip on Windows since the use of stderr seems to cause hangs on Windows CI
+#ifndef _WIN32
     bodo::tests::test("Registering before/after_each after tests", [] {
         // This test constructs a fake suite and registers tests manually to
         // verify that before/after_each cannot be registered after a test is.
@@ -53,4 +56,6 @@ bodo::tests::suite test_framework_tests([] {
         bodo::tests::check(events[4] == "test1");
         bodo::tests::check(events[5] == "after");
     });
+
+#endif
 });

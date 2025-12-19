@@ -14,7 +14,6 @@
 #include <Python.h>
 #include <mpi.h>
 #include <algorithm>
-#include <ciso646>
 #include <cstdint>
 #include <iostream>
 #include <string>

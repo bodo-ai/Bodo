@@ -53,9 +53,6 @@ from bodo.utils.typing import ColNamesMetaType, MetaType
 # Skip for all CI
 pytestmark = pytest_perf_regression
 
-# Codegen change: turn verbose mode on
-bodo.set_verbose_level(2)
-
 global_2 = MetaType((0,))
 global_3 = ColNamesMetaType(("O_ORDERKEY", "O_CUSTKEY", "O_ORDERPRIORITY", "O_COMMENT"))
 global_1 = MetaType((0, 1, 5, 8))
@@ -314,7 +311,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     "build_outer,probe_outer",
     [(False, False), (False, True), (True, False), (True, True)],
 )
-def test_simple_hash_join(build_outer, probe_outer):
+def test_simple_hash_join(build_outer, probe_outer, verbose_mode_on):
     # Reset the global variables as per the parametrized inputs
     global global_build_outer, global_probe_outer
     global_build_outer = build_outer

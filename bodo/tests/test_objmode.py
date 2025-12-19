@@ -2,25 +2,27 @@
 Unittests for objmode blocks
 """
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import check_func, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
 
 def test_type_register():
-    """test bodo.register_type() including error checking"""
+    """test bodo.types.register_type() including error checking"""
+    from bodo.utils.typing import BodoError
+
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
-    bodo.register_type("my_type1", df_type1)
+    bodo.types.register_type("my_type1", df_type1)
 
     def impl():
-        with bodo.objmode(df="my_type1"):
+        with numba.objmode(df="my_type1"):
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 
@@ -33,22 +35,23 @@ def test_type_register():
 
     # error checking
     with pytest.raises(BodoError, match="type name 'my_type1' already exists"):
-        bodo.register_type("my_type1", df_type1)
+        bodo.types.register_type("my_type1", df_type1)
     with pytest.raises(BodoError, match="type name should be a string"):
-        bodo.register_type(3, df_type1)
+        bodo.types.register_type(3, df_type1)
     with pytest.raises(BodoError, match="type value should be a valid data type"):
-        bodo.register_type("mt", 3)
+        bodo.types.register_type("mt", 3)
 
 
 def test_type_check():
     """test type checking for objmode output values"""
+    from bodo.utils.typing import BodoError
 
     # A is specified as int but return value has strings
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
 
     def impl():
-        with bodo.objmode(df=df_type1):
+        with numba.objmode(df=df_type1):
             df = pd.DataFrame({"A": ["abc", "bc"]})
         return df
 
@@ -65,7 +68,7 @@ def test_df_dist_fix():
 
     def impl():
         df2 = pd.DataFrame({"A": np.arange(10)})
-        with bodo.objmode(df=df_type1):
+        with numba.objmode(df=df_type1):
             df = df2[["A"]]
         return df
 
@@ -80,8 +83,10 @@ def test_df_index_fix():
     df_type1 = bodo.typeof(df1)
 
     def impl():
-        with bodo.objmode(df=df_type1):
-            df = pd.DataFrame({"A": np.arange(10)}, index=np.arange(10) + 1)
+        with numba.objmode(df=df_type1):
+            df = pd.DataFrame(
+                {"A": np.arange(10, dtype=np.int64)}, index=np.arange(10) + 1
+            )
         return df
 
     check_func(impl, (), reset_index=True, only_seq=True)
@@ -89,9 +94,10 @@ def test_df_index_fix():
 
 def test_df_type_class():
     """test dropping numeric index from objmode output dataframe if necessary"""
+    from bodo.utils.typing import BodoError
 
     def impl():
-        with bodo.objmode(df=bodo.DataFrameType):
+        with numba.objmode(df=bodo.types.DataFrameType):
             df = pd.DataFrame({"A": np.arange(10)}, index=np.arange(10) + 1)
         return df
 
@@ -108,7 +114,7 @@ def test_df_index_name_fix():
 
     def impl():
         df2 = pd.DataFrame({"A": np.arange(10), "B": np.ones(10)})
-        with bodo.objmode(df=df_type1):
+        with numba.objmode(df=df_type1):
             df = df2.groupby("A").sum()
         return df
 
@@ -127,7 +133,7 @@ def test_reflected_list():
     t = bodo.typeof([1, 2, 3])
 
     def impl():
-        with bodo.objmode(a=t):
+        with numba.objmode(a=t):
             a = [1, 2, 3]
         return a
 
@@ -139,14 +145,14 @@ def test_df_table_format():
 
     # user specified type has table_format=False
     n_cols = max(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD, 1)
-    df_type = bodo.DataFrameType(
-        tuple(bodo.int64[::1] for _ in range(n_cols)),
-        bodo.RangeIndexType(),
+    df_type = bodo.types.DataFrameType(
+        tuple(bodo.types.int64[::1] for _ in range(n_cols)),
+        bodo.types.RangeIndexType(),
         tuple(i for i in range(n_cols)),
     )
 
     def impl():
-        with bodo.objmode(df=df_type):
+        with numba.objmode(df=df_type):
             df = pd.DataFrame({i: [1, 2, 3] for i in range(n_cols)})
         return df
 
@@ -168,7 +174,7 @@ def test_df_column_order():
     df_type = bodo.typeof(df1)
 
     def impl():
-        with bodo.objmode(df=df_type):
+        with numba.objmode(df=df_type):
             df = pd.DataFrame(
                 {
                     "C": ["a", "ab", "cd"],
@@ -187,25 +193,25 @@ def test_scalar_cast():
 
     # int to int
     def impl1():
-        with bodo.objmode(a="uint32"):
+        with numba.objmode(a="uint32"):
             a = 4
         return a
 
     # float to float
     def impl2():
-        with bodo.objmode(a="float32"):
+        with numba.objmode(a="float32"):
             a = 4.1
         return a
 
     # float to int
     def impl3():
-        with bodo.objmode(a="int32"):
+        with numba.objmode(a="int32"):
             a = 4.0000001
         return a
 
     # int to float
     def impl4():
-        with bodo.objmode(a="float64"):
+        with numba.objmode(a="float64"):
             a = 4
         return a
 

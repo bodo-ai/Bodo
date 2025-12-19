@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import gc
 import glob
@@ -6,23 +8,25 @@ import operator
 import os
 import shutil
 import subprocess
+import sys
 import time
 import traceback
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    Optional,
     Protocol,
 )
+from uuid import uuid4
 
+import adlfs
 import pandas as pd
 import psutil
 import pytest
-from numba.core.runtime import rtsys
+from numba.core.runtime import rtsys  # noqa TID253
 
 import bodo
-import bodo.utils.allocation_tracking
+import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
@@ -92,6 +96,7 @@ def memory_leak_check():
     https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
     """
     import bodo.tests.utils
+    import bodo.utils.allocation_tracking
 
     gc.collect()
     old = rtsys.get_allocation_stats()
@@ -113,6 +118,16 @@ def memory_leak_check():
     else:
         assert total_alloc == total_free
         assert total_mi_alloc == total_mi_free
+
+
+@pytest.fixture(scope="function")
+def jit_import_check():
+    """Fixture used to assert that a test should not import JIT."""
+    jit_already_imported = "bodo.decorators" in sys.modules
+    yield
+    assert jit_already_imported or "bodo.decorators" not in sys.modules, (
+        "Test was not explicitly marked as a JIT dependency, but imported JIT."
+    )
 
 
 def item_file_name(item):
@@ -207,6 +222,29 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_30of30,
     ]
 
+    # DataFrame library NP=1
+    azure_df_1p_markers = [pytest.mark.bodo_df_1of2, pytest.mark.bodo_df_2of2]
+
+    # DataFrame library NP=2
+    azure_df_2p_markers = [
+        pytest.mark.bodo_df_1of5,
+        pytest.mark.bodo_df_2of5,
+        pytest.mark.bodo_df_3of5,
+        pytest.mark.bodo_df_4of5,
+        pytest.mark.bodo_df_5of5,
+    ]
+
+    # Spawn NP=2
+    azure_spawn_2p_markers = [pytest.mark.bodo_spawn_1of2, pytest.mark.bodo_spawn_2of2]
+
+    test_splits = [
+        azure_1p_markers,
+        azure_2p_markers,
+        azure_df_1p_markers,
+        azure_df_2p_markers,
+        azure_spawn_2p_markers,
+    ]
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -220,21 +258,40 @@ def pytest_collection_modifyitems(items):
 
     # If this assert fails, we need to get more than just the last byte from the
     # hash below, and then the limit can be updated to 2**(8 * num_bytes).
-    assert len(azure_1p_markers) < 128, "Need more bytes from hash to distribute tests"
-    assert len(azure_2p_markers) < 128, "Need more bytes from hash to distribute tests"
+    assert all(len(split) < 128 for split in test_splits), (
+        "Need more bytes from hash to distribute tests"
+    )
+
     for item in items:
         hash_ = get_last_byte_of_test_hash(item)
         # Divide the tests evenly so long tests don't end up in 1 group
-        azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
-        azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
+        markers = [split[hash_ % len(split)] for split in test_splits]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
         testfile = item_file_name(item)
         if "test_s3.py" in testfile:
-            azure_1p_marker = azure_1p_markers[0]
-            azure_2p_marker = azure_2p_markers[0]
-        item.add_marker(azure_1p_marker)
-        item.add_marker(azure_2p_marker)
+            markers = [split[0] for split in test_splits]
+
+        for marker in markers:
+            item.add_marker(marker)
+
+    # If running tests in DataFrames mode, add a check that JIT is not imported to all tests
+    # that don't explicitly depend on JIT via the jit_dependency marker.
+    if bodo.test_dataframe_library_enabled:
+        assert "bodo.decorators" not in sys.modules, (
+            "JIT was imported before pytest_collection_modifyitems finished."
+        )
+
+        no_jit_dep = [
+            item for item in items if not item.get_closest_marker("jit_dependency")
+        ]
+
+        for item in no_jit_dep:
+            if (
+                hasattr(item, "fixturenames")
+                and "jit_import_check" not in item.fixturenames
+            ):
+                item.fixturenames = ["jit_import_check"] + item.fixturenames
 
 
 def group_from_hash(testname, num_groups):
@@ -370,7 +427,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             for path in glob.glob(pat):
                 fname = path[len(prefix) + 1 :]
                 fname = f"{dst_dirname}/{fname}"
-                s3.meta.client.upload_file(path, bucket_name, fname)
+                bucket.upload_file(path, fname)
 
         upload_dir(datapath("example_single.json"), "example_single.json", "json")
         upload_dir(datapath("example_multi.json"), "example_multi.json", "json")
@@ -384,7 +441,10 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                 rel_path = os.path.join(
                     "example_deltalake", os.path.relpath(full_path, path)
                 )
-                s3.meta.client.upload_file(full_path, bucket_name, rel_path)
+                # Avoid "\" generated on Windows that causes object name errors
+                s3.meta.client.upload_file(
+                    full_path, bucket_name, rel_path.replace("\\", "/")
+                )
 
     bodo.barrier()
     return bucket_name
@@ -545,7 +605,7 @@ def iceberg_database() -> Generator[
     # make this safer to use - calling this function will invalidate all old
     # spark referneces.
     def create_tables_on_rank_one(
-        tables: list[str] | str = [], spark: Optional["SparkSession"] = None
+        tables: list[str] | str = [], spark: SparkSession | None = None
     ) -> tuple[str, str]:
         if not isinstance(tables, list):
             tables = [tables]
@@ -624,7 +684,7 @@ def cmp_op(request):
 @pytest.fixture
 def time_df():
     """
-    Fixture containing a representative set of bodo.Time object
+    Fixture containing a representative set of bodo.types.Time object
     for use in testing, including None object.
     """
     return {
@@ -632,30 +692,30 @@ def time_df():
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(17, 33, 26, 91, 8, 79),
-                        bodo.Time(0, 24, 43, 365, 18, 74),
-                        bodo.Time(3, 59, 6, 25, 757, 3),
-                        bodo.Time(),
-                        bodo.Time(4),
-                        bodo.Time(6, 41),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 33, 26, 91, 8),
+                        bodo.types.Time(0, 24, 43, 365, 18),
+                        bodo.types.Time(3, 59, 6, 25, 757),
+                        bodo.types.Time(),
+                        bodo.types.Time(4),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(7, 3, 45, 876, 234),
                         None,
                     ]
                 ),
                 "B": pd.Series(
                     [
-                        bodo.Time(20, 6, 26, 324, 4, 79),
-                        bodo.Time(3, 59, 6, 25, 57, 3),
-                        bodo.Time(7, 3, 45, 876, 234),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(6, 41),
-                        bodo.Time(4),
-                        bodo.Time(),
+                        bodo.types.Time(20, 6, 26, 324, 4),
+                        bodo.types.Time(3, 59, 6, 25, 57),
+                        bodo.types.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(4),
+                        bodo.types.Time(),
                         None,
-                        bodo.Time(0, 24, 4, 512, 18, 74),
+                        bodo.types.Time(0, 24, 4, 512, 18),
                     ]
                 ),
             }
@@ -800,43 +860,6 @@ def pytest_collect_file(parent, file_path: Path):
         )
 
 
-def get_tabular_connection(tabular_credential: str):
-    return (
-        "https://api.tabular.io/ws",
-        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-        os.getenv("TABULAR_CREDENTIAL"),
-    )
-
-
-@pytest.fixture
-def tabular_connection(request):
-    """
-    Fixture to create a connection to the tabular warehouse.
-    Returns the catalog url, warehouse name, and credential.
-    """
-    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
-    assert request.node.get_closest_marker("tabular") is not None, (
-        "tabular marker not set"
-    )
-    # Unset the AWS credentials to avoid using them
-    # to confirm that the tests are getting aws credentials from Tabular
-    with temp_env_override(
-        {
-            "AWS_ACCESS_KEY_ID": None,
-            "AWS_SECRET_ACCESS_KEY": None,
-            "AWS_SESSION_TOKEN": None,
-        }
-    ):
-        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
-
-
-def pytest_runtest_setup(item):
-    tabular = len(list(item.iter_markers(name="tabular")))
-    if tabular:
-        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
-            pytest.skip("Tabular tests must be run on Azure CI")
-
-
 @pytest.fixture(
     params=[
         "quarter",
@@ -899,3 +922,47 @@ def datetime_part_strings(request):
     for use in testing, including aliases.
     """
     return request.param
+
+
+@pytest.fixture(scope="session")
+def abfs_fs():
+    """
+    Create an Azure Blob FileSystem instance for testing.
+    """
+
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
+    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
+
+
+@pytest.fixture
+def tmp_abfs_path(abfs_fs):
+    """
+    Create a temporary ABFS path for testing.
+    """
+    from bodo.spawn.utils import run_rank0
+
+    @run_rank0
+    def setup():
+        folder_name = str(uuid4())
+        abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+        return folder_name
+
+    # Need to include account name in path for C++ filesystem code
+    folder_name = setup()
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
+
+    @run_rank0
+    def cleanup():
+        if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
+            abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
+
+    cleanup()
+
+
+@pytest.fixture(scope="module")
+def verbose_mode_on():
+    bodo.set_verbose_level(2)
+    yield
+    bodo.user_logging.restore_default_bodo_verbose_level()

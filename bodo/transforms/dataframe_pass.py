@@ -45,6 +45,7 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.transform import (
     compile_func_single_block,
     gen_const_tup,
+    get_build_sequence_vars,
     get_call_expr_arg,
     get_const_value,
     get_const_value_inner,
@@ -720,9 +721,11 @@ class DataFramePass:
         out_arr_types = out_arr_types if is_df_output else [out_arr_types]
         n_out_cols = len(out_arr_types)
         extra_args = get_call_expr_arg("apply", rhs.args, kws, 4, "args", [])
+        nodes = []
         if extra_args:
-            extra_args = guard(find_build_sequence, self.func_ir, extra_args)
-            extra_args = [] if extra_args is None else extra_args[0]
+            extra_args = get_build_sequence_vars(
+                self.func_ir, self.typemap, self.calltypes, extra_args, nodes
+            )
 
         # find kw arguments to UDF (pop apply() args first)
         kws.pop("func", None)
@@ -808,7 +811,6 @@ class DataFramePass:
         exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
 
-        nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
@@ -988,7 +990,7 @@ class DataFramePass:
         )
         if inplace:
             arr_types = df_typ.data + (self.typemap[in_index_var.name],)
-            if any(arr_types[i] == bodo.dict_str_arr_type for i in key_inds):
+            if any(arr_types[i] == bodo.types.dict_str_arr_type for i in key_inds):
                 raise BodoError(
                     "inplace sort not supported for dictionary-encoded string arrays yet",
                     loc=rhs.loc,
@@ -1236,12 +1238,12 @@ class DataFramePass:
         """
         clean_name = pd.core.computation.parsing.clean_column_name
         cleaned_columns = [clean_name(c) for c in df_typ.columns]
-        resolver = {c: 0 for c in cleaned_columns}
+        resolver = dict.fromkeys(cleaned_columns, 0)
         resolver["index"] = 0
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
-        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        lcls = dict.fromkeys(self.func_ir.func_id.code.co_varnames, 0)
         env = pd.core.computation.scope.ensure_scope(2, glbs, lcls, (resolver,))
         index_name = df_typ.index.name_typ
         return bodo.hiframes.dataframe_impl._parse_query_expr(
@@ -2238,7 +2240,7 @@ class DataFramePass:
             # For dict-encoded string, allocate array for indices only.
             # Then, create in_key_arrs as dictionary-encoded string at the end.
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-            if key_typ == bodo.dict_str_arr_type:
+            if key_typ == bodo.types.dict_str_arr_type:
                 func_text += f"  dict_key_indices_arrs{i} = bodo.libs.int_arr_ext.alloc_int_array(ngroups, np.int32)\n"
             else:
                 func_text += f"  in_key_arrs{i} = bodo.utils.utils.alloc_type(ngroups, s_key{i}, (-1,))\n"
@@ -2269,7 +2271,7 @@ class DataFramePass:
             func_text += "    arrs0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out)\n"
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-            if key_typ == bodo.dict_str_arr_type:
+            if key_typ == bodo.types.dict_str_arr_type:
                 func_text += (
                     f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"
                 )
@@ -2290,7 +2292,7 @@ class DataFramePass:
             index_names = "None"
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-            if key_typ == bodo.dict_str_arr_type:
+            if key_typ == bodo.types.dict_str_arr_type:
                 func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i}, False, False, s_key{i}._dict_id)\n"
 
         if isinstance(out_typ.index, MultiIndexType):
@@ -2374,7 +2376,7 @@ class DataFramePass:
                 # all rows of output get the input keys as Index. Hence, create an array
                 # of key values with same length as output
                 key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-                if key_typ == bodo.dict_str_arr_type:
+                if key_typ == bodo.types.dict_str_arr_type:
                     func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}._indices[starts[i]], s_key{i}._indices))\n"
                 else:
                     func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
@@ -2392,7 +2394,7 @@ class DataFramePass:
         if grp_typ.as_index:
             for i in range(n_keys):
                 key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-                if key_typ == bodo.dict_str_arr_type:
+                if key_typ == bodo.types.dict_str_arr_type:
                     func_text += f"  out_key_arr_dict_index{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
                     func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary, s_key{i}._has_unique_local_dictionary, s_key{i}._dict_id)\n"
                 else:

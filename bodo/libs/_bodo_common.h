@@ -8,7 +8,8 @@
 #endif
 
 #include <Python.h>
-#include <boost/multiprecision/cpp_int.hpp>
+#include <arrow/type.h>
+#include <utility>
 #include <vector>
 
 #include "_meminfo.h"
@@ -377,30 +378,32 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
         bodo::default_buffer_memory_manager());
 
 constexpr inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (typ == Bodo_CTypes::UINT8)
+    if (typ == Bodo_CTypes::UINT8) {
         return true;
-    if (typ == Bodo_CTypes::UINT16)
+    } else if (typ == Bodo_CTypes::UINT16) {
         return true;
-    if (typ == Bodo_CTypes::UINT32)
+    } else if (typ == Bodo_CTypes::UINT32) {
         return true;
-    if (typ == Bodo_CTypes::UINT64)
+    } else if (typ == Bodo_CTypes::UINT64) {
         return true;
+    }
     return false;
 }
 
 constexpr inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (is_unsigned_integer(typ))
+    if (is_unsigned_integer(typ)) {
         return true;
-    if (typ == Bodo_CTypes::INT8)
+    } else if (typ == Bodo_CTypes::INT8) {
         return true;
-    if (typ == Bodo_CTypes::INT16)
+    } else if (typ == Bodo_CTypes::INT16) {
         return true;
-    if (typ == Bodo_CTypes::INT32)
+    } else if (typ == Bodo_CTypes::INT32) {
         return true;
-    if (typ == Bodo_CTypes::INT64)
+    } else if (typ == Bodo_CTypes::INT64) {
         return true;
-    if (typ == Bodo_CTypes::INT128)
+    } else if (typ == Bodo_CTypes::INT128) {
         return true;
+    }
     return false;
 }
 
@@ -430,8 +433,8 @@ constexpr inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
 template <Bodo_CTypes::CTypeEnum DType>
     requires(is_complex(DType))
 using complex_type =
-    typename std::conditional<DType == Bodo_CTypes::COMPLEX128,
-                              std::complex<double>, std::complex<float>>::type;
+    std::conditional_t<DType == Bodo_CTypes::COMPLEX128, std::complex<double>,
+                       std::complex<float>>;
 /** Getting the expression of a T value as a vector of characters
  *
  * The template parameter is T.
@@ -443,8 +446,9 @@ inline std::vector<char> GetCharVector(T const& val) {
     const T* valptr = &val;
     const char* charptr = (char*)valptr;
     std::vector<char> V(sizeof(T));
-    for (size_t u = 0; u < sizeof(T); u++)
+    for (size_t u = 0; u < sizeof(T); u++) {
         V[u] = charptr[u];
+    }
     return V;
 }
 
@@ -462,37 +466,37 @@ inline std::vector<char> GetCharVector(T const& val) {
  * @return the list of characters in output.
  */
 inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::_BOOL)
+    if (dtype == Bodo_CTypes::_BOOL) {
         return GetCharVector<bool>(false);
-    if (dtype == Bodo_CTypes::INT8)
+    } else if (dtype == Bodo_CTypes::INT8) {
         return GetCharVector<int8_t>(-1);
-    if (dtype == Bodo_CTypes::UINT8)
+    } else if (dtype == Bodo_CTypes::UINT8) {
         return GetCharVector<uint8_t>(0);
-    if (dtype == Bodo_CTypes::INT16)
+    } else if (dtype == Bodo_CTypes::INT16) {
         return GetCharVector<int16_t>(-1);
-    if (dtype == Bodo_CTypes::UINT16)
+    } else if (dtype == Bodo_CTypes::UINT16) {
         return GetCharVector<uint16_t>(0);
-    if (dtype == Bodo_CTypes::INT32)
+    } else if (dtype == Bodo_CTypes::INT32) {
         return GetCharVector<int32_t>(-1);
-    if (dtype == Bodo_CTypes::UINT32)
+    } else if (dtype == Bodo_CTypes::UINT32) {
         return GetCharVector<uint32_t>(0);
-    if (dtype == Bodo_CTypes::INT64)
+    } else if (dtype == Bodo_CTypes::INT64) {
         return GetCharVector<int64_t>(-1);
-    if (dtype == Bodo_CTypes::UINT64)
+    } else if (dtype == Bodo_CTypes::UINT64) {
         return GetCharVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::DATE) {
+    } else if (dtype == Bodo_CTypes::DATE) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "In DATE case missing values are handled by "
                              "NULLABLE_INT_BOOL so this case is impossible");
-    }
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
-        dtype == Bodo_CTypes::TIMESTAMPTZ)
+    } else if (dtype == Bodo_CTypes::DATETIME ||
+               dtype == Bodo_CTypes::TIMEDELTA ||
+               dtype == Bodo_CTypes::TIMESTAMPTZ) {
         return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
-    if (dtype == Bodo_CTypes::FLOAT32)
+    } else if (dtype == Bodo_CTypes::FLOAT32) {
         return GetCharVector<float>(std::nanf("1"));
-    if (dtype == Bodo_CTypes::FLOAT64)
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
         return GetCharVector<double>(std::nan("1"));
-    if (dtype == Bodo_CTypes::DECIMAL) {
+    } else if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
         __int128_t e_val = 0;
@@ -558,6 +562,18 @@ inline std::string GetArrType_as_string(int8_t arr_type) {
         static_cast<bodo_array_type::arr_type_enum>(arr_type));
 }
 
+/**
+ * @brief Table metadata similar to Arrow's:
+ * https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/cpp/src/arrow/util/key_value_metadata.h#L36
+ * Currently, the only key should be "pandas", which is used only to reconstruct
+ * Index columns on the Python side (passed to Python with
+ * table->schema()->ToArrowSchema()).
+ */
+struct TableMetadata {
+    const std::vector<std::string> keys;
+    const std::vector<std::string> values;
+};
+
 namespace bodo {
 
 /**
@@ -570,6 +586,7 @@ struct DataType {
     const Bodo_CTypes::CTypeEnum c_type;
     const int8_t precision;
     const int8_t scale;
+    const std::string timezone;  // for DATETIME types.
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
@@ -577,14 +594,16 @@ struct DataType {
      * @param c_type Type of the Array Elements
      * @param precision The precision (required for DECIMAL types)
      * @param scale The scale (required for DECIMAL types)
+     * @param timezone The timezone (optional for DATETIME types)
      */
     DataType(bodo_array_type::arr_type_enum array_type,
              Bodo_CTypes::CTypeEnum c_type, int8_t precision = -1,
-             int8_t scale = -1)
+             int8_t scale = -1, std::string timezone = "")
         : array_type(array_type),
           c_type(c_type),
           precision(precision),
-          scale(scale) {
+          scale(scale),
+          timezone(std::move(timezone)) {
         // TODO: For decimal types, check if scale and precision are valid and
         // throw some exception (this will likely cause issues due to other
         // places where they are not being set properly.)
@@ -637,6 +656,12 @@ struct DataType {
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
                            std::vector<int8_t>& arr_c_types) const;
 
+    /// @brief Convert to the equivalent Arrow field type
+    virtual std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const;
+
+    virtual std::shared_ptr<::arrow::DataType> ToArrowDataType() const;
+
     ///@brief Deep copy the Datatype, returns the proper child type if
     /// appropriate
     std::unique_ptr<DataType> copy() const;
@@ -659,6 +684,9 @@ struct ArrayType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for Representing the Type of Struct Arrays
@@ -674,6 +702,9 @@ struct StructType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for representing the type of Map Arrays
@@ -692,6 +723,9 @@ struct MapType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /**
@@ -700,10 +734,17 @@ struct MapType final : public DataType {
  */
 struct Schema {
     std::vector<std::unique_ptr<DataType>> column_types;
+    std::vector<std::string> column_names;
+    std::shared_ptr<TableMetadata> metadata;
     Schema();
     Schema(const Schema& other);
     Schema(Schema&& other);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+           std::vector<std::string> column_names);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+           std::vector<std::string> column_names,
+           std::shared_ptr<TableMetadata> metadata);
     /** @brief Return the number of columns in the schema
      *
      * @return void The number of columns in the schema
@@ -770,7 +811,7 @@ struct Schema {
      *
      * @return std::string
      */
-    std::string ToString();
+    std::string ToString(bool use_col_names = false);
 
     /**
      * @brief Return a new schema with only the first 'first_n' columns.
@@ -784,11 +825,20 @@ struct Schema {
      * @brief Same as the previous, except it provides the column indices to
      * keep.
      *
+     * @tparam T Integer type for indices
      * @param column_indices Column indices to keep in the new schema.
      * @return std::unique_ptr<Schema> New schema.
      */
-    std::unique_ptr<Schema> Project(
-        const std::span<const int64_t> column_indices) const;
+    template <typename T>
+        requires(std::integral<T> && !std::same_as<T, bool>)
+    std::unique_ptr<Schema> Project(const std::vector<T>& column_indices) const;
+
+    /// @brief Convert to an Arrow schema
+    std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
+
+    /// @brief Convert from an Arrow schema to a Bodo schema
+    static std::shared_ptr<Schema> FromArrowSchema(
+        std::shared_ptr<::arrow::Schema> schema);
 };
 
 }  // namespace bodo
@@ -882,6 +932,7 @@ struct array_info {
     int32_t precision;        // for array of decimals and times
     int32_t scale;            // for array of decimals
     uint64_t num_categories;  // for categorical arrays
+    std::string timezone;     // timezone info for timestamp arrays
     // ID used to identify matching equivalent dictionaries.
     // Currently only used by string arrays that are the dictionaries
     // inside dictionary encoded arrays. It cannot be placed in the dictionary
@@ -916,7 +967,8 @@ struct array_info {
                int64_t _num_categories = 0, int64_t _array_id = -1,
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
-               int64_t _offset = 0, std::vector<std::string> _field_names = {})
+               int64_t _offset = 0, std::vector<std::string> _field_names = {},
+               std::string _timezone_param = "")
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -926,6 +978,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
+          timezone(std::move(_timezone_param)),
           array_id(_array_id),
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
@@ -1166,11 +1219,6 @@ struct array_info {
         }
     }
 
-    /**
-     * Return string representation of value in position `idx` of this array.
-     */
-    std::string val_to_str(size_t idx);
-
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
     void set_null_bit(size_t idx, bool bit) {
@@ -1233,9 +1281,6 @@ struct array_info {
             case bodo_array_type::MAP:
             case bodo_array_type::CATEGORICAL:
                 return true;
-            case bodo_array_type::NUMPY:
-                // TODO: Remove when TIMEDELTA moves to nullable arrays.
-                return dtype == Bodo_CTypes::TIMEDELTA;
             default:
                 return false;
         }
@@ -1307,17 +1352,10 @@ struct array_info {
                                                    std::move(value_type));
         } else {
             return std::make_unique<bodo::DataType>(
-                arr_type, dtype, this->precision, this->scale);
+                arr_type, dtype, this->precision, this->scale, this->timezone);
         }
     }
 };
-
-/**
- * @brief Convert array_info to equivalent Arrow array.
- *
- * @return std::shared_ptr<arrow::Array> equivalent Array array
- */
-std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -1401,7 +1439,8 @@ std::unique_ptr<array_info> alloc_nullable_array(
     int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "");
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -1582,7 +1621,8 @@ std::unique_ptr<array_info> alloc_array_top_level(
     bool is_locally_unique = false, bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager()) {
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "") {
     switch (const_arr_type != bodo_array_type::UNKNOWN ? const_arr_type
                                                        : arr_type) {
         case bodo_array_type::STRING:
@@ -1593,7 +1633,7 @@ std::unique_ptr<array_info> alloc_array_top_level(
 
         case bodo_array_type::NULLABLE_INT_BOOL:
             return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
-                                        std::move(mm));
+                                        std::move(mm), timezone);
 
         case bodo_array_type::INTERVAL:
             return alloc_interval_array(length, dtype, pool, std::move(mm));
@@ -1768,6 +1808,8 @@ struct mpi_str_comm_info {
 
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
+    std::vector<std::string> column_names;
+    std::shared_ptr<TableMetadata> metadata;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
@@ -1783,6 +1825,17 @@ struct table_info {
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
                         uint64_t nrows)
         : columns(_columns), _nrows(nrows) {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
+                        std::vector<std::string> column_names,
+                        std::shared_ptr<TableMetadata> metadata)
+        : columns(_columns), column_names(column_names), metadata(metadata) {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
+                        uint64_t nrows, std::vector<std::string> column_names,
+                        std::shared_ptr<TableMetadata> metadata)
+        : columns(_columns),
+          column_names(column_names),
+          metadata(metadata),
+          _nrows(nrows) {}
     uint64_t ncols() const { return columns.size(); }
     uint64_t nrows() const {
         // TODO: Replace with _nrows always.
@@ -1801,7 +1854,8 @@ struct table_info {
             column_types.push_back(col->data_type());
         }
 
-        return std::make_unique<bodo::Schema>(std::move(column_types));
+        return std::make_unique<bodo::Schema>(std::move(column_types),
+                                              column_names, metadata);
     }
 
     void pin() {
@@ -2087,10 +2141,11 @@ inline void InitializeBitMask(uint8_t* bits, size_t length, bool val,
     }
     size_t n_bytes = (length - start_row + 7) >> 3;
     uint8_t* ptr = bits + (start_row >> 3);
-    if (!val)
+    if (!val) {
         memset(ptr, 0, n_bytes);
-    else
+    } else {
         memset(ptr, 0xff, n_bytes);
+    }
 }
 
 inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
@@ -2098,13 +2153,17 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
+/**
+ * @brief Convert Arrow DataType to Bodo DataType, including nested types
+ *
+ * @param arrow_type input Arrow DataType
+ * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
+ */
+std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
+    const std::shared_ptr<arrow::DataType> arrow_type);
+
 // Retrieve the bodo version as a string.
 std::string get_bodo_version();
-
-// Use libzstd to decompress a blob string.
-// It is in this file for now because we don't have enough zstd functionality
-// to give it its own file.
-std::string decode_zstd(std::string blob);
 
 // C++20 magic to support "heterogeneous" access to unordered containers
 // makes the key "transparent", allowing std::string_view to be used similar to
@@ -2155,44 +2214,3 @@ struct numba_optional {
                       "numba_optional must be standard layout");
     }
 };
-
-extern "C" {
-PyMODINIT_FUNC PyInit_hdist(void);
-PyMODINIT_FUNC PyInit_hstr_ext(void);
-PyMODINIT_FUNC PyInit_decimal_ext(void);
-PyMODINIT_FUNC PyInit_quantile_alg(void);
-PyMODINIT_FUNC PyInit_lateral_cpp(void);
-PyMODINIT_FUNC PyInit_theta_sketches(void);
-PyMODINIT_FUNC PyInit_puffin_file(void);
-PyMODINIT_FUNC PyInit_lead_lag(void);
-PyMODINIT_FUNC PyInit_crypto_funcs(void);
-PyMODINIT_FUNC PyInit_hdatetime_ext(void);
-PyMODINIT_FUNC PyInit_hio(void);
-PyMODINIT_FUNC PyInit_array_ext(void);
-PyMODINIT_FUNC PyInit_s3_reader(void);
-PyMODINIT_FUNC PyInit_hdfs_reader(void);
-#ifndef NO_HDF5
-PyMODINIT_FUNC PyInit__hdf5(void);
-#endif
-PyMODINIT_FUNC PyInit_arrow_cpp(void);
-PyMODINIT_FUNC PyInit_csv_cpp(void);
-PyMODINIT_FUNC PyInit_json_cpp(void);
-PyMODINIT_FUNC PyInit_stream_join_cpp(void);
-PyMODINIT_FUNC PyInit_stream_sort_cpp(void);
-PyMODINIT_FUNC PyInit_listagg(void);
-PyMODINIT_FUNC PyInit_memory_budget_cpp(void);
-PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
-PyMODINIT_FUNC PyInit_stream_window_cpp(void);
-PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
-PyMODINIT_FUNC PyInit_table_builder_cpp(void);
-PyMODINIT_FUNC PyInit_fft_cpp(void);
-#ifdef BUILD_WITH_V8
-PyMODINIT_FUNC PyInit_javascript_udf_cpp(void);
-#endif
-PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void);
-PyMODINIT_FUNC PyInit_uuid_cpp(void);
-PyMODINIT_FUNC PyInit_memory_cpp(void);
-#ifdef IS_TESTING
-PyMODINIT_FUNC PyInit_test_cpp(void);
-#endif
-}  // extern "C"

@@ -14,82 +14,81 @@ on:
         default: ''
 
 jobs:
-  run-e2e:
-    name: Run E2E
-    runs-on: self-hosted-xlarge
-    steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          pixi-version: v0.40.2
-          cache: true
-          cache-write: ${{ github.event_name == 'schedule' }}
-          environments: 'default'
-          activate-environment: true
+  # JIT/SQL End-to-end CI runs out of memory on self-hosted-xlarge runner.
+  # run-e2e:
+  #   name: Run E2E
+  #   runs-on: self-hosted-xlarge
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: prefix-dev/setup-pixi@v0.9.0
+  #       with:
+  #         pixi-version: v0.40.2
+  #         cache: true
+  #         cache-write: ${{ github.event_name == 'schedule' }}
+  #         environments: 'default'
+  #         activate-environment: true
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
-          role-session-name: BodoEngineNightlySession
-          role-skip-session-tagging: true
-          # It takes around 80 minutes to run everything.
-          role-duration-seconds: 7200
+  #     - name: Configure AWS Credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: us-east-2
+  #         role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+  #         role-session-name: BodoEngineNightlySession
+  #         role-skip-session-tagging: true
+  #         # It takes around 80 minutes to run everything.
+  #         role-duration-seconds: 7200
 
-      - name: Load and Save Hadoop to Cache
-        uses: actions/cache@v4
-        with:
-          path: hadoop.tar.gz
-          key: hadoop-3.3.2-${{ runner.os }}
+  #     - name: Load and Save Hadoop to Cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: hadoop.tar.gz
+  #         key: hadoop-3.3.2-${{ runner.os }}
 
-      # TODO: Once stable, inline all the scripts
-      - name: Install Bodo Packages
-        env:
-          # Build with support for javascript udfs
-          BUILD_WITH_V8: 1
-          # Use sccache over ccache
-          DISABLE_CCACHE: 1
-        run: |
-          pixi run build
-          # Azure SAS Provider Install
-          ./buildscripts/install_azurefs_sas_token_provider.sh
+  #     - name: Install Bodo Packages
+  #       env:
+  #         # Skipping BUILD_WITH_V8 due to conflict with MPICH's UCX dependency
+  #         BUILD_WITH_V8: 0
+  #         # Use sccache over ccache
+  #         DISABLE_CCACHE: 1
+  #       run: pixi run build
 
-      - name: Run Tests
-        run: |
-          set -eo pipefail
+  #     - name: Run Tests
+  #       run: |
+  #         set -eo pipefail
 
-          # ------ Setup Hadoop (and Arrow) environment variables ------
-          export HADOOP_HOME=/tmp/hadoop-3.3.2
-          export HADOOP_INSTALL=$HADOOP_HOME
-          export HADOOP_MAPRED_HOME=$HADOOP_HOME
-          export HADOOP_COMMON_HOME=$HADOOP_HOME
-          export HADOOP_HDFS_HOME=$HADOOP_HOME
-          export YARN_HOME=$HADOOP_HOME
-          export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
-          export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
-          export HADOOP_OPTIONAL_TOOLS=hadoop-azure
-          export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
-          export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+  #         # ------ Setup Hadoop (and Arrow) environment variables ------
+  #         export HADOOP_HOME=/tmp/hadoop-3.3.2
+  #         export HADOOP_INSTALL=$HADOOP_HOME
+  #         export HADOOP_MAPRED_HOME=$HADOOP_HOME
+  #         export HADOOP_COMMON_HOME=$HADOOP_HOME
+  #         export HADOOP_HDFS_HOME=$HADOOP_HOME
+  #         export YARN_HOME=$HADOOP_HOME
+  #         export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+  #         export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+  #         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+  #         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+  #         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
-          # ------ Clean Maven and Spark Ivy Cache ------
-          rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+  #         # ------ Clean Maven and Spark Ivy Cache ------
+  #         rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
 
-          # --------- Run Tests -----------
-          cd e2e-tests
-          pytest -s -v --durations=0
-          cd ..
-          pytest -s -v --durations=0 bodo/tests/test_javascript*
+  #         # --------- Run Tests -----------
+  #         cd e2e-tests
+  #         pytest -s -v --durations=0
 
-        env:
-          PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
-          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
-          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
-          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
-          NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
+  #
+  #         cd ..
+  #         pytest -s -v --durations=0 bodo/tests/test_javascript*
+
+  #       env:
+  #         PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
+  #         SF_USERNAME: ${{ secrets.SF_USERNAME }}
+  #         SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+  #         SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+  #         SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+  #         SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+  #         SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+  #         NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
 
   run-examples:
     name: Run Examples
@@ -97,14 +96,19 @@ jobs:
     env:
       # Skip files that aren't testing core functionality or are covered in existing tests.
       SKIP_FILES: >
-        query_llm_ollama.py
+        llm_query_ollama.py
         preprocess_thepile_bodo.py
-        generate_kmers.py
+        bio_parallelizing_fasta_processing.py
         llm_inference_speedtest.py
-        Tutorials/*.py
+        pleias_ocr_correction_inference.py
+        pleias_ocr_correction_tokenization.py
+        pandas_ddp_example.py
+        llama_finetune_iceberg_data.py
+        _Tutorials/*.py
+        _Getting-Started/dataframes.py
     steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: actions/checkout@v5
+      - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.40.2
           cache: true
@@ -129,10 +133,13 @@ jobs:
 
       - name: Convert Notebooks scripts to Python
         run: |
-          pip install nbconvert
+          pip install nbconvert ipython
 
+          # Get notebook files and convert to python scripts
           export NOTEBOOK_FILES=$(find examples -name "*.ipynb")
           echo "$NOTEBOOK_FILES" | xargs -n 10 jupyter nbconvert --to script
+
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find examples -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
 
           # replace notebook builtin display with a print
@@ -141,14 +148,9 @@ jobs:
 
       - name: Install Bodo Packages
         env:
-          # Build with support for javascript udfs
-          BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
-        run: |
-          pixi run build
-          # Azure SAS Provider Install
-          ./buildscripts/install_azurefs_sas_token_provider.sh
+        run: pixi run build
 
       - name: Run Python Examples
         working-directory: ./examples
@@ -160,8 +162,9 @@ jobs:
           set -eo pipefail
 
           # for ML examples
-          pip install seaborn imblearn
+          pip install seaborn imbalanced-learn
 
+          # filter file names we want to skip 
           export PYTHON_FILES=$(find . -name "*.py" | grep -v -E "$(echo $SKIP_FILES | sed 's/ /|/g')")
           echo "$PYTHON_FILES"
 

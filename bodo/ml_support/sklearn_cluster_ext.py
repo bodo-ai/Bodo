@@ -2,6 +2,7 @@
 
 import sys
 
+import numba
 import numpy as np
 import sklearn.cluster
 from numba.extending import (
@@ -11,7 +12,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs.distributed_api import get_host_ranks
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 
@@ -24,7 +24,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoKMeansClusteringType = install_py_obj_class(
+BodoKMeansClusteringType, _ = install_py_obj_class(
     types_name="kmeans_clustering_type",
     python_type=sklearn.cluster.KMeans,
     module=this_module,
@@ -45,8 +45,6 @@ def sklearn_cluster_kmeans_overload(
     copy_x=True,
     algorithm="lloyd",
 ):
-    check_sklearn_version()
-
     def _sklearn_cluster_kmeans_impl(
         n_clusters=8,
         init="k-means++",
@@ -58,7 +56,7 @@ def sklearn_cluster_kmeans_overload(
         copy_x=True,
         algorithm="lloyd",
     ):  # pragma: no cover
-        with bodo.objmode(m="kmeans_clustering_type"):
+        with numba.objmode(m="kmeans_clustering_type"):
             m = sklearn.cluster.KMeans(
                 n_clusters=n_clusters,
                 init=init,
@@ -159,7 +157,7 @@ def overload_kmeans_clustering_fit(
             all_X = X
             all_sample_weight = sample_weight
 
-        with bodo.objmode(m="kmeans_clustering_type"):
+        with numba.objmode(m="kmeans_clustering_type"):
             m = kmeans_fit_helper(
                 m, len(X), all_X, all_sample_weight, _is_data_distributed
             )
@@ -169,7 +167,7 @@ def overload_kmeans_clustering_fit(
     return _cluster_kmeans_fit_impl
 
 
-def kmeans_predict_helper(m, X, sample_weight):
+def kmeans_predict_helper(m, X):
     """
     We implement the prediction operation in parallel.
     Each rank has its own copy of the KMeans model and predicts for its
@@ -184,7 +182,7 @@ def kmeans_predict_helper(m, X, sample_weight):
         # TODO If X is replicated this should be an error (same as sklearn)
         preds = np.empty(0, dtype=np.int64)
     else:
-        preds = m.predict(X, sample_weight).astype(np.int64).flatten()
+        preds = m.predict(X).astype(np.int64).flatten()
 
     # Restore
     m._n_threads = orig_nthreads
@@ -195,12 +193,11 @@ def kmeans_predict_helper(m, X, sample_weight):
 def overload_kmeans_clustering_predict(
     m,
     X,
-    sample_weight=None,
 ):
-    def _cluster_kmeans_predict(m, X, sample_weight=None):  # pragma: no cover
-        with bodo.objmode(preds="int64[:]"):
+    def _cluster_kmeans_predict(m, X):  # pragma: no cover
+        with numba.objmode(preds="int64[:]"):
             # TODO: Set _n_threads to 1, even though it shouldn't be necessary
-            preds = kmeans_predict_helper(m, X, sample_weight)
+            preds = kmeans_predict_helper(m, X)
         return preds
 
     return _cluster_kmeans_predict
@@ -224,7 +221,7 @@ def overload_kmeans_clustering_score(
     def _cluster_kmeans_score(
         m, X, y=None, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with bodo.objmode(result="float64"):
+        with numba.objmode(result="float64"):
             # Don't NEED to set _n_threads becasue
             # (a) it isn't used, (b) OMP_NUM_THREADS is set to 1 by bodo init
             # But we're do it anyway in case sklearn changes its behavior later
@@ -258,7 +255,7 @@ def overload_kmeans_clustering_transform(m, X):
     """
 
     def _cluster_kmeans_transform(m, X):  # pragma: no cover
-        with bodo.objmode(X_new="float64[:,:]"):
+        with numba.objmode(X_new="float64[:,:]"):
             # Doesn't parallelize automatically afaik. Set n_threads to 1 anyway.
             orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
             m._n_threads = 1

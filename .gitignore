@@ -25,12 +25,6 @@
 
 build/
 docs/_build/
-docs/gh-pages/
-docs/Bodo-tutorial/
-docs/source/bodo_tutorial_files/
-docs/source/user_guide.rst
-dev_docs/_build/
-dev_docs/gh-pages/
 *.DS_Store
 
 # Config
@@ -43,9 +37,6 @@ compile_commands.json
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/
-
-# Tutorial material
-tutorial/test_bodo.py
 
 # Coverage report
 coverage.xml
@@ -60,22 +51,22 @@ bodo/io/csv_json_reader.h
 bodo/io/csv_json_reader.cpp
 bodo/io/arrow_ext.h
 bodo/io/arrow_ext.cpp
-bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 bodo/libs/memory.cpp
 bodo/io/pyarrow_wrappers.cpp
 bodo/io/pyarrow_wrappers.h
 bodo/io/pyarrow_wrappers_api.h
+bodo/memory.cpp
+bodo/pandas/plan_optimizer.cpp
+bodo/tests/memory_tester.cpp
+bodo/transforms/type_inference/native_typer.cpp
+bodo/transforms/type_inference/native_typer.h
 
 # Iceberg Connector
 iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-java/target
 iceberg/bodo_iceberg_connector/iceberg-java/*.iml
 iceberg/bodo_iceberg_connector/jars
-
-# Bodo AzureFS Sas Token Provider
-azurefs-sas-token-provider/bodo_azurefs_sas_token_provider/target
-azurefs-sas-token-provider/bodo_azurefs_sas_token_provider/jars
 
 #                                 --------BodoSQL--------
 
@@ -108,7 +99,7 @@ bodosql-protocol-mvn/
 BodoSQL/docs/_build/
 
 # Vendored packages
-bodo/mpi4py**
+bodo/mpi4py/_vendor_mpi4py**
 
 # Distribution / packaging
 BodoSQL/.Python

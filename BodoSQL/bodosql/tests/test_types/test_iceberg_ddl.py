@@ -3,21 +3,22 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
-# Add test harnesses when adding new catalogs.
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
 from numba.core.config import shutil
-from tabular_test_harness import TabularTestHarness
+from rest_test_harness import RestTestHarness
 
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
-from bodo.tests.utils import pytest_one_rank, pytest_tabular
-from bodo.utils.typing import BodoError
+from bodo.tests.iceberg_database_helpers.utils import get_spark
+from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
+
+# Add test harnesses when adding new catalogs.
+from BodoSQL.bodosql.bodosql_types.rest_catalog import RESTCatalog
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
-pytestmark = pytest_tabular + pytest_one_rank
+pytestmark = pytest_polaris + pytest_one_rank + [pytest.mark.slow]
 
 
 @pytest.fixture(scope="session")
@@ -43,9 +44,32 @@ def filesystem_test_harness(test_harness_path):
     return FilesystemTestHarness(catalog)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_spark():
+    # Get Spark to start it with all environment variables set, not overriden by polaris_connection fixture
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        get_spark()
+
+
 @pytest.fixture
-def tabular_test_harness(tabular_catalog, tabular_connection, test_harness_path):
-    return TabularTestHarness(tabular_catalog, tabular_connection, test_harness_path)
+def rest_test_harness(aws_polaris_catalog, aws_polaris_connection):
+    # This is needed for Spark
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        catalog = RESTCatalog(
+            aws_polaris_catalog.warehouse,
+            aws_polaris_catalog.rest_uri,
+            aws_polaris_catalog.token,
+            aws_polaris_catalog.credential,
+            aws_polaris_catalog.scope,
+            "default",
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc.sql("CREATE SCHEMA IF NOT EXISTS BODOSQL_DDL_TESTS")
+        bc.sql("CREATE SCHEMA IF NOT EXISTS BODOSQL_DDL_TESTS_ALTERNATE")
+        harness = RestTestHarness(catalog, aws_polaris_connection)
+        assert harness.check_schema_exists("BODOSQL_DDL_TESTS")
+        assert harness.check_schema_exists("BODOSQL_DDL_TESTS_ALTERNATE")
+        yield harness
 
 
 def trim_describe_table_output(output: pd.DataFrame):
@@ -64,8 +88,8 @@ def trim_describe_table_output(output: pd.DataFrame):
 @pytest.mark.parametrize(
     "harness_name, ifExists",
     [
-        pytest.param("tabular_test_harness", True, id="tabular-if_exists"),
-        pytest.param("tabular_test_harness", False, id="tabular-no_if_exists"),
+        pytest.param("rest_test_harness", True, id="rest-if_exists"),
+        pytest.param("rest_test_harness", False, id="rest-no_if_exists"),
         pytest.param("filesystem_test_harness", True, id="filesystem-if_exists"),
         pytest.param("filesystem_test_harness", False, id="filesystem-no_if_exists"),
     ],
@@ -94,7 +118,7 @@ def test_create_schema(request, harness_name: str, ifExists: bool):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -114,7 +138,7 @@ def test_create_schema_already_exists(request, harness_name: str):
         assert harness.check_schema_exists(schema_name)
 
         # Create schema again
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             bodo_output = harness.run_bodo_query(f"CREATE SCHEMA {schema_name}")
 
     finally:
@@ -124,7 +148,7 @@ def test_create_schema_already_exists(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -161,7 +185,7 @@ def test_create_schema_ifnotexists_already_exists(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name, test_views",
     [
-        pytest.param("tabular_test_harness", True, id="tabular-views"),
+        pytest.param("rest_test_harness", True, id="rest-views"),
         pytest.param("filesystem_test_harness", False, id="filesystem-no_views"),
     ],
 )
@@ -213,8 +237,8 @@ def test_describe_schema(request, harness_name: str, test_views: bool):
 @pytest.mark.parametrize(
     "harness_name, ifExists",
     [
-        pytest.param("tabular_test_harness", True, id="tabular_if_exists"),
-        pytest.param("tabular_test_harness", False, id="tabular_no_if_exists"),
+        pytest.param("rest_test_harness", True, id="rest_if_exists"),
+        pytest.param("rest_test_harness", False, id="rest_no_if_exists"),
     ],
 )
 def test_alter_table_rename(request, harness_name: str, ifExists: bool):
@@ -245,7 +269,7 @@ def test_alter_table_rename(request, harness_name: str, ifExists: bool):
 
 @pytest.mark.parametrize(
     "harness_name",
-    [pytest.param("tabular_test_harness", id="tabular")],
+    [pytest.param("rest_test_harness", id="rest")],
 )
 def test_alter_table_rename_compound(request, harness_name: str):
     """Tests that Bodo can rename a table via ALTER TABLE, where we can specify a schema."""
@@ -274,7 +298,7 @@ def test_alter_table_rename_compound(request, harness_name: str):
 
 @pytest.mark.parametrize(
     "harness_name",
-    [pytest.param("tabular_test_harness", id="tabular")],
+    [pytest.param("rest_test_harness", id="rest")],
 )
 def test_alter_table_rename_diffschema(request, harness_name: str):
     """Tests that Bodo can rename a table via ALTER TABLE into a different schema."""
@@ -285,7 +309,7 @@ def test_alter_table_rename_diffschema(request, harness_name: str):
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
 
-        with pytest.raises(BodoError, match="Namespace does not exist"):
+        with pytest.raises(ValueError, match="Namespace does not exist"):
             rename_table_identifier = harness.get_table_identifier(
                 table_name + "_renamed", "NONEXISTENT_SCHEMA"
             )
@@ -313,7 +337,7 @@ def test_alter_table_rename_diffschema(request, harness_name: str):
 
 @pytest.mark.parametrize(
     "harness_name",
-    [pytest.param("tabular_test_harness", id="tabular")],
+    [pytest.param("rest_test_harness", id="rest")],
 )
 def test_alter_table_rename_not_found(request, harness_name: str):
     """Tests that Bodo throws an error when trying to rename a table that does not exist."""
@@ -323,14 +347,14 @@ def test_alter_table_rename_not_found(request, harness_name: str):
     # Table should not exist.
     assert not harness.check_table_exists(table_identifier)
     rename_table_identifier = harness.get_table_identifier(table_name + "_renamed")
-    with pytest.raises(BodoError, match="does not exist or not authorized"):
+    with pytest.raises(ValueError, match="does not exist or not authorized"):
         query = f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
         harness.run_bodo_query(query)
 
 
 @pytest.mark.parametrize(
     "harness_name",
-    [pytest.param("tabular_test_harness", id="tabular")],
+    [pytest.param("rest_test_harness", id="rest")],
 )
 def test_alter_table_rename_ifexists_not_found(request, harness_name: str):
     """Tests that Bodo returns gracefully when trying to rename a table that does not exist,
@@ -351,7 +375,7 @@ def test_alter_table_rename_ifexists_not_found(request, harness_name: str):
 
 @pytest.mark.parametrize(
     "harness_name",
-    [pytest.param("tabular_test_harness", id="tabular")],
+    [pytest.param("rest_test_harness", id="rest")],
 )
 def test_alter_table_rename_to_existing(request, harness_name: str):
     """
@@ -373,7 +397,7 @@ def test_alter_table_rename_to_existing(request, harness_name: str):
         assert harness.check_table_exists(table_identifier_b)
 
         # Query
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             harness.run_bodo_query(
                 f"ALTER TABLE {table_identifier} RENAME TO {table_identifier_b}"
             )
@@ -385,7 +409,7 @@ def test_alter_table_rename_to_existing(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -396,21 +420,21 @@ def test_alter_unsupported_commands(request, harness_name: str):
     query = "ALTER VIEW placeholder_name SET SECURE"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         harness.run_bodo_query(query)
 
     # Unsupported query
     query = "ALTER TABLE placeholder_name SWAP WITH placeholder_name_swap"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="currently unsupported"):
+    with pytest.raises(ValueError, match="currently unsupported"):
         harness.run_bodo_query(query)
 
     # Unsupported query
     query = "ALTER TABLE placeholder_name CLUSTER BY junk_column"
 
     # This should throw an error
-    with pytest.raises(BodoError, match="Unable to parse"):
+    with pytest.raises(ValueError, match="Unable to parse"):
         harness.run_bodo_query(query)
 
 
@@ -420,7 +444,7 @@ def test_alter_unsupported_commands(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -467,7 +491,7 @@ def test_alter_table_set_property(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -510,7 +534,7 @@ def test_alter_table_set_property_rename(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -519,22 +543,22 @@ def test_alter_table_set_property_error(request, harness_name: str):
     on malformed queries."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
     # Invalid query
-    with pytest.raises(BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query"):
         query = "ALTER TABLE placeholder_table SET PROPERTY"
         harness.run_bodo_query(query)
 
     # Missing property value
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY 'key'"
         harness.run_bodo_query(query)
 
     # Invalid property key (non-string)
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY invalid_key = 'value'"
         harness.run_bodo_query(query)
 
     # Invalid property value (non-string)
-    with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+    with pytest.raises(ValueError, match="Unable to parse SQL Query."):
         query = "ALTER TABLE placeholder_table SET PROPERTY 'key' = 123"
         harness.run_bodo_query(query)
 
@@ -545,7 +569,7 @@ def test_alter_table_set_property_error(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -605,7 +629,7 @@ def test_alter_table_unset_property(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -630,7 +654,9 @@ def test_alter_table_unset_property_error(request, harness_name: str):
         assert harness.check_row_exists(output, test_row)
 
         # unset non-existent property
-        with pytest.raises(BodoError, match="Property nonexistent_tag does not exist."):
+        with pytest.raises(
+            ValueError, match="Property nonexistent_tag does not exist."
+        ):
             query = f"ALTER TABLE {table_identifier} UNSET PROPERTY 'nonexistent_tag'"
             bodo_output = harness.run_bodo_query(query)
 
@@ -655,7 +681,7 @@ def test_alter_table_unset_property_error(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -751,7 +777,8 @@ def get_sqlnode_type_names():
         # iceberg type: date
         "DATE": "DATE",
         # iceberg type: time
-        "TIME": "TIME(6)",
+        # Spark doesn't support TIME type
+        # "TIME": "TIME(6)",
         # iceberg type: timestamp
         "DATETIME": "TIMESTAMP(6)",
         "TIMESTAMP": "TIMESTAMP(6)",
@@ -765,7 +792,7 @@ def get_sqlnode_type_names():
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -780,7 +807,6 @@ def test_alter_table_add_column(request, harness_name: str):
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
         harness.refresh_table(table_identifier)
-        harness.run_bodo_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         sqlnode_type_names = get_sqlnode_type_names()
         # # Convert to list to maintain order throughout testing
         typeNames = list(sqlnode_type_names.keys())
@@ -790,6 +816,8 @@ def test_alter_table_add_column(request, harness_name: str):
             bodo_output = harness.run_bodo_query(query)
             assert_equal_par(bodo_output, py_output)
 
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         # Check column names and types
         output = harness.describe_table(table_identifier)
         # Create dataframe with expected output
@@ -811,7 +839,7 @@ def test_alter_table_add_column(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -825,7 +853,7 @@ def test_alter_table_add_column_ifnotexists(request, harness_name: str):
         assert harness.check_table_exists(table_identifier)
 
         # Preexisting column name
-        with pytest.raises(BodoError, match="Cannot add column, name already exists"):
+        with pytest.raises(ValueError, match="Cannot add column, name already exists"):
             query = f"ALTER TABLE {table_identifier} add column A integer"
             bodo_output = harness.run_bodo_query(query)
 
@@ -842,7 +870,7 @@ def test_alter_table_add_column_ifnotexists(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -854,9 +882,7 @@ def test_alter_table_drop_column(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
 
         # Create test columns
         harness.run_spark_query(
@@ -871,6 +897,8 @@ def test_alter_table_drop_column(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL4 INT"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} DROP COLUMN A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
@@ -947,7 +975,7 @@ def test_alter_table_drop_column(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -960,9 +988,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -971,6 +997,8 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         harness.run_spark_query(f"REFRESH TABLE {table_identifier}")
         # Check
         output = harness.describe_table(table_identifier)
@@ -983,7 +1011,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop non-existent column
-        with pytest.raises(BodoError, match="Cannot delete missing column"):
+        with pytest.raises(ValueError, match="Cannot delete missing column"):
             query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL3"
             bodo_output = harness.run_bodo_query(query)
 
@@ -1021,7 +1049,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -1035,9 +1063,7 @@ def test_alter_table_rename_column(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -1049,6 +1075,8 @@ def test_alter_table_rename_column(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL3 INT"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
@@ -1123,10 +1151,10 @@ def test_alter_table_rename_column(request, harness_name: str):
 
         # Rename to existing column (should error)
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED2 TO TESTCOL3"
-        with pytest.raises(BodoError, match="already exists; cannot rename"):
+        with pytest.raises(ValueError, match="already exists; cannot rename"):
             bodo_output = harness.run_bodo_query(query)
 
-        with pytest.raises(BodoError, match="Cannot rename missing column"):
+        with pytest.raises(ValueError, match="Cannot rename missing column"):
             # Rename non-existent column (should error)
             query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL4 to TESTCOL4_RENAMED"
             harness.run_bodo_query(query)
@@ -1143,7 +1171,7 @@ def test_alter_table_rename_column(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -1155,9 +1183,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
         table_identifier = harness.get_table_identifier(table_name)
         harness.create_test_table(table_identifier)
         assert harness.check_table_exists(table_identifier)
-        # Drop extraneous column created during table creation
         harness.refresh_table(table_identifier)
-        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
 
         # Create test columns
         harness.run_spark_query(
@@ -1166,6 +1192,8 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
         )
+        # Drop extraneous column created during table creation
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
@@ -1235,7 +1263,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 
         # comment on nonexistent column
         with pytest.raises(
-            BodoError, match="Invalid column name or column does not exist"
+            ValueError, match="Invalid column name or column does not exist"
         ):
             query = f"ALTER TABLE {table_identifier} ALTER COLUMN NONEXISTENT_COLUMN COMMENT 'test_comment'"
             bodo_output = harness.run_bodo_query(query)
@@ -1247,7 +1275,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -1296,7 +1324,7 @@ def test_alter_table_alter_column_dropnotnull(request, harness_name: str):
 @pytest.mark.parametrize(
     "harness_name, db_schema",
     [
-        pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular"),
+        pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", id="rest"),
         pytest.param("filesystem_test_harness", "iceberg_db", id="filesystem"),
     ],
 )
@@ -1334,7 +1362,7 @@ def test_show_tables_terse(request, harness_name: str, db_schema: str):
 @pytest.mark.parametrize(
     "harness_name, db_schema",
     [
-        pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular"),
+        pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", id="rest"),
         pytest.param("filesystem_test_harness", "iceberg_db", id="filesystem"),
     ],
 )
@@ -1386,7 +1414,7 @@ def test_show_tables(request, harness_name: str, db_schema: str):
 
 @pytest.mark.parametrize(
     "harness_name, db_schema",
-    [pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular")],
+    [pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", id="rest")],
 )
 def test_show_views_terse(request, harness_name: str, db_schema: str):
     """Tests that Bodo can show views in a terse format."""
@@ -1421,7 +1449,7 @@ def test_show_views_terse(request, harness_name: str, db_schema: str):
 
 @pytest.mark.parametrize(
     "harness_name, db_schema",
-    [pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular")],
+    [pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", id="rest")],
 )
 def test_show_views(request, harness_name: str, db_schema: str):
     """Tests that Bodo can show views in a full format."""
@@ -1464,7 +1492,7 @@ def test_show_views(request, harness_name: str, db_schema: str):
 @pytest.mark.parametrize(
     "harness_name, db_schema",
     [
-        pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular"),
+        pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", id="rest"),
         pytest.param("filesystem_test_harness", "iceberg_db", id="filesystem"),
     ],
 )
@@ -1502,9 +1530,7 @@ def test_show_objects_terse(request, harness_name: str, db_schema: str):
 @pytest.mark.parametrize(
     "harness_name, db_schema, test_views",
     [
-        pytest.param(
-            "tabular_test_harness", "BODOSQL_SHOW_TESTS", True, id="tabular-views"
-        ),
+        pytest.param("rest_test_harness", "BODOSQL_SHOW_TESTS", True, id="rest-views"),
         pytest.param(
             "filesystem_test_harness", "iceberg_db", False, id="filesystem-no_views"
         ),
@@ -1580,7 +1606,7 @@ def test_show_objects(request, harness_name: str, db_schema: str, test_views: bo
 def test_show_schemas_terse(request, harness_name: str, db_schema: str):
     """Tests that Bodo can show schemas in a terse format."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
-    # Don't test Tabular, as doesn't support nested schemas?
+    # Don't test rest, as doesn't support nested schemas?
     try:
         db_name = harness.gen_unique_id(db_schema).upper()
         query = f'CREATE SCHEMA "{db_name}"'
@@ -1628,7 +1654,7 @@ def test_show_schemas_terse(request, harness_name: str, db_schema: str):
 def test_show_schemas(request, harness_name: str, db_schema: str):
     """Tests that Bodo can show schemas in a full format."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
-    # Don't test Tabular, as doesn't support nested schemas?
+    # Don't test rest, as doesn't support nested schemas?
     try:
         db_name = harness.gen_unique_id(db_schema).upper()
         query = f'CREATE SCHEMA "{db_name}"'
@@ -1675,7 +1701,7 @@ def test_show_schemas(request, harness_name: str, db_schema: str):
 @pytest.mark.parametrize(
     "harness_name",
     [
-        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("rest_test_harness", id="rest"),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
 )
@@ -1733,7 +1759,7 @@ def test_show_tblproperties(request, harness_name: str):
 
         # show non-existent property (should error)
         with pytest.raises(
-            BodoError, match="The property nonexistent_tag was not found"
+            ValueError, match="The property nonexistent_tag was not found"
         ):
             query = f"SHOW TBLPROPERTIES {table_identifier} ('nonexistent_tag')"
             output = harness.run_bodo_query(query)

@@ -6,6 +6,7 @@ in other files and exported out of this module.
 
 from __future__ import annotations
 
+import importlib
 import os
 import time
 import typing as pt
@@ -17,24 +18,14 @@ import pyarrow.dataset as ds
 import bodo
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
-from bodo.io.helpers import sync_and_reraise_error
-from bodo.io.parquet_pio import get_fpath_without_protocol_prefix, parse_fpath
 from bodo.mpi4py import MPI
 
-from . import merge_into
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,
-    IcebergConnectionType,
+    _fs_from_file_path,
     flatten_concatenation,
     flatten_tuple,
-    format_iceberg_conn,
-    format_iceberg_conn_njit,
-    get_iceberg_fs,
-)
-from .read_compilation import (
-    determine_str_as_dict_columns,
-    get_iceberg_type_info,
-    is_snowflake_managed_iceberg_wh,
+    verify_pyiceberg_installed,
 )
 from .read_metadata import (
     get_iceberg_file_list_parallel,
@@ -49,19 +40,33 @@ from .read_parquet import (
     get_row_counts_for_schema_group,
     warn_if_non_ideal_io_parallelism,
 )
-from .sf_prefetch import prefetch_sf_tables_njit
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.catalog import Catalog
+    from pyiceberg.expressions import BooleanExpression
+
+
+ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
+
+
+try:
+    importlib.import_module("pyiceberg")
+    from . import monkey_patch as _  # noqa: F401
+except ImportError:
+    pass
 
 
 def get_iceberg_pq_dataset(
-    conn: str,
-    database_schema: str,
-    table_name: str,
+    catalog: Catalog,
+    table_id: str,
     typing_pa_table_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    iceberg_filter: str | None = None,
+    iceberg_filter: BooleanExpression,
     expr_filter_f_str: str | None = None,
     filter_scalars: list[tuple[str, pt.Any]] | None = None,
     force_row_level_read: bool = True,
+    snapshot_id: int = -1,
+    limit: int = -1,
 ) -> IcebergParquetDataset:
     """
     Top-Level Function for Planning Iceberg Parquet Files at Runtime
@@ -71,10 +76,8 @@ def get_iceberg_pq_dataset(
     all processing is parallelized for best performance.
 
     Args:
-        conn (str): Iceberg connection string provided by the user.
-        database_schema (str): Iceberg database that the table
-            exists in.
-        table_name (str): Name of the table to use.
+        catalog (Catalog): PyIceberg catalog to read table metadata.
+        table_id (str): Table Identifier of the table to use.
         typing_pa_table_schema (pa.Schema): Final/Target PyArrow schema
             for the Iceberg table generated at compile time. This must
             have Iceberg Field IDs in the metadata of the fields.
@@ -89,6 +92,9 @@ def get_iceberg_pq_dataset(
             scalars used in the expression filter. See description of
             'generate_expr_filter' for more details. Defaults to None.
         force_row_level_read (bool, default: true): TODO
+        snapshot_id (int, default: -1): The snapshot ID to use for the Iceberg
+            table. If -1, the latest snapshot will be used.
+        limit (int, default: -1): Limit on the number of rows to read.
 
     Returns:
         IcebergParquetDataset: Contains all the pieces to read, along
@@ -100,6 +106,8 @@ def get_iceberg_pq_dataset(
         have all pieces in their dataset. The caller is expected to
         split the work for the actual read.
     """
+    _ = verify_pyiceberg_installed()
+
     ev = tracing.Event("get_iceberg_pq_dataset")
     metrics = IcebergPqDatasetMetrics()
     comm = MPI.COMM_WORLD
@@ -109,14 +117,16 @@ def get_iceberg_pq_dataset(
     start_time = time.monotonic()
     (
         pq_infos,
-        snapshot_id,
         all_schemas,
+        snapshot_id,
+        io,
         get_file_to_schema_us,
     ) = get_iceberg_file_list_parallel(
-        conn,
-        database_schema,
-        table_name,
+        catalog,
+        table_id,
         iceberg_filter,
+        snapshot_id,
+        limit,
     )
     metrics.file_to_schema_time_us = get_file_to_schema_us
     metrics.file_list_time += int((time.monotonic() - start_time) * 1_000_000)
@@ -125,9 +135,6 @@ def get_iceberg_pq_dataset(
     if len(pq_infos) == 0:
         return IcebergParquetDataset(
             True,
-            conn,
-            database_schema,
-            table_name,
             typing_pa_table_schema,
             [],
             snapshot_id,
@@ -139,20 +146,7 @@ def get_iceberg_pq_dataset(
         )
 
     start_time = time.monotonic()
-    # Clean up file paths further and remove filesystem info
-    pq_abs_path_file_list, parse_result, protocol = parse_fpath(
-        [x.standard_path for x in pq_infos]
-    )
-    pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
-        pq_abs_path_file_list, protocol, parse_result
-    )
-    for x, abs_path in zip(pq_infos, pq_abs_path_file_list):
-        x.standard_path = abs_path
-
-    # Construct a filesystem.
-    fs = get_iceberg_fs(
-        protocol, conn, database_schema, table_name, pq_abs_path_file_list
-    )
+    fs = _fs_from_file_path(pq_infos[0].path, io)
     metrics.get_fs_time += int((time.monotonic() - start_time) * 1_000_000)
 
     if expr_filter_f_str is not None and len(expr_filter_f_str) == 0:
@@ -164,9 +158,9 @@ def get_iceberg_pq_dataset(
 
     # 1. Select a slice of the list of files based on the rank.
     n_pes, rank = bodo.get_size(), bodo.get_rank()
-    total_num_files = len(pq_abs_path_file_list)
-    start = bodo.libs.distributed_api.get_start(total_num_files, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(total_num_files, n_pes, rank)
+    total_num_files = len(pq_infos)
+    start = bodo.get_start(total_num_files, n_pes, rank)
+    end = bodo.get_end(total_num_files, n_pes, rank)
 
     local_pq_infos = pq_infos[start:end]
     metrics.n_files_analyzed += len(local_pq_infos)
@@ -189,7 +183,7 @@ def get_iceberg_pq_dataset(
     if any(pa.types.is_struct(ty) for ty in typing_pa_table_schema.types):
         pq_format = ds.ParquetFileFormat()
         pq_frags = [
-            pq_format.make_fragment(pq_info.standard_path, fs)
+            pq_format.make_fragment(pq_info.sanitized_path, fs)
             for pq_info in local_pq_infos
         ]
         arrow_cpp.fetch_parquet_frags_metadata(pq_frags)
@@ -237,14 +231,14 @@ def get_iceberg_pq_dataset(
             local_pieces.extend(file_pieces)
     except Exception as e:
         err = e
-    sync_and_reraise_error(err, _is_parallel=True)
+    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=True)
 
     # Analyze number of row groups, their sizes, etc. and print warnings
     # similar to what we do for Parquet.
     g_total_rows = comm.allreduce(metrics.get_row_counts_nrows, op=MPI.SUM)
     g_total_rgs = comm.allreduce(metrics.get_row_counts_nrgs, op=MPI.SUM)
     g_total_size_bytes = comm.allreduce(metrics.get_row_counts_total_bytes, op=MPI.SUM)
-    warn_if_non_ideal_io_parallelism(g_total_rgs, g_total_size_bytes, protocol)
+    warn_if_non_ideal_io_parallelism(g_total_rgs, g_total_size_bytes, fs.type_name)
 
     if tracing.is_tracing():  # pragma: no cover
         ev.add_attribute("num_rows", metrics.get_row_counts_nrows)
@@ -312,13 +306,11 @@ def get_iceberg_pq_dataset(
 
     # 6. Create an IcebergParquetDataset object with this list of schema-groups,
     #    pieces and other relevant details.
-    iceberg_pq_dataset: IcebergParquetDataset = IcebergParquetDataset(
+    assert snapshot_id != -1
+    iceberg_pq_dataset = IcebergParquetDataset(
         row_level,
-        conn,
-        database_schema,
-        table_name,
         typing_pa_table_schema,
-        [x.orig_path for x in pq_infos],
+        [x.path for x in pq_infos],
         snapshot_id,
         fs,
         iceberg_pieces,
@@ -346,14 +338,6 @@ def get_iceberg_pq_dataset(
 
 
 __all__ = [
-    "merge_into",
     "ICEBERG_FIELD_ID_MD_KEY",
-    "IcebergConnectionType",
-    "format_iceberg_conn",
-    "format_iceberg_conn_njit",
     "get_iceberg_pq_dataset",
-    "determine_str_as_dict_columns",
-    "get_iceberg_type_info",
-    "is_snowflake_managed_iceberg_wh",
-    "prefetch_sf_tables_njit",
 ]

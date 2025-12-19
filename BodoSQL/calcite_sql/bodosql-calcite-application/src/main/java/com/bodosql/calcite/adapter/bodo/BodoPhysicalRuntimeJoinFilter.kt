@@ -162,9 +162,9 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
          * Generate runtime join filter code as an expression in terms of the input expression.
          *
          * @param ctx The builder context
-         * @param joinFilterID The ID of the join causing the filter.
-         * @param columns The list mapping columns of the join to the columns in the current table
-         * @param isFirstLocation The list indicating for which of the columns is it the first filtering site
+         * @param joinFilterIDs The ID of the join causing the filter.
+         * @param equalityFilterColumns The list mapping columns of the join to the columns in the current table
+         * @param equalityIsFirstLocations The list indicating for which of the columns is it the first filtering site
          * @param input The input expression
          * @return
          */
@@ -184,8 +184,6 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
             val stateVars = mutableListOf<StateVariable>()
             val columnVars = mutableListOf<Variable>()
             val isFirstLocationVars = mutableListOf<Variable>()
-            // If we don't have the state stored assume we have disabled
-            // streaming entirely and this is a no-op.
             joinStatesInfo.forEachIndexed { stateIdx, (stateVar, keyLocations, _) ->
                 stateVar.let {
                     val columnOrderedList = MutableList(equalityFilterColumns[stateIdx].size) { Expr.NegativeOne }
@@ -202,7 +200,10 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
                     stateVars.add(stateVar)
                 }
             }
-            if (stateVars.size == 0) {
+
+            // If we don't have the state stored assume we have disabled
+            // streaming entirely and this is a no-op.
+            if (stateVars.isEmpty()) {
                 return null
             }
 

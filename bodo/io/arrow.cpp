@@ -47,18 +47,18 @@ ArrowReader* pq_reader_init_py_entry(
 
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read_py_entry(
-    const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
+    PyObject* catalog, const char* table_id, bool parallel,
+    int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
     const char* expr_filter_f_str_, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
     int32_t num_str_as_dict_cols, bool create_dict_from_string,
-    bool is_merge_into_cow, int64_t* total_rows_out, PyObject** file_list_ptr,
-    int64_t* snapshot_id_ptr);
+    bool is_merge_into_cow, int64_t* snapshot_id_ptr, int64_t* total_rows_out,
+    PyObject** file_list_ptr);
 
 ArrowReader* iceberg_pq_reader_init_py_entry(
-    const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
+    PyObject* catalog, const char* table_id, bool parallel,
+    int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
     const char* expr_filter_f_str, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
@@ -82,16 +82,12 @@ ArrowReader* snowflake_reader_init_py_entry(
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* _path_name, table_info* table,
-                          array_info* col_names_arr, array_info* index,
-                          bool write_index, const char* metadata,
+                          array_info* col_names_arr, const char* metadata,
                           const char* compression, bool is_parallel,
-                          bool write_rangeindex_to_metadata, const int ri_start,
-                          const int ri_stop, const int ri_step,
-                          const char* idx_name, const char* bucket_region,
-                          int64_t row_group_size, const char* prefix,
-                          bool convert_timedelta_to_int64, const char* tz,
-                          bool downcast_time_ns_to_us, bool create_dir,
-                          bool force_hdfs);
+                          const char* bucket_region, int64_t row_group_size,
+                          const char* prefix, bool convert_timedelta_to_int64,
+                          const char* tz, bool downcast_time_ns_to_us,
+                          bool create_dir);
 
 void pq_write_create_dir_py_entry(const char* _path_name);
 
@@ -104,27 +100,12 @@ void pq_write_partitioned_py_entry(
 
 // ---------- functions defined in iceberg_parquet_write.cpp ----
 PyObject* iceberg_pq_write_py_entry(
-    const char* table_data_loc, table_info* table, array_info* col_names_arr,
-    PyObject* partition_spec, PyObject* sort_order, const char* compression,
-    bool is_parallel, const char* bucket_region, int64_t row_group_size,
-    char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
-    numba_optional<arrow::fs::FileSystem> arrow_fs,
-    UpdateSketchCollection* sketches);
-
-/**
- * @brief Delete the given Arrow FileSystem object if it is not NULL.
- *
- * @param fs The Arrow FileSystem object to delete.
- */
-void arrow_filesystem_del_py_entry(numba_optional<arrow::fs::FileSystem> fs) {
-    try {
-        if (fs.has_value) {
-            delete fs.value;
-        }
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-    }
-}
+    const char* table_data_loc, table_info* in_table,
+    array_info* in_col_names_arr, PyObject* partition_spec,
+    PyObject* sort_order, const char* compression, bool is_parallel,
+    const char* bucket_region, int64_t row_group_size,
+    const char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
+    PyObject* arrow_fs, void* sketches_ptr);
 
 PyMethodDef fetch_frags_method_def = {"fetch_parquet_frags_metadata",
                                       (PyCFunction)fetch_parquet_frags_metadata,
@@ -162,8 +143,6 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
                            PyCFunction_New(&fetch_frags_method_def, NULL));
     PyObject_SetAttrString(m, "fetch_parquet_frag_row_counts",
                            PyCFunction_New(&fetch_row_count_method_def, NULL));
-
-    SetAttrStringFromVoidPtr(m, arrow_filesystem_del_py_entry);
 
     return m;
 }

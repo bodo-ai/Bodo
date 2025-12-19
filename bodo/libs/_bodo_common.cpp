@@ -1,15 +1,16 @@
 #include "_bodo_common.h"
 
-#include <arrow/array.h>
-#include <zstd.h>
 #include <complex>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
+#include <arrow/array.h>
+#include <arrow/type.h>
 #include <fmt/format.h>
-#include "_bodo_to_arrow.h"
-#include "_datetime_utils.h"
 #include "_distributed.h"
+#include "_memory.h"
+#include "arrow/util/key_value_metadata.h"
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
 // Order should match Bodo_CTypes::CTypeEnum
@@ -46,12 +47,69 @@ const std::vector<size_t> numpy_item_size({
     0,                             // MAP
     sizeof(int64_t),               // TIMESTAMPTZ data1
 });
+
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
         return;
     }
     initialized = true;
+
+    // Get the default buffer pool pointer from Python and set the global
+    // pointer
+    PyObject* memory_module = PyImport_ImportModule("bodo.memory_cpp");
+    if (memory_module == nullptr) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to import bodo.memory_cpp module!");
+        return;
+    }
+
+    PyObject* pool_ptr_obj =
+        PyObject_CallMethod(memory_module, "default_buffer_pool_ptr", nullptr);
+    if (pool_ptr_obj == nullptr) {
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to call default_buffer_pool_ptr()!");
+        return;
+    }
+
+    int64_t memory_pool_ptr = PyLong_AsLongLong(pool_ptr_obj);
+    if (memory_pool_ptr == -1 && PyErr_Occurred()) {
+        Py_DECREF(pool_ptr_obj);
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to convert pool pointer to integer!");
+        return;
+    }
+
+    bodo::init_buffer_pool_ptr(memory_pool_ptr);
+
+    Py_DECREF(pool_ptr_obj);
+
+    // Get the default memsys pointer from Python and set the global
+    // pointer
+    PyObject* memsys_ptr_obj =
+        PyObject_CallMethod(memory_module, "default_memsys_ptr", nullptr);
+    if (memsys_ptr_obj == nullptr) {
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to call default_memsys_ptr()!");
+        return;
+    }
+
+    int64_t memory_memsys_ptr = PyLong_AsLongLong(memsys_ptr_obj);
+    if (memory_memsys_ptr == -1 && PyErr_Occurred()) {
+        Py_DECREF(pool_ptr_obj);
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to convert memsys pointer to integer!");
+        return;
+    }
+
+    global_memsys = reinterpret_cast<MemSys*>(memory_memsys_ptr);
+
+    Py_DECREF(memsys_ptr_obj);
+    Py_DECREF(memory_module);
 
     if (numpy_item_size.size() != Bodo_CTypes::_numtypes) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -135,11 +193,149 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
-        // TODO Timedelta
+        case arrow::Type::DURATION:
+            return Bodo_CTypes::TIMEDELTA;
         default: {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");
         }
+    }
+}
+
+std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
+    const std::shared_ptr<arrow::DataType> arrow_type) {
+    switch (arrow_type->id()) {
+        // String array
+        case arrow::Type::LARGE_STRING:
+        case arrow::Type::STRING: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::STRING);
+        }
+        // Binary array
+        case arrow::Type::LARGE_BINARY:
+        case arrow::Type::BINARY: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::BINARY);
+        }
+        // array(item) array
+        case arrow::Type::LARGE_LIST:
+        case arrow::Type::LIST: {
+            assert(arrow_type->num_fields() == 1);
+            std::unique_ptr<bodo::DataType> inner =
+                arrow_type_to_bodo_data_type(arrow_type->field(0)->type());
+            return std::make_unique<bodo::ArrayType>(std::move(inner));
+        }
+        // map array
+        case arrow::Type::MAP: {
+            std::shared_ptr<arrow::MapType> map_type =
+                std::static_pointer_cast<arrow::MapType>(arrow_type);
+            std::unique_ptr<bodo::DataType> key_type =
+                arrow_type_to_bodo_data_type(map_type->key_type());
+            std::unique_ptr<bodo::DataType> value_type =
+                arrow_type_to_bodo_data_type(map_type->item_type());
+            return std::make_unique<bodo::MapType>(std::move(key_type),
+                                                   std::move(value_type));
+        }
+        // struct array
+        case arrow::Type::STRUCT: {
+            std::vector<std::unique_ptr<bodo::DataType>> field_types;
+            for (int i = 0; i < arrow_type->num_fields(); i++) {
+                field_types.push_back(
+                    arrow_type_to_bodo_data_type(arrow_type->field(i)->type()));
+            }
+            return std::make_unique<bodo::StructType>(std::move(field_types));
+        }
+        // all fixed-size nullable types
+        case arrow::Type::DOUBLE:
+        case arrow::Type::FLOAT:
+        case arrow::Type::BOOL:
+        case arrow::Type::UINT64:
+        case arrow::Type::INT64:
+        case arrow::Type::UINT32:
+        case arrow::Type::DATE32:
+        case arrow::Type::DURATION:
+        case arrow::Type::INT32:
+        case arrow::Type::UINT16:
+        case arrow::Type::INT16:
+        case arrow::Type::UINT8:
+        case arrow::Type::INT8: {
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()));
+        }
+        case arrow::Type::TIMESTAMP: {
+            auto arrow_timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()), -1, -1,
+                arrow_timestamp_type->timezone());
+        }
+
+        case arrow::Type::TIME32:
+        case arrow::Type::TIME64: {
+            std::shared_ptr<arrow::TimeType> time_type =
+                std::static_pointer_cast<arrow::TimeType>(arrow_type);
+            int8_t precision;
+            switch (time_type->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    precision = 0;
+                    break;
+                case arrow::TimeUnit::MILLI:
+                    precision = 3;
+                    break;
+                case arrow::TimeUnit::MICRO:
+                    precision = 6;
+                    break;
+                case arrow::TimeUnit::NANO:
+                    precision = 9;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported time unit passed to "
+                        "arrow_type_to_bodo_data_type: " +
+                        time_type->ToString());
+            }
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()), precision);
+        }
+
+        // decimal array
+        case arrow::Type::DECIMAL128: {
+            auto arrow_decimal_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()),
+                arrow_decimal_type->precision(), arrow_decimal_type->scale());
+        }
+        // dictionary-encoded array
+        case arrow::Type::DICTIONARY: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                    Bodo_CTypes::STRING);
+        }
+        // null array
+        case arrow::Type::NA: {
+            // null array is currently stored as string array in C++
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::STRING);
+        }
+        case arrow::Type::EXTENSION: {
+            // Cast the type to an ExtensionArray to access the extension name
+            auto ext_type =
+                std::static_pointer_cast<arrow::ExtensionType>(arrow_type);
+            auto name = ext_type->extension_name();
+            if (name == "arrow_timestamp_tz") {
+                return std::make_unique<bodo::DataType>(
+                    bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ);
+            }
+            [[fallthrough]];
+        }
+        default:
+            throw std::runtime_error(
+                "arrow_type_to_bodo_data_type(): Arrow type " +
+                arrow_type->ToString() + " not supported");
     }
 }
 
@@ -271,7 +467,8 @@ std::unique_ptr<DataType> DataType::copy() const {
 
     } else {
         return std::make_unique<DataType>(this->array_type, this->c_type,
-                                          this->precision, this->scale);
+                                          this->precision, this->scale,
+                                          this->timezone);
     }
 }
 
@@ -304,7 +501,7 @@ std::unique_ptr<DataType> DataType::to_nullable_type() const {
             arr_type = bodo_array_type::NULLABLE_INT_BOOL;
         }
         return std::make_unique<DataType>(arr_type, dtype, this->precision,
-                                          this->scale);
+                                          this->scale, this->timezone);
     }
 }
 
@@ -315,6 +512,9 @@ void DataType::to_string_inner(std::string& out) {
     // for decimals we want to add the precision and scale as well
     if (this->c_type == Bodo_CTypes::DECIMAL) {
         out += fmt::format("({},{})", this->precision, this->scale);
+    }
+    if (this->c_type == Bodo_CTypes::DATETIME && this->timezone.length() > 0) {
+        out += fmt::format("({})", this->timezone);
     }
     out += "]";
 }
@@ -361,6 +561,20 @@ void DataType::Serialize(std::vector<int8_t>& arr_array_types,
         arr_array_types.push_back(scale);
         arr_c_types.push_back(precision);
         arr_c_types.push_back(scale);
+    } else if (array_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               c_type == Bodo_CTypes::DATETIME) {
+        // For Datetime types, append the length of the timezone
+        // string and then the characters as int8_t.
+        if (timezone.size() > 255) {
+            throw std::runtime_error(
+                "String too long for 1-byte length prefix");
+        }
+        uint8_t len = static_cast<uint8_t>(timezone.size());
+        arr_array_types.push_back(static_cast<int8_t>(len));
+        arr_array_types.insert(arr_array_types.end(), timezone.begin(),
+                               timezone.end());
+        arr_c_types.push_back(static_cast<int8_t>(len));
+        arr_c_types.insert(arr_c_types.end(), timezone.begin(), timezone.end());
     }
 }
 
@@ -389,6 +603,125 @@ void MapType::Serialize(std::vector<int8_t>& arr_array_types,
     arr_c_types.push_back(c_type);
     key_type->Serialize(arr_array_types, arr_c_types);
     value_type->Serialize(arr_array_types, arr_c_types);
+}
+
+std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
+    if (array_type == bodo_array_type::STRING) {
+        if (c_type == Bodo_CTypes::STRING) {
+            return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
+                                                    true);
+        } else {
+            assert(c_type == Bodo_CTypes::BINARY);
+            return std::make_shared<::arrow::Field>(name, arrow::large_binary(),
+                                                    true);
+        }
+
+    } else if (array_type == bodo_array_type::DICT) {
+        return std::make_shared<::arrow::Field>(
+            name, arrow::dictionary(arrow::int32(), arrow::large_utf8()), true);
+    } else if (array_type == bodo_array_type::TIMESTAMPTZ) {
+        throw std::runtime_error("TIMESTAMPTZ is not supported in Arrow");
+    }
+
+    bool is_nullable = array_type == bodo_array_type::NULLABLE_INT_BOOL;
+    std::shared_ptr<arrow::DataType> dtype;
+    switch (c_type) {
+        case Bodo_CTypes::INT8:
+            dtype = arrow::int8();
+            break;
+        case Bodo_CTypes::UINT8:
+            dtype = arrow::uint8();
+            break;
+        case Bodo_CTypes::INT16:
+            dtype = arrow::int16();
+            break;
+        case Bodo_CTypes::UINT16:
+            dtype = arrow::uint16();
+            break;
+        case Bodo_CTypes::INT32:
+            dtype = arrow::int32();
+            break;
+        case Bodo_CTypes::UINT32:
+            dtype = arrow::uint32();
+            break;
+        case Bodo_CTypes::INT64:
+            dtype = arrow::int64();
+            break;
+        case Bodo_CTypes::UINT64:
+            dtype = arrow::uint64();
+            break;
+        case Bodo_CTypes::FLOAT32:
+            dtype = arrow::float32();
+            break;
+        case Bodo_CTypes::FLOAT64:
+            dtype = arrow::float64();
+            break;
+        case Bodo_CTypes::_BOOL:
+            dtype = arrow::boolean();
+            break;
+        case Bodo_CTypes::DATE:
+            dtype = arrow::date32();
+            break;
+        // TODO: check precision
+        case Bodo_CTypes::TIME:
+            dtype = arrow::time64(arrow::TimeUnit::NANO);
+            break;
+        case Bodo_CTypes::DATETIME:
+            if (timezone.length() > 0) {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
+            } else {
+                dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            }
+            break;
+        case Bodo_CTypes::TIMEDELTA:
+            dtype = arrow::duration(arrow::TimeUnit::NANO);
+            break;
+        case Bodo_CTypes::DECIMAL:
+            dtype = arrow::decimal128(precision, scale);
+            break;
+        default: {
+            throw std::runtime_error("ToArrowType: unsupported dtype " +
+                                     std::string(dtype_to_str(c_type)));
+        }
+    }
+
+    return std::make_shared<::arrow::Field>(name, dtype, is_nullable);
+}
+
+std::shared_ptr<::arrow::DataType> DataType::ToArrowDataType() const {
+    std::string dummy = "dummy";
+    std::shared_ptr<::arrow::Field> field = ToArrowType(dummy);
+    return field->type();
+}
+
+std::shared_ptr<::arrow::Field> ArrayType::ToArrowType(
+    std::string& name) const {
+    std::string element_name = "element";
+    return std::make_shared<::arrow::Field>(
+        name, arrow::large_list(this->value_type->ToArrowType(element_name)),
+        true);
+}
+
+std::shared_ptr<::arrow::Field> StructType::ToArrowType(
+    std::string& name) const {
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    for (size_t i = 0; i < child_types.size(); i++) {
+        std::string field_name = fmt::format("field_{}", i);
+        fields.push_back(child_types[i]->ToArrowType(field_name));
+    }
+
+    return std::make_shared<::arrow::Field>(name, arrow::struct_(fields), true);
+}
+
+std::shared_ptr<::arrow::Field> MapType::ToArrowType(std::string& name) const {
+    std::string key_name = "key";
+    std::string value_name = "value";
+
+    return std::make_shared<::arrow::Field>(
+        name,
+        arrow::map(this->key_type->ToArrowType(key_name)->type(),
+                   this->value_type->ToArrowType(value_name)),
+        true);
 }
 
 static std::unique_ptr<DataType> from_byte_helper(
@@ -425,6 +758,20 @@ static std::unique_ptr<DataType> from_byte_helper(
         uint8_t scale = arr_c_types[i + 1];
         i += 2;
         return std::make_unique<DataType>(array_type, c_type, precision, scale);
+    } else if (c_type == Bodo_CTypes::DATETIME &&
+               array_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t len = static_cast<uint8_t>(arr_array_types[i]);
+        i += 1;
+
+        if (len == 0) {
+            return std::make_unique<DataType>(array_type, c_type, -1, -1, "");
+        }
+
+        std::string timezone(reinterpret_cast<const char*>(&arr_array_types[i]),
+                             len);
+        i += len;
+
+        return std::make_unique<DataType>(array_type, c_type, -1, -1, timezone);
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
@@ -443,14 +790,30 @@ Schema::Schema(const Schema& other) {
     for (const auto& t : other.column_types) {
         this->column_types.push_back(t->copy());
     }
+    this->column_names = other.column_names;
+    this->metadata = other.metadata;
 }
 
 Schema::Schema(Schema&& other) {
     this->column_types = std::move(other.column_types);
+    this->column_names = std::move(other.column_names);
+    this->metadata = std::move(other.metadata);
 }
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
     : column_types(std::move(column_types_)) {}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+               std::vector<std::string> column_names)
+    : column_types(std::move(column_types_)), column_names(column_names) {}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+               std::vector<std::string> column_names,
+               std::shared_ptr<TableMetadata> metadata)
+    : column_types(std::move(column_types_)),
+      column_names(column_names),
+      metadata(metadata) {}
+
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
                            const size_t idx) {
     size_t i = 0;
@@ -506,35 +869,115 @@ std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() const {
     return std::pair(arr_array_types, arr_c_types);
 }
 
-std::string Schema::ToString() {
+std::string Schema::ToString(bool use_col_names) {
     std::string out;
     for (size_t i = 0; i < this->column_types.size(); i++) {
         if (i > 0) {
             out += "\n";
         }
         out += fmt::format("{}: {}", i, this->column_types[i]->ToString());
+        if (use_col_names && i < this->column_names.size()) {
+            out += " " + this->column_names[i];
+        }
     }
     return out;
 }
 
 std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
+    std::vector<std::string> col_names;
     dtypes.reserve(first_n);
+    if (this->column_names.size() > 0) {
+        col_names.reserve(first_n);
+    }
     for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
         dtypes.push_back(this->column_types[i]->copy());
+        if (this->column_names.size() > 0) {
+            col_names.push_back(this->column_names[i]);
+        }
     }
-    return std::make_unique<Schema>(std::move(dtypes));
+    return std::make_unique<Schema>(std::move(dtypes), std::move(col_names),
+                                    this->metadata);
 }
 
+template <typename T>
+    requires(std::integral<T> && !std::same_as<T, bool>)
 std::unique_ptr<Schema> Schema::Project(
-    const std::span<const int64_t> column_indices) const {
+    const std::vector<T>& column_indices) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
+    std::vector<std::string> col_names;
     dtypes.reserve(column_indices.size());
-    for (int64_t col_idx : column_indices) {
-        assert((size_t)col_idx < this->column_types.size());
-        dtypes.push_back(this->column_types[col_idx]->copy());
+    if (this->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
     }
-    return std::make_unique<Schema>(std::move(dtypes));
+    for (T col_idx : column_indices) {
+        assert(static_cast<size_t>(col_idx) < this->column_types.size());
+        dtypes.push_back(this->column_types[col_idx]->copy());
+        if (this->column_names.size() > 0) {
+            col_names.push_back(this->column_names[col_idx]);
+        }
+    }
+    return std::make_unique<Schema>(std::move(dtypes), std::move(col_names),
+                                    this->metadata);
+}
+
+// Explicit template instantiations
+template std::unique_ptr<Schema> Schema::Project<int>(
+    const std::vector<int>& column_indices) const;
+template std::unique_ptr<Schema> Schema::Project<int64_t>(
+    const std::vector<int64_t>& column_indices) const;
+template std::unique_ptr<Schema> Schema::Project<uint64_t>(
+    const std::vector<uint64_t>& column_indices) const;
+
+std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
+    if (this->column_names.size() == 0 && this->ncols() != 0) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: column names not available");
+    }
+
+    if (!this->metadata) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: metadata not available");
+    }
+
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    fields.reserve(this->column_types.size());
+
+    uint32_t idx = 0;
+    for (size_t i = 0; i < this->column_types.size(); i++) {
+        const std::unique_ptr<DataType>& data_type = this->column_types[i];
+        std::string name = fmt::format("field_{}", idx);
+        // Use table name if available
+        if (this->column_names.size() > 0) {
+            name = this->column_names[i];
+        }
+        fields.push_back(data_type->ToArrowType(name));
+        idx++;
+    }
+    std::shared_ptr<const arrow::KeyValueMetadata> arrow_metadata =
+        std::make_shared<const arrow::KeyValueMetadata>(this->metadata->keys,
+                                                        this->metadata->values);
+    return std::make_shared<arrow::Schema>(fields, arrow_metadata);
+}
+
+std::shared_ptr<Schema> Schema::FromArrowSchema(
+    std::shared_ptr<::arrow::Schema> schema) {
+    std::vector<std::unique_ptr<DataType>> column_types;
+    for (const auto& field : schema->fields()) {
+        // TODO: support dictionary-encoded arrays
+        auto bodo_type = arrow_type_to_bodo_data_type(field->type());
+        column_types.push_back(bodo_type->copy());
+    }
+    std::shared_ptr<TableMetadata> metadata;
+    if (schema->metadata()) {
+        metadata = std::make_shared<TableMetadata>(
+            schema->metadata()->keys(), schema->metadata()->values());
+    } else {
+        metadata = std::make_shared<TableMetadata>(std::vector<std::string>{},
+                                                   std::vector<std::string>{});
+    }
+    return std::make_shared<Schema>(std::move(column_types),
+                                    schema->field_names(), metadata);
 }
 
 }  // namespace bodo
@@ -639,14 +1082,6 @@ template double __int128_t::int128_to_float<double>() const;
 
 #endif
 
-std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
-                               false /*convert_timedelta_to_int64*/, "",
-                               time_unit, false /*downcast_time_ns_to_us*/,
-                               bodo::default_buffer_memory_manager());
-}
-
 std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     const int64_t size, bodo::IBufferPool* const pool,
     const std::shared_ptr<::arrow::MemoryManager> mm) {
@@ -663,84 +1098,6 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     int64_t itemsize = numpy_item_size[typ_enum];
     int64_t size = length * itemsize;
     return AllocateBodoBuffer(size, pool, std::move(mm));
-}
-
-std::string array_info::val_to_str(size_t idx) {
-    switch (dtype) {
-        case Bodo_CTypes::INT8:
-            return std::to_string(this->at<int8_t>(idx));
-        case Bodo_CTypes::UINT8:
-            return std::to_string(this->at<uint8_t>(idx));
-        case Bodo_CTypes::INT32:
-            return std::to_string(this->at<int32_t>(idx));
-        case Bodo_CTypes::UINT32:
-            return std::to_string(this->at<uint32_t>(idx));
-        case Bodo_CTypes::INT64:
-            return std::to_string(this->at<int64_t>(idx));
-        case Bodo_CTypes::UINT64:
-            return std::to_string(this->at<uint64_t>(idx));
-        case Bodo_CTypes::FLOAT32:
-            return std::to_string(this->at<float>(idx));
-        case Bodo_CTypes::FLOAT64:
-            return std::to_string(this->at<double>(idx));
-        case Bodo_CTypes::INT16:
-            return std::to_string(this->at<int16_t>(idx));
-        case Bodo_CTypes::UINT16:
-            return std::to_string(this->at<uint16_t>(idx));
-        case Bodo_CTypes::STRING: {
-            if (this->arr_type == bodo_array_type::DICT) {
-                // In case of dictionary encoded string array
-                // get the string value by indexing into the dictionary
-                return this->child_arrays[0]->val_to_str(
-                    this->child_arrays[1]
-                        ->at<dict_indices_t,
-                             bodo_array_type::NULLABLE_INT_BOOL>(idx));
-            }
-            offset_t* offsets =
-                (offset_t*)this->data2<bodo_array_type::STRING>();
-            return std::string(
-                this->data1<bodo_array_type::STRING>() + offsets[idx],
-                offsets[idx + 1] - offsets[idx]);
-        }
-        case Bodo_CTypes::DATE: {
-            int64_t day = this->at<int32_t>(idx);
-            int64_t year = days_to_yearsdays(&day);
-            int64_t month;
-            get_month_day(year, day, &month, &day);
-            std::string date_str;
-            date_str.reserve(10);
-            date_str += std::to_string(year) + "-";
-            if (month < 10) {
-                date_str += "0";
-            }
-            date_str += std::to_string(month) + "-";
-            if (day < 10) {
-                date_str += "0";
-            }
-            date_str += std::to_string(day);
-            return date_str;
-        }
-        case Bodo_CTypes::_BOOL:
-            bool val;
-            if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                val = GetBit(
-                    (uint8_t*)this->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
-                    idx);
-            } else {
-                val = this->at<bool>(idx);
-            }
-            if (val) {
-                return "True";
-            } else {
-                return "False";
-            }
-        default: {
-            std::vector<char> error_msg(100);
-            snprintf(error_msg.data(), error_msg.size(),
-                     "val_to_str not implemented for dtype %d", dtype);
-            throw std::runtime_error(error_msg.data());
-        }
-    }
 }
 
 std::unique_ptr<array_info> alloc_numpy(
@@ -881,7 +1238,7 @@ std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
 std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
     bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    const std::shared_ptr<::arrow::MemoryManager> mm, std::string timezone) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size;
     if (typ_enum == Bodo_CTypes::_BOOL) {
@@ -899,7 +1256,9 @@ std::unique_ptr<array_info> alloc_nullable_array(
     return std::make_unique<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
-            {std::move(buffer), std::move(buffer_bitmask)}));
+            {std::move(buffer), std::move(buffer_bitmask)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, -1, false, false,
+        false, 0, std::vector<std::string>({}), timezone);
 }
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
@@ -1276,78 +1635,6 @@ std::unique_ptr<array_info> alloc_array_like(
             out_arr->child_arrays.front() = in_arr->child_arrays.front();
         }
         return out_arr;
-    }
-}
-
-int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
-    int64_t n_rows = arr->length();
-    int64_t n_bytes = (n_rows + 7) >> 3;
-#if OFFSET_BITWIDTH == 32
-    if (arr->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_arr =
-            std::dynamic_pointer_cast<arrow::ListArray>(arr);
-#else
-    if (arr->type_id() == arrow::Type::LARGE_LIST) {
-        std::shared_ptr<arrow::LargeListArray> list_arr =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(arr);
-#endif
-        int64_t siz_offset = sizeof(offset_t) * (n_rows + 1);
-        int64_t siz_null_bitmap = n_bytes;
-        std::shared_ptr<arrow::Array> arr_values = list_arr->values();
-        return siz_offset + siz_null_bitmap +
-               arrow_array_memory_size(arr_values);
-    }
-    if (arr->type_id() == arrow::Type::MAP) {
-        std::shared_ptr<arrow::MapArray> map_arr =
-            std::dynamic_pointer_cast<arrow::MapArray>(arr);
-        int64_t siz_offset = sizeof(uint32_t) * (n_rows + 1);
-        int64_t siz_null_bitmap = n_bytes;
-        int64_t total_siz = siz_offset + siz_null_bitmap;
-        total_siz += arrow_array_memory_size(map_arr->keys());
-        total_siz += arrow_array_memory_size(map_arr->items());
-        return total_siz;
-    }
-    if (arr->type_id() == arrow::Type::STRUCT) {
-        std::shared_ptr<arrow::StructArray> struct_arr =
-            std::dynamic_pointer_cast<arrow::StructArray>(arr);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
-        int64_t num_fields = struct_type->num_fields();
-        int64_t total_siz = n_bytes;
-        for (int64_t i_field = 0; i_field < num_fields; i_field++) {
-            total_siz += arrow_array_memory_size(struct_arr->field(i_field));
-        }
-        return total_siz;
-    }
-#if OFFSET_BITWIDTH == 32
-    if (arr->type_id() == arrow::Type::STRING) {
-        std::shared_ptr<arrow::StringArray> string_array =
-            std::dynamic_pointer_cast<arrow::StringArray>(arr);
-#else
-    if (arr->type_id() == arrow::Type::LARGE_STRING) {
-        std::shared_ptr<arrow::LargeStringArray> string_array =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
-#endif
-        int64_t siz_offset = sizeof(offset_t) * (n_rows + 1);
-        int64_t siz_null_bitmap = n_bytes;
-        int64_t siz_character = string_array->value_offset(n_rows);
-        return siz_offset + siz_null_bitmap + siz_character;
-    } else {
-        int64_t siz_null_bitmap = n_bytes;
-        std::shared_ptr<arrow::PrimitiveArray> prim_arr =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        std::shared_ptr<arrow::DataType> arrow_type = prim_arr->type();
-        int64_t siz_primitive_data;
-        if (arrow_type->id() == arrow::Type::BOOL) {
-            // Arrow boolean arrays store 1 bit per boolean
-            siz_primitive_data = n_bytes;
-        } else {
-            Bodo_CTypes::CTypeEnum bodo_typ =
-                arrow_to_bodo_type(prim_arr->type()->id());
-            int64_t siz_typ = numpy_item_size[bodo_typ];
-            siz_primitive_data = siz_typ * n_rows;
-        }
-        return siz_null_bitmap + siz_primitive_data;
     }
 }
 
@@ -1852,72 +2139,3 @@ std::string get_bodo_version() {
     Py_DECREF(version);
     return result;
 }
-
-std::string decode_zstd(std::string blob) {
-    auto const est_decomp_size =
-        ZSTD_getFrameContentSize(blob.data(), blob.size());
-    std::string decomp_buffer{};
-    decomp_buffer.resize(est_decomp_size);
-    size_t const decomp_size = ZSTD_decompress(
-        (void*)decomp_buffer.data(), est_decomp_size, blob.data(), blob.size());
-    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
-        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
-        throw std::runtime_error("Malformed ZSTD decompression");
-    }
-    return decomp_buffer;
-}
-
-extern "C" {
-
-PyMODINIT_FUNC PyInit_ext(void) {
-    PyObject* m;
-    MOD_DEF(m, "ext", "No docs", nullptr);
-    if (m == nullptr) {
-        return nullptr;
-    }
-
-    bodo_common_init();
-
-    SetAttrStringFromPyInit(m, hdist);
-    SetAttrStringFromPyInit(m, hstr_ext);
-    SetAttrStringFromPyInit(m, decimal_ext);
-    SetAttrStringFromPyInit(m, quantile_alg);
-    SetAttrStringFromPyInit(m, lateral_cpp);
-    SetAttrStringFromPyInit(m, theta_sketches);
-    SetAttrStringFromPyInit(m, puffin_file);
-    SetAttrStringFromPyInit(m, lead_lag);
-    SetAttrStringFromPyInit(m, crypto_funcs);
-    SetAttrStringFromPyInit(m, hdatetime_ext);
-    SetAttrStringFromPyInit(m, hio);
-    SetAttrStringFromPyInit(m, array_ext);
-    SetAttrStringFromPyInit(m, s3_reader);
-    SetAttrStringFromPyInit(m, hdfs_reader);
-#ifndef NO_HDF5
-    SetAttrStringFromPyInit(m, _hdf5);
-#endif
-    SetAttrStringFromPyInit(m, arrow_cpp);
-    SetAttrStringFromPyInit(m, csv_cpp);
-    SetAttrStringFromPyInit(m, json_cpp);
-    SetAttrStringFromPyInit(m, memory_budget_cpp);
-    SetAttrStringFromPyInit(m, stream_join_cpp);
-    SetAttrStringFromPyInit(m, stream_groupby_cpp);
-    SetAttrStringFromPyInit(m, stream_window_cpp);
-    SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
-    SetAttrStringFromPyInit(m, stream_sort_cpp);
-    SetAttrStringFromPyInit(m, table_builder_cpp);
-    SetAttrStringFromPyInit(m, query_profile_collector_cpp);
-    SetAttrStringFromPyInit(m, uuid_cpp);
-#ifdef BUILD_WITH_V8
-    SetAttrStringFromPyInit(m, javascript_udf_cpp);
-#endif
-
-#ifdef IS_TESTING
-    SetAttrStringFromPyInit(m, test_cpp);
-#endif
-
-    SetAttrStringFromPyInit(m, listagg);
-    SetAttrStringFromPyInit(m, memory_cpp);
-    return m;
-}
-
-} /* extern "C" */

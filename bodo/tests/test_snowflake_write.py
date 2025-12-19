@@ -2,6 +2,8 @@
 Tests for writing to Snowflake using Python APIs
 """
 
+from __future__ import annotations
+
 import datetime
 import io
 import os
@@ -12,18 +14,14 @@ import uuid
 from decimal import Decimal
 from tempfile import TemporaryDirectory
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
-import bodo.io.snowflake
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.io.snowflake_write import (
-    snowflake_writer_append_table,
-    snowflake_writer_init,
-)
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -36,17 +34,13 @@ from bodo.tests.utils import (
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
     get_snowflake_connection_string,
-    get_start_end,
     pytest_mark_one_rank,
     pytest_one_rank,
     pytest_snowflake,
-    reduce_sum,
-    run_rank0,
     snowflake_cred_env_vars_present,
     temp_env_override,
 )
 from bodo.utils.testing import ensure_clean_snowflake_table
-from bodo.utils.typing import BodoWarning
 
 pytestmark = pytest_snowflake
 
@@ -58,7 +52,12 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     """
     Tests creating an internal stage within Snowflake
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import create_internal_stage, snowflake_connect
+    from bodo.tests.utils_jit import reduce_sum
+
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -68,7 +67,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_create_internal_stage(cursor):
-        with bodo.objmode(stage_name="unicode_type"):
+        with numba.objmode(stage_name="unicode_type"):
             stage_name = create_internal_stage(cursor, is_temporary=is_temporary)
         return stage_name
 
@@ -116,7 +115,12 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     """
     Tests dropping an internal stage within Snowflake
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import drop_internal_stage, snowflake_connect
+    from bodo.tests.utils_jit import reduce_sum
+
+    # initialize global node_ranks before compiling to avoid hangs
+    bodo.get_nodes_first_ranks()
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -126,7 +130,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_drop_internal_stage(cursor, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             drop_internal_stage(cursor, stage_name)
 
     bodo_impl = bodo.jit(distributed=False)(test_impl_drop_internal_stage)
@@ -179,7 +183,9 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     """
     Tests uploading files to Snowflake internal stage using PUT command
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import do_upload_and_cleanup, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -189,7 +195,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_do_upload_and_cleanup(cursor, chunk_path, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             do_upload_and_cleanup(cursor, 0, chunk_path, stage_name)
 
     bodo_impl = bodo.jit()(test_impl_do_upload_and_cleanup)
@@ -265,8 +271,9 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
 
         # Use GET to fetch all uploaded files
         with TemporaryDirectory() as tmp_folder:
+            tmp_folder_path = tmp_folder.replace("\\", "/")
             get_stage_sql = (
-                f"GET @\"{stage_name}\" 'file://{tmp_folder}' "
+                f"GET @\"{stage_name}\" 'file://{tmp_folder_path}' "
                 f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
@@ -305,7 +312,9 @@ def test_snowflake_write_create_table_handle_exists():
     """
     Test Snowflake write table creation, both with and without a pre-existing table
     """
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.snowflake import create_table_handle_exists, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -317,7 +326,7 @@ def test_snowflake_write_create_table_handle_exists():
     def test_impl_create_table_handle_exists(
         cursor, location, sf_schema, if_exists, table_type=""
     ):
-        with bodo.objmode():
+        with numba.objmode():
             create_table_handle_exists(
                 cursor, location, sf_schema, if_exists, table_type
             )
@@ -384,8 +393,9 @@ def test_snowflake_write_create_table_handle_exists():
         df_input = df_in.iloc[start:end]
         df_input.to_parquet(df_path)
 
+        df_path_path = df_path.replace("\\", "/")
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -524,7 +534,10 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     """
     Tests executing COPY_INTO into a Snowflake table from internal stage
     """
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.io.snowflake
     from bodo.io.snowflake import execute_copy_into, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -534,7 +547,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema, df_in):
-        with bodo.objmode(
+        with numba.objmode(
             nsuccess="int64",
             nchunks="int64",
             nrows="int64",
@@ -621,8 +634,9 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
 
         bodo.jit(distributed=False)(test_write)(df_input)
 
+        df_path_tmp = df_path.replace("\\", "/")
         upload_put_sql = (
-            f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path_tmp}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql.test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -781,7 +795,13 @@ def test_to_sql_table_name(table_names):
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize(
     "sf_write_use_put",
-    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+    [
+        pytest.param(True, id="with-put"),
+        pytest.param(
+            False,
+            id="no-put",
+        ),
+    ],
 )
 @pytest.mark.parametrize(
     "snowflake_user",
@@ -802,10 +822,9 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
 
-    import platform
-
     import bodo
     import bodo.io.snowflake
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     rng = np.random.default_rng(5)
     letters = np.array(list(string.ascii_letters))
@@ -836,27 +855,7 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
         with ensure_clean_snowflake_table(conn) as name:
-            # If using a Azure Snowflake account, the stage will be ADLS backed, so
-            # when writing to it directly, we need a proper ADLS/Hadoop setup
-            # and the bodo_azurefs_sas_token_provider library, both of which are only
-            # done for Linux. So we verify that it shows user the appropriate warning
-            # about falling back to the PUT method.
-            if (
-                snowflake_user == 3
-                and (not sf_write_use_put)
-                and (platform.system() != "Linux")
-            ):
-                if bodo.get_rank() == 0:
-                    # Warning is only raised on rank 0
-                    with pytest.warns(
-                        BodoWarning,
-                        match="Falling back to PUT command for upload for now.",
-                    ):
-                        test_write(df, name, conn, schema)
-                else:
-                    test_write(df, name, conn, schema)
-            else:
-                test_write(df, name, conn, schema)
+            test_write(df, name, conn, schema)
 
             bodo.barrier()
             passed = 1
@@ -890,6 +889,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
     This compares the dataframe Bodo writes and reads vs.
     the dataframe Pandas writes and reads
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P1"
     py_tablename = "PY_DT_P1"
@@ -1013,6 +1013,8 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         # 3. Decimal. I don't know why but probably precision difference.
         # 4. Others have datatype differences.
     """
+    import bodo.types
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P2"
     db = "TEST_DB"
@@ -1049,43 +1051,43 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             # with type Time: did not recognize Python value type when inferring an Arrow data type'
             # pa.time32("s")
             "time_col_p0": [
-                bodo.Time(12, 0, precision=0),
-                bodo.Time(1, 1, 3, precision=0),
-                bodo.Time(2, precision=0),
-                bodo.Time(12, 0, precision=0),
-                bodo.Time(5, 6, 3, precision=0),
-                bodo.Time(9, precision=0),
-                bodo.Time(11, 19, 34, precision=0),
+                bodo.types.Time(12, 0, precision=0),
+                bodo.types.Time(1, 1, 3, precision=0),
+                bodo.types.Time(2, precision=0),
+                bodo.types.Time(12, 0, precision=0),
+                bodo.types.Time(5, 6, 3, precision=0),
+                bodo.types.Time(9, precision=0),
+                bodo.types.Time(11, 19, 34, precision=0),
             ],
             # pa.time32("ms")
             "time_col_p3": [
-                bodo.Time(12, 0, precision=3),
-                bodo.Time(1, 1, 3, precision=3),
-                bodo.Time(2, precision=3),
-                bodo.Time(12, 0, precision=3),
-                bodo.Time(6, 7, 13, precision=3),
-                bodo.Time(2, precision=3),
-                bodo.Time(17, 1, 3, precision=3),
+                bodo.types.Time(12, 0, precision=3),
+                bodo.types.Time(1, 1, 3, precision=3),
+                bodo.types.Time(2, precision=3),
+                bodo.types.Time(12, 0, precision=3),
+                bodo.types.Time(6, 7, 13, precision=3),
+                bodo.types.Time(2, precision=3),
+                bodo.types.Time(17, 1, 3, precision=3),
             ],
             # # pa.time64("us")
             "time_col_p6": [
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(5, 11, 53, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(5, 11, 53, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
             ],
             # pa.time64("ns"). Default precision=9
             "time_col_p9": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3),
-                bodo.Time(2),
-                bodo.Time(12, 1),
-                bodo.Time(5, 6, 3),
-                bodo.Time(9),
-                bodo.Time(11, 19, 34),
+                bodo.types.Time(12, 0),
+                bodo.types.Time(1, 1, 3),
+                bodo.types.Time(2),
+                bodo.types.Time(12, 1),
+                bodo.types.Time(5, 6, 3),
+                bodo.types.Time(9),
+                bodo.types.Time(11, 19, 34),
             ],
             "timestamp_ltz_col": [
                 pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai"),
@@ -1120,13 +1122,13 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             # SF ignores nanoseconds precisions with COPY INTO FROM PARQUET-FILES
             # See for more information
             df["time_col_p9"] = [
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(12, 1, precision=6),
-                bodo.Time(5, 6, 3, precision=6),
-                bodo.Time(9, precision=6),
-                bodo.Time(11, 19, 34, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(12, 1, precision=6),
+                bodo.types.Time(5, 6, 3, precision=6),
+                bodo.types.Time(9, precision=6),
+                bodo.types.Time(11, 19, 34, precision=6),
             ]
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
@@ -1241,6 +1243,8 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
 
 def test_snowflake_to_sql_nullarray(memory_leak_check):
     """Tests that df.to_sql works with NullArrayType."""
+    import bodo.libs.null_arr_ext
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P4"
     db = "TEST_DB"
@@ -1339,6 +1343,7 @@ def test_snowflake_to_sql_colname_case(memory_leak_check):
     """
     Tests that df.to_sql works with different upper/lower case of column name
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     tablename = "TEST_CASE"
     db = "TEST_DB"
@@ -1436,6 +1441,8 @@ def test_to_sql_snowflake_nulls_in_dict(memory_leak_check):
     We also explicitly test the table-format case since the codegen
     for it is slightly different.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     S = pa.DictionaryArray.from_arrays(
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0, 2, 3, 1] * 2, dtype=np.int32),
         pd.Series(["B", None, "A", None]),
@@ -1559,7 +1566,10 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
     "sf_write_use_put",
     [
         pytest.param(True, id="with-put"),
-        pytest.param(False, id="no-put"),
+        pytest.param(
+            False,
+            id="no-put",
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -1601,6 +1611,18 @@ def test_batched_write_agg(
     Test a simple use of batched Snowflake writes by reading a table, writing
     the results, then reading again
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.arrow_reader import (
+        arrow_reader_del,
+        read_arrow_next,
+    )
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+    from bodo.spawn.utils import run_rank0
+    from bodo.tests.utils_jit import reduce_sum
+
     comm = MPI.COMM_WORLD
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
@@ -1886,6 +1908,8 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
+    from bodo.spawn.utils import run_rank0
+
     if is_variant and write_type == "replace":
         pytest.skip("When replacing a table columns are never written as variant")
 
@@ -1893,6 +1917,10 @@ def test_batched_write_nested_array(
         column_type = "variant"
 
     from bodo.io.snowflake import snowflake_connect
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
 
     conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
     kept_cols = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
@@ -1980,6 +2008,12 @@ def test_write_with_string_precision(memory_leak_check):
     Tests streaming write using string column precisions to specify the maximum
     number of bytes for each column.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+
     global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
     global_2 = bodo.utils.typing.MetaType((0, 1, 2))
     global_3 = bodo.utils.typing.MetaType((8, -1, 3))
@@ -2046,6 +2080,12 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     Tests streaming write using timestamp/time column precisions to specify the
     precision for each column.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+
     global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E", "F"))
     global_2 = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5))
     # Note: BodoSQL shouldn't generate -1, but we check just in case.
@@ -2083,9 +2123,11 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
                 A4 = bodo.utils.conversion.make_replicated_array(
                     pd.Timestamp("01-11-2023", tz="US/Pacific"), 50
                 )
-                A5 = bodo.utils.conversion.make_replicated_array(bodo.Time(2, 3, 4), 50)
+                A5 = bodo.utils.conversion.make_replicated_array(
+                    bodo.types.Time(2, 3, 4), 50
+                )
                 A6 = bodo.utils.conversion.make_replicated_array(
-                    bodo.Time(2, 3, 4, 5, precision=6), 50
+                    bodo.types.Time(2, 3, 4, 5, precision=6), 50
                 )
                 df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
                     (A1, A2, A3, A4, A5, A6),
@@ -2144,6 +2186,9 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
     Tests that reading and writing a number column that requires > int64 but
     is smaller than Number(38, 0) is read and written correctly by Bodo.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.snowflake_write import snowflake_writer_init
+
     snowflake_user = 1
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -2262,6 +2307,9 @@ def test_create_table_with_comments(memory_leak_check):
     Tests using streaming Snowflake write functions to create a new table
     with table comments and column comments.
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.snowflake_write import snowflake_writer_init
+
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
 

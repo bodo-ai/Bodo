@@ -5,7 +5,8 @@ ci:
 
 # We should never format the copied Calcite files, in order to avoid massive diffs when Calcite is updated.
 # See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
-exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources
+# Also exclude vendored duckdb code
+exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/|^BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources|^bodo/pandas/vendor/
 repos:
   # Basics
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -18,21 +19,21 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.4
+    rev: v0.12.7
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
       - id: ruff-format
   # Cython
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.16.6
+    rev: v0.16.7
     hooks:
       - id: cython-lint
         args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
       - id: double-quote-cython-strings
   # Java and Kotlin
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.14.0
+    rev: v2.15.0
     hooks:
       - id: pretty-format-java
         args: ["--autofix", "--google-java-formatter-version", "1.24.0"]
@@ -40,7 +41,7 @@ repos:
         args: ["--autofix"]
   # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v19.1.7
+    rev: v20.1.8
     hooks:
       - id: clang-format
         types_or: [c++]

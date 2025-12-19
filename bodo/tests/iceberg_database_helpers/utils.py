@@ -1,5 +1,7 @@
-import os
+from __future__ import annotations
+
 import shutil
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import pandas as pd
@@ -25,65 +27,153 @@ class SortField(NamedTuple):
 # All spark instances must share the same set of jars - this is because
 # `spark.jars.packages` is not a run time option and cannot be modified.
 SPARK_JAR_PACKAGES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
-    "software.amazon.awssdk:bundle:2.29.19",
-    "software.amazon.awssdk:url-connection-client:2.29.19",
+    "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0",
+    "software.amazon.awssdk:bundle:2.34.5",
+    "software.amazon.awssdk:url-connection-client:2.34.5",
+    "org.apache.iceberg:iceberg-azure-bundle:1.10.0",
 ]
 
 
-def get_spark(path: str = ".") -> SparkSession:
+@dataclass(frozen=True)
+class SparkIcebergCatalog:
+    catalog_name: str
+    default_schema: str | None = field(default=None)
+
+
+@dataclass(frozen=True)
+class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
+    catalog_name: str = "hadoop_prod"
+    path: str = None
+
+
+@dataclass(frozen=True)
+class SparkRestIcebergCatalog(SparkIcebergCatalog):
+    uri: str = None
+    credential: str = None
+    warehouse: str = None
+
+
+@dataclass(frozen=True)
+class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
+    pass
+
+
+@dataclass(frozen=True)
+class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
+    region: str = field(default="us-east-2")
+
+
+def get_spark_catalog_for_connection(connection: tuple[str, str, str]):
+    uri, warehouse, credential = connection
+    if "aws" in warehouse:
+        return SparkAwsIcebergCatalog(
+            catalog_name=warehouse,
+            uri=uri,
+            warehouse=warehouse,
+            credential=credential,
+        )
+    elif "azure" in warehouse:
+        return SparkAzureIcebergCatalog(
+            catalog_name=warehouse,
+            uri=uri,
+            warehouse=warehouse,
+            credential=credential,
+        )
+    else:
+        raise ValueError(f"Unknown warehouse: {warehouse}")
+
+
+# This should probably be wrapped into a class or fixture in the future
+spark_catalogs: set[SparkIcebergCatalog] = set()
+spark: SparkSession | None = None
+
+
+def get_spark(
+    catalog: SparkIcebergCatalog = SparkFilesystemIcebergCatalog(
+        catalog_name="hadoop_prod", path="."
+    ),
+) -> SparkSession:
+    global spark
+    global spark_catalogs
     import bodo
 
     # Only run Spark on one rank to run faster and avoid Spark issues
     if bodo.get_rank() != 0:
         return None
 
+    builder = SparkSession.builder.appName("spark")
+    builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
+    builder.config("spark.sql.execution.arrow.enabled", "true")
+    builder.config("spark.sql.ansi.enabled", "false")
+    spark = builder.getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
+
+    def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
+        if isinstance(catalog, SparkFilesystemIcebergCatalog):
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}",
+                "org.apache.iceberg.spark.SparkCatalog",
+            )
+            builder.config(f"spark.sql.catalog.{catalog.catalog_name}.type", "hadoop")
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.warehouse", catalog.path
+            )
+        elif isinstance(catalog, SparkRestIcebergCatalog):
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}",
+                "org.apache.iceberg.spark.SparkCatalog",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.catalog-impl",
+                "org.apache.iceberg.rest.RESTCatalog",
+            )
+            builder.config(f"spark.sql.catalog.{catalog.catalog_name}.uri", catalog.uri)
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.credential",
+                catalog.credential,
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.warehouse",
+                catalog.warehouse,
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.scope",
+                "PRINCIPAL_ROLE:ALL",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
+                "vended-credentials",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
+                "true",
+            )
+        if isinstance(catalog, SparkAwsIcebergCatalog):
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.client.region",
+                catalog.region,
+            )
+        if catalog.default_schema:
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.default-namespace",
+                catalog.default_schema,
+            )
+
     def do_get_spark():
         builder = SparkSession.builder.appName("spark")
         builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
-
-        builder.config(
-            "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
-        )
-        builder.config("spark.sql.catalog.hadoop_prod.type", "hadoop")
-        builder.config("spark.sql.catalog.hadoop_prod.warehouse", path)
-        builder.config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
         # NOTE: This is deprecated, but some Iceberg tests with nested data types
         # don't work without it. Let's try to avoid using Spark for those tests
         # as much as possible.
         builder.config("spark.sql.execution.arrow.enabled", "true")
+        builder.config("spark.sql.ansi.enabled", "false")
+        builder.config(
+            "spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        )
 
-        # Note that we need to have all catalogs registered on the same instance
-        # because otherwise spark will cache the instance, and not pick up new
-        # configuration changes.
-        # Tabular's platform seems to be dead but we will reuse this for general
-        # rest catalog testing.
-        if "TABULAR_CREDENTIAL" in os.environ and False:
-            # TODO(aneesh) this is mildly sketchy - ideally a tabular spark
-            # instance should be provided as pytest fixture
-            from bodo.tests.conftest import get_tabular_connection
-
-            rest_uri, tabular_warehouse, tabular_credential = get_tabular_connection(
-                os.getenv("TABULAR_CREDENTIAL")
-            )
-            builder.config(
-                "spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog"
-            )
-            builder.config(
-                "spark.sql.catalog.rest_prod.catalog-impl",
-                "org.apache.iceberg.rest.RESTCatalog",
-            )
-            builder.config("spark.sql.catalog.rest_prod.uri", rest_uri)
-            builder.config("spark.sql.catalog.rest_prod.credential", tabular_credential)
-            builder.config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
-            builder.config("spark.sql.defaultCatalog", "rest_prod")
-            builder.config(
-                "spark.sql.catalog.rest_prod.io-impl",
-                "org.apache.iceberg.aws.s3.S3FileIO",
-            )
+        for catalog in spark_catalogs:
+            add_catalog(builder, catalog)
 
         spark = builder.getOrCreate()
 
@@ -95,15 +185,24 @@ def get_spark(path: str = ".") -> SparkSession:
 
         return spark
 
-    try:
-        return do_get_spark()
-    except Exception:
-        # Clear cache and try again - note that this is only for use in CI.
-        # Sometimes packages fail to download - if this happens to you locally,
-        # clear your cache manually. The path is in the logs.
-        shutil.rmtree("/root/.ivy2", ignore_errors=True)
-        shutil.rmtree("/root/.m2/repository", ignore_errors=True)
-    return do_get_spark()
+    if catalog not in spark_catalogs:
+        # Clear the spark instance and reinitialize
+        # we can't add a new catalog to an existing spark instance
+        if spark is not None:
+            spark.stop()
+        spark_catalogs.add(catalog)
+
+        try:
+            spark = do_get_spark()
+        except Exception:
+            # Clear cache and try again - note that this is only for use in CI.
+            # Sometimes packages fail to download - if this happens to you locally,
+            # clear your cache manually. The path is in the logs.
+            shutil.rmtree("/root/.ivy2", ignore_errors=True)
+            shutil.rmtree("/root/.m2/repository", ignore_errors=True)
+            spark = do_get_spark()
+    spark.catalog.setCurrentCatalog(catalog.catalog_name)
+    return spark
 
 
 def transform_str(col_name: str, transform: str, val: int) -> str:
@@ -158,7 +257,7 @@ def append_to_iceberg_table(
 
 
 def create_iceberg_table(
-    df: pd.DataFrame,
+    df: pd.DataFrame | None,
     sql_schema: list[tuple[str, str, bool]],
     table_name: str,
     spark: SparkSession | None = None,
@@ -213,6 +312,8 @@ def create_iceberg_table(
             WRITE ORDERED BY {", ".join(sort_defs)}
         """
         )
-    append_to_iceberg_table(df, sql_schema, table_name, spark)
+
+    if df is not None:
+        append_to_iceberg_table(df, sql_schema, table_name, spark)
 
     return table_name

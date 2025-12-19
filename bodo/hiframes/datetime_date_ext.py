@@ -1,5 +1,7 @@
 """Numba extension support for datetime.date objects and their arrays."""
 
+from __future__ import annotations
+
 import datetime
 import operator
 import warnings
@@ -52,8 +54,6 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
-ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
-ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
 ll.add_symbol("get_isocalendar", hdatetime_ext.get_isocalendar)
 ll.add_symbol("get_days_from_date", hdatetime_ext.get_days_from_date)
 
@@ -99,7 +99,7 @@ class DatetimeAttribute(AttributeTemplate):
 # corresponding to this Date object. This is useful
 # for cases such as comparison operators where we
 # need all 3 values.
-@overload_attribute(DatetimeDateType, "_ymd")
+@overload_attribute(DatetimeDateType, "_ymd", jit_options={"cache": True})
 def overload_datetime_date_get_ymd(a):
     def get_ymd(a):  # pragma: no cover
         return _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -107,7 +107,7 @@ def overload_datetime_date_get_ymd(a):
     return get_ymd
 
 
-@overload_attribute(DatetimeDateType, "year")
+@overload_attribute(DatetimeDateType, "year", jit_options={"cache": True})
 def overload_datetime_date_get_year(a):
     def get_year(a):  # pragma: no cover
         year, _, _ = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -116,7 +116,7 @@ def overload_datetime_date_get_year(a):
     return get_year
 
 
-@overload_attribute(DatetimeDateType, "month")
+@overload_attribute(DatetimeDateType, "month", jit_options={"cache": True})
 def overload_datetime_date_get_month(a):
     def get_month(a):  # pragma: no cover
         _, month, _ = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -125,7 +125,7 @@ def overload_datetime_date_get_month(a):
     return get_month
 
 
-@overload_attribute(DatetimeDateType, "day")
+@overload_attribute(DatetimeDateType, "day", jit_options={"cache": True})
 def overload_datetime_date_get_day(a):
     def get_day(a):  # pragma: no cover
         _, _, day = _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
@@ -260,20 +260,20 @@ _DAYS_BEFORE_MONTH = np.array(
 )
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _is_leap(year):  # pragma: no cover
     "year -> 1 if leap year, else 0."
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_before_year(year):  # pragma: no cover
     "year -> number of days before January 1st of year."
     y = year - 1
     return y * 365 + y // 4 - y // 100 + y // 400
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_in_month(year, month):  # pragma: no cover
     "year, month -> number of days in that month in that year."
     if month == 2 and _is_leap(year):
@@ -281,13 +281,13 @@ def _days_in_month(year, month):  # pragma: no cover
     return _DAYS_IN_MONTH[month]
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _days_before_month(year, month):  # pragma: no cover
     "year, month -> number of days in year preceding first day of month."
     return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _day_of_year(year, month, day):  # pragma: no cover
     "year, month, day -> how many days into the year is it"
     days = day
@@ -301,7 +301,7 @@ _DI100Y = _days_before_year(101)  #    "    "   "   " 100   "
 _DI4Y = _days_before_year(5)  #    "    "   "   "   4   "
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _ymd2ord(year, month, day):  # pragma: no cover
     "year, month, day -> ordinal, considering 01-Jan-0001 as day 1."
     # If we pass in 2/29 on a non-leap-year, decrement to 2/28
@@ -310,7 +310,7 @@ def _ymd2ord(year, month, day):  # pragma: no cover
     return _days_before_year(year) + _days_before_month(year, month) + day
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _ord2ymd(n):  # pragma: no cover
     "ordinal -> (year, month, day), considering 01-Jan-0001 as day 1."
 
@@ -371,7 +371,7 @@ def _ord2ymd(n):  # pragma: no cover
     return year, month, n + 1
 
 
-@register_jitable
+@register_jitable(cache=True)
 def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
@@ -415,18 +415,18 @@ def get_isocalendar(typingctx, dt_year, dt_month, dt_day):
 types.datetime_date_type = datetime_date_type
 
 
-@register_jitable
+@register_jitable(cache=True)
 def today_impl():  # pragma: no cover
     """Internal call to support datetime.date.today().
     Untyped pass replaces datetime.date.today() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_date_type"):
+    with numba.objmode(d="datetime_date_type"):
         d = datetime.date.today()
     return d
 
 
-@register_jitable
+@register_jitable(cache=True)
 def today_rank_consistent():  # pragma: no cover
     """Internal wrapper around today_impl that is used to ensure all
     ranks return the same value.
@@ -439,7 +439,7 @@ def today_rank_consistent():  # pragma: no cover
     return bodo.libs.distributed_api.bcast_scalar(d)
 
 
-@register_jitable
+@register_jitable(cache=True)
 def fromordinal_impl(n):  # pragma: no cover
     """Internal call to support datetime.date.fromordinal().
     Untyped pass replaces datetime.date.fromordinal() with this call since class methods are
@@ -460,7 +460,7 @@ def str_2d(a):  # pragma: no cover
     return res
 
 
-@overload_method(DatetimeDateType, "__str__")
+@overload_method(DatetimeDateType, "__str__", jit_options={"cache": True})
 def overload_date_str(val):
     def impl(val):  # pragma: no cover
         year, month, day = val._ymd
@@ -469,7 +469,7 @@ def overload_date_str(val):
     return impl
 
 
-@overload_method(DatetimeDateType, "replace")
+@overload_method(DatetimeDateType, "replace", jit_options={"cache": True})
 def replace_overload(date, year=None, month=None, day=None):
     if not is_overload_none(year) and not is_overload_int(year):
         raise BodoError("date.replace(): year must be an integer")
@@ -488,7 +488,9 @@ def replace_overload(date, year=None, month=None, day=None):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "toordinal", no_unliteral=True)
+@overload_method(
+    DatetimeDatetimeType, "toordinal", no_unliteral=True, jit_options={"cache": True}
+)
 def toordinal(dt):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -501,7 +503,9 @@ def toordinal(dt):
     return impl
 
 
-@overload_method(DatetimeDateType, "toordinal", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "toordinal", no_unliteral=True, jit_options={"cache": True}
+)
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -514,8 +518,12 @@ def toordinal(date):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "weekday", no_unliteral=True)
-@overload_method(DatetimeDateType, "weekday", no_unliteral=True)
+@overload_method(
+    DatetimeDatetimeType, "weekday", no_unliteral=True, jit_options={"cache": True}
+)
+@overload_method(
+    DatetimeDateType, "weekday", no_unliteral=True, jit_options={"cache": True}
+)
 def weekday(date):
     "Return day of the week, where Monday == 0 ... Sunday == 6."
 
@@ -525,7 +533,9 @@ def weekday(date):
     return impl
 
 
-@overload_method(DatetimeDateType, "isocalendar", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "isocalendar", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_pd_timestamp_isocalendar(date):
     def impl(date):  # pragma: no cover
         year, month, day = date._ymd
@@ -589,7 +599,7 @@ def overload_sub_operator_datetime_date(lhs, rhs):
         return impl
 
 
-@overload(min, no_unliteral=True)
+@overload(min, no_unliteral=True, jit_options={"cache": True})
 def date_min(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -616,7 +626,7 @@ def date_min(lhs, rhs):
         return impl
 
 
-@overload(max, no_unliteral=True)
+@overload(max, no_unliteral=True, jit_options={"cache": True})
 def date_max(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -643,7 +653,9 @@ def date_max(lhs, rhs):
         return impl
 
 
-@overload_method(DatetimeDateType, "__hash__", no_unliteral=True)
+@overload_method(
+    DatetimeDateType, "__hash__", no_unliteral=True, jit_options={"cache": True}
+)
 def __hash__(td):
     """Hashcode for datetime.date types. Copies the CPython implementation"""
 
@@ -659,7 +671,7 @@ def __hash__(td):
     return impl
 
 
-@overload(bool, inline="always", no_unliteral=True)
+@overload(bool, inline="always", no_unliteral=True, jit_options={"cache": True})
 def date_to_bool(date):
     """All dates evaluate to True"""
     if date != datetime_date_type:  # pragma: no cover
@@ -732,7 +744,9 @@ make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
 make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
-@overload_method(DatetimeDateArrayType, "copy", no_unliteral=True)
+@overload_method(
+    DatetimeDateArrayType, "copy", no_unliteral=True, jit_options={"cache": True}
+)
 def overload_datetime_date_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_date_array(
         A._data.copy(),
@@ -740,45 +754,14 @@ def overload_datetime_date_arr_copy(A):
     )  # pragma: no cover
 
 
-@overload_attribute(DatetimeDateArrayType, "dtype")
+@overload_attribute(DatetimeDateArrayType, "dtype", jit_options={"cache": True})
 def overload_datetime_date_arr_dtype(A):
     return lambda A: np.object_  # pragma: no cover
 
 
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
-    n = bodo.utils.utils.object_length(c, val)
-    arr_typ = types.Array(types.int32, 1, "C")
-    data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
-
-    # function signature of unbox_datetime_date_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="unbox_datetime_date_array"
-    )
-    c.builder.call(fn, [val, n, data_arr.data, bitmap_arr.data])
-
-    out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    out_dt_date_arr.data = data_arr._getvalue()
-    out_dt_date_arr.null_bitmap = bitmap_arr._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(out_dt_date_arr._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 def int_to_datetime_date_python(ia):
@@ -792,28 +775,7 @@ def int_array_to_datetime_date(ia):
 
 @box(DatetimeDateArrayType)
 def box_datetime_date_array(typ, val, c):
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-
-    data_arr = c.context.make_array(types.Array(types.int32, 1, "C"))(
-        c.context, c.builder, in_arr.data
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
-
-    n = c.builder.extract_value(data_arr.shape, 0)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [lir.IntType(64), lir.IntType(32).as_pointer(), lir.IntType(8).as_pointer()],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_datetime_date_array"
-    )
-    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data])
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic
@@ -846,10 +808,7 @@ def init_datetime_date_array(typingctx, data, nulls):
 @lower_constant(DatetimeDateArrayType)
 def lower_constant_datetime_date_arr(context, builder, typ, pyval):
     n = len(pyval)
-    # Set data to a default value to avoid issues with getitem
-    # returning an invalid value.
-    valid_date = (1970 << 32) + (1 << 16) + 1
-    data_arr = np.full(n, valid_date, np.int32)
+    data_arr = np.zeros(n, np.int32)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
 
     for i, s in enumerate(pyval):
@@ -887,7 +846,7 @@ def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = alloc_datetime_date_array_equiv
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def dt_date_arr_getitem(A, ind):
     if A != datetime_date_array_type:
         return
@@ -929,7 +888,7 @@ def dt_date_arr_getitem(A, ind):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem, no_unliteral=True, jit_options={"cache": True})
 def dt_date_arr_setitem(A, idx, val):
     if A != datetime_date_array_type:
         return
@@ -955,7 +914,7 @@ def dt_date_arr_setitem(A, idx, val):
             raise BodoError(typ_err_msg)
 
     if not (
-        (is_iterable_type(val) and val.dtype == bodo.datetime_date_type)
+        (is_iterable_type(val) and val.dtype == bodo.types.datetime_date_type)
         or types.unliteral(val) == datetime_date_type
     ):
         raise BodoError(typ_err_msg)
@@ -1005,18 +964,18 @@ def dt_date_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
 
 
-@overload_attribute(DatetimeDateArrayType, "shape")
+@overload_attribute(DatetimeDateArrayType, "shape", jit_options={"cache": True})
 def overload_datetime_date_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
-@overload_attribute(DatetimeDateArrayType, "nbytes")
+@overload_attribute(DatetimeDateArrayType, "nbytes", jit_options={"cache": True})
 def datetime_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
@@ -1038,7 +997,7 @@ def create_cmp_op_overload(op):
             return impl
 
         # datetime.date and datetime64
-        if lhs == datetime_date_type and rhs == bodo.datetime64ns:
+        if lhs == datetime_date_type and rhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 cast_datetime_date_to_int_ns(lhs),
@@ -1046,7 +1005,7 @@ def create_cmp_op_overload(op):
             )  # pragma: no cover
 
         # datetime64 and datetime.date
-        if rhs == datetime_date_type and lhs == bodo.datetime64ns:
+        if rhs == datetime_date_type and lhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.dt64_to_integer(lhs),
@@ -1064,7 +1023,7 @@ def create_datetime_date_cmp_op_overload(op):
         # equality between datetime and date doesn't look at the values.
         # We raise a warning because this may be a bug.
         datetime_warning = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[op]} {rhs} is always {op == operator.ne} in Python. If this is unexpected there may be a bug in your code."
-        warnings.warn(datetime_warning, bodo.utils.typing.BodoWarning)
+        warnings.warn(datetime_warning, bodo.BodoWarning)
         if op == operator.eq:
             return lambda lhs, rhs: False  # pragma: no cover
         elif op == operator.ne:
@@ -1078,7 +1037,7 @@ def create_datetime_array_date_cmp_op_overload(op):
     and date types."""
 
     def overload_arr_cmp(lhs, rhs):
-        if isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns:
+        if isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns:
             # datetime64 + date scalar
             if rhs == datetime_date_type:
 
@@ -1123,7 +1082,7 @@ def create_datetime_array_date_cmp_op_overload(op):
 
                 return impl
 
-        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns:
+        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns:
             # date scalar + datetime64
             if lhs == datetime_date_type:
 
@@ -1282,7 +1241,7 @@ def now_date_wrapper(tz_value_or_none=None):
     """
 
     def impl(tz_value_or_none=None):  # pragma: no cover
-        with bodo.objmode(d="datetime_date_type"):
+        with numba.objmode(d="datetime_date_type"):
             d = now_date_python(tz_value_or_none)
         return d
 

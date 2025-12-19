@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
         # Setup
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v5
         - name: Install Java
           uses: actions/setup-java@v4
           with:
@@ -26,7 +26,7 @@ jobs:
         # Publishing Test Results
         # Always run both even if tests fail
         - name: Publish Test Result Failures
-          uses: mikepenz/action-junit-report@v4
+          uses: mikepenz/action-junit-report@v5
 
           if: success() || failure()
           with:

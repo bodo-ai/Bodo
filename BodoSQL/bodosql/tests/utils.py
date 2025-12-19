@@ -37,8 +37,8 @@ from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
     gen_unique_table_id,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
@@ -313,11 +313,11 @@ def check_query(
         run_jit_1DVar = False
 
     # Only run Python mode when spawn testing is enabled since others aren't applicable
-    if bodo.tests.utils.test_spawn_mode_enabled:
+    if bodo.tests.utils.test_spawn_mode_enabled or bodosql.use_cpp_backend:
         run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
         if only_jit_seq:
             warnings.warn(
-                "check_query: no tests are being run since spawn enabled and only_jit_seq=True."
+                "check_query: no tests are being run since spawn or BodoSQL C++ backend enabled and only_jit_seq=True."
             )
             return
 
@@ -337,9 +337,11 @@ def check_query(
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params, bind_variables))
 
-    if expected_output is None and (bodo.get_rank() == 0 and spark is None):
+    if expected_output is None and (
+        bodo.get_rank() == 0 and spark is None and not use_duckdb
+    ):
         raise ValueError(
-            "Either `expected_output` or `spark` argument must be set to not None"
+            "Either `expected_output` or `spark` argument must be set to not None or use_duckdb must be True."
         )
 
     # Determine the Spark output.
@@ -444,7 +446,7 @@ def check_query(
 
             # Compute the expected output
             # We need to convert to arrow and then Pandas to maintain some types (decimal, timestamp)
-            expected_output = conn.sql(q).arrow().to_pandas()
+            expected_output = conn.sql(q).arrow().read_pandas()
 
         # Distribute the expected output and handle errors
         comm = MPI.COMM_WORLD
@@ -712,7 +714,9 @@ def check_query_jit(
 
     # test dict-encoded string type if there is any string array in input
     if use_dict_encoded_strings is None and any(
-        any(t == bodo.string_array_type for t in bodo.tests.utils._typeof(df).data)
+        any(
+            t == bodo.types.string_array_type for t in bodo.tests.utils._typeof(df).data
+        )
         for df in dataframe_dict.values()
     ):
         check_query_jit(
@@ -1205,12 +1209,12 @@ def _run_jit_query(
 def _check_query_equal(
     bodosql_output,
     expected_output,
-    check_names,
-    check_dtype,
-    sort_output,
-    is_out_distributed,
-    failure_message,
-    convert_nullable_bodosql,
+    check_names=False,
+    check_dtype=False,
+    sort_output=True,
+    is_out_distributed=False,
+    failure_message="query test failed",
+    convert_nullable_bodosql=False,
     convert_columns_to_pandas: bool = False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
@@ -1260,6 +1264,8 @@ def _check_query_equal(
             except Exception:
                 pass
 
+    # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
+    bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
@@ -1284,8 +1290,8 @@ def _check_query_equal(
         expected_output = expected_output.reset_index(drop=True)
     # check_names=False doesn't seem to work inside pd.testing.assert_frame_equal, so manually rename
     if not check_names:
-        bodosql_output.columns = range(len(bodosql_output.columns))
-        expected_output.columns = range(len(expected_output.columns))
+        bodosql_output.columns = [str(i) for i in range(len(bodosql_output.columns))]
+        expected_output.columns = [str(i) for i in range(len(expected_output.columns))]
 
     passed = 1
     n_ranks = bodo.get_size()
@@ -1443,6 +1449,31 @@ def convert_nullable_object(df):
             ):
                 S = df.iloc[:, i]
                 df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
+    return df
+
+
+def convert_arrow_time_to_bodo_time(df):
+    """Convert a DataFrame with potentially Arrow Time64[ns] columns to bodo.types.Time objects.
+    Imports the compiler for bodo.types.Time"""
+    import bodo.decorators  # noqa
+
+    if not isinstance(df, pd.DataFrame):
+        return df
+
+    for col in df.columns:
+        if df[col].dtype == pd.ArrowDtype(pa.time64("ns")):
+            col_as_int = pd.array(
+                df[col].array._pa_array.cast(pa.int64()),
+                dtype=pd.ArrowDtype(pa.int64()),
+            )
+            bodo_times = []
+            for x in col_as_int:
+                if pd.isna(x):
+                    bodo_times.append(None)
+                else:
+                    bodo_times.append(bodo.types.Time(nanosecond=x, precision=9))
+            df[col] = pd.Series(bodo_times, dtype=object)
+
     return df
 
 
@@ -1610,8 +1641,8 @@ def create_pyspark_schema_from_dataframe(df):
         types.uint64: LongType(),
         types.float32: FloatType(),
         types.float64: DoubleType(),
-        bodo.datetime64ns: TimestampType(),
-        bodo.timedelta64ns: DayTimeIntervalType(),
+        bodo.types.datetime64ns: TimestampType(),
+        bodo.types.timedelta64ns: DayTimeIntervalType(),
     }
 
     df_type = bodo.typeof(df)
@@ -1620,12 +1651,17 @@ def create_pyspark_schema_from_dataframe(df):
     for col, arr_type in zip(df_type.columns, df_type.data):
         if (
             isinstance(
-                arr_type, (types.Array, bodo.IntegerArrayType, bodo.FloatingArrayType)
+                arr_type,
+                (
+                    types.Array,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                ),
             )
-            or arr_type == bodo.boolean_array_type
+            or arr_type == bodo.types.boolean_array_type
         ):
             pyspark_type = bodo_to_pyspark_dtype_map[arr_type.dtype]
-        elif arr_type == bodo.string_array_type:
+        elif arr_type == bodo.types.string_array_type:
             pyspark_type = StringType()
         else:
             raise TypeError("Type mapping to Pyspark Schema not implemented yet.")

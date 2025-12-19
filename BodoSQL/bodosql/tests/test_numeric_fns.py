@@ -2,6 +2,7 @@
 Test that various numeric builtin functions are properly supported in BODOSQL
 """
 
+import sys
 from decimal import Decimal
 
 import numpy as np
@@ -32,9 +33,10 @@ pytestmark = pytest_slow_unless_codegen
 def bodosql_negative_numeric_types(request):
     """
     Fixture for DataFrames with negative numeric BodoSQL types:
-
-
     """
+    if sys.platform == "win32":
+        pytest.skip("Spark does not support unsigned int columns on Windows.")
+
     int_dtype = request.param[0]
     float_dtype = request.param[1]
     numeric_data = {

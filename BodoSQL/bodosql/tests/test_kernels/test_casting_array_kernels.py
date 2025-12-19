@@ -364,7 +364,7 @@ def test_cast_int16(numeric_arrays, memory_leak_check):
             # we normally must calculate the underflow/overflow behavior for ints
             # however casting to float64 first will handle this for us
             if f_elem.is_integer():
-                return np.int16(elem)
+                return np.int64(elem).astype(np.int16)
             else:
                 return np.int16(_round_float(f_elem))
 
@@ -406,7 +406,7 @@ def test_cast_int8(numeric_arrays, memory_leak_check):
             # we normally must calculate the underflow/overflow behavior for ints
             # however casting to float64 first will handle this for us
             if f_elem.is_integer():
-                return np.int8(elem)
+                return np.int64(elem).astype(np.int8)
             else:
                 return np.int8(_round_float(f_elem))
 
@@ -459,8 +459,8 @@ def test_cast_boolean(numeric_arrays, memory_leak_check):
             (
                 pd.Series(
                     [
-                        bodo.Time(1, 2, 3, 4, 5, 6),
-                        bodo.Time(1, 52, 33, 443, 534, 632),
+                        bodo.types.Time(1, 2, 3, 4, 5, 6),
+                        bodo.types.Time(1, 52, 33, 443, 534, 632),
                         None,
                     ]
                     * 4
@@ -491,7 +491,7 @@ def test_cast_char_other(args, memory_leak_check):
     def char_scalar_fn(elem):
         if pd.isna(elem):
             return None
-        elif isinstance(elem, (bodo.Time, bodo.TimeType)):
+        elif isinstance(elem, (bodo.types.Time, bodo.types.TimeType)):
             # Using Snowflake's default TIME format: HH:MM:SS
             return f"{elem.hour:02}:{elem.minute:02}:{elem.second:02}"
         elif isinstance(elem, bytes):
@@ -877,7 +877,7 @@ def test_cast_int_opt(memory_leak_check):
             for flag2 in [True, False]:
                 for flag3 in [True, False]:
                     answer = (
-                        np.int8(136) if flag0 else None,
+                        np.int8(-120) if flag0 else None,
                         np.int16(12) if flag1 else None,
                         np.int32(_round_float(140.5)) if flag2 else None,
                         np.int64(12) if flag3 else None,

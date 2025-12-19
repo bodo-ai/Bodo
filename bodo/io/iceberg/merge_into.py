@@ -10,16 +10,13 @@ import numba
 import pandas as pd
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.utils.tracing as tracing
-from bodo.io.iceberg.common import format_iceberg_conn_njit, get_rest_catalog_config
+from bodo.io.iceberg.common import get_rest_catalog_config
 from bodo.io.iceberg.write import (
     generate_data_file_info,
-    get_table_details_before_write,
     iceberg_pq_write,
-)
-from bodo.io.s3_fs import (
-    create_iceberg_aws_credentials_provider,
-    create_s3_fs_instance,
 )
 from bodo.libs.array import (
     arr_info_list_to_table,
@@ -49,7 +46,7 @@ def iceberg_merge_cow(
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed DataFrames"
 
-    with bodo.no_warning_objmode(
+    with bodo.ir.object_mode.no_warning_objmode(
         already_exists="bool_",
         table_loc="unicode_type",
         partition_spec="python_list_of_heterogeneous_tuples_type",
@@ -87,16 +84,11 @@ def iceberg_merge_cow(
 
     arrow_fs = None
     if catalog_uri and bearer_token and warehouse:
-        arrow_fs = create_s3_fs_instance(
-            credentials_provider=create_iceberg_aws_credentials_provider(
-                catalog_uri, bearer_token, warehouse, database_schema, table_name
-            ),
-        )
+        # TODO: Update MERGE INTO to use PyIceberg
+        pass
 
-    dummy_theta_sketch = (
-        bodo.io.iceberg.stream_iceberg_write.init_theta_sketches_wrapper(
-            alloc_false_bool_array(num_cols)
-        )
+    dummy_theta_sketch = bodo.io.iceberg.theta.init_theta_sketches_wrapper(
+        alloc_false_bool_array(num_cols)
     )
     bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
@@ -113,7 +105,7 @@ def iceberg_merge_cow(
         bucket_region,
     )
 
-    with bodo.no_warning_objmode(success="bool_"):
+    with bodo.ir.object_mode.no_warning_objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector
@@ -135,7 +127,7 @@ def iceberg_merge_cow(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg MERGE INTO: write failed")
 
-    bodo.io.iceberg.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+    bodo.io.iceberg.theta.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()
 
@@ -270,3 +262,11 @@ def iceberg_merge_cow_py(
         impl = locals["impl"]
 
     return impl
+
+
+def format_iceberg_conn_njit():
+    pass
+
+
+def get_table_details_before_write():
+    pass

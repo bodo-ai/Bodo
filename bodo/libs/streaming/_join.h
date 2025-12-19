@@ -283,7 +283,8 @@ class JoinPartition {
         bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
+        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
+        bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     // The types of the columns in the build table and probe tables.
     const std::shared_ptr<bodo::Schema> build_table_schema;
@@ -395,6 +396,10 @@ class JoinPartition {
     // vector (using .data()) or the uint32_t[] shared_ptr directly (using
     // .get())
     uint32_t* probe_table_hashes;
+
+    // Matches Pandas behavior by treating NA values as equal.
+    const bool is_na_equal;
+    const bool is_mark_join;
 
     /// @brief Get number of bits in the 'top_bitmask'.
     size_t get_num_top_bits() const { return this->num_top_bits; }
@@ -570,6 +575,7 @@ class JoinPartition {
      * @tparam build_table_outer
      * @tparam probe_table_outer
      * @tparam non_equi_condition
+     * @tparam is_anti_join
      * @param cond_func Condition function for the non-equi condition case,
      * nullptr otherwise.
      * @param build_kept_cols Which columns to generate in the output on the
@@ -584,7 +590,7 @@ class JoinPartition {
      *
      */
     template <bool build_table_outer, bool probe_table_outer,
-              bool non_equi_condition>
+              bool non_equi_condition, bool is_anti_join>
     void FinalizeProbeForInactivePartition(
         cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols,
@@ -662,31 +668,6 @@ class JoinPartition {
     HashJoinMetrics& metrics;
 };
 
-/**
- * @brief Helper for UnifyBuildTableDictionaryArrays and
- * UnifyProbeTableDictionaryArrays. Unifies dictionaries of input table with
- * dictionaries in dict_builders by appending its new dictionary values to
- * buffer's dictionaries and transposing input's indices.
- *
- * @param in_table input table
- * @param dict_builders Dictionary builders to unify with. The dict builders
- * will be appended with the new values from dictionaries in input_table.
- * @param n_keys number of key columns
- * @param only_transpose_existing_on_key_cols For key columns, whether or not to
- * only transpose the values that already exist in the dictionary-builder (and
- * set the rest as nulls) instead of full unification which would append any
- * values not already in the dictionary-builder to the dictionary-builder. This
- * is used in the Probe-Inner case in Join since we statically know that the
- * dictionary should not grow because if a value doesn't already exist, it will
- * get filtered out by the Join anyway.
- * @return std::shared_ptr<table_info> input table with dictionaries unified
- * with build table dictionaries.
- */
-std::shared_ptr<table_info> unify_dictionary_arrays_helper(
-    const std::shared_ptr<table_info>& in_table,
-    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    uint64_t n_keys, bool only_transpose_existing_on_key_cols = false);
-
 class JoinState {
    public:
     // The types of the columns in the build table and probe tables.
@@ -698,6 +679,10 @@ class JoinState {
     const bool build_table_outer;
     const bool probe_table_outer;
     const bool force_broadcast;
+    // Matches Pandas behavior by treating NA values as equal.
+    const bool is_na_equal;
+    // Mark join is used for Series.isin in dataframe library
+    const bool is_mark_join;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.
     bool build_parallel;
@@ -770,7 +755,8 @@ class JoinState {
               uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_);
+              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
+              bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     virtual ~JoinState() {}
 
@@ -832,6 +818,11 @@ class JoinState {
     std::shared_ptr<table_info> UnifyProbeTableDictionaryArrays(
         const std::shared_ptr<table_info>& in_table,
         bool only_transpose_existing_on_key_cols = false);
+
+    /**
+     * @brief Returns whether this is a nested loop join or hash join.
+     */
+    bool IsNestedLoopJoin() const { return this->n_keys == 0; }
 
     // Operator ID.
     const int64_t op_id;
@@ -965,7 +956,8 @@ class HashJoinState : public JoinState {
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
-                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH);
+                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
+                  bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1164,13 +1156,14 @@ class HashJoinState : public JoinState {
      * @tparam build_table_outer
      * @tparam probe_table_outer
      * @tparam non_equi_condition
+     * @tparam is_anti_join
      * @param build_kept_cols Which columns to generate in the output on the
      * build side.
      * @param probe_kept_cols Which columns to generate in the output on the
      * probe side.
      */
     template <bool build_table_outer, bool probe_table_outer,
-              bool non_equi_condition>
+              bool non_equi_condition, bool is_anti_join>
     void FinalizeProbeForInactivePartitions(
         const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols);
@@ -1411,6 +1404,19 @@ class NestedLoopJoinState : public JoinState {
 };
 
 /**
+ * @brief consume build table batch in streaming nested loop join
+ * Design doc:
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1373896721/Vectorized+Nested+Loop+Join+Design
+ *
+ * @param join_state join state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ */
+bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
+                                          std::shared_ptr<table_info> in_table,
+                                          bool is_last);
+
+/**
  * @brief Python wrapper to consume build table batch in nested loop join
  *
  * @param join_state join state pointer
@@ -1439,3 +1445,38 @@ bool nested_loop_join_probe_consume_batch(
     const std::vector<uint64_t> probe_kept_cols, bool is_last);
 
 bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state);
+
+/**
+ * @brief consume build table batch in streaming join (insert into hash
+ * table)
+ *
+ * @param join_state join state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ * @return updated is_last
+ */
+bool join_build_consume_batch(HashJoinState* join_state,
+                              std::shared_ptr<table_info> in_table,
+                              bool use_bloom_filter, bool local_is_last);
+
+/**
+ * @brief consume probe table batch in streaming join.
+ *
+ * @param join_state join state pointer
+ * @param in_table probe table batch
+ * @param build_kept_cols Which columns to generate in the output on the
+ * build side.
+ * @param probe_kept_cols Which columns to generate in the output on the
+ * probe side.
+ * @param is_last is last batch
+ * @param parallel parallel flag
+ * @return updated global is_last with the possibility of false positives
+ * due to iterations between syncs
+ */
+template <bool build_table_outer, bool probe_table_outer,
+          bool non_equi_condition, bool use_bloom_filter, bool is_anti_join>
+bool join_probe_consume_batch(HashJoinState* join_state,
+                              std::shared_ptr<table_info> in_table,
+                              const std::vector<uint64_t> build_kept_cols,
+                              const std::vector<uint64_t> probe_kept_cols,
+                              bool local_is_last);

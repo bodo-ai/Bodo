@@ -1,6 +1,4 @@
-import atexit
 import datetime
-import sys
 import time
 import warnings
 from collections import defaultdict
@@ -27,8 +25,12 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip # noqa
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hdist
@@ -39,25 +41,21 @@ from bodo.libs.array import (
     delete_info,
     delete_table,
     info_to_array,
-    py_data_to_cpp_table,
     py_table_to_cpp_table,
     table_type,
 )
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
-    np_offset_type,
     offset_type,
 )
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
-from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
+from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
-    convert_len_arr_to_offset,
-    get_bit_bitmap,
     get_data_ptr,
     get_null_bitmap_ptr,
     get_offset_ptr,
@@ -72,9 +70,7 @@ from bodo.utils.typing import (
     BodoWarning,
     ColNamesMetaType,
     ExternalFunctionErrorChecked,
-    MetaType,
     decode_if_dict_array,
-    is_bodosql_context_type,
     is_overload_false,
     is_overload_none,
     is_str_arr_type,
@@ -82,14 +78,12 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     CTypeEnum,
     bodo_exec,
+    cached_call_internal,
     check_and_propagate_cpp_exception,
-    empty_like_type,
     is_array_typ,
-    is_distributable_typ,
     numba_to_c_type,
 )
 
-ll.add_symbol("dist_get_time", hdist.dist_get_time)
 ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
@@ -107,7 +101,6 @@ ll.add_symbol("c_get_rank", hdist.dist_get_rank)
 ll.add_symbol("c_get_size", hdist.dist_get_size)
 ll.add_symbol("c_get_remote_size", hdist.dist_get_remote_size)
 ll.add_symbol("c_barrier", hdist.barrier)
-ll.add_symbol("c_alltoall", hdist.c_alltoall)
 ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)
 ll.add_symbol("c_scatterv", hdist.c_scatterv)
@@ -124,16 +117,20 @@ ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
 ll.add_symbol("gather_table_py_entry", hdist.gather_table_py_entry)
 ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
+ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
+ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
 
-
-# get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
-mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
 
 DEFAULT_ROOT = 0
-ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+
 
 # Wrapper for getting process rank from C (MPI rank currently)
-get_rank = hdist.get_rank_py_wrapper
+def get_rank():
+    return hdist.get_rank_py_wrapper()
+
+
+def get_size():
+    return hdist.get_size_py_wrapper()
 
 
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
@@ -154,15 +151,14 @@ class Reduce_Type(Enum):
     No_Op = 13
 
 
-_get_rank = types.ExternalFunction("c_get_rank", types.int32())
-_get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
-_dist_transpose_comm = types.ExternalFunction(
-    "_dist_transpose_comm",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
-)
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
+
+
+@infer_global(get_rank)
+class GetRankInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
 
 
 @lower_builtin(
@@ -179,10 +175,23 @@ def lower_get_rank(context, builder, sig, args):
     return out
 
 
-@numba.njit(cache=True)
-def get_size():  # pragma: no cover
-    """wrapper for getting number of processes (MPI COMM size currently)"""
-    return _get_size()
+@infer_global(get_size)
+class GetSizeInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
+
+
+@lower_builtin(
+    get_size,
+)
+def lower_get_size(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [],
+    )
+    fn_typ = cgutils.get_or_insert_function(builder.module, fnty, name="c_get_size")
+    out = builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return out
 
 
 @numba.njit(cache=True)
@@ -203,10 +212,6 @@ def get_cpu_id():  # pragma: no cover
     return _get_cpu_id()
 
 
-_get_time = types.ExternalFunction("get_time", types.float64())
-dist_time = types.ExternalFunction("dist_get_time", types.float64())
-
-
 @infer_global(time.time)
 class TimeInfer(ConcreteTemplate):
     cases = [signature(types.float64)]
@@ -214,7 +219,9 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
-    return context.compile_internal(builder, lambda: _get_time(), sig, args)
+    _get_time = types.ExternalFunction("get_time", types.float64())
+
+    return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
@@ -227,8 +234,6 @@ def get_type_enum(arr):
     typ_val = numba_to_c_type(dtype)
     return lambda arr: np.int32(typ_val)
 
-
-INT_MAX = np.iinfo(np.int32).max
 
 _send = types.ExternalFunction(
     "c_send",
@@ -259,17 +264,23 @@ def recv(dtype, rank, tag):  # pragma: no cover
     return recv_arr[0]
 
 
-_isend = types.ExternalFunction(
-    "dist_isend",
-    mpi_req_numba_type(
-        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
-    ),
-)
-
-
 @numba.generated_jit(nopython=True)
 def isend(arr, size, pe, tag, cond=True):
     """call MPI isend with input data"""
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _isend = types.ExternalFunction(
+        "dist_isend",
+        mpi_req_numba_type(
+            types.voidptr,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.bool_,
+        ),
+    )
+
     # Numpy array
     if isinstance(arr, types.Array):
 
@@ -388,146 +399,12 @@ def isend(arr, size, pe, tag, cond=True):
     return impl_voidptr
 
 
-_irecv = types.ExternalFunction(
-    "dist_irecv",
-    mpi_req_numba_type(
-        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
-    ),
-)
-
-
 @numba.generated_jit(nopython=True)
 def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
     """post MPI irecv for array and return the request"""
+    import bodo.libs.distributed_impl
 
-    # Numpy array
-    if isinstance(arr, types.Array):
-
-        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
-            type_enum = get_type_enum(arr)
-            return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
-
-        return impl
-
-    # Primitive array
-    if isinstance(arr, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
-
-        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
-            np_arr = bodo.libs.primitive_arr_ext.primitive_to_np(arr)
-            type_enum = get_type_enum(np_arr)
-            return _irecv(np_arr.ctypes, size, type_enum, pe, tag, cond)
-
-        return impl
-
-    if arr == boolean_array_type:
-        # Nullable booleans need their own implementation because the
-        # data array stores 1 bit per boolean. As a result, the data array
-        # requires separate handling.
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_bool(arr, size, pe, tag, cond=True):  # pragma: no cover
-            n_bytes = (size + 7) >> 3
-            data_req = _irecv(arr._data.ctypes, n_bytes, char_typ_enum, pe, tag, cond)
-            null_req = _irecv(
-                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
-            )
-            return (data_req, null_req)
-
-        return impl_bool
-
-    # nullable arrays
-    if (
-        isinstance(
-            arr,
-            (
-                IntegerArrayType,
-                FloatingArrayType,
-                DecimalArrayType,
-                TimeArrayType,
-                DatetimeArrayType,
-            ),
-        )
-        or arr == datetime_date_array_type
-    ):
-        # return a tuple of requests for data and null arrays
-        type_enum = np.int32(numba_to_c_type(arr.dtype))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_nullable(arr, size, pe, tag, cond=True):  # pragma: no cover
-            n_bytes = (size + 7) >> 3
-            data_req = _irecv(arr._data.ctypes, size, type_enum, pe, tag, cond)
-            null_req = _irecv(
-                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
-            )
-            return (data_req, null_req)
-
-        return impl_nullable
-
-    # string arrays
-    if arr in [binary_array_type, string_array_type]:
-        offset_typ_enum = np.int32(numba_to_c_type(offset_type))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        # using blocking communication for string arrays instead since the array
-        # slice passed in shift() may not stay alive (not a view of the original array)
-        if arr == binary_array_type:
-            alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
-        else:
-            alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
-        func_text = f"""def impl(arr, size, pe, tag, cond=True):
-            # recv the number of string characters and resize buffer to proper size
-            n_chars = bodo.libs.distributed_api.recv(np.int64, pe, tag - 1)
-            new_arr = {alloc_fn}(size, n_chars)
-            bodo.libs.str_arr_ext.move_str_binary_arr_payload(arr, new_arr)
-
-            n_bytes = (size + 7) >> 3
-            bodo.libs.distributed_api._recv(
-                bodo.libs.str_arr_ext.get_offset_ptr(arr),
-                size + 1,
-                offset_typ_enum,
-                pe,
-                tag,
-            )
-            bodo.libs.distributed_api._recv(
-                bodo.libs.str_arr_ext.get_data_ptr(arr), n_chars, char_typ_enum, pe, tag
-            )
-            bodo.libs.distributed_api._recv(
-                bodo.libs.str_arr_ext.get_null_bitmap_ptr(arr),
-                n_bytes,
-                char_typ_enum,
-                pe,
-                tag,
-            )
-            return None"""
-
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "np": np,
-                "offset_typ_enum": offset_typ_enum,
-                "char_typ_enum": char_typ_enum,
-            },
-            loc_vars,
-        )
-        impl = loc_vars["impl"]
-        return impl
-
-    raise BodoError(f"irecv(): array type {arr} not supported yet")
-
-
-_alltoall = types.ExternalFunction(
-    "c_alltoall", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
-)
-
-
-@numba.njit(cache=True)
-def alltoall(send_arr, recv_arr, count):  # pragma: no cover
-    # TODO: handle int64 counts
-    assert count < INT_MAX
-    type_enum = get_type_enum(send_arr)
-    _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
+    return bodo.libs.distributed_impl.irecv_impl(arr, size, pe, tag, cond)
 
 
 @numba.njit(cache=True)
@@ -542,6 +419,18 @@ def gather_scalar_impl_jit(
     data = types.unliteral(data)
     typ_val = numba_to_c_type(data)
     dtype = data
+
+    c_gather_scalar = types.ExternalFunction(
+        "c_gather_scalar",
+        types.void(
+            types.voidptr,
+            types.voidptr,
+            types.int32,
+            types.bool_,
+            types.int32,
+            types.int64,
+        ),
+    )
 
     def gather_scalar_impl(
         data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
@@ -563,46 +452,6 @@ def gather_scalar_impl_jit(
         return res
 
     return gather_scalar_impl
-
-
-c_gather_scalar = types.ExternalFunction(
-    "c_gather_scalar",
-    types.void(
-        types.voidptr, types.voidptr, types.int32, types.bool_, types.int32, types.int64
-    ),
-)
-
-
-# sendbuf, sendcount, recvbuf, recv_counts, displs, dtype
-c_gatherv = types.ExternalFunction(
-    "c_gatherv",
-    types.void(
-        types.voidptr,
-        types.int64,
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.int32,
-        types.bool_,
-        types.int32,
-        types.int64,
-    ),
-)
-
-# sendbuff, sendcounts, displs, recvbuf, recv_count, dtype
-c_scatterv = types.ExternalFunction(
-    "c_scatterv",
-    types.void(
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.int64,
-        types.int32,
-        types.int32,
-        types.int64,
-    ),
-)
 
 
 @intrinsic
@@ -640,26 +489,6 @@ def load_val_ptr(typingctx, ptr_tp, val_tp=None):
     return val_tp(ptr_tp, val_tp), codegen
 
 
-_dist_reduce = types.ExternalFunction(
-    "dist_reduce",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
-)
-
-_dist_arr_reduce = types.ExternalFunction(
-    "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
-)
-
-_timestamptz_reduce = types.ExternalFunction(
-    "timestamptz_reduce",
-    types.void(types.int64, types.int64, types.voidptr, types.voidptr, types.boolean),
-)
-
-_decimal_reduce = types.ExternalFunction(
-    "decimal_reduce",
-    types.void(types.int64, types.voidptr, types.voidptr, types.int32, types.int32),
-)
-
-
 @numba.njit(cache=True)
 def dist_reduce(value, reduce_op, comm=0):
     return dist_reduce_impl(value, reduce_op, comm)
@@ -669,6 +498,11 @@ def dist_reduce(value, reduce_op, comm=0):
 def dist_reduce_impl(value, reduce_op, comm):
     if isinstance(value, types.Array):
         typ_enum = np.int32(numba_to_c_type(value.dtype))
+
+        _dist_arr_reduce = types.ExternalFunction(
+            "dist_arr_reduce",
+            types.void(types.voidptr, types.int64, types.int32, types.int32),
+        )
 
         def impl_arr(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
@@ -692,22 +526,30 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.float32,
             types.float64,
             types.int64,
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
-            bodo.datetime_date_type,
-            bodo.TimeType,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
+            bodo.types.datetime_date_type,
+            bodo.types.TimeType,
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
+            target_typ, (bodo.types.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type):
+    if isinstance(target_typ, bodo.types.Decimal128Type):
         # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
+
+        _decimal_reduce = types.ExternalFunction(
+            "decimal_reduce",
+            types.void(
+                types.int64, types.voidptr, types.voidptr, types.int32, types.int32
+            ),
+        )
+
         if isinstance(types.unliteral(value), IndexValueType):
 
             def impl(value, reduce_op, comm):  # pragma: no cover
@@ -740,7 +582,7 @@ def dist_reduce_impl(value, reduce_op, comm):
 
         return impl
 
-    if isinstance(value, bodo.TimestampTZType):
+    if isinstance(value, bodo.types.TimestampTZType):
         # This requires special handling because TimestampTZ's scalar
         # representation isn't the same as it's array representation - as such,
         # we need to extract the timestamp and offset separately, otherwise the
@@ -754,6 +596,14 @@ def dist_reduce_impl(value, reduce_op, comm):
         # portable).
         # TODO(aneesh): unify array and scalar representations of TimestampTZ to
         # avoid this.
+
+        _timestamptz_reduce = types.ExternalFunction(
+            "timestamptz_reduce",
+            types.void(
+                types.int64, types.int64, types.voidptr, types.voidptr, types.boolean
+            ),
+        )
+
         def impl(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
             if reduce_op not in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
@@ -774,9 +624,14 @@ def dist_reduce_impl(value, reduce_op, comm):
             )
             out_ts = load_val_ptr(out_ts_ptr, value_ts)
             out_offset = load_val_ptr(out_offset_ptr, value_ts)
-            return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
+            return bodo.types.TimestampTZ(pd.Timestamp(out_ts), out_offset)
 
         return impl
+
+    _dist_reduce = types.ExternalFunction(
+        "dist_reduce",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
+    )
 
     def impl(value, reduce_op, comm):  # pragma: no cover
         in_ptr = value_to_ptr(value)
@@ -785,11 +640,6 @@ def dist_reduce_impl(value, reduce_op, comm):
         return load_val_ptr(out_ptr, value)
 
     return impl
-
-
-_dist_exscan = types.ExternalFunction(
-    "dist_exscan", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
-)
 
 
 @numba.njit(cache=True)
@@ -802,6 +652,11 @@ def dist_exscan_impl(value, reduce_op):
     target_typ = types.unliteral(value)
     typ_enum = np.int32(numba_to_c_type(target_typ))
     zero = target_typ(0)
+
+    _dist_exscan = types.ExternalFunction(
+        "dist_exscan",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+    )
 
     def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
@@ -837,20 +692,10 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
-_gather_table_py_entry = ExternalFunctionErrorChecked(
-    "gather_table_py_entry",
-    table_type(table_type, types.bool_, types.int32, types.int64),
-)
-
-
-_gather_array_py_entry = ExternalFunctionErrorChecked(
-    "gather_array_py_entry",
-    array_info_type(array_info_type, types.bool_, types.int32, types.int64),
-)
-
-
 def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=None):
     """Gathers data from all ranks to root."""
+    import bodo.libs.distributed_impl
+    from bodo.libs.distributed_impl import gatherv_impl_wrapper
     from bodo.mpi4py import MPI
 
     if allgather and comm is not None:
@@ -883,6 +728,7 @@ def gatherv_overload(
     data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
 ):
     """support gatherv inside jit functions"""
+    from bodo.libs.distributed_impl import gatherv_impl_jit
 
     return (
         lambda data,
@@ -891,575 +737,6 @@ def gatherv_overload(
         root=DEFAULT_ROOT,
         comm=0: gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
     )  # pragma: no cover
-
-
-@numba.njit(cache=True)
-def gatherv_impl_wrapper(
-    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-):
-    return gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
-
-
-@numba.generated_jit(nopython=True)
-def gatherv_impl_jit(
-    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-):
-    """gathers distributed data into rank 0 or all ranks if 'allgather' is set.
-    'warn_if_rep' flag controls if a warning is raised if the input is replicated and
-    gatherv has no effect (applicable only inside jit functions).
-    """
-    from bodo.libs.csr_matrix_ext import CSRMatrixType
-
-    bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
-        data, "bodo.gatherv()"
-    )
-
-    if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
-
-        def impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            # get data and index arrays
-            arr = bodo.hiframes.pd_series_ext.get_series_data(data)
-            index = bodo.hiframes.pd_series_ext.get_series_index(data)
-            name = bodo.hiframes.pd_series_ext.get_series_name(data)
-            # Send name from workers to receiver in case of intercomm since not
-            # available on receiver
-            if comm != 0:
-                bcast_root = MPI.PROC_NULL
-                is_receiver = root == MPI.ROOT
-                if is_receiver:
-                    bcast_root = 0
-                elif bodo.get_rank() == 0:
-                    bcast_root = MPI.ROOT
-                name = bcast_scalar(name, bcast_root, comm)
-            # gather data
-            out_arr = bodo.libs.distributed_api.gatherv(
-                arr, allgather, warn_if_rep, root, comm
-            )
-            out_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)
-            # create output Series
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
-
-        return impl
-
-    if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
-        INT64_MAX = np.iinfo(np.int64).max
-        INT64_MIN = np.iinfo(np.int64).min
-
-        def impl_range_index(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            is_receiver = bodo.get_rank() == root
-            if comm != 0:
-                is_receiver = root == MPI.ROOT
-
-            # NOTE: assuming processes have chunks of a global RangeIndex with equal
-            # steps. using min/max reductions to get start/stop of global range
-            start = data._start
-            stop = data._stop
-            step = data._step
-            name = data._name
-            # Send name and step from workers to receiver in case of intercomm since not
-            # available on receiver
-            if comm != 0:
-                bcast_root = MPI.PROC_NULL
-                if is_receiver:
-                    bcast_root = 0
-                elif bodo.get_rank() == 0:
-                    bcast_root = MPI.ROOT
-                name = bcast_scalar(name, bcast_root, comm)
-                step = bcast_scalar(step, bcast_root, comm)
-
-            # ignore empty ranges coming from slicing, see test_getitem_slice
-            if len(data) == 0:
-                start = INT64_MAX
-                stop = INT64_MIN
-            min_op = np.int32(Reduce_Type.Min.value)
-            max_op = np.int32(Reduce_Type.Max.value)
-            start = bodo.libs.distributed_api.dist_reduce(
-                start, min_op if step > 0 else max_op, comm
-            )
-            stop = bodo.libs.distributed_api.dist_reduce(
-                stop, max_op if step > 0 else min_op, comm
-            )
-            total_len = bodo.libs.distributed_api.dist_reduce(
-                len(data), np.int32(Reduce_Type.Sum.value), comm
-            )
-            # output is empty if all range chunks are empty
-            if start == INT64_MAX and stop == INT64_MIN:
-                start = 0
-                stop = 0
-
-            # make sure global length is consistent in case the user passes in incorrect
-            # RangeIndex chunks (e.g. trivial index in each chunk), see test_rebalance
-            l = max(0, -(-(stop - start) // step))
-            if l < total_len:
-                stop = start + step * total_len
-
-            # gatherv() of dataframe returns 0-length arrays so index should
-            # be 0-length to match
-            if not is_receiver and not allgather:
-                start = 0
-                stop = 0
-
-            return bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
-
-        return impl_range_index
-
-    # Index types
-    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        from bodo.hiframes.pd_index_ext import PeriodIndexType
-
-        if isinstance(data, PeriodIndexType):
-            freq = data.freq
-
-            def impl_pd_index(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-            ):  # pragma: no cover
-                arr = bodo.libs.distributed_api.gatherv(
-                    data._data, allgather, warn_if_rep, root, comm
-                )
-                # Send name from workers to receiver in case of intercomm since not
-                # available on receiver
-                name = data._name
-                if comm != 0:
-                    bcast_root = MPI.PROC_NULL
-                    is_receiver = root == MPI.ROOT
-                    if is_receiver:
-                        bcast_root = 0
-                    elif bodo.get_rank() == 0:
-                        bcast_root = MPI.ROOT
-                    name = bcast_scalar(name, bcast_root, comm)
-                return bodo.hiframes.pd_index_ext.init_period_index(arr, name, freq)
-
-        else:
-
-            def impl_pd_index(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-            ):  # pragma: no cover
-                arr = bodo.libs.distributed_api.gatherv(
-                    data._data, allgather, warn_if_rep, root, comm
-                )
-                # Send name from workers to receiver in case of intercomm since not
-                # available on receiver
-                name = data._name
-                if comm != 0:
-                    bcast_root = MPI.PROC_NULL
-                    is_receiver = root == MPI.ROOT
-                    if is_receiver:
-                        bcast_root = 0
-                    elif bodo.get_rank() == 0:
-                        bcast_root = MPI.ROOT
-                    name = bcast_scalar(name, bcast_root, comm)
-                return bodo.utils.conversion.index_from_array(arr, name)
-
-        return impl_pd_index
-
-    # MultiIndex index
-    if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
-        # just gather the data arrays
-        # TODO: handle `levels` and `codes` when available
-        def impl_multi_index(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root, comm)
-            # Send name from workers to receiver in case of intercomm since not
-            # available on receiver
-            name = data._name
-            names = data._names
-            if comm != 0:
-                bcast_root = MPI.PROC_NULL
-                is_receiver = root == MPI.ROOT
-                if is_receiver:
-                    bcast_root = 0
-                elif bodo.get_rank() == 0:
-                    bcast_root = MPI.ROOT
-                name = bcast_scalar(name, bcast_root, comm)
-                names = bcast_tuple(names, bcast_root, comm)
-            return bodo.hiframes.pd_multi_index_ext.init_multi_index(
-                all_data, names, name
-            )
-
-        return impl_multi_index
-
-    if isinstance(data, bodo.hiframes.table.TableType):
-        table_type = data
-        n_table_cols = len(table_type.arr_types)
-        in_col_inds = MetaType(tuple(range(n_table_cols)))
-        out_cols_arr = np.array(range(n_table_cols), dtype=np.int64)
-
-        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
-            cpp_table = py_data_to_cpp_table(data, (), in_col_inds, n_table_cols)
-            out_cpp_table = _gather_table_py_entry(cpp_table, allgather, root, comm)
-            ret = cpp_table_to_py_table(out_cpp_table, out_cols_arr, table_type, 0)
-            delete_table(out_cpp_table)
-            return ret
-
-        return impl
-
-    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-        n_cols = len(data.columns)
-        # empty dataframe case
-        if n_cols == 0:
-            __col_name_meta_value_gatherv_no_cols = ColNamesMetaType(())
-
-            def impl(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-            ):  # pragma: no cover
-                index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)
-                g_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)
-                return bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                    (), g_index, __col_name_meta_value_gatherv_no_cols
-                )
-
-            return impl
-
-        data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
-
-        func_text = f"def impl_df(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
-        if data.is_table_format:
-            data_args = "T2"
-            func_text += (
-                "  T = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
-                "  T2 = bodo.gatherv(T, allgather, warn_if_rep, root, comm)\n"
-            )
-        else:
-            for i in range(n_cols):
-                func_text += f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i})\n"
-                func_text += f"  g_data_{i} = bodo.gatherv(data_{i}, allgather, warn_if_rep, root, comm)\n"
-        func_text += (
-            "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
-            "  g_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)\n"
-            f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), g_index, __col_name_meta_value_gatherv_with_cols)\n"
-        )
-
-        loc_vars = {}
-        glbls = {
-            "bodo": bodo,
-            "__col_name_meta_value_gatherv_with_cols": ColNamesMetaType(data.columns),
-        }
-        exec(func_text, glbls, loc_vars)
-        impl_df = loc_vars["impl_df"]
-        return impl_df
-
-    # CSR Matrix
-    if isinstance(data, CSRMatrixType):
-
-        def impl_csr_matrix(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            # gather local data
-            all_data = bodo.gatherv(data.data, allgather, warn_if_rep, root, comm)
-            all_col_inds = bodo.gatherv(
-                data.indices, allgather, warn_if_rep, root, comm
-            )
-            all_indptr = bodo.gatherv(data.indptr, allgather, warn_if_rep, root, comm)
-            all_local_rows = gather_scalar(
-                data.shape[0], allgather, root=root, comm=comm
-            )
-            n_rows = all_local_rows.sum()
-            n_cols = bodo.libs.distributed_api.dist_reduce(
-                data.shape[1], np.int32(Reduce_Type.Max.value), comm
-            )
-
-            # using np.int64 in output since maximum index value is not known at
-            # compilation time
-            new_indptr = np.empty(n_rows + 1, np.int64)
-            all_col_inds = all_col_inds.astype(np.int64)
-
-            # construct indptr for output
-            new_indptr[0] = 0
-            out_ind = 1  # current position in output new_indptr
-            indptr_ind = 0  # current position in input all_indptr
-            for n_loc_rows in all_local_rows:
-                for _ in range(n_loc_rows):
-                    row_size = all_indptr[indptr_ind + 1] - all_indptr[indptr_ind]
-                    new_indptr[out_ind] = new_indptr[out_ind - 1] + row_size
-                    out_ind += 1
-                    indptr_ind += 1
-                indptr_ind += 1  # skip extra since each arr is n_rows + 1
-
-            return bodo.libs.csr_matrix_ext.init_csr_matrix(
-                all_data, all_col_inds, new_indptr, (n_rows, n_cols)
-            )
-
-        return impl_csr_matrix
-
-    # Tuple of data containers
-    if isinstance(data, types.BaseTuple):
-        func_text = f"def impl_tuple(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
-        func_text += "  return ({}{})\n".format(
-            ", ".join(
-                f"bodo.gatherv(data[{i}], allgather, warn_if_rep, root, comm)"
-                for i in range(len(data))
-            ),
-            "," if len(data) > 0 else "",
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        impl_tuple = loc_vars["impl_tuple"]
-        return impl_tuple
-
-    if data is types.none:
-        return (
-            lambda data,
-            allgather=False,
-            warn_if_rep=True,
-            root=DEFAULT_ROOT,
-            comm=0: None
-        )  # pragma: no cover
-
-    if isinstance(data, types.Array) and data.ndim != 1:
-        typ_val = numba_to_c_type(data.dtype)
-
-        def gatherv_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            data = np.ascontiguousarray(data)
-            rank = bodo.get_rank()
-            is_receiver = rank == root
-            is_intercomm = comm != 0
-            if is_intercomm:
-                is_receiver = root == MPI.ROOT
-            # size to handle multi-dim arrays
-            n_loc = data.size
-            recv_counts = gather_scalar(
-                np.int64(n_loc), allgather, root=root, comm=comm
-            )
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = np.empty(1, np.int64)
-            if is_receiver or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-            c_gatherv(
-                data.ctypes,
-                np.int64(n_loc),
-                all_data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-                comm,
-            )
-
-            shape = data.shape
-            # Send shape from workers to receiver in case of intercomm since not
-            # available on receiver
-            if is_intercomm:
-                bcast_root = MPI.PROC_NULL
-                if is_receiver:
-                    bcast_root = 0
-                elif rank == 0:
-                    bcast_root = MPI.ROOT
-                shape = bcast_tuple(shape, bcast_root, comm)
-
-            # handle multi-dim case
-            return all_data.reshape((-1,) + shape[1:])
-
-        return gatherv_impl
-
-    if isinstance(data, CategoricalArrayType):
-
-        def impl_cat(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            codes = bodo.gatherv(data.codes, allgather, warn_if_rep, root, comm)
-            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
-                codes, data.dtype
-            )
-
-        return impl_cat
-
-    if isinstance(data, bodo.MatrixType):
-
-        def impl_matrix(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            new_data = bodo.gatherv(data.data, allgather, warn_if_rep, root, comm)
-            return bodo.libs.matrix_ext.init_np_matrix(new_data)
-
-        return impl_matrix
-
-    # DatetimeTimeDeltaArrayType (not supported by C++ below yet)
-    if data == datetime_timedelta_array_type:
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_timedelta(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            days = bodo.gatherv(data._days_data, allgather, warn_if_rep, root, comm)
-            seconds = bodo.gatherv(
-                data._seconds_data, allgather, warn_if_rep, root, comm
-            )
-            microseconds = bodo.gatherv(
-                data._microseconds_data, allgather, warn_if_rep, root, comm
-            )
-
-            rank = bodo.get_rank()
-            is_receiver = rank == root
-            if comm != 0:
-                is_receiver = root == MPI.ROOT
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(
-                np.int32(n_loc), allgather, warn_if_rep, root, comm
-            )
-
-            recv_counts_nulls = np.empty(1, np.int64)
-            displs_nulls = np.empty(1, np.int64)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if is_receiver or allgather:
-                recv_counts_nulls = np.empty(len(recv_counts), np.int64)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int64(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-                comm,
-            )
-            out_null_bitmap = np.empty(recv_counts.sum() >> 3, np.uint8)
-            copy_gathered_null_bytes(
-                out_null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-                days, seconds, microseconds, out_null_bitmap
-            )
-
-        return impl_timedelta
-
-    if is_array_typ(data, False):
-        dtype = data
-
-        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
-            input_info = array_to_info(data)
-            out_info = _gather_array_py_entry(input_info, allgather, root, comm)
-            ret = info_to_array(out_info, dtype)
-            delete_info(out_info)
-            return ret
-
-        return impl
-
-    # List of distributable data
-    if isinstance(data, types.List) and is_distributable_typ(data.dtype):
-
-        def impl_list(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank = bodo.get_rank()
-            is_receiver = rank == root
-            is_intercomm = comm != 0
-            if is_intercomm:
-                is_receiver = root == MPI.ROOT
-
-            length = len(data)
-            # Send length from workers to receiver in case of intercomm since not
-            # available on receiver
-            if is_intercomm:
-                bcast_root = MPI.PROC_NULL
-                if is_receiver:
-                    bcast_root = 0
-                elif rank == 0:
-                    bcast_root = MPI.ROOT
-                length = bcast_scalar(length, bcast_root, comm)
-
-            out = []
-            for i in range(length):
-                in_val = data[i] if not is_receiver else data[0]
-                out.append(bodo.gatherv(in_val, allgather, warn_if_rep, root, comm))
-
-            return out
-
-        return impl_list
-
-    # Dict of distributable data
-    if isinstance(data, types.DictType) and is_distributable_typ(data.value_type):
-
-        def impl_dict(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank = bodo.get_rank()
-            is_receiver = rank == root
-            is_intercomm = comm != 0
-            if is_intercomm:
-                is_receiver = root == MPI.ROOT
-
-            length = len(data)
-            # Send length from workers to receiver in case of intercomm since not
-            # available on receiver
-            if is_intercomm:
-                bcast_root = MPI.PROC_NULL
-                if is_receiver:
-                    bcast_root = 0
-                elif rank == 0:
-                    bcast_root = MPI.ROOT
-                length = bcast_scalar(length, bcast_root, comm)
-
-            in_keys = list(data.keys())
-            in_values = list(data.values())
-            out = {}
-            for i in range(length):
-                key = in_keys[i] if not is_receiver else in_keys[0]
-                if is_intercomm:
-                    bcast_root = MPI.PROC_NULL
-                    if is_receiver:
-                        bcast_root = 0
-                    elif rank == 0:
-                        bcast_root = MPI.ROOT
-                    key = bcast_scalar(key, bcast_root, comm)
-                value = in_values[i] if not is_receiver else in_values[0]
-                out[key] = bodo.gatherv(value, allgather, warn_if_rep, root, comm)
-
-            return out
-
-        return impl_dict
-
-    if is_bodosql_context_type(data):
-        import bodosql
-
-        func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
-        comma_sep_names = ", ".join([f"'{name}'" for name in data.names])
-        comma_sep_dfs = ", ".join(
-            [
-                f"bodo.gatherv(data.dataframes[{i}], allgather, warn_if_rep, root, comm)"
-                for i in range(len(data.dataframes))
-            ]
-        )
-        func_text += f"  return bodosql.context_ext.init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), data.catalog, None)\n"
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo, "bodosql": bodosql}, loc_vars)
-        impl_bodosql_context = loc_vars["impl_bodosql_context"]
-        return impl_bodosql_context
-
-    if type(data).__name__ == "TablePathType":
-        try:
-            from bodosql import TablePathType
-        except ImportError:  # pragma: no cover
-            raise ImportError("Install bodosql to use gatherv() with TablePathType")
-        assert isinstance(data, TablePathType)
-        # Table Path info is all compile time so we return the same data.
-        func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
-        func_text += "  return data\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        impl_table_path = loc_vars["impl_table_path"]
-        return impl_table_path
-
-    raise BodoError(f"gatherv() not available for {data}")  # pragma: no cover
 
 
 def distributed_transpose(arr):  # pragma: no cover
@@ -1477,6 +754,10 @@ def overload_distributed_transpose(arr):
         "distributed_transpose: 2D array expected"
     )
     c_type = numba_to_c_type(arr.dtype)
+    _dist_transpose_comm = types.ExternalFunction(
+        "_dist_transpose_comm",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
+    )
 
     def impl(arr):  # pragma: no cover
         n_loc_rows, n_cols = arr.shape
@@ -1703,39 +984,6 @@ def allgatherv_impl(data, warn_if_rep=True, root=DEFAULT_ROOT):
     )  # pragma: no cover
 
 
-@numba.njit(cache=True)
-def get_scatter_null_bytes_buff(
-    null_bitmap_ptr, sendcounts, sendcounts_nulls, is_sender
-):  # pragma: no cover
-    """copy null bytes into a padded buffer for scatter.
-    Padding is needed since processors receive whole bytes and data inside border bytes
-    has to be split.
-    Only the root rank has the input data and needs to create a valid send buffer.
-    """
-    # non-root ranks don't have scatter input
-    if not is_sender:
-        return np.empty(1, np.uint8)
-
-    null_bytes_buff = np.empty(sendcounts_nulls.sum(), np.uint8)
-
-    curr_tmp_byte = 0  # current location in scatter buffer
-    curr_str = 0  # current string in input bitmap
-
-    # for each rank
-    for i_rank in range(len(sendcounts)):
-        n_strs = sendcounts[i_rank]
-        n_bytes = sendcounts_nulls[i_rank]
-        chunk_bytes = null_bytes_buff[curr_tmp_byte : curr_tmp_byte + n_bytes]
-        # for each string in chunk
-        for j in range(n_strs):
-            set_bit_to_arr(chunk_bytes, j, get_bit_bitmap(null_bitmap_ptr, curr_str))
-            curr_str += 1
-
-        curr_tmp_byte += n_bytes
-
-    return null_bytes_buff
-
-
 def _bcast_dtype(data, root=DEFAULT_ROOT, comm=None):
     """broadcast data type from rank 0 using mpi4py"""
     try:
@@ -1748,83 +996,6 @@ def _bcast_dtype(data, root=DEFAULT_ROOT, comm=None):
 
     data = comm.bcast(data, root)
     return data
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def _get_scatterv_send_counts(send_counts, n_pes, n):
-    """compute send counts if 'send_counts' is None."""
-    if not is_overload_none(send_counts):
-        return lambda send_counts, n_pes, n: send_counts
-
-    def impl(send_counts, n_pes, n):  # pragma: no cover
-        # compute send counts if not available
-        send_counts = np.empty(n_pes, np.int64)
-        for i in range(n_pes):
-            send_counts[i] = get_node_portion(n, n_pes, i)
-        return send_counts
-
-    return impl
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0):
-    """scatterv() implementation for numpy arrays, refactored here with
-    no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
-    Numba creates a wrapper and complains about unboxing int128.
-    """
-    typ_val = numba_to_c_type(data.dtype)
-    ndim = data.ndim
-    dtype = data.dtype
-    # using np.dtype since empty() doesn't work with typeref[datetime/timedelta]
-    if dtype == types.NPDatetime("ns"):
-        dtype = np.dtype("datetime64[ns]")
-    elif dtype == types.NPTimedelta("ns"):
-        dtype = np.dtype("timedelta64[ns]")
-    zero_shape = (0,) * ndim
-
-    def scatterv_arr_impl(
-        data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-    ):  # pragma: no cover
-        rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
-        data_in = np.ascontiguousarray(data)
-        data_ptr = data_in.ctypes
-
-        # broadcast shape to all processors
-        shape = zero_shape
-        if is_sender:
-            shape = data_in.shape
-        shape = bcast_tuple(shape, root, comm)
-        n_elem_per_row = get_tuple_prod(shape[1:])
-
-        send_counts = _get_scatterv_send_counts(send_counts, n_pes, shape[0])
-        send_counts *= n_elem_per_row
-
-        # allocate output with total number of receive elements on this PE
-        n_loc = 0 if (is_intercomm and is_sender) else send_counts[rank]
-        recv_data = np.empty(n_loc, dtype)
-
-        # displacements
-        displs = bodo.ir.join.calc_disp(send_counts)
-
-        c_scatterv(
-            data_ptr,
-            send_counts.ctypes,
-            displs.ctypes,
-            recv_data.ctypes,
-            np.int64(n_loc),
-            np.int32(typ_val),
-            root,
-            comm,
-        )
-
-        if is_intercomm and is_sender:
-            shape = zero_shape
-
-        # handle multi-dim case
-        return recv_data.reshape((-1,) + shape[1:])
-
-    return scatterv_arr_impl
 
 
 def _get_array_first_val_fix_decimal_dict(arr):
@@ -1871,7 +1042,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
-    if dtype == bodo.dict_str_arr_type:
+    if dtype == bodo.types.dict_str_arr_type:
         return pd.array(["a"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())))
 
     if dtype == binary_array_type:
@@ -1904,8 +1075,12 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return np.array([datetime.date(2011, 8, 9)])
 
     # timedelta array
-    if dtype == datetime_timedelta_array_type:
-        return np.array([datetime.timedelta(33)])
+    if dtype == timedelta_array_type:
+        # Use Arrow duration array to ensure pd.Index() below doesn't convert it to
+        # a non-nullable numpy timedelta64 array (leading to parallel errors).
+        return pd.array(
+            [datetime.timedelta(33)], dtype=pd.ArrowDtype(pa.duration("ns"))
+        )
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
@@ -1914,7 +1089,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
-        if isinstance(dtype, bodo.PeriodIndexType):
+        if isinstance(dtype, bodo.types.PeriodIndexType):
             return pd.period_range(
                 start="2023-01-01", periods=1, freq=dtype.freq, name=name
             )
@@ -1948,7 +1123,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return df
 
     # Table
-    if isinstance(dtype, bodo.TableType):
+    if isinstance(dtype, bodo.types.TableType):
         arrs = tuple(get_value_for_type(t) for t in dtype.arr_types)
         return bodo.hiframes.table.Table(arrs)
 
@@ -1977,11 +1152,14 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
 
     # DatetimeArray
     if isinstance(dtype, DatetimeArrayType):
-        return pd.array([pd.Timestamp("2024/1/1", tz=dtype.tz)])
+        return pd.array(
+            [pd.Timestamp("2024/1/1", tz=dtype.tz)],
+            pd.ArrowDtype(pa.timestamp("ns", tz=dtype.tz)),
+        )
 
     # TimestampTZ array
-    if dtype == bodo.timestamptz_array_type:
-        return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+    if dtype == bodo.types.timestamptz_array_type:
+        return np.array([bodo.types.TimestampTZ(pd.Timestamp(0), 0)])
 
     # TimeArray
     if isinstance(dtype, TimeArrayType):
@@ -1991,18 +1169,19 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
                 "get_value_for_type: only nanosecond precision is supported for nested data"
             )
             return pd.array(
-                [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
+                [bodo.types.Time(3, precision=precision)],
+                pd.ArrowDtype(pa.time64("ns")),
             )
-        return np.array([bodo.Time(3, precision=precision)], object)
+        return np.array([bodo.types.Time(3, precision=precision)], object)
 
     # NullArray
-    if dtype == bodo.null_array_type:
+    if dtype == bodo.types.null_array_type:
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
-    if isinstance(dtype, bodo.StructArrayType):
+    if isinstance(dtype, bodo.types.StructArrayType):
         # Handle empty struct corner case which can have typing issues
-        if dtype == bodo.StructArrayType((), ()):
+        if dtype == bodo.types.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
 
         pa_arr = pa.StructArray.from_arrays(
@@ -2011,7 +1190,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # TupleArray
-    if isinstance(dtype, bodo.TupleArrayType):
+    if isinstance(dtype, bodo.types.TupleArrayType):
         # TODO[BSE-4213]: Use Arrow arrays
         return pd.array(
             [
@@ -2024,7 +1203,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )._ndarray
 
     # MapArrayType
-    if isinstance(dtype, bodo.MapArrayType):
+    if isinstance(dtype, bodo.types.MapArrayType):
         pa_arr = pa.MapArray.from_arrays(
             [0, 1],
             get_value_for_type(dtype.key_arr_type, True),
@@ -2033,7 +1212,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # Numpy Matrix
-    if isinstance(dtype, bodo.MatrixType):
+    if isinstance(dtype, bodo.types.MatrixType):
         return np.asmatrix(
             get_value_for_type(types.Array(dtype.dtype, 2, dtype.layout))
         )
@@ -2046,7 +1225,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             get_value_for_type(dtype.key_type): get_value_for_type(dtype.value_type)
         }
 
-    if dtype == bodo.string_type:
+    if dtype == bodo.types.string_type:
         # make names unique with next_label to avoid MultiIndex unboxing issue #811
         return "_" + str(ir_utils.next_label())
 
@@ -2063,26 +1242,12 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
 
 
-@numba.njit(cache=True, no_cpython_wrapper=True)
-def get_scatter_comm_info(root, comm):
-    """Return communication attributes for scatterv based on root and intercomm"""
-    is_intercomm = comm != 0
-    rank = bodo.libs.distributed_api.get_rank()
-    is_sender = rank == root
-    if is_intercomm:
-        is_sender = root == MPI.ROOT
-    n_pes = (
-        bodo.libs.distributed_api.get_size()
-        if not (is_intercomm and is_sender)
-        else bodo.libs.distributed_api.get_remote_size(comm)
-    )
-    return rank, is_intercomm, is_sender, n_pes
-
-
 def scatterv(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=None):
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks should just pass None.
     """
+    import bodo.libs.distributed_impl
+    from bodo.libs.distributed_impl import scatterv_impl
     from bodo.mpi4py import MPI
 
     rank = bodo.libs.distributed_api.get_rank()
@@ -2120,6 +1285,9 @@ def scatterv_overload(
     data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
 ):
     """support scatterv inside jit functions"""
+    import bodo.libs.distributed_impl
+    from bodo.libs.distributed_impl import scatterv_impl_jit
+
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.scatterv()"
     )
@@ -2130,908 +1298,6 @@ def scatterv_overload(
         root=DEFAULT_ROOT,
         comm=0: scatterv_impl_jit(data, send_counts, warn_if_dist, root, comm)
     )  # pragma: no cover
-
-
-@numba.njit(cache=True)
-def scatterv_impl(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0):
-    return scatterv_impl_jit(data, send_counts, warn_if_dist, root, comm)
-
-
-@numba.generated_jit(nopython=True)
-def scatterv_impl_jit(
-    data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-):
-    """nopython implementation of scatterv()"""
-    if isinstance(data, types.Array):
-        return (
-            lambda data,
-            send_counts=None,
-            warn_if_dist=True,
-            root=DEFAULT_ROOT,
-            comm=0: _scatterv_np(data, send_counts, warn_if_dist, root, comm)
-        )  # pragma: no cover
-
-    if data in (string_array_type, binary_array_type):
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-        empty_int32_arr = np.array([], np.int32)
-
-        if data == binary_array_type:
-            alloc_fn = bodo.libs.binary_arr_ext.pre_alloc_binary_array
-        else:
-            alloc_fn = bodo.libs.str_arr_ext.pre_alloc_string_array
-
-        def impl(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
-            n_all = bodo.libs.distributed_api.bcast_scalar(len(data), root, comm)
-
-            # convert offsets to lengths of strings
-            send_arr_lens = np.empty(
-                len(data), np.uint32
-            )  # XXX offset type is offset_type, lengths for comm are uint32
-            for i in range(len(data)):
-                send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
-                    data, i
-                )
-
-            # ------- calculate buffer counts -------
-
-            send_counts = bodo.libs.distributed_api._get_scatterv_send_counts(
-                send_counts, n_pes, n_all
-            )
-
-            # displacements
-            displs = bodo.ir.join.calc_disp(send_counts)
-
-            # compute send counts for characters
-            send_counts_char = np.empty(n_pes, np.int64)
-            if is_sender:
-                curr_str = 0
-                for i in range(n_pes):
-                    c = 0
-                    for _ in range(send_counts[i]):
-                        c += send_arr_lens[curr_str]
-                        curr_str += 1
-                    send_counts_char[i] = c
-
-            send_counts_char = bodo.libs.distributed_api.bcast(
-                send_counts_char, empty_int32_arr, root, comm
-            )
-
-            # displacements for characters
-            displs_char = bodo.ir.join.calc_disp(send_counts_char)
-
-            # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int64)
-            for i in range(n_pes):
-                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
-
-            # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-            # allocate output with total number of receive elements on this PE
-            n_loc = 0 if (is_intercomm and is_sender) else send_counts[rank]
-            n_loc_char = 0 if (is_intercomm and is_sender) else send_counts_char[rank]
-            recv_arr = alloc_fn(n_loc, n_loc_char)
-
-            # ----- string lengths -----------
-
-            recv_lens = np.empty(n_loc, np.uint32)
-            bodo.libs.distributed_api.c_scatterv(
-                send_arr_lens.ctypes,
-                send_counts.ctypes,
-                displs.ctypes,
-                recv_lens.ctypes,
-                np.int64(n_loc),
-                int32_typ_enum,
-                root,
-                comm,
-            )
-
-            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
-            # use the same buffer
-            bodo.libs.str_arr_ext.convert_len_arr_to_offset(
-                recv_lens.ctypes, bodo.libs.str_arr_ext.get_offset_ptr(recv_arr), n_loc
-            )
-
-            # ----- string characters -----------
-
-            bodo.libs.distributed_api.c_scatterv(
-                bodo.libs.str_arr_ext.get_data_ptr(data),
-                send_counts_char.ctypes,
-                displs_char.ctypes,
-                bodo.libs.str_arr_ext.get_data_ptr(recv_arr),
-                np.int64(n_loc_char),
-                char_typ_enum,
-                root,
-                comm,
-            )
-
-            # ----------- null bitmap -------------
-
-            n_recv_bytes = (n_loc + 7) >> 3
-
-            send_null_bitmap = bodo.libs.distributed_api.get_scatter_null_bytes_buff(
-                bodo.libs.str_arr_ext.get_null_bitmap_ptr(data),
-                send_counts,
-                send_counts_nulls,
-                is_sender,
-            )
-
-            bodo.libs.distributed_api.c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                bodo.libs.str_arr_ext.get_null_bitmap_ptr(recv_arr),
-                np.int64(n_recv_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-
-            return recv_arr
-
-        return impl
-
-    if isinstance(data, ArrayItemArrayType):
-        # Code adapted from the string code. Both the string and array(item) codes should be
-        # refactored.
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-        empty_int32_arr = np.array([], np.int32)
-
-        def scatterv_array_item_impl(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
-            in_data_arr = bodo.libs.array_item_arr_ext.get_data(data)
-            in_data_arr = in_data_arr[: in_offsets_arr[-1]]
-            in_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
-
-            rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-            n_all = bcast_scalar(len(data), root, comm)
-
-            # convert offsets to lengths of lists
-            send_arr_lens = np.empty(
-                len(data), np.uint32
-            )  # XXX offset type is offset_type
-            for i in range(len(data)):
-                send_arr_lens[i] = in_offsets_arr[i + 1] - in_offsets_arr[i]
-
-            # ------- calculate buffer counts -------
-
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-
-            # displacements
-            displs = bodo.ir.join.calc_disp(send_counts)
-
-            # compute send counts for items
-            send_counts_item = np.empty(n_pes, np.int64)
-            if is_sender:
-                curr_item = 0
-                for i in range(n_pes):
-                    c = 0
-                    for _ in range(send_counts[i]):
-                        c += send_arr_lens[curr_item]
-                        curr_item += 1
-                    send_counts_item[i] = c
-
-            send_counts_item = bodo.libs.distributed_api.bcast(
-                send_counts_item, empty_int32_arr, root, comm
-            )
-
-            # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int64)
-            for i in range(n_pes):
-                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
-
-            # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-            # allocate output with total number of receive elements on this PE
-            n_loc = 0 if (is_intercomm and is_sender) else send_counts[rank]
-            recv_offsets_arr = np.empty(n_loc + 1, np_offset_type)
-
-            recv_data_arr = bodo.libs.distributed_api.scatterv_impl(
-                in_data_arr, send_counts_item, warn_if_dist, root, comm
-            )
-            n_recv_null_bytes = (n_loc + 7) >> 3
-            recv_null_bitmap_arr = np.empty(n_recv_null_bytes, np.uint8)
-
-            # ----- list of item lengths -----------
-
-            recv_lens = np.empty(n_loc, np.uint32)
-            c_scatterv(
-                send_arr_lens.ctypes,
-                send_counts.ctypes,
-                displs.ctypes,
-                recv_lens.ctypes,
-                np.int64(n_loc),
-                int32_typ_enum,
-                root,
-                comm,
-            )
-
-            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
-            # use the same buffer
-            convert_len_arr_to_offset(recv_lens.ctypes, recv_offsets_arr.ctypes, n_loc)
-
-            # ----------- null bitmap -------------
-
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                in_null_bitmap_arr.ctypes, send_counts, send_counts_nulls, is_sender
-            )
-
-            c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                recv_null_bitmap_arr.ctypes,
-                np.int64(n_recv_null_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-
-            return bodo.libs.array_item_arr_ext.init_array_item_array(
-                n_loc, recv_data_arr, recv_offsets_arr, recv_null_bitmap_arr
-            )
-
-        return scatterv_array_item_impl
-
-    if data == boolean_array_type:
-        # Nullable booleans need their own implementation because the
-        # data array stores 1 bit per boolean. As a result, the counts may split
-        # may split the data array mid-byte, so we need to handle it the same
-        # way we handle the null bitmap. The send count also doesn't reflect the
-        # number of bytes to send, so we need to calculate that separately.
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def scatterv_impl_bool_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-            data_in = data._data
-            null_bitmap = data._null_bitmap
-            # Calculate the displacements for nulls and data, each of
-            # which is a single bit.
-            n_in = len(data)
-            n_all = bcast_scalar(n_in, root, comm)
-
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-            # Calculate number of local output elements
-            n_loc = np.int64(0 if (is_intercomm and is_sender) else send_counts[rank])
-            # compute send counts bytes
-            send_counts_bytes = np.empty(n_pes, np.int64)
-            for i in range(n_pes):
-                send_counts_bytes[i] = (send_counts[i] + 7) >> 3
-
-            displs_bytes = bodo.ir.join.calc_disp(send_counts_bytes)
-
-            send_data_bitmap = get_scatter_null_bytes_buff(
-                data_in.ctypes, send_counts, send_counts_bytes, is_sender
-            )
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                null_bitmap.ctypes, send_counts, send_counts_bytes, is_sender
-            )
-            # Allocate the output arrays
-            n_recv_bytes = (
-                0 if (is_intercomm and is_sender) else send_counts_bytes[rank]
-            )
-            data_recv = np.empty(n_recv_bytes, np.uint8)
-            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
-
-            c_scatterv(
-                send_data_bitmap.ctypes,
-                send_counts_bytes.ctypes,
-                displs_bytes.ctypes,
-                data_recv.ctypes,
-                np.int64(n_recv_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-            c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_bytes.ctypes,
-                displs_bytes.ctypes,
-                bitmap_recv.ctypes,
-                np.int64(n_recv_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-            return bodo.libs.bool_arr_ext.init_bool_array(data_recv, bitmap_recv, n_loc)
-
-        return scatterv_impl_bool_arr
-
-    if (
-        isinstance(
-            data,
-            (
-                IntegerArrayType,
-                FloatingArrayType,
-                DecimalArrayType,
-                DatetimeArrayType,
-                TimeArrayType,
-            ),
-        )
-        or data == datetime_date_array_type
-    ):
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        # these array need a data array and a null bitmap array to be initialized by
-        # their init functions
-        if isinstance(data, IntegerArrayType):
-            init_func = bodo.libs.int_arr_ext.init_integer_array
-        if isinstance(data, FloatingArrayType):
-            init_func = bodo.libs.float_arr_ext.init_float_array
-        if isinstance(data, DecimalArrayType):
-            precision = data.precision
-            scale = data.scale
-            init_func = numba.njit(no_cpython_wrapper=True)(
-                lambda d, b: bodo.libs.decimal_arr_ext.init_decimal_array(
-                    d, b, precision, scale
-                )  # pragma: no cover
-            )
-        if isinstance(data, DatetimeArrayType):
-            tz = data.tz
-            init_func = numba.njit(no_cpython_wrapper=True)(
-                lambda d, b: bodo.libs.pd_datetime_arr_ext.init_datetime_array(d, b, tz)
-            )  # pragma: no cover
-        if data == datetime_date_array_type:
-            init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
-        if isinstance(data, TimeArrayType):
-            precision = data.precision
-            init_func = numba.njit(no_cpython_wrapper=True)(
-                lambda d, b: bodo.hiframes.time_ext.init_time_array(
-                    d, b, precision
-                )  # pragma: no cover
-            )
-
-        def scatterv_impl_int_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            data_in = data._data
-            null_bitmap = data._null_bitmap
-            n_in = len(data_in)
-
-            data_recv = _scatterv_np(data_in, send_counts, warn_if_dist, root, comm)
-            out_null_bitmap = _scatterv_null_bitmap(
-                null_bitmap, send_counts, n_in, root, comm
-            )
-
-            return init_func(data_recv, out_null_bitmap)
-
-        return scatterv_impl_int_arr
-
-    # interval array
-    if isinstance(data, IntervalArrayType):
-        # scatter the left/right arrays
-        def impl_interval_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            left_chunk = bodo.libs.distributed_api.scatterv_impl(
-                data._left, send_counts, warn_if_dist, root, comm
-            )
-            right_chunk = bodo.libs.distributed_api.scatterv_impl(
-                data._right, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.libs.interval_arr_ext.init_interval_array(
-                left_chunk, right_chunk
-            )
-
-        return impl_interval_arr
-
-    # DatetimeTimeDeltaArrayType
-    if data == datetime_timedelta_array_type:
-
-        def impl_timedelta_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            days = bodo.libs.distributed_api.scatterv_impl(
-                data._days_data, send_counts, warn_if_dist, root, comm
-            )
-            seconds = bodo.libs.distributed_api.scatterv_impl(
-                data._seconds_data, send_counts, warn_if_dist, root, comm
-            )
-            microseconds = bodo.libs.distributed_api.scatterv_impl(
-                data._microseconds_data, send_counts, warn_if_dist, root, comm
-            )
-            out_null_bitmap = _scatterv_null_bitmap(
-                data._null_bitmap, send_counts, len(data), root, comm
-            )
-            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-                days, seconds, microseconds, out_null_bitmap
-            )
-
-        return impl_timedelta_arr
-
-    # NullArray
-    if data == bodo.null_array_type:
-
-        def impl_null_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            _, is_intercomm, is_sender, _ = get_scatter_comm_info(root, comm)
-            n = bodo.libs.distributed_api.get_node_portion(
-                bcast_scalar(len(data), root, comm), bodo.get_size(), bodo.get_rank()
-            )
-            if is_intercomm and is_sender:
-                n = 0
-            return bodo.libs.null_arr_ext.init_null_array(n)
-
-        return impl_null_arr
-
-    # TimestampTZ array
-    if data == bodo.timestamptz_array_type:
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_timestamp_tz_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            _, _, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
-            data_ts_in = data.data_ts
-            data_offset_in = data.data_offset
-            null_bitmap = data._null_bitmap
-            n_in = len(data_ts_in)
-
-            data_ts_recv = _scatterv_np(
-                data_ts_in, send_counts, warn_if_dist, root, comm
-            )
-            data_offset_recv = _scatterv_np(
-                data_offset_in, send_counts, warn_if_dist, root, comm
-            )
-
-            n_all = bcast_scalar(n_in, root, comm)
-            n_recv_bytes = (len(data_ts_recv) + 7) >> 3
-            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
-
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-
-            # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int64)
-            for i in range(n_pes):
-                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
-
-            # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                null_bitmap.ctypes, send_counts, send_counts_nulls, is_sender
-            )
-
-            c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                bitmap_recv.ctypes,
-                np.int64(n_recv_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-            return bodo.hiframes.timestamptz_ext.init_timestamptz_array(
-                data_ts_recv, data_offset_recv, bitmap_recv
-            )
-
-        return impl_timestamp_tz_arr
-
-    if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
-        # TODO: support send_counts
-        def impl_range_index(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
-            start = data._start
-            stop = data._stop
-            step = data._step
-            name = data._name
-
-            name = bcast_scalar(name, root, comm)
-
-            start = bcast_scalar(start, root, comm)
-            stop = bcast_scalar(stop, root, comm)
-            step = bcast_scalar(step, root, comm)
-            n_items = bodo.libs.array_kernels.calc_nitems(start, stop, step)
-            chunk_start = bodo.libs.distributed_api.get_start(n_items, n_pes, rank)
-            chunk_count = bodo.libs.distributed_api.get_node_portion(
-                n_items, n_pes, rank
-            )
-            new_start = start + step * chunk_start
-            new_stop = start + step * (chunk_start + chunk_count)
-            new_stop = min(new_stop, stop) if step > 0 else max(new_stop, stop)
-
-            if is_intercomm and is_sender:
-                new_start = new_stop = 0
-
-            return bodo.hiframes.pd_index_ext.init_range_index(
-                new_start, new_stop, step, name
-            )
-
-        return impl_range_index
-
-    # Period index requires special handling because index_from_array
-    # doesn't work properly (can't infer the index).
-    # See [BE-2067]
-    if isinstance(data, bodo.hiframes.pd_index_ext.PeriodIndexType):
-        freq = data.freq
-
-        def impl_period_index(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            data_in = data._data
-            name = data._name
-            name = bcast_scalar(name, root, comm)
-            arr = bodo.libs.distributed_api.scatterv_impl(
-                data_in, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.hiframes.pd_index_ext.init_period_index(arr, name, freq)
-
-        return impl_period_index
-
-    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-
-        def impl_pd_index(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            data_in = data._data
-            name = data._name
-            name = bcast_scalar(name, root, comm)
-            arr = bodo.libs.distributed_api.scatterv_impl(
-                data_in, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.utils.conversion.index_from_array(arr, name)
-
-        return impl_pd_index
-
-    # MultiIndex index
-    if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
-        # TODO: handle `levels` and `codes` when available
-        def impl_multi_index(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            all_data = bodo.libs.distributed_api.scatterv_impl(
-                data._data, send_counts, warn_if_dist, root, comm
-            )
-            name = bcast_scalar(data._name, root, comm)
-            names = bcast_tuple(data._names, root, comm)
-            return bodo.hiframes.pd_multi_index_ext.init_multi_index(
-                all_data, names, name
-            )
-
-        return impl_multi_index
-
-    if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
-
-        def impl_series(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            # get data and index arrays
-            arr = bodo.hiframes.pd_series_ext.get_series_data(data)
-            index = bodo.hiframes.pd_series_ext.get_series_index(data)
-            name = bodo.hiframes.pd_series_ext.get_series_name(data)
-            # scatter data
-            out_name = bcast_scalar(name, root, comm)
-            out_arr = bodo.libs.distributed_api.scatterv_impl(
-                arr, send_counts, warn_if_dist, root, comm
-            )
-            out_index = bodo.libs.distributed_api.scatterv_impl(
-                index, send_counts, warn_if_dist, root, comm
-            )
-            # create output Series
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, out_name)
-
-        return impl_series
-
-    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-        n_cols = len(data.columns)
-        __col_name_meta_scaterv_impl = ColNamesMetaType(data.columns)
-
-        func_text = f"def impl_df(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
-        if data.is_table_format:
-            func_text += (
-                "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
-            )
-            func_text += "  g_table = bodo.libs.distributed_api.scatterv_impl(table, send_counts, warn_if_dist, root, comm)\n"
-            data_args = "g_table"
-        else:
-            for i in range(n_cols):
-                func_text += f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i})\n"
-                func_text += f"  g_data_{i} = bodo.libs.distributed_api.scatterv_impl(data_{i}, send_counts, warn_if_dist, root, comm)\n"
-            data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
-        func_text += (
-            "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
-        )
-        func_text += "  g_index = bodo.libs.distributed_api.scatterv_impl(index, send_counts, warn_if_dist, root, comm)\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), g_index, __col_name_meta_scaterv_impl)\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "__col_name_meta_scaterv_impl": __col_name_meta_scaterv_impl,
-            },
-            loc_vars,
-        )
-        impl_df = loc_vars["impl_df"]
-        return impl_df
-
-    if isinstance(data, bodo.TableType):
-        func_text = f"def impl_table(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
-        func_text += "  T = data\n"
-        func_text += "  T2 = init_table(T, False)\n"
-        func_text += "  l = 0\n"
-
-        glbls = {}
-        for blk in data.type_to_blk.values():
-            glbls[f"arr_inds_{blk}"] = np.array(
-                data.block_to_arr_ind[blk], dtype=np.int64
-            )
-            func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
-            func_text += f"  for i in range(len(arr_list_{blk})):\n"
-            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-            func_text += (
-                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-            )
-            func_text += f"    out_arr_{blk} = bodo.libs.distributed_api.scatterv_impl(arr_list_{blk}[i], send_counts, warn_if_dist, root, comm)\n"
-            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
-            func_text += f"    l = len(out_arr_{blk})\n"
-            func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-        func_text += "  T2 = set_table_len(T2, l)\n"
-        func_text += "  return T2\n"
-
-        glbls.update(
-            {
-                "bodo": bodo,
-                "init_table": bodo.hiframes.table.init_table,
-                "get_table_block": bodo.hiframes.table.get_table_block,
-                "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
-                "set_table_block": bodo.hiframes.table.set_table_block,
-                "set_table_len": bodo.hiframes.table.set_table_len,
-                "alloc_list_like": bodo.hiframes.table.alloc_list_like,
-            }
-        )
-        loc_vars = {}
-        exec(func_text, glbls, loc_vars)
-        return loc_vars["impl_table"]
-
-    if data == bodo.dict_str_arr_type:
-        empty_int32_arr = np.array([], np.int32)
-
-        def impl_dict_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            # broadcast the dictionary data (string array)
-            str_arr = bodo.libs.distributed_api.bcast(
-                data._data, empty_int32_arr, root, comm
-            )
-            # scatter indices array
-            new_indices = bodo.libs.distributed_api.scatterv_impl(
-                data._indices, send_counts, warn_if_dist, root, comm
-            )
-            # the dictionary is global by construction (broadcast)
-            return bodo.libs.dict_arr_ext.init_dict_arr(
-                str_arr, new_indices, True, data._has_unique_local_dictionary, None
-            )
-
-        return impl_dict_arr
-
-    if isinstance(data, CategoricalArrayType):
-
-        def impl_cat(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            codes = bodo.libs.distributed_api.scatterv_impl(
-                data.codes, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
-                codes, data.dtype
-            )
-
-        return impl_cat
-
-    # Tuple of data containers
-    if isinstance(data, types.BaseTuple):
-        func_text = f"def impl_tuple(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
-        func_text += "  return ({}{})\n".format(
-            ", ".join(
-                f"bodo.libs.distributed_api.scatterv_impl(data[{i}], send_counts, warn_if_dist, root, comm)"
-                for i in range(len(data))
-            ),
-            "," if len(data) > 0 else "",
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        impl_tuple = loc_vars["impl_tuple"]
-        return impl_tuple
-
-    # List of distributable data
-    if isinstance(data, types.List) and is_distributable_typ(data.dtype):
-
-        def impl_list(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            is_sender = rank == root
-            if comm != 0:
-                is_sender = root == MPI.ROOT
-
-            length = bcast_scalar(len(data), root, comm)
-            out = []
-            for i in range(length):
-                in_val = data[i] if is_sender else data[0]
-                out.append(
-                    bodo.libs.distributed_api.scatterv_impl(
-                        in_val, send_counts, warn_if_dist, root, comm
-                    )
-                )
-
-            return out
-
-        return impl_list
-
-    # Dictionary of distributable data
-    if isinstance(data, types.DictType) and is_distributable_typ(data.value_type):
-
-        def impl_dict(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            is_sender = rank == root
-            if comm != 0:
-                is_sender = root == MPI.ROOT
-
-            length = bcast_scalar(len(data), root, comm)
-            in_keys = list(data.keys())
-            in_values = list(data.values())
-            out = {}
-            for i in range(length):
-                key = in_keys[i] if is_sender else in_keys[0]
-                value = in_values[i] if is_sender else in_values[0]
-                out_key = bcast_scalar(key, root, comm)
-                out[out_key] = bodo.libs.distributed_api.scatterv_impl(
-                    value, send_counts, warn_if_dist, root, comm
-                )
-
-            return out
-
-        return impl_dict
-
-    # StructArray
-    if isinstance(data, bodo.StructArrayType):
-        n_fields = len(data.data)
-        func_text = f"def impl_struct(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
-        func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
-        func_text += "  out_null_bitmap = _scatterv_null_bitmap(bodo.libs.struct_arr_ext.get_null_bitmap(data), send_counts, len(data), root, comm)\n"
-        for i in range(n_fields):
-            func_text += f"  new_inner_data_arr_{i} = bodo.libs.distributed_api.scatterv_impl(inner_data_arrs[{i}], send_counts, warn_if_dist, root, comm)\n"
-
-        new_data_tuple_str = "({}{})".format(
-            ", ".join([f"new_inner_data_arr_{i}" for i in range(n_fields)]),
-            "," if n_fields > 0 else "",
-        )
-        field_names_tuple_str = "({}{})".format(
-            ", ".join([f"'{f}'" for f in data.names]),
-            "," if n_fields > 0 else "",
-        )
-        out_len = (
-            "len(new_inner_data_arr_0)"
-            if n_fields > 0
-            else "bodo.libs.distributed_api.get_node_portion(bcast_scalar(len(data), root, comm), bodo.get_size(), bodo.get_rank())"
-        )
-        func_text += f"  return bodo.libs.struct_arr_ext.init_struct_arr({out_len}, {new_data_tuple_str}, out_null_bitmap, {field_names_tuple_str})\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "_scatterv_null_bitmap": _scatterv_null_bitmap,
-                "bcast_scalar": bcast_scalar,
-            },
-            loc_vars,
-        )
-        impl_struct = loc_vars["impl_struct"]
-        return impl_struct
-
-    # MapArrayType
-    if isinstance(data, bodo.MapArrayType):
-
-        def impl(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            # Call it recursively on the underlying ArrayItemArray array.
-            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
-                data._data, send_counts, warn_if_dist, root, comm
-            )
-            # Reconstruct the Map array from the new ArrayItemArray array.
-            new_data = bodo.libs.map_arr_ext.init_map_arr(new_underlying_data)
-            return new_data
-
-        return impl
-
-    # TupleArray
-    if isinstance(data, bodo.TupleArrayType):
-
-        def impl_tuple(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
-                data._data, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.libs.tuple_arr_ext.init_tuple_arr(new_underlying_data)
-
-        return impl_tuple
-
-    if data is types.none:  # pragma: no cover
-        return (
-            lambda data,
-            send_counts=None,
-            warn_if_dist=True,
-            root=DEFAULT_ROOT,
-            comm=0: None
-        )
-
-    if isinstance(data, bodo.MatrixType):
-
-        def impl_matrix(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
-                data.data, send_counts, warn_if_dist, root, comm
-            )
-            return bodo.libs.matrix_ext.init_np_matrix(new_underlying_data)
-
-        return impl_matrix
-
-    raise BodoError(f"scatterv() not available for {data}")  # pragma: no cover
-
-
-char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-
-@numba.njit(cache=True, no_cpython_wrapper=True)
-def _scatterv_null_bitmap(null_bitmap, send_counts, n_in, root, comm):
-    """Scatter null bitmap for nullable arrays"""
-    rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
-    n_all = bcast_scalar(n_in, root, comm)
-
-    send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-    n_loc = 0 if (is_intercomm and is_sender) else send_counts[rank]
-
-    n_recv_bytes = (n_loc + 7) >> 3
-    bitmap_recv = np.empty(n_recv_bytes, np.uint8)
-
-    # compute send counts for nulls
-    send_counts_nulls = np.empty(n_pes, np.int64)
-    for i in range(n_pes):
-        send_counts_nulls[i] = (send_counts[i] + 7) >> 3
-
-    # displacements for nulls
-    displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-    send_null_bitmap = get_scatter_null_bytes_buff(
-        null_bitmap.ctypes, send_counts, send_counts_nulls, is_sender
-    )
-
-    c_scatterv(
-        send_null_bitmap.ctypes,
-        send_counts_nulls.ctypes,
-        displs_nulls.ctypes,
-        bitmap_recv.ctypes,
-        np.int64(n_recv_bytes),
-        char_typ_enum,
-        root,
-        comm,
-    )
-    return bitmap_recv
 
 
 @intrinsic
@@ -3055,6 +1321,8 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
     ranks.
     Only supports basic numeric and string data types (e.g. no nested arrays).
     """
+    INT_MAX = np.iinfo(np.int32).max
+
     # Numpy arrays
     if isinstance(data, types.Array):
 
@@ -3156,18 +1424,18 @@ class BcastScalarInfer(AbstractTemplate):
                 (
                     types.Integer,
                     types.Float,
-                    bodo.PandasTimestampType,
+                    bodo.types.PandasTimestampType,
                 ),
             )
             or val
             in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-                bodo.string_type,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
+                bodo.types.string_type,
                 types.none,
                 types.bool_,
-                bodo.datetime_date_type,
-                bodo.timestamptz_type,
+                bodo.types.datetime_date_type,
+                bodo.types.timestamptz_type,
             ]
         ):
             raise BodoError(
@@ -3181,7 +1449,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
     if val == types.none:
         return lambda val, root=DEFAULT_ROOT, comm=0: None
 
-    if val == bodo.timestamptz_type:
+    if val == bodo.types.timestamptz_type:
 
         def impl(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             updated_timestamp = bodo.libs.distributed_api.bcast_scalar(
@@ -3190,11 +1458,11 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
             updated_offset = bodo.libs.distributed_api.bcast_scalar(
                 val.offset_minutes, root, comm
             )
-            return bodo.TimestampTZ(updated_timestamp, updated_offset)
+            return bodo.types.TimestampTZ(updated_timestamp, updated_offset)
 
         return impl
 
-    if val == bodo.datetime_date_type:
+    if val == bodo.types.datetime_date_type:
         c_type = numba_to_c_type(types.int32)
 
         # Note: There are issues calling this function with recursion.
@@ -3207,7 +1475,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
         c_type = numba_to_c_type(types.int64)
         tz = val.tz
 
@@ -3222,7 +1490,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if val == bodo.string_type:
+    if val == bodo.types.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_str(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
@@ -3250,23 +1518,15 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
     # TODO: other types like boolean
     typ_val = numba_to_c_type(val)
-    # TODO: fix np.full and refactor
-    func_text = (
-        f"def bcast_scalar_impl(val, root={DEFAULT_ROOT}, comm=0):\n"
-        "  send = np.empty(1, dtype)\n"
-        "  send[0] = val\n"
-        f"  c_bcast(send.ctypes, np.int32(1), np.int32({typ_val}), np.int32(root), comm)\n"
-        "  return send[0]\n"
-    )
-
     dtype = numba.np.numpy_support.as_dtype(val)
-    loc_vars = {}
-    exec(
-        func_text,
-        {"bodo": bodo, "np": np, "c_bcast": c_bcast, "dtype": dtype},
-        loc_vars,
-    )
-    bcast_scalar_impl = loc_vars["bcast_scalar_impl"]
+
+    # TODO: fix np.full and refactor
+    def bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
+        send = np.empty(1, dtype)
+        send[0] = val
+        c_bcast(send.ctypes, np.int32(1), np.int32(typ_val), np.int32(root), comm)
+        return send[0]
+
     return bcast_scalar_impl
 
 
@@ -3385,9 +1645,6 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
-
-
 def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
@@ -3410,7 +1667,7 @@ def transform_str_getitem_output(data, length):
 
 @overload(transform_str_getitem_output)
 def overload_transform_str_getitem_output(data, length):
-    if data == bodo.string_type:
+    if data == bodo.types.string_type:
         return lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
             data._data, length
         )  # pragma: no cover
@@ -3423,7 +1680,10 @@ def overload_transform_str_getitem_output(data, length):
 
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
-    if is_str_arr_type(arr) or arr == bodo.binary_array_type:
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
+
+    if is_str_arr_type(arr) or arr == bodo.types.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -3497,7 +1757,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
-    if isinstance(arr, bodo.CategoricalArrayType):
+    if isinstance(arr, bodo.types.CategoricalArrayType):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def cat_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -3573,7 +1833,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return tz_aware_getitem_impl
 
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
 
         def null_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -3584,7 +1844,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return null_getitem_impl
 
-    if arr == bodo.datetime_date_array_type:
+    if arr == bodo.types.datetime_date_array_type:
 
         def date_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -3619,7 +1879,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return date_getitem_impl
 
-    if arr == bodo.timestamptz_array_type:
+    if arr == bodo.types.timestamptz_array_type:
 
         def timestamp_tz_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -3757,7 +2017,10 @@ def int_optional_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
 
 @overload(int_isna, no_unliteral=True)
-def int_isn_overload(arr, ind, arr_start, total_len, is_1D):
+def int_isna_overload(arr, ind, arr_start, total_len, is_1D):
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
+
     def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         if ind >= total_len:
             raise IndexError("index out of bounds")
@@ -3845,113 +2108,6 @@ def get_chunk_bounds_overload(A, parallel=False):
     return impl
 
 
-# send_data, recv_data, send_counts, recv_counts, send_disp, recv_disp, typ_enum
-c_alltoallv = types.ExternalFunction(
-    "c_alltoallv",
-    types.void(
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.voidptr,
-        types.int32,
-    ),
-)
-
-
-# TODO: test
-# TODO: big alltoallv
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def alltoallv(
-    send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
-):  # pragma: no cover
-    typ_enum = get_type_enum(send_data)
-    typ_enum_o = get_type_enum(out_data)
-    assert typ_enum == typ_enum_o
-
-    if isinstance(
-        send_data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
-    ) or send_data in (
-        boolean_array_type,
-        datetime_date_array_type,
-    ):
-        # TODO: Move boolean_array_type to its own section because we use 1 bit per boolean
-        # TODO: Send the null bitmap
-        return (
-            lambda send_data,
-            out_data,
-            send_counts,
-            recv_counts,
-            send_disp,
-            recv_disp: c_alltoallv(
-                send_data._data.ctypes,
-                out_data._data.ctypes,
-                send_counts.ctypes,
-                recv_counts.ctypes,
-                send_disp.ctypes,
-                recv_disp.ctypes,
-                typ_enum,
-            )
-        )  # pragma: no cover
-
-    if isinstance(send_data, bodo.CategoricalArrayType):
-        return (
-            lambda send_data,
-            out_data,
-            send_counts,
-            recv_counts,
-            send_disp,
-            recv_disp: c_alltoallv(
-                send_data.codes.ctypes,
-                out_data.codes.ctypes,
-                send_counts.ctypes,
-                recv_counts.ctypes,
-                send_disp.ctypes,
-                recv_disp.ctypes,
-                typ_enum,
-            )
-        )  # pragma: no cover
-
-    return (
-        lambda send_data,
-        out_data,
-        send_counts,
-        recv_counts,
-        send_disp,
-        recv_disp: c_alltoallv(
-            send_data.ctypes,
-            out_data.ctypes,
-            send_counts.ctypes,
-            recv_counts.ctypes,
-            send_disp.ctypes,
-            recv_disp.ctypes,
-            typ_enum,
-        )
-    )  # pragma: no cover
-
-
-def alltoallv_tup(
-    send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
-):  # pragma: no cover
-    return
-
-
-@overload(alltoallv_tup, no_unliteral=True)
-def alltoallv_tup_overload(
-    send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
-):
-    count = send_data.count
-    assert out_data.count == count
-
-    func_text = "def bodo_alltoallv_tup(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):\n"
-    for i in range(count):
-        func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
-    func_text += "  return\n"
-
-    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, globals())
-
-
 @numba.njit(cache=True)
 def get_start_count(n):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
@@ -3969,7 +2125,7 @@ def get_start(total_size, pes, rank):  # pragma: no cover
     return rank * blk_size + min(rank, res)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     res = total_size % pes
@@ -4206,19 +2362,23 @@ def overload_print_if_not_empty(*args):
     return impl
 
 
-_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
-
-
 @numba.generated_jit(nopython=True)
 def wait(req, cond=True):
     """wait on MPI request"""
+
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _wait = types.ExternalFunction(
+        "dist_wait", types.void(mpi_req_numba_type, types.bool_)
+    )
+
     # Tuple of requests (e.g. nullable arrays)
     if isinstance(req, types.BaseTuple):
         count = len(req.types)
         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
         func_text = "def bodo_wait(req, cond=True):\n"
         func_text += f"  return {tup_call}\n"
-        return bodo_exec(func_text, {"_wait": _wait}, {}, globals())
+        return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
 
     # None passed means no request to wait on (no-op), happens for shift() for string
     # arrays since we use blocking communication instead
@@ -4348,58 +2508,6 @@ def dist_permutation_array_index(
     check_and_propagate_cpp_exception()
 
 
-########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
-
-
-from bodo.io import hdfs_reader
-
-finalize = hdist.finalize_py_wrapper
-disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
-
-ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
-disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
-
-
-@numba.njit(cache=True)
-def disconnect_hdfs_njit():  # pragma: no cover
-    """
-    Simple njit wrapper around disconnect_hdfs.
-    This is useful for resetting the singleton
-    hadoop filesystem instance. This is a NOP
-    if the filesystem hasn't been initialized yet.
-    """
-    disconnect_hdfs()
-
-
-def call_finalize():  # pragma: no cover
-    finalize()
-    disconnect_hdfs_py_wrapper()
-
-
-def flush_stdout():
-    # using a function since pytest throws an error sometimes
-    # if flush function is passed directly to atexit
-    if not sys.stdout.closed:
-        sys.stdout.flush()
-
-
-atexit.register(call_finalize)
-# Flush output before finalize
-atexit.register(flush_stdout)
-
-
-ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
-c_broadcast_array = ExternalFunctionErrorChecked(
-    "broadcast_array_py_entry",
-    array_info_type(array_info_type, array_info_type, types.int32, types.int64),
-)
-ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
-c_broadcast_table = ExternalFunctionErrorChecked(
-    "broadcast_table_py_entry",
-    table_type(table_type, array_info_type, types.int32, types.int64),
-)
-
-
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
     from bodo.mpi4py import MPI
@@ -4447,6 +2555,10 @@ def bcast_overload(data, comm_ranks, root=DEFAULT_ROOT, comm=0):
 def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     """nopython implementation of bcast()"""
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(data, "bodo.bcast()")
+    c_broadcast_array = ExternalFunctionErrorChecked(
+        "broadcast_array_py_entry",
+        array_info_type(array_info_type, array_info_type, types.int32, types.int64),
+    )
 
     if isinstance(data, types.Array) and data.ndim > 1:
         ndim = data.ndim
@@ -4542,6 +2654,10 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     if isinstance(data, bodo.hiframes.table.TableType):
         data_type = data
         out_cols_arr = np.arange(len(data.arr_types), dtype=np.int64)
+        c_broadcast_table = ExternalFunctionErrorChecked(
+            "broadcast_table_py_entry",
+            table_type(table_type, array_info_type, types.int32, types.int64),
+        )
 
         def impl_table(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             data_cpp = py_table_to_cpp_table(data, data_type)
@@ -4638,11 +2754,10 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
 node_ranks = None
 
 
-def get_host_ranks():  # pragma: no cover
+def get_host_ranks(comm: MPI.Comm = MPI.COMM_WORLD):  # pragma: no cover
     """Get dict holding hostname and its associated ranks"""
     global node_ranks
     if node_ranks is None:
-        comm = MPI.COMM_WORLD
         hostname = MPI.Get_processor_name()
         rank_host = comm.allgather(hostname)
         node_ranks = defaultdict(list)
@@ -4660,15 +2775,90 @@ def create_subcomm_mpi4py(comm_ranks):  # pragma: no cover
     return new_comm
 
 
-def get_nodes_first_ranks():  # pragma: no cover
+def get_nodes_first_ranks(comm: MPI.Comm = MPI.COMM_WORLD):  # pragma: no cover
     """Get first rank in each node"""
-    host_ranks = get_host_ranks()
+    host_ranks = get_host_ranks(comm)
     return np.array([ranks[0] for ranks in host_ranks.values()], dtype="int32")
 
 
 def get_num_nodes():  # pragma: no cover
     """Get number of nodes"""
     return len(get_host_ranks())
+
+
+def get_num_gpus(framework="torch"):  # pragma: no cover
+    """Get number of GPU devices on this host"""
+    if framework == "torch":
+        try:
+            import torch
+
+            if hasattr(torch, "accelerator"):
+                return torch.accelerator.device_count()
+            else:
+                return torch.cuda.device_count()
+        except ImportError:
+            raise RuntimeError(
+                "PyTorch is not installed. Please install PyTorch to use GPU features."
+            )
+    elif framework == "tensorflow":
+        try:
+            import tensorflow as tf
+
+            return len(tf.config.list_physical_devices("GPU"))
+        except ImportError:
+            raise RuntimeError(
+                "TensorFlow is not installed. Please install TensorFlow to use GPU features."
+            )
+    else:
+        raise RuntimeError(f"Framework {framework} not recognized")
+
+
+def get_gpu_ranks():  # pragma: no cover
+    """Calculate and return the global list of ranks to pin to GPUs
+    Return list of ranks to pin to the GPUs.
+    """
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    host_ranks = get_host_ranks()
+    nodes_first_ranks = get_nodes_first_ranks()
+    if rank in nodes_first_ranks:
+        # the first rank on each host collects the number of GPUs on the host
+        # and sends them to rank 0. rank 0 will calculate global gpu rank list
+        try:
+            num_gpus_in_node = get_num_gpus()
+        except Exception as e:  # pragma: no cover
+            num_gpus_in_node = e
+        subcomm = create_subcomm_mpi4py(nodes_first_ranks)
+        num_gpus_per_node = subcomm.gather(num_gpus_in_node)
+        if rank == 0:
+            gpu_ranks = []
+            error = None
+            for i, ranks in enumerate(host_ranks.values()):  # pragma: no cover
+                n_gpus = num_gpus_per_node[i]
+                if isinstance(n_gpus, Exception):
+                    error = n_gpus
+                    break
+                if n_gpus == 0:
+                    continue
+                cores_per_gpu = len(ranks) // n_gpus
+                for local_rank, global_rank in enumerate(ranks):
+                    if local_rank % cores_per_gpu == 0:
+                        # pin this rank to GPU
+                        my_gpu = local_rank // cores_per_gpu
+                        if my_gpu < n_gpus:
+                            gpu_ranks.append(global_rank)
+            if error:  # pragma: no cover
+                comm.bcast(error)
+                raise error
+            else:
+                comm.bcast(gpu_ranks)
+    if rank != 0:  # pragma: no cover
+        # wait for global list of GPU ranks from rank 0.
+        gpu_ranks = comm.bcast(None)
+        if isinstance(gpu_ranks, Exception):
+            e = gpu_ranks
+            raise e
+    return gpu_ranks
 
 
 # Use default number of iterations for sync if not specified by user
@@ -4701,10 +2891,21 @@ register_model(IsLastStateType)(models.OpaqueModel)
 is_last_state_type = IsLastStateType()
 
 init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_type())
-delete_is_last_state = types.ExternalFunction(
-    "delete_is_last_state", types.none(is_last_state_type)
-)
+
 # NOTE: using int32 types to avoid i1 vs i8 boolean errors in lowering
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+# Replace top export wrappers to help function matching inside JIT compilation
+bodo.allgatherv = allgatherv
+bodo.barrier = barrier
+bodo.gatherv = gatherv
+bodo.get_rank = get_rank
+bodo.get_size = get_size
+bodo.get_nodes_first_ranks = get_nodes_first_ranks
+bodo.parallel_print = parallel_print
+bodo.rebalance = rebalance
+bodo.random_shuffle = random_shuffle
+bodo.scatterv = scatterv

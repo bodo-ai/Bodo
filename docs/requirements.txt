@@ -36,3 +36,5 @@ zipp==3.17.0
 mkdocstrings==0.25.1
 mkdocstrings[python]
 mkdocs-include-dir-to-nav
+nbconvert
+jupyter

@@ -1,8 +1,13 @@
 #include "_puffin.h"
+
 #include <arrow/python/api.h>
+#include <listobject.h>
+#include <object.h>
+#include <zstd.h>
 #include <algorithm>
 
 #include "../io/_fs_io.h"
+#include "../io/arrow_compat.h"
 #include "../io/iceberg_helpers.h"
 
 // Throw an error if there is a null pointer returned
@@ -48,7 +53,7 @@ inline void verify_magic(const std::string &src, size_t idx) {
                              std::string(errmsg));
 
 // Fetches an integer field from a json object representing a BlobMetadata.
-long fetch_numeric_field(boost::json::object obj, std::string field_name) {
+int64_t fetch_numeric_field(boost::json::object obj, std::string field_name) {
     boost::json::value *as_val = obj.if_contains(field_name);
     if (as_val == nullptr) {
         invalid_blob_metadata("missing required field '" + field_name + "'");
@@ -57,7 +62,22 @@ long fetch_numeric_field(boost::json::object obj, std::string field_name) {
     if (as_int == nullptr) {
         invalid_blob_metadata("field '" + field_name + "' must be an integer");
     }
-    return (long)(*as_int);
+    return *as_int;
+}
+
+std::string decode_zstd(std::string blob) {
+    auto const est_decomp_size =
+        ZSTD_getFrameContentSize(blob.data(), blob.size());
+    std::string decomp_buffer{};
+    decomp_buffer.resize(est_decomp_size);
+    size_t const decomp_size =
+        ZSTD_decompress((void *)decomp_buffer.data(), est_decomp_size,
+                        blob.data(), blob.size());
+    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
+        throw std::runtime_error("Malformed ZSTD decompression");
+    }
+    return decomp_buffer;
 }
 
 BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
@@ -91,10 +111,10 @@ BlobMetadata BlobMetadata::from_json(boost::json::object obj) {
     }
 
     // Extract the required fields snapshot-id, sequence-number, offset, length
-    long snapshot_id = fetch_numeric_field(obj, "snapshot-id");
-    long sequence_number = fetch_numeric_field(obj, "sequence-number");
-    long offset = fetch_numeric_field(obj, "offset");
-    long length = fetch_numeric_field(obj, "length");
+    int64_t snapshot_id = fetch_numeric_field(obj, "snapshot-id");
+    int64_t sequence_number = fetch_numeric_field(obj, "sequence-number");
+    int64_t offset = fetch_numeric_field(obj, "offset");
+    int64_t length = fetch_numeric_field(obj, "length");
 
     // Extract the optional 'compression_codec' field
     std::optional<std::string> compression_codec = std::nullopt;
@@ -454,15 +474,21 @@ std::shared_ptr<CompactSketchCollection> PuffinFile::to_theta_sketches(
 PyObject *get_statistics_file_metadata(
     const std::unique_ptr<PuffinFile> &puffin, std::string puffin_loc,
     int64_t snapshot_id, size_t file_size_in_bytes, int32_t footer_size) {
-    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
-    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    PyObject *ice = PyImport_ImportModule("pyiceberg.table.statistics");
+    CHECK(ice,
+          "importing PyIceberg submodule (pyiceberg.table.statistics) module "
+          "failed");
     // Create the list of BlobMetadata objects
-    PyObject *blob_metadata_class = PyObject_GetAttrString(bic, "BlobMetadata");
+    PyObject *blob_metadata_class = PyObject_GetAttrString(ice, "BlobMetadata");
     CHECK(blob_metadata_class,
-          "getting bodo_iceberg_connector.BlobMetadata failed");
+          "getting pyiceberg.table.statistics.BlobMetadata failed");
     size_t n_blobs = puffin->num_blobs();
     PyObject *blob_list = PyList_New(n_blobs);
     CHECK(blob_list, "creating blob list failed");
+
+    PyObject *args = PyTuple_New(0);
+    CHECK(args, "Creating empty args tuple failed");
+
     for (size_t i = 0; i < n_blobs; i++) {
         BlobMetadata blob_metadata = puffin->get_blob_metadata(i);
         // Get the fields
@@ -492,10 +518,18 @@ PyObject *get_statistics_file_metadata(
             }
         }
 
-        PyObject *blob_metadata_obj = PyObject_CallFunction(
-            blob_metadata_class, "sllOO", blob_metadata.get_type().c_str(),
-            blob_metadata.get_snapshot_id(),
-            blob_metadata.get_sequence_number(), fields_list, properties_dict);
+        // Call BlobMetadata(type, snap_id, seq_num, fields, properties)
+        // Note, all args need to be kwargs
+        PyObject *kwargs = Py_BuildValue(
+            "{s:s,s:L,s:L,s:O,s:O}", "type", blob_metadata.get_type().c_str(),
+            "snapshot-id", blob_metadata.get_snapshot_id(), "sequence-number",
+            blob_metadata.get_sequence_number(), "fields", fields_list,
+            "properties", properties_dict);
+        CHECK(kwargs, "Creating args for BlobMetadata failed");
+        PyObject *blob_metadata_obj =
+            PyObject_Call(blob_metadata_class, args, kwargs);
+        Py_DECREF(kwargs);
+
         CHECK(blob_metadata_obj, "creating BlobMetadata object failed");
         // PyList_SetItem steals the reference created by
         // the constructor.
@@ -507,38 +541,64 @@ PyObject *get_statistics_file_metadata(
     Py_DECREF(blob_metadata_class);
     // Create the statistics file object
     PyObject *statistics_file_class =
-        PyObject_GetAttrString(bic, "StatisticsFile");
+        PyObject_GetAttrString(ice, "StatisticsFile");
     CHECK(statistics_file_class,
-          "getting bodo_iceberg_connector.StatisticsFile failed");
-    PyObject *statistics_file_obj = PyObject_CallFunction(
-        statistics_file_class, "lsliO", snapshot_id, puffin_loc.c_str(),
-        file_size_in_bytes, footer_size, blob_list);
+          "getting pyiceberg.table.statistics.StatisticsFile failed");
+
+    PyObject *kwargs = Py_BuildValue(
+        "{s:L,s:s,s:L,s:i,s:O}", "snapshot-id", snapshot_id, "statistics-path",
+        puffin_loc.c_str(), "file-size-in-bytes", file_size_in_bytes,
+        "file-footer-size-in-bytes", footer_size, "blob-metadata", blob_list);
+    CHECK(kwargs, "Creating args for StatisticsFile failed");
+
+    PyObject *statistics_file_obj =
+        PyObject_Call(statistics_file_class, args, kwargs);
+
     CHECK(statistics_file_obj, "creating StatisticsFile object failed");
+    Py_DECREF(kwargs);
+    Py_DECREF(args);
     Py_DECREF(blob_list);
     Py_DECREF(statistics_file_class);
-    Py_DECREF(bic);
+    Py_DECREF(ice);
     return statistics_file_obj;
 }
 
 /**
- * @brief Generate an equivalent empty bodo_iceberg_connector.StatisticsFile
+ * @brief Generate an equivalent empty pyiceberg.table.statistics.StatisticsFile
  * object for when the rank is not 0. This is used for type stability when
  * interacting with object mode.
  *
  * @return PyObject*
  */
 PyObject *get_empty_statistics_file_metadata() {
-    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
-    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    PyObject *ice = PyImport_ImportModule("pyiceberg.table.statistics");
+    CHECK(ice, "importing pyiceberg.table.statistics module failed");
     PyObject *statistics_file_class =
-        PyObject_GetAttrString(bic, "StatisticsFile");
+        PyObject_GetAttrString(ice, "StatisticsFile");
     CHECK(statistics_file_class,
-          "getting bodo_iceberg_connector.StatisticsFile failed");
+          "getting pyiceberg.table.statistics.StatisticsFile failed");
+
+    PyObject *args = PyTuple_New(0);
+    CHECK(args, "Creating empty args tuple failed");
+
+    PyObject *blob_list = PyList_New(0);
+    CHECK(blob_list, "Creating empty list failed");
+
+    PyObject *kwargs = Py_BuildValue(
+        "{s:L,s:s,s:L,s:i,s:O}", "snapshot-id", -1, "statistics-path", "",
+        "file-size-in-bytes", -1, "file-footer-size-in-bytes", -1,
+        "blob-metadata", blob_list);
+    CHECK(kwargs, "Creating empty args for StatisticsFile failed");
+
     PyObject *statistics_file_obj =
-        PyObject_CallMethod(statistics_file_class, "empty", "");
+        PyObject_Call(statistics_file_class, args, kwargs);
+
     CHECK(statistics_file_obj, "creating empty StatisticsFile object failed");
+    Py_DECREF(blob_list);
+    Py_DECREF(args);
+    Py_DECREF(kwargs);
     Py_DECREF(statistics_file_class);
-    Py_DECREF(bic);
+    Py_DECREF(ice);
     return statistics_file_obj;
 }
 
@@ -591,8 +651,7 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
 PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
-    PyObject *iceberg_arrow_schema_py,
-    numba_optional<arrow::fs::FileSystem> arrow_fs,
+    PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
     const char *existing_puffin_file_loc) {
     try {
         std::shared_ptr<arrow::Schema> iceberg_schema;
@@ -611,7 +670,7 @@ PyObject *write_puffin_file_py_entrypt(
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         if (rank == 0) {
-            if (existing_puffin_path != "") {
+            if (!existing_puffin_path.empty()) {
                 auto existing_puffin =
                     read_puffin_file(existing_puffin_path, bucket_region);
                 merged_sketches = CompactSketchCollection::merge_sketches(
@@ -636,19 +695,23 @@ PyObject *write_puffin_file_py_entrypt(
                                 &fs_option, &dirname, &fname, &puffin_loc,
                                 &path_name);
             std::shared_ptr<::arrow::io::OutputStream> out_stream;
-            // If we already have a filesystem, use it
-            if (arrow_fs.has_value) {
-                std::filesystem::path out_path(dirname);
-                out_path /= fname;  // append file name to output path
-                arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-                    arrow_fs.value->OpenOutputStream(out_path.string());
-                CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
-                                       out_stream);
-            } else {
-                // TODO: Simplify/refactor this function. Its doing too much.
-                open_outstream(fs_option, false, "puffin", dirname, fname,
-                               puffin_loc, &out_stream, bucket_region);
+
+            if (arrow::py::import_pyarrow_wrappers()) {
+                throw std::runtime_error("Importing pyarrow_wrappers failed!");
             }
+            std::shared_ptr<arrow::fs::FileSystem> arrow_fs;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow::py::unwrap_filesystem(pyarrow_fs),
+                "Error during Iceberg write: Failed to unwrap Arrow filesystem",
+                arrow_fs);
+
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;  // append file name to output path
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                arrow_fs->OpenOutputStream(out_path.string());
+            CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
+                                   out_stream);
+
             CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
                         "Failed to write puffin data");
             CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");

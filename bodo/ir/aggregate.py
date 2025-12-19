@@ -49,7 +49,6 @@ from bodo.libs.array import (
     cpp_table_to_py_data,
     delete_info,
     delete_table,
-    groupby_and_aggregate,
     py_data_to_cpp_table,
 )
 from bodo.libs.array_item_arr_ext import (
@@ -200,7 +199,7 @@ def add_agg_cfunc_sym(typingctx, func, sym):
 @numba.njit
 def get_agg_udf_addr(name):
     """Resolve address of cfunc given by its symbol name"""
-    with bodo.no_warning_objmode(addr="int64"):
+    with bodo.ir.object_mode.no_warning_objmode(addr="int64"):
         addr = bodo.ir.aggregate.gb_agg_cfunc_addr[name]
     return addr
 
@@ -1460,6 +1459,132 @@ class EvalDummyTyper(AbstractTemplate):
         return signature(args[0].dtype, *args)
 
 
+@intrinsic
+def groupby_and_aggregate(
+    typingctx,
+    table_t,
+    n_keys_t,
+    cols_per_func_t,
+    nwindows_calls_per_func_t,
+    n_funcs_t,
+    input_has_index,
+    ftypes,
+    func_offsets,
+    udf_n_redvars,
+    is_parallel,
+    skip_na_data_t,
+    shift_periods_t,
+    transform_func,
+    head_n,
+    return_keys,
+    return_index,
+    dropna,
+    update_cb,
+    combine_cb,
+    eval_cb,
+    general_udfs_cb,
+    udf_table_dummy_t,
+    n_out_rows_t,
+    window_ascending_t,
+    window_na_position_t,
+    window_args_t,
+    n_window_args_per_func_t,
+    n_input_cols_per_func_t,
+    maintain_input_size_t,
+    n_shuffle_keys_t,
+    use_sql_rules_t,
+):
+    """
+    Interface to groupby_and_aggregate function in C++ library for groupby
+    offloading.
+    """
+    from bodo.libs.array import table_type
+
+    assert table_t == table_type
+    assert udf_table_dummy_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # table_info*
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),  # shift_periods_t
+                lir.IntType(8).as_pointer(),  # transform_func
+                lir.IntType(64),  # head_n
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),  # groupby key dropna
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),  # window_ascending
+                lir.IntType(8).as_pointer(),  # window_na_position
+                lir.IntType(8).as_pointer(),  # window_args
+                lir.IntType(8).as_pointer(),  # n_window_args_per_func
+                lir.IntType(8).as_pointer(),  # n_input_cols_per_func
+                lir.IntType(1),  # maintain_input_size
+                lir.IntType(64),  # n_shuffle_keys_t
+                lir.IntType(1),  # use_sql_rules_t
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_and_aggregate"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            table_t,
+            types.int64,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.boolean,
+            types.boolean,
+            types.int64,  # shift_periods
+            types.voidptr,  # transform_func
+            types.int64,  # head_n
+            types.boolean,
+            types.boolean,
+            types.boolean,  # dropna
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            table_t,
+            types.voidptr,
+            types.voidptr,  # window_ascending
+            types.voidptr,  # window_na_position
+            window_args_t,  # window_args
+            types.voidptr,  # n_window_args_per_func
+            types.voidptr,  # n_input_cols_per_func
+            types.boolean,  # maintain_input_size
+            types.int64,  # n_shuffle_keys_t
+            types.boolean,  # use_sql_rules_t
+        ),
+        codegen,
+    )
+
+
 def agg_distributed_run(
     agg_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
@@ -1516,11 +1641,11 @@ def agg_distributed_run(
     }
     # TODO: Support for Categories not known at compile time
     for i, in_col_typ in enumerate(in_col_typs):
-        if isinstance(in_col_typ, bodo.CategoricalArrayType):
+        if isinstance(in_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"in_cat_dtype_{i}": in_col_typ})
 
     for i, out_col_typ in enumerate(out_col_typs):
-        if isinstance(out_col_typ, bodo.CategoricalArrayType):
+        if isinstance(out_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
     udf_func_struct = get_udf_func_struct(
@@ -1631,7 +1756,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return "bodo.libs.bool_arr_ext.alloc_bool_array(0)"
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
-    elif t == bodo.dict_str_arr_type:
+    elif t == bodo.types.dict_str_arr_type:
         return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False, False, None)"
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
@@ -1641,7 +1766,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return f"alloc_decimal_array(1, {t.precision}, {t.scale})"
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
-    elif isinstance(t, bodo.CategoricalArrayType):
+    elif isinstance(t, bodo.types.CategoricalArrayType):
         if t.dtype.categories is None:
             raise BodoError(
                 "Groupby agg operations on Categorical types require constant categories"
@@ -2404,7 +2529,7 @@ def gen_top_level_agg_func(
         # as_index=True (part of Index)
         out_key_offset = (
             0
-            if isinstance(agg_node.out_type.index, bodo.RangeIndexType)
+            if isinstance(agg_node.out_type.index, bodo.types.RangeIndexType)
             # number of data columns is all logical columns minus keys minus Index
             else agg_node.n_out_cols - len(agg_node.in_key_inds) - 1
         )
@@ -2511,7 +2636,7 @@ def create_dummy_table(data_types):
     arr_types = tuple(
         unwrap_typeref(data_types.types[i]) for i in range(len(data_types.types))
     )
-    table_type = bodo.TableType(arr_types)
+    table_type = bodo.types.TableType(arr_types)
     glbls = {"table_type": table_type}
 
     func_text = "def impl(data_types):\n"

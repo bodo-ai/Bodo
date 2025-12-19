@@ -68,10 +68,10 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     if not isinstance(shift_amount, types.Integer):  # pragma: no cover
         raise_bodo_error("Shift amount must be an integer type")
 
-    no_default = default_value == bodo.none
+    no_default = default_value == bodo.types.none
 
     func_text = "def impl(input_arr, shift_amount, default_value):\n"
-    if isinstance(input_arr, bodo.SeriesType):
+    if isinstance(input_arr, bodo.types.SeriesType):
         func_text += (
             "    input_arr = bodo.utils.conversion.coerce_to_array(input_arr)\n"
         )
@@ -262,10 +262,10 @@ def windowed_sum(S, lower_bound, upper_bound):
 
     calculate_block = "res[i] = total"
 
-    if isinstance(S.dtype, bodo.Decimal128Type):
+    if isinstance(S.dtype, bodo.types.Decimal128Type):
         prec = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
         scale = S.dtype.scale
-        out_dtype = bodo.DecimalArrayType(prec, scale)
+        out_dtype = bodo.types.DecimalArrayType(prec, scale)
         propagate_nan = False
 
         constant_block = (
@@ -285,7 +285,7 @@ def windowed_sum(S, lower_bound, upper_bound):
             out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
             propagate_nan = False
         else:
-            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
             propagate_nan = True
 
         constant_block = "constant_value = S.sum()"
@@ -344,7 +344,7 @@ def make_windowed_bool_aggfunc(func, cond):
 
         exit_block = "true_count -= int(bool(elem0))"
 
-        out_dtype = bodo.boolean_array_type
+        out_dtype = bodo.types.boolean_array_type
 
         return gen_windowed(
             calculate_block,
@@ -409,7 +409,7 @@ def overload_windowed_count_star(n, lower_bound, upper_bound):
     # look at a specific column. In contrast to most of the window
     # functions, this one just takes the length of the input.
     def impl(n, lower_bound, upper_bound):  # pragma: no cover
-        result = bodo.libs.int_arr_ext.alloc_int_array(n, bodo.uint32)
+        result = bodo.libs.int_arr_ext.alloc_int_array(n, bodo.types.uint32)
         if upper_bound < lower_bound:
             result[:] = np.uint32(0)
             return result
@@ -488,7 +488,7 @@ def windowed_avg(S, lower_bound, upper_bound):
 
     exit_block = "total -= elem0"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -555,7 +555,7 @@ def make_windowed_variance_stddev_function(name, method, ddof):
         calculate_block += "else:\n"
         calculate_block += f"   res[i] = {calculation}"
 
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
         return gen_windowed(
             calculate_block,
@@ -615,7 +615,7 @@ def windowed_median(S, lower_bound, upper_bound):
 def windowed_mode(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
-    if isinstance(S, bodo.SeriesType):  # pragma: no cover
+    if isinstance(S, bodo.types.SeriesType):  # pragma: no cover
         out_dtype = S.data
     else:
         out_dtype = S
@@ -853,7 +853,7 @@ def windowed_corr(Y, X, lower_bound, upper_bound):
     exit_block += "e1_x -= elem1 - k_x\n"
     exit_block += "e2_x -= (elem1 - k_x) ** 2\n"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -888,7 +888,7 @@ def overload_windowed_approx_percentile(data, q):
         of the data (or null if data is all null/empty) used to fill
         an array the same size as data.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(data, q):  # pragma: no cover
         data = bodo.utils.conversion.coerce_to_array(data)
@@ -928,9 +928,9 @@ def make_str_arr_min_max_overload(func):
         """
         # Parametrize the starting value and comparison operation based on
         # the dtype and whether the function is min or max
-        if arr == bodo.string_array_type:
+        if arr == bodo.types.string_array_type:
             starting_value = '""'
-        elif arr == bodo.binary_array_type:
+        elif arr == bodo.types.binary_array_type:
             starting_value = 'b""'
         else:
             return None
@@ -1004,8 +1004,9 @@ def make_windowed_min_max_function(func, cmp):
 
         # Dictionary encoded arrays have a special procedure to find the
         # min/max string within each slice
-        if S == bodo.dict_str_arr_type or (
-            isinstance(S, bodo.SeriesType) and S.data == bodo.dict_str_arr_type
+        if S == bodo.types.dict_str_arr_type or (
+            isinstance(S, bodo.types.SeriesType)
+            and S.data == bodo.types.dict_str_arr_type
         ):
             setup_block += "dictionary = arr0._data\n"
             setup_block += "indices = arr0._indices\n"
@@ -1058,7 +1059,7 @@ def make_windowed_min_max_function(func, cmp):
             "dict_index_dtype": bodo.libs.dict_arr_ext.dict_indices_arr_type
         }
 
-        if isinstance(S, bodo.SeriesType):  # pragma: no cover
+        if isinstance(S, bodo.types.SeriesType):  # pragma: no cover
             out_dtype = S.data
         else:
             out_dtype = S
@@ -1095,7 +1096,7 @@ def windowed_skew(S, lower_bound, upper_bound):  # pragma: no cover
 
 overload(windowed_skew)(
     make_slice_window_agg(
-        out_dtype_fn=lambda _: bodo.float64,
+        out_dtype_fn=lambda _: bodo.types.float64,
         agg_func=lambda S: f"{S}.skew()",
         min_elements=3,
     )
@@ -1108,7 +1109,7 @@ def windowed_kurtosis(S, lower_bound, upper_bound):  # pragma: no cover
 
 overload(windowed_kurtosis)(
     make_slice_window_agg(
-        out_dtype_fn=lambda _: bodo.float64,
+        out_dtype_fn=lambda _: bodo.types.float64,
         agg_func=lambda S: f"{S}.kurtosis()",
         min_elements=4,
     )
@@ -1180,7 +1181,7 @@ def overload_windowed_object_agg(K, V):
     val_type = V.data if bodo.hiframes.pd_series_ext.is_series_type else V
     struct_typ_tuple = (key_type, val_type)
     map_struct_names = bodo.utils.typing.ColNamesMetaType(("key", "value"))
-    map_arr = bodo.MapArrayType(key_type, val_type)
+    map_arr = bodo.types.MapArrayType(key_type, val_type)
 
     def impl(K, V):  # pragma: no cover
         # Convert series to arrays

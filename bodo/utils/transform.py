@@ -2,6 +2,8 @@
 Helper functions for transformations.
 """
 
+from __future__ import annotations
+
 import itertools
 import math
 import operator
@@ -17,6 +19,7 @@ from numba.core.ir_utils import (
     build_definitions,
     compile_to_numba_ir,
     compute_cfg_from_blocks,
+    find_build_sequence,
     find_callname,
     find_const,
     get_definition,
@@ -30,7 +33,9 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import fold_arguments
 
 import bodo
-from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
+import bodo.ir.object_mode
+import bodo.libs.distributed_api
+import bodo.pandas as bd
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -47,7 +52,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     raise_bodo_error,
 )
-from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
+from bodo.utils.utils import gen_getitem, is_array_typ, is_assign, is_call, is_expr
 
 ReplaceFunc = namedtuple(
     "ReplaceFunc",
@@ -133,6 +138,10 @@ no_side_effect_call_tuples = {
     ("Int64Dtype", pd),
     ("Timestamp", pd),
     ("Week", "offsets", "tseries", pd),
+    ("Int32Dtype", bd),
+    ("Int64Dtype", bd),
+    ("Timestamp", bd),
+    ("Week", "offsets", "tseries", bd),
     # Series
     ("init_series", "pd_series_ext", "hiframes", bodo),
     ("get_series_data", "pd_series_ext", "hiframes", bodo),
@@ -179,7 +188,7 @@ no_side_effect_call_tuples = {
         bodo,
     ),
     (
-        "alloc_datetime_timedelta_array",
+        "alloc_timedelta_array",
         "datetime_timedelta_ext",
         "hiframes",
         bodo,
@@ -234,6 +243,7 @@ no_side_effect_call_tuples = {
     ("groupby",),
     ("rolling",),
     (pd.CategoricalDtype,),
+    (bd.CategoricalDtype,),
     (bodo.hiframes.pd_categorical_ext.get_code_for_value,),
     # Numpy
     ("asarray", np),
@@ -321,11 +331,12 @@ no_side_effect_call_tuples = {
     ("str_isdecimal", "dict_arr_ext", "libs", bodo),
     ("str_match", "dict_arr_ext", "libs", bodo),
     ("prange", bodo),
-    (bodo.prange,),
+    (numba.prange,),
     ("objmode", bodo),
-    (bodo.objmode,),
+    ("objmode", numba),
+    (numba.objmode,),
     ("no_warning_objmode", bodo),
-    (bodo.no_warning_objmode,),
+    (bodo.ir.object_mode.no_warning_objmode,),
     # Helper functions, inlined in astype
     ("get_label_dict_from_categories", "pd_categorial_ext", "hiframes", bodo),
     (
@@ -997,7 +1008,10 @@ def get_const_value_inner(
         )
 
     # pd.CategoricalDtype() calls
-    if call_name == ("CategoricalDtype", "pandas"):
+    if call_name in (
+        ("CategoricalDtype", "pandas"),
+        ("CategoricalDtype", "bodo.pandas"),
+    ):
         kws = dict(var_def.kws)
         cats = get_call_expr_arg(
             "CategoricalDtype", var_def.args, kws, 0, "categories", ""
@@ -1041,7 +1055,7 @@ def get_const_value_inner(
     if (
         call_name is not None
         and len(call_name) == 2
-        and call_name[1] == "pandas"
+        and call_name[1] in ("pandas", "bodo.pandas")
         and call_name[0]
         in (
             "Int8Dtype",
@@ -1077,11 +1091,11 @@ def get_const_value_inner(
         }
         return getattr(val, call_name[0])(*args, **kws)
 
-    # bodo data type calls like bodo.DataFrameType()
+    # bodo data type calls like bodo.types.DataFrameType()
     if (
         call_name is not None
         and len(call_name) == 2
-        and call_name[1] == "bodo"
+        and call_name[1] == "bodo.types"
         and call_name[0] in bodo_types_with_params
     ):
         args = tuple(
@@ -1094,7 +1108,7 @@ def get_const_value_inner(
             )
             for name, v in dict(var_def.kws).items()
         }
-        return getattr(bodo, call_name[0])(*args, **kwargs)
+        return getattr(bodo.types, call_name[0])(*args, **kwargs)
 
     # evaluate JIT function at compile time if arguments can be constant and it is a
     # "pure" function (has no side effects and only depends on input values for output)
@@ -1172,7 +1186,9 @@ def _func_is_pure(py_func, arg_types, kw_types):
                         return False
                     func_name, func_mod = fdef
                     # check I/O functions
-                    if func_mod == "pandas" and func_name.startswith("read_"):
+                    if func_mod in ("pandas", "bodo.pandas") and func_name.startswith(
+                        "read_"
+                    ):
                         return False
                     if fdef in (
                         ("fromfile", "numpy"),
@@ -1198,7 +1214,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
                         if isinstance(typ, types.Array) and func_name == "tofile":
                             return False
                         # logging calls have side effects
-                        if isinstance(typ, bodo.LoggingLoggerType):
+                        if isinstance(typ, bodo.types.LoggingLoggerType):
                             return False
                         # matplotlib types
                         if str(typ).startswith("Mpl"):
@@ -1253,6 +1269,7 @@ def get_const_func_output_type(
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     'is_udf' prepares the output for UDF cases like Series.apply()
     """
+    from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
     from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
     # wrap_python functions have output type available already
@@ -1778,6 +1795,13 @@ def replace_func(
     run_full_pipeline=False,
 ):
     """"""
+    # We can't leave globals updated outside this function so we save, update, then restore.
+    saved = {
+        name: func.__globals__[name]
+        for name in ("numba", "np", "bodo", "pd")
+        if name in func.__globals__
+    }
+
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
     if extra_globals is not None:
         glbls.update(extra_globals)
@@ -1820,9 +1844,11 @@ def replace_func(
             else:
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
-    return ReplaceFunc(
+    ret = ReplaceFunc(
         func, arg_typs, args, glbls, inline_bodo_calls, run_full_pipeline, pre_nodes
     )
+    func.__globals__.update(saved)
+    return ret
 
 
 ############################# UDF utils ############################
@@ -1889,7 +1915,7 @@ def get_type_alloc_counts(t):
     if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
-    if t == string_array_type or t == bodo.binary_array_type:
+    if t == string_array_type or t == bodo.types.binary_array_type:
         return 2
 
     if isinstance(t, ArrayItemArrayType):
@@ -1902,7 +1928,7 @@ def get_type_alloc_counts(t):
             t.value_arr_type
         )
 
-    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.string_type:
+    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.types.string_type:
         return 1
 
     if isinstance(t, StructType):
@@ -2241,3 +2267,32 @@ def create_nested_run_pass_event(pass_name: str, state, pass_obj):
     ev_details = {"name": f"{pass_name} [...]"}
     with event.trigger_event("numba:run_pass", data=ev_details):
         pass_obj.run_pass(state)
+
+
+def get_build_sequence_vars(func_ir, typemap, calltypes, seq_var, nodes):
+    """Get the list of variables from a build sequence expression like a build_tuple or
+    build_list.
+    If the sequence is not constant but is a tuple, generate a new variable for each
+    item in the tuple and return a list of those variables.
+    Otherwise, throw an error.
+    """
+    items = guard(find_build_sequence, func_ir, seq_var)
+    if items is not None:
+        return items[0]
+
+    typ = typemap[seq_var.name]
+
+    if not isinstance(typ, types.BaseTuple):
+        raise BodoError(
+            f"Expected a constant sequence or tuple type for {seq_var.name}, but got {typ}.",
+            loc=seq_var.loc,
+        )
+
+    out_vars = []
+    for i in range(len(typ)):
+        var = ir.Var(seq_var.scope, mk_unique_var("build_seq"), seq_var.loc)
+        typemap[var.name] = typ[i]
+        gen_getitem(var, seq_var, i, calltypes, nodes)
+        out_vars.append(var)
+
+    return out_vars

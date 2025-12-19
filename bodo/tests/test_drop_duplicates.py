@@ -150,7 +150,7 @@ pytestmark = pytest_pandas
                     (788, 4000, np.int8(22), np.float32(6.2)),
                     (62, 5000, np.int8(67), np.float32(7.1)),
                     (1, 6000, np.int8(100), np.float32(50.56)),
-                    (33, 7000, np.int8(250), np.float32(67.5)),
+                    (33, 7000, np.int8(115), np.float32(67.5)),
                 ]
                 * 2
             ),

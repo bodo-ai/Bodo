@@ -2,6 +2,7 @@
 
 import sys
 
+import numba
 import sklearn.svm
 from numba.extending import (
     overload,
@@ -10,7 +11,6 @@ from numba.extending import (
 
 import bodo
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_score,
 )
@@ -31,7 +31,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLinearSVCType = install_py_obj_class(
+BodoLinearSVCType, _ = install_py_obj_class(
     types_name="linear_svc_type",
     python_type=sklearn.svm.LinearSVC,
     module=this_module,
@@ -55,8 +55,6 @@ def sklearn_svm_linear_svc_overload(
     random_state=None,
     max_iter=1000,
 ):
-    check_sklearn_version()
-
     def _sklearn_svm_linear_svc_impl(
         penalty="l2",
         loss="squared_hinge",
@@ -71,7 +69,7 @@ def sklearn_svm_linear_svc_overload(
         random_state=None,
         max_iter=1000,
     ):  # pragma: no cover
-        with bodo.objmode(m="linear_svc_type"):
+        with numba.objmode(m="linear_svc_type"):
             m = sklearn.svm.LinearSVC(
                 penalty=penalty,
                 loss=loss,
@@ -106,7 +104,7 @@ def overload_linear_svc_fit(
         def _svm_linear_svc_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -125,7 +123,7 @@ def overload_linear_svc_fit(
                 bodo.ml_support.sklearn_linear_model_ext._raise_SGD_warning(
                     "SGDClassifier"
                 )
-            with bodo.objmode(clf="sgd_classifier_type"):
+            with numba.objmode(clf="sgd_classifier_type"):
                 clf = sklearn.linear_model.SGDClassifier(
                     loss="hinge",
                     penalty=m.penalty,
@@ -137,7 +135,7 @@ def overload_linear_svc_fit(
                     verbose=m.verbose,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with bodo.objmode():
+            with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_

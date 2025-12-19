@@ -199,3 +199,23 @@ struct TableBuildBuffer {
      */
     void unpin();
 };
+
+struct ChunkedTableBuilderState {
+    const std::shared_ptr<bodo::Schema> table_schema;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    std::unique_ptr<ChunkedTableBuilder> builder;
+
+    ChunkedTableBuilderState(const std::shared_ptr<bodo::Schema> table_schema_,
+                             size_t chunk_size)
+        : table_schema(std::move(table_schema_)) {
+        // Create dictionary builders for all columns
+        for (const std::unique_ptr<bodo::DataType>& t :
+             table_schema->column_types) {
+            dict_builders.emplace_back(
+                create_dict_builder_for_array(t->copy(), false));
+        }
+        builder = std::make_unique<ChunkedTableBuilder>(ChunkedTableBuilder(
+            table_schema, dict_builders, chunk_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES));
+    }
+};

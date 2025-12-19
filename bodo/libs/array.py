@@ -30,7 +30,7 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     get_categories_int_type,
 )
-from bodo.hiframes.time_ext import TimeArrayType, TimeType
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -60,19 +60,23 @@ from bodo.libs.struct_arr_ext import (
     define_struct_arr_dtor,
 )
 from bodo.libs.tuple_arr_ext import TupleArrayType
+from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 from bodo.utils.typing import (
-    BodoError,
     MetaType,
     decode_if_dict_array,
     get_overload_const_int,
     is_overload_constant_int,
     is_overload_none,
-    is_str_arr_type,
     raise_bodo_error,
     type_has_unknown_cats,
     unwrap_typeref,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception, numba_to_c_type
+from bodo.utils.utils import (
+    bodo_exec,
+    cached_call_internal,
+    check_and_propagate_cpp_exception,
+    numba_to_c_type,
+)
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
@@ -90,6 +94,7 @@ ll.add_symbol("null_array_to_info", array_ext.null_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
+ll.add_symbol("datetime_array_to_info", array_ext.datetime_array_to_info)
 ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
 ll.add_symbol("timestamp_tz_array_to_info", array_ext.timestamp_tz_array_to_info)
 ll.add_symbol("info_to_array_item_array", array_ext.info_to_array_item_array)
@@ -102,6 +107,9 @@ ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
+ll.add_symbol(
+    "append_arr_info_list_to_cpp_table", array_ext.append_arr_info_list_to_cpp_table
+)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
 ll.add_symbol(
@@ -161,7 +169,6 @@ ll.add_symbol("dealloc_like_kernel_cache", array_ext.dealloc_like_kernel_cache)
 ll.add_symbol(
     "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
 )
-ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 
 
 # Sentinal for field names when converting tuple arrays to struct arrays (workaround
@@ -398,7 +405,7 @@ def array_to_info_codegen(context, builder, sig, args):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # pass string array and indices array as array_info to C++
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         str_arr = arr.data
@@ -555,7 +562,7 @@ def array_to_info_codegen(context, builder, sig, args):
             )
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         # TODO: Add a null dtype in C++. Since adding C++ support enables
         # passing the null array anywhere, including places where null arrays
@@ -591,6 +598,7 @@ def array_to_info_codegen(context, builder, sig, args):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.types.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         dtype = arr_type.dtype
@@ -598,11 +606,13 @@ def array_to_info_codegen(context, builder, sig, args):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
+        elif arr_type == bodo.types.timedelta_array_type:
+            np_dtype = bodo.types.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -647,6 +657,37 @@ def array_to_info_codegen(context, builder, sig, args):
                     bitmap_arr.meminfo,
                     context.get_constant(types.int32, arr_type.precision),
                     context.get_constant(types.int32, arr_type.scale),
+                ],
+            )
+        if isinstance(arr_type, DatetimeArrayType):
+            # Ignore fixed offset timezones for now (not supported by Arrow/DF lib)
+            tz = arr_type.tz if isinstance(arr_type.tz, str) else ""
+
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="datetime_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                    context.insert_const_string(builder.module, tz),
                 ],
             )
         elif isinstance(arr_type, TimeArrayType):
@@ -748,19 +789,22 @@ def array_to_info_codegen(context, builder, sig, args):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Boxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(array_info_type)
 
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
 
 
-def _lower_info_to_array_numpy(arr_type, context, builder, in_info, raise_py_err=True):
+def _lower_info_to_array_numpy(
+    arr_type, context, builder, in_info, raise_py_err=True, dict_as_int=False
+):
     assert arr_type.ndim == 1, "only 1D array supported"
     arr = context.make_array(arr_type)(context, builder)
 
     length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
     data_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
     meminfo_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+    dict_as_int_flag = context.get_constant(types.bool_, dict_as_int)
 
     fnty = lir.FunctionType(
         lir.VoidType(),
@@ -769,12 +813,13 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info, raise_py_err
             lir.IntType(64).as_pointer(),  # num_items
             lir.IntType(8).as_pointer().as_pointer(),  # data
             lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(1),  # dict_as_int_flag
         ],
     )  # meminfo
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="info_to_numpy_array"
     )
-    builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
+    builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr, dict_as_int_flag])
     if raise_py_err:
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
@@ -1020,7 +1065,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # extract nested array infos from input array info
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -1125,8 +1170,15 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         int_dtype = get_categories_int_type(arr_type.dtype)
         int_arr_type = types.Array(int_dtype, 1, "C")
+        # dict_as_int allows conversion from DICT to int32 for categorical codes since
+        # Parquet reader reads categorical data as dictionary-encoded strings.
         out_arr.codes = _lower_info_to_array_numpy(
-            int_arr_type, context, builder, in_info, raise_py_err
+            int_arr_type,
+            context,
+            builder,
+            in_info,
+            raise_py_err,
+            dict_as_int=(int_dtype == types.int32),
         )
         # set categorical dtype of output array to be same as input array
         if isinstance(array_type, types.TypeRef):
@@ -1176,11 +1228,11 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Unboxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(arr_type)
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         # Set the array as not empty
         arr.not_empty = lir.Constant(lir.IntType(1), 1)
@@ -1321,18 +1373,21 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.types.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         np_dtype = arr_type.dtype
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
+        elif arr_type == bodo.types.timedelta_array_type:
+            np_dtype = bodo.types.timedelta64ns
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
@@ -1600,62 +1655,6 @@ def _typeof_pd_arrow_arr(val, c):
     return bodo.io.helpers.pyarrow_type_to_numba(val._pa_array.type)
 
 
-def convert_arrow_arr_to_dict(arr, arrow_type):
-    """Convert PyArrow array's type to a type with dictionary-encoding as specified by
-    arrow_type. Not using Arrow's cast() since not working for nested arrays
-    (as of Arrow 13).
-
-    Args:
-        arr (pa.Array): input PyArrow array
-        arrow_type (DataType): target Arrow array type with dictionary encoding
-
-    Returns:
-        pa.Array: converted PyArrow array
-    """
-    if (
-        pa.types.is_large_list(arrow_type)
-        or pa.types.is_list(arrow_type)
-        or pa.types.is_fixed_size_list(arrow_type)
-    ):
-        new_arr = arr.from_arrays(
-            arr.offsets, convert_arrow_arr_to_dict(arr.values, arrow_type.value_type)
-        )
-        # Arrow's from_arrays ignores nulls (bug as of Arrow 14) so we add them back manually
-        return pa.Array.from_buffers(
-            new_arr.type, len(new_arr), arr.buffers()[:2], children=[new_arr.values]
-        )
-
-    if pa.types.is_struct(arrow_type):
-        new_arrs = [
-            convert_arrow_arr_to_dict(arr.field(i), arrow_type.field(i).type)
-            for i in range(arr.type.num_fields)
-        ]
-        names = [arr.type.field(i).name for i in range(arr.type.num_fields)]
-        new_arr = arr.from_arrays(new_arrs, names)
-        # Arrow's from_arrays ignores nulls (bug as of Arrow 14) so we add them back manually
-        return pa.Array.from_buffers(
-            new_arr.type, len(new_arr), arr.buffers()[:1], children=new_arrs
-        )
-
-    if pa.types.is_map(arrow_type):
-        new_keys = convert_arrow_arr_to_dict(arr.keys, arrow_type.key_type)
-        new_items = convert_arrow_arr_to_dict(arr.items, arrow_type.item_type)
-        new_arr = arr.from_arrays(arr.offsets, new_keys, new_items)
-        # Arrow's from_arrays ignores nulls (bug as of Arrow 14) so we add them back manually
-        buffs = new_arr.buffers()
-        buffs[0] = pa.compute.invert(arr.is_null()).buffers()[1]
-        return new_arr.from_buffers(
-            new_arr.type, len(new_arr), buffs[:2], children=[new_arr.values]
-        )
-
-    if (
-        pa.types.is_string(arr.type) or pa.types.is_large_string(arr.type)
-    ) and pa.types.is_dictionary(arrow_type):
-        return arr.dictionary_encode()
-
-    return arr
-
-
 def to_pa_arr(A, arrow_type, arrow_type_no_dict):
     """Convert input to PyArrow array with specified type"""
     if isinstance(A, pa.Array):
@@ -1669,7 +1668,7 @@ def to_pa_arr(A, arrow_type, arrow_type_no_dict):
     if isinstance(A, np.ndarray) and A.ndim == 2:
         A = [A[i] for i in range(len(A))]
 
-    arr = pa.array(A, arrow_type_no_dict)
+    arr = pa.array(A, arrow_type_no_dict, from_pandas=True)
 
     if arrow_type != arrow_type_no_dict:
         arr = convert_arrow_arr_to_dict(arr, arrow_type)
@@ -1961,6 +1960,35 @@ def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
     return arr_type(table_t, ind_t, array_type_t), array_from_cpp_table_codegen
 
 
+def append_arr_info_list_to_cpp_table_codegen(context, builder, sig, args):
+    """
+    Codegen for append_arr_info_list_to_cpp_table. This isn't a closure so it can be
+    called from other intrinsics.
+    """
+    (table, info_list) = args
+    inst = numba.cpython.listobj.ListInstance(context, builder, sig.args[1], info_list)
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(64),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="append_arr_info_list_to_cpp_table"
+    )
+    return builder.call(fn_tp, [table, inst.data, inst.size])
+
+
+@intrinsic
+def append_arr_info_list_to_cpp_table(typingctx, table_t, list_arr_info_typ=None):
+    assert list_arr_info_typ == types.List(array_info_type)
+    return types.void(
+        table_type, list_arr_info_typ
+    ), append_arr_info_list_to_cpp_table_codegen
+
+
 @intrinsic
 def cpp_table_to_py_table(
     typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t
@@ -2071,7 +2099,9 @@ def cpp_table_to_py_table(
     )
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+@numba.generated_jit(
+    nopython=True, no_cpython_wrapper=True, no_unliteral=True, cache=True
+)
 def cpp_table_to_py_data(
     cpp_table,
     out_col_inds_t,
@@ -2135,9 +2165,9 @@ def cpp_table_to_py_data(
 
     out_vars = []
 
-    func_text = "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
+    func_text = "def bodo_cpp_table_to_py_data(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
-    if isinstance(py_table_type, bodo.TableType):
+    if isinstance(py_table_type, bodo.types.TableType):
         func_text += "  py_table = init_table(py_table_type, False)\n"
         func_text += "  py_table = set_table_len(py_table, n_rows_t)\n"
 
@@ -2228,9 +2258,7 @@ def cpp_table_to_py_data(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 @intrinsic
@@ -2381,7 +2409,7 @@ class PyDataToCppTableInfer(AbstractTemplate):
         assert len(args) == 4
         py_table, extra_arrs_tup, _, n_table_cols_t = args
 
-        assert py_table == types.none or isinstance(py_table, bodo.TableType)
+        assert py_table == types.none or isinstance(py_table, bodo.types.TableType)
         assert isinstance(extra_arrs_tup, types.BaseTuple)
         assert all(
             isinstance(t, types.ArrayCompatible) or t == types.none
@@ -2403,7 +2431,7 @@ PyDataToCppTableInfer._no_unliteral = True
 def lower_py_data_to_cpp_table(context, builder, sig, args):
     """lower table_filter() using gen_table_filter_impl above"""
     impl = gen_py_data_to_cpp_table_impl(*sig.args)
-    return context.compile_internal(builder, impl, sig, args)
+    return cached_call_internal(context, builder, impl, sig, args)
 
 
 def gen_py_data_to_cpp_table_impl(
@@ -2444,7 +2472,7 @@ def gen_py_data_to_cpp_table_impl(
     #     if array_ind in output_inds:
     #       output_list[out_ind] = array_to_info(block[array_ind])
 
-    func_text = "def impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
+    func_text = "def bodo_impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
     func_text += (
         f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
     )
@@ -2498,9 +2526,7 @@ def gen_py_data_to_cpp_table_impl(
         }
     )
 
-    loc_vars = {}
-    exec(func_text, glbls, loc_vars)
-    return loc_vars["impl_py_data_to_cpp_table"]
+    return bodo_exec(func_text, glbls, {}, __name__)
 
 
 delete_info = types.ExternalFunction(
@@ -2600,7 +2626,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     table_typs = table_tup.types
     # All inputs have the same number of columns, so generate info from the first input.
     base_typ = table_typs[0]
-    if isinstance(base_typ, bodo.TableType):
+    if isinstance(base_typ, bodo.types.TableType):
         n_cols = len(base_typ.arr_types)
     else:
         # Input must be a tuple of arrays.
@@ -2617,7 +2643,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     )
     # Step 1: Convert each of the inputs to a C++ table.
     for i, table_typ in enumerate(table_typs):
-        if isinstance(table_typ, bodo.TableType):
+        if isinstance(table_typ, bodo.types.TableType):
             func_text += f"  table{i} = table_tup[{i}]\n"
             func_text += f"  arrs{i} = ()\n"
             table_cols = n_cols
@@ -2705,26 +2731,6 @@ def delete_shuffle_info(typingctx, shuffle_info_t=None):
 
 
 @intrinsic
-def reverse_shuffle_table(typingctx, table_t, shuffle_info_t):
-    """call reverse shuffle if shuffle info not none"""
-
-    def codegen(context, builder, sig, args):
-        if sig.args[-1] == types.none:
-            return context.get_constant_null(table_type)
-
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="reverse_shuffle_table"
-        )
-        return builder.call(fn_tp, args)
-
-    return table_type(table_type, shuffle_info_t), codegen
-
-
-@intrinsic
 def get_null_shuffle_info(typingctx):
     """return a null shuffle info object"""
 
@@ -2732,398 +2738,6 @@ def get_null_shuffle_info(typingctx):
         return context.get_constant_null(sig.return_type)
 
     return shuffle_info_type(), codegen
-
-
-@intrinsic
-def hash_join_table(
-    typingctx,
-    left_table_t,
-    right_table_t,
-    left_parallel_t,
-    right_parallel_t,
-    n_keys_t,
-    n_data_left_t,
-    n_data_right_t,
-    same_vect_t,
-    key_in_out_t,
-    same_need_typechange_t,
-    is_left_t,
-    is_right_t,
-    is_join_t,
-    extra_data_col_t,
-    indicator,
-    _bodo_na_equal,
-    _bodo_rebalance_output_if_skewed,
-    cond_func,
-    left_col_nums,
-    left_col_nums_len,
-    right_col_nums,
-    right_col_nums_len,
-    num_rows_ptr_t,
-):
-    """
-    Interface to the hash join of two tables.
-    """
-    assert left_table_t == table_type
-    assert right_table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="hash_join_table"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            left_table_t,
-            right_table_t,
-            types.boolean,
-            types.boolean,
-            types.int64,
-            types.int64,
-            types.int64,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def nested_loop_join_table(
-    typingctx,
-    left_table_t,
-    right_table_t,
-    left_parallel_t,
-    right_parallel_t,
-    is_left_t,
-    is_right_t,
-    key_in_output_t,
-    need_typechange_t,
-    _bodo_rebalance_output_if_skewed,
-    cond_func,
-    left_col_nums,
-    left_col_nums_len,
-    right_col_nums,
-    right_col_nums_len,
-    num_rows_ptr_t,
-):
-    """
-    Call cpp function for cross join of two tables.
-    """
-    assert left_table_t == table_type, "nested_loop_join_table: cpp table type expected"
-    assert right_table_t == table_type, (
-        "nested_loop_join_table: cpp table type expected"
-    )
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="nested_loop_join_table"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            left_table_t,
-            right_table_t,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def interval_join_table(
-    typingctx,
-    left_table_t,
-    right_table_t,
-    left_parallel_t,
-    right_parallel_t,
-    is_left_t,
-    is_right_t,
-    is_left_point_t,
-    is_strict_contains_t,
-    is_strict_left_t,
-    point_col_id_t,
-    interval_start_col_id_t,
-    interval_end_col_id_t,
-    key_in_output_t,
-    need_typechange_t,
-    _bodo_rebalance_output_if_skewed,
-    num_rows_ptr_t,
-):
-    """
-    Call cpp function for optimized interval join of two tables.
-    Point in interval and interval overlap joins are supported.
-    """
-    assert left_table_t == table_type, "interval_join_table: cpp table type expected"
-    assert right_table_t == table_type, "interval_join_table: cpp table type expected"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="interval_join_table"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            left_table_t,
-            right_table_t,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.uint64,
-            types.uint64,
-            types.uint64,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def sort_values_table_py_entry(
-    typingctx,
-    table_t,
-    n_keys_t,
-    vect_ascending_t,
-    na_position_b_t,
-    dead_keys_t,
-    n_rows_t,
-    bounds_t,
-    parallel_t,
-):
-    """
-    Interface to the sorting of tables.
-    """
-    assert table_t == table_type, "C++ table type expected"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sort_values_table_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def sort_table_for_interval_join(
-    typingctx,
-    table_t,
-    bounds_arr_t,
-    is_table_point_side_t,
-    parallel_t,
-):
-    """
-    Interface to the sorting of a table for interval join.
-    Bounds must be provided.
-    """
-    assert table_t == table_type, "C++ table type expected"
-    assert bounds_arr_t == array_info_type, "C++ Array Info type expected"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sort_table_for_interval_join_py_entrypoint"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            bounds_arr_t,
-            types.boolean,
-            types.boolean,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def sample_table(
-    typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
-):
-    """
-    Interface to the sampling of tables.
-    """
-    assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.DoubleType(),
-                lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(1),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sample_table_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            types.float64,
-            types.boolean,
-            types.int64,
-            types.boolean,
-        ),
-        codegen,
-    )
 
 
 @intrinsic
@@ -3233,130 +2847,6 @@ def drop_duplicates_cpp_table(
     )
 
 
-@intrinsic
-def groupby_and_aggregate(
-    typingctx,
-    table_t,
-    n_keys_t,
-    cols_per_func_t,
-    nwindows_calls_per_func_t,
-    n_funcs_t,
-    input_has_index,
-    ftypes,
-    func_offsets,
-    udf_n_redvars,
-    is_parallel,
-    skip_na_data_t,
-    shift_periods_t,
-    transform_func,
-    head_n,
-    return_keys,
-    return_index,
-    dropna,
-    update_cb,
-    combine_cb,
-    eval_cb,
-    general_udfs_cb,
-    udf_table_dummy_t,
-    n_out_rows_t,
-    window_ascending_t,
-    window_na_position_t,
-    window_args_t,
-    n_window_args_per_func_t,
-    n_input_cols_per_func_t,
-    maintain_input_size_t,
-    n_shuffle_keys_t,
-    use_sql_rules_t,
-):
-    """
-    Interface to groupby_and_aggregate function in C++ library for groupby
-    offloading.
-    """
-    assert table_t == table_type
-    assert udf_table_dummy_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # table_info*
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(64),  # shift_periods_t
-                lir.IntType(8).as_pointer(),  # transform_func
-                lir.IntType(64),  # head_n
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),  # groupby key dropna
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),  # window_ascending
-                lir.IntType(8).as_pointer(),  # window_na_position
-                lir.IntType(8).as_pointer(),  # window_args
-                lir.IntType(8).as_pointer(),  # n_window_args_per_func
-                lir.IntType(8).as_pointer(),  # n_input_cols_per_func
-                lir.IntType(1),  # maintain_input_size
-                lir.IntType(64),  # n_shuffle_keys_t
-                lir.IntType(1),  # use_sql_rules_t
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="groupby_and_aggregate"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            types.voidptr,
-            types.voidptr,
-            types.int64,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-            types.int64,  # shift_periods
-            types.voidptr,  # transform_func
-            types.int64,  # head_n
-            types.boolean,
-            types.boolean,
-            types.boolean,  # dropna
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            table_t,
-            types.voidptr,
-            types.voidptr,  # window_ascending
-            types.voidptr,  # window_na_position
-            window_args_t,  # window_args
-            types.voidptr,  # n_window_args_per_func
-            types.voidptr,  # n_input_cols_per_func
-            types.boolean,  # maintain_input_size
-            types.int64,  # n_shuffle_keys_t
-            types.boolean,  # use_sql_rules_t
-        ),
-        codegen,
-    )
-
-
 _drop_duplicates_local_dictionary = types.ExternalFunction(
     "drop_duplicates_local_dictionary_py_entry",
     array_info_type(array_info_type, types.bool_),
@@ -3372,15 +2862,9 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
         dict_arr_info, sort_dictionary
     )
     check_and_propagate_cpp_exception()
-    out_arr = info_to_array(out_dict_arr_info, bodo.dict_str_arr_type)
+    out_arr = info_to_array(out_dict_arr_info, bodo.types.dict_str_arr_type)
     delete_info(out_dict_arr_info)
     return out_arr
-
-
-get_groupby_labels = types.ExternalFunction(
-    "get_groupby_labels_py_entry",
-    types.int64(table_type, types.voidptr, types.voidptr, types.boolean, types.bool_),
-)
 
 
 _array_isin = types.ExternalFunction(
@@ -3405,480 +2889,3 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
         is_parallel,
     )
     check_and_propagate_cpp_exception()
-
-
-_get_search_regex = types.ExternalFunction(
-    "get_search_regex_py_entry",
-    # params: in array, case-sensitive flag, pattern, output boolean array
-    types.void(
-        array_info_type,
-        types.bool_,
-        types.bool_,
-        types.voidptr,
-        array_info_type,
-        types.bool_,
-    ),
-)
-
-_get_replace_regex = types.ExternalFunction(
-    "get_replace_regex_py_entry",
-    # params: in array, pattern, replacement,
-    # Output: out array
-    array_info_type(array_info_type, types.voidptr, types.voidptr),
-)
-
-
-@intrinsic
-def _get_replace_regex_dict_state(
-    typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
-):
-    assert arr_info_t == array_info_type
-    assert isinstance(func_id_t, types.Integer), "func_id must be an integer"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_replace_regex_dict_state_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    sig = array_info_type(
-        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, types.int64
-    )
-    return sig, codegen
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_search_regex(
-    in_arr, case, match, pat, out_arr, do_full_match=False
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = array_to_info(out_arr)
-    _get_search_regex(in_arr_info, case, match, pat, out_arr_info, do_full_match)
-    check_and_propagate_cpp_exception()
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
-    check_and_propagate_cpp_exception()
-    out = info_to_array(out_arr_info, in_arr)
-    delete_info(out_arr_info)
-    return out
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_replace_regex_dict_state(
-    in_arr, pattern_typ, replace_typ, dict_encoding_state, func_id
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex_dict_state(
-        in_arr_info, pattern_typ, replace_typ, dict_encoding_state, func_id
-    )
-    out = info_to_array(out_arr_info, in_arr)
-    delete_info(out_arr_info)
-    return out
-
-
-def _gen_row_access_intrinsic(col_array_typ, c_ind):
-    """Generate an intrinsic for loading a value from a table column with
-    'col_array_typ' array type. 'c_ind' is the index of the column within the table.
-    The intrinsic's input is an array of pointers for the table's data either array
-    info or data depending on the type and a row index.
-
-    For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
-    row_ind=2 will return 6 for the table below.
-    A  B  C
-    1  4  7
-    2  5  8
-    3  6  9
-
-    NOTE: This function may execute even if the data is NA, so the implementation must
-    not segfault when accessing NA data.
-    """
-    from llvmlite import ir as lir
-
-    col_dtype = col_array_typ.dtype
-
-    if isinstance(
-        col_dtype,
-        (types.Number, TimeType, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype),
-    ) or col_dtype in [
-        bodo.datetime_date_type,
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
-        types.bool_,
-    ]:
-        # Note: PandasDatetimeTZDtype is not the return type for scalar data.
-        # In C++ the data is just a datetime64ns
-        if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-            col_dtype = bodo.datetime64ns
-
-        # This code path just returns the data.
-        @intrinsic
-        def getitem_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, sig, args):
-                table, row_ind = args
-                # cast void* to void**
-                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
-                # get data pointer for input column and cast to proper data type
-                col_ind = lir.Constant(lir.IntType(64), c_ind)
-                col_ptr = builder.load(builder.gep(table, [col_ind]))
-
-                if col_array_typ == boolean_array_type:
-                    # Boolean arrays store 1 bit per value, so we need a custom path to load the bit.
-                    col_ptr = builder.bitcast(
-                        col_ptr, context.get_data_type(types.uint8).as_pointer()
-                    )
-                    data_val = bodo.utils.cg_helpers.get_bitmap_bit(
-                        builder, col_ptr, row_ind
-                    )
-                    # Case the loaded bit to bool
-                    return context.cast(
-                        builder,
-                        data_val,
-                        types.uint8,
-                        col_dtype,
-                    )
-                else:
-                    col_ptr = builder.bitcast(
-                        col_ptr, context.get_data_type(col_dtype).as_pointer()
-                    )
-                    data_val = builder.gep(col_ptr, [row_ind])
-                    # Similar to Numpy array getitem in Numba:
-                    # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
-                    # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
-                    return context.unpack_value(builder, col_dtype, data_val)
-
-            return col_dtype(types.voidptr, types.int64), codegen
-
-        return getitem_func
-
-    if col_array_typ in (bodo.string_array_type, bodo.binary_array_type):
-        # If we have a unicode type we want to leave the raw
-        # data pointer as a void* because we don't have a full
-        # string yet.
-
-        # This code path returns the data + length
-
-        @intrinsic
-        def getitem_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, sig, args):
-                table, row_ind = args
-                # cast void* to void**
-                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
-                # get data pointer for input column and cast to proper data type
-                col_ind = lir.Constant(lir.IntType(64), c_ind)
-                col_ptr = builder.load(builder.gep(table, [col_ind]))
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(64),
-                        lir.IntType(64).as_pointer(),
-                    ],
-                )
-                getitem_fn = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="array_info_getitem"
-                )
-                # Allocate for the output size
-                size = cgutils.alloca_once(builder, lir.IntType(64))
-                args = (col_ptr, row_ind, size)
-                data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
-                return context.compile_internal(
-                    builder,
-                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
-                        data, length
-                    ),
-                    decode_sig,
-                    [data_ptr, builder.load(size)],
-                )
-
-            return (
-                bodo.string_type(types.voidptr, types.int64),
-                codegen,
-            )
-
-        return getitem_func
-
-    if col_array_typ == bodo.libs.dict_arr_ext.dict_str_arr_type:
-        # If we have a dictionary string type we want to extract the two
-        # components and execute them differently. First we want to run to
-        # extract the index in the dictionary in the intrinsic and get the
-        # unicode data from C++.
-        # This code path returns the data + length
-        @intrinsic
-        def getitem_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, sig, args):
-                # Define some constants
-                zero = lir.Constant(lir.IntType(64), 0)
-                one = lir.Constant(lir.IntType(64), 1)
-
-                table, row_ind = args
-                # cast void* to void**
-                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
-                # get data pointer for the input column
-                col_ind = lir.Constant(lir.IntType(64), c_ind)
-                col_ptr = builder.load(builder.gep(table, [col_ind]))
-                # Extract the index array from the dict array
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(64),
-                    ],
-                )
-                get_info_func = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="get_child_info"
-                )
-                args = (col_ptr, one)
-                indices_array_info = builder.call(get_info_func, args)
-                # Extract the data from the array info
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer()]
-                )
-                get_data_func = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="array_info_getdata1"
-                )
-                args = (indices_array_info,)
-                index_ptr = builder.call(get_data_func, args)
-                index_ptr = builder.bitcast(
-                    index_ptr,
-                    context.get_data_type(col_array_typ.indices_dtype).as_pointer(),
-                )
-                dict_loc = builder.sext(
-                    builder.load(builder.gep(index_ptr, [row_ind])), lir.IntType(64)
-                )
-                # NA gets checked after this function.
-                # Extract the dictionary from the dict array
-                args = (col_ptr, zero)
-                dictionary_ptr = builder.call(get_info_func, args)
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(64),
-                        lir.IntType(64).as_pointer(),
-                    ],
-                )
-                getitem_fn = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="array_info_getitem"
-                )
-                # Allocate for the output size
-                size = cgutils.alloca_once(builder, lir.IntType(64))
-                args = (dictionary_ptr, dict_loc, size)
-                data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
-                return context.compile_internal(
-                    builder,
-                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
-                        data, length
-                    ),
-                    decode_sig,
-                    [data_ptr, builder.load(size)],
-                )
-
-            return (
-                bodo.string_type(types.voidptr, types.int64),
-                codegen,
-            )
-
-        return getitem_func
-
-    raise BodoError(
-        f"General Join Conditions with '{col_array_typ}' column type and '{col_dtype}' data type not supported"
-    )
-
-
-def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
-    """Generate an intrinsic for checking is a value is NA from a table column with
-    array type 'col_array_dtype'. 'c_ind' is the index of the column within the table.
-    The intrinsic's input is an array of data pointers or nullbit map depending on
-    the type and a row index.
-
-    For example, col_dtype=StringArray, c_ind=1, table=[A_bitmap, B_bitmap, C_bitmap],
-    row_ind=2 will return True.
-    A  B     C
-    1  NA    7
-    2  "qe"  8
-    3  "ef"  9
-    """
-    if (
-        isinstance(
-            col_array_dtype, (IntegerArrayType, FloatingArrayType, bodo.TimeArrayType)
-        )
-        or col_array_dtype
-        in (
-            bodo.libs.bool_arr_ext.boolean_array_type,
-            bodo.binary_array_type,
-            bodo.datetime_date_array_type,
-        )
-        or is_str_arr_type(col_array_dtype)
-    ):
-        # These arrays use a null bitmap to store NA values.
-        @intrinsic
-        def checkna_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, sig, args):
-                null_bitmaps, row_ind = args
-                # cast void* to void**
-                null_bitmaps = builder.bitcast(
-                    null_bitmaps, lir.IntType(8).as_pointer().as_pointer()
-                )
-                # get null bitmap for input column and cast to proper data type
-                col_ind = lir.Constant(lir.IntType(64), c_ind)
-                col_ptr = builder.load(builder.gep(null_bitmaps, [col_ind]))
-                null_bitmap = builder.bitcast(
-                    col_ptr, context.get_data_type(types.bool_).as_pointer()
-                )
-                is_na = bodo.utils.cg_helpers.get_bitmap_bit(
-                    builder, null_bitmap, row_ind
-                )
-                # IS NA is non-zero if null else 0.
-                not_na = builder.icmp_unsigned(
-                    "!=", is_na, lir.Constant(lir.IntType(8), 0)
-                )
-                # Since the & is bitwise we need the result to be either -1 or 0,
-                # so we sign extend the result.
-                return builder.sext(not_na, lir.IntType(8))
-
-            # Return int8 because we don't want the actual bit
-            return types.int8(types.voidptr, types.int64), codegen
-
-        return checkna_func
-
-    elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
-        col_dtype = col_array_dtype.dtype
-        if col_dtype in [
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
-        ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-            # Note: PandasDatetimeTZDtype is not the return type for scalar data.
-            # In C++ the data is just a datetime64ns
-            if isinstance(
-                col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
-            ):
-                col_dtype = bodo.datetime64ns
-
-            # Datetime arrays represent NULL by using pd._libs.iNaT
-            @intrinsic
-            def checkna_func(typingctx, table_t, ind_t):
-                def codegen(context, builder, sig, args):
-                    table, row_ind = args
-                    # cast void* to void**
-                    table = builder.bitcast(
-                        table, lir.IntType(8).as_pointer().as_pointer()
-                    )
-                    # get data pointer for input column and cast to proper data type
-                    col_ind = lir.Constant(lir.IntType(64), c_ind)
-                    col_ptr = builder.load(builder.gep(table, [col_ind]))
-                    col_ptr = builder.bitcast(
-                        col_ptr, context.get_data_type(col_dtype).as_pointer()
-                    )
-                    value = builder.load(builder.gep(col_ptr, [row_ind]))
-                    not_na = builder.icmp_unsigned(
-                        "!=", value, lir.Constant(lir.IntType(64), pd._libs.iNaT)
-                    )
-                    # Since the & is bitwise we need the result to be either -1 or 0,
-                    # so we sign extend the result.
-                    return builder.sext(not_na, lir.IntType(8))
-
-                # Return int8 because we don't want the actual bit
-                return types.int8(types.voidptr, types.int64), codegen
-
-            return checkna_func
-
-        elif isinstance(col_dtype, types.Float):
-            # If we have float NA values are stored as nan.
-            # In this situation we need to check isnan. If we assume IEEE-754 Floating Point,
-            # this check is simply checking certain bits
-            @intrinsic
-            def checkna_func(typingctx, table_t, ind_t):
-                def codegen(context, builder, sig, args):
-                    table, row_ind = args
-                    # cast void* to void**
-                    table = builder.bitcast(
-                        table, lir.IntType(8).as_pointer().as_pointer()
-                    )
-                    # get data pointer for input column and cast to proper data type
-                    col_ind = lir.Constant(lir.IntType(64), c_ind)
-                    col_ptr = builder.load(builder.gep(table, [col_ind]))
-                    col_ptr = builder.bitcast(
-                        col_ptr, context.get_data_type(col_dtype).as_pointer()
-                    )
-
-                    # Get the float value
-                    value = builder.load(builder.gep(col_ptr, [row_ind]))
-
-                    isnan_sig = signature(
-                        types.bool_,
-                        col_dtype,
-                    )
-
-                    # This function is a lowering function so we can call it directly
-                    is_na = numba.np.npyfuncs.np_real_isnan_impl(
-                        context, builder, isnan_sig, (value,)
-                    )
-
-                    # Since the & is bitwise we need the result to be either -1 or 0, so
-                    # sign extend and flip all of the bits
-                    return builder.not_(builder.sext(is_na, lir.IntType(8)))
-
-                # Return int8 because we don't want the actual bit
-                return types.int8(types.voidptr, types.int64), codegen
-
-            return checkna_func
-
-    raise BodoError(
-        f"General Join Conditions with '{col_array_dtype}' column type not supported"
-    )
-
-
-@intrinsic
-def _retrieve_table(typingctx, cpp_table, row_bitmask):
-    """This function takes in a cpp table and a bitmask over it's rows
-    and returns a new table after applying the bitmask. If the bitmask is
-    all True copying is skipped.
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # output is a table
-            [
-                lir.IntType(8).as_pointer(),  # in_table
-                lir.IntType(8).as_pointer(),  # row_bitmask
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="retrieve_table_py_entry"
-        )
-        func_args = [args[0], args[1]]
-        table_ret = builder.call(fn_tp, func_args)  # change this to bitmask
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return table_ret
-
-    sig = cpp_table(
-        cpp_table,
-        array_info_type,
-    )
-
-    return sig, codegen
-
-
-# ----------- Export Array and Table Info Unpin for Testing -----------------
-
-_array_info_unpin = types.ExternalFunction(
-    "array_info_unpin", types.void(array_info_type)
-)

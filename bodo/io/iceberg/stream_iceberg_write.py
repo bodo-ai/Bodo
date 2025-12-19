@@ -3,16 +3,17 @@ Operator for streaming Iceberg writer. Currently used by BodoSQL only.
 Not intended for external use
 """
 
+from __future__ import annotations
+
 import operator
 import os
 import traceback
-import warnings
+import typing as pt
 
-import llvmlite.binding as ll
 import numba
 import pandas as pd
-from llvmlite import ir as lir
-from numba.core import cgutils, types
+import pyarrow as pa
+from numba.core import types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -31,35 +32,38 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import TableType
-from bodo.io.fs_io import ArrowFs, arrow_filesystem_del
 from bodo.io.helpers import (
     _get_stream_writer_payload,
+    pyarrow_fs_type,
     pyarrow_schema_type,
     stream_writer_alloc_codegen,
 )
-from bodo.io.iceberg.common import get_rest_catalog_fs
-from bodo.io.iceberg.write import (
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.io.iceberg.theta import (
+    _write_puffin_file,
     commit_statistics_file,
+    delete_theta_sketches,
     fetch_puffin_metadata,
-    generate_data_file_info,
+    get_default_theta_sketch_columns,
     get_old_statistics_file_path,
-    get_rest_catalog_config,
-    get_table_details_before_write,
-    iceberg_pq_write,
-    python_list_of_heterogeneous_tuples_type,
-    register_table_write,
-    remove_transaction,
+    get_supported_theta_sketch_columns,
+    init_theta_sketches_wrapper,
     table_columns_enabled_theta_sketches,
     table_columns_have_theta_sketches,
     theta_sketch_collection_type,
+)
+from bodo.io.iceberg.write import (
+    dict_type,
+    generate_data_file_info,
+    iceberg_pq_write,
+    partition_spec_type,
+    python_list_of_heterogeneous_tuples_type,
+    register_table_write,
+    transaction_type,
     wrap_start_write,
 )
-from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
-    array_info_type,
     array_to_info,
-    delete_info,
-    info_to_array,
     py_table_to_cpp_table,
 )
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
@@ -77,46 +81,17 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import run_rank0
 
-ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
-ll.add_symbol("delete_theta_sketches", theta_sketches.delete_theta_sketches_py_entrypt)
-ll.add_symbol(
-    "fetch_ndv_approximations", theta_sketches.fetch_ndv_approximations_py_entrypt
-)
-ll.add_symbol("write_puffin_file", puffin_file.write_puffin_file_py_entrypt)
-ll.add_symbol("read_puffin_file_ndvs", puffin_file.read_puffin_file_ndvs_py_entrypt)
-ll.add_symbol(
-    "get_supported_theta_sketch_columns",
-    theta_sketches.get_supported_theta_sketch_columns_py_entrypt,
-)
-ll.add_symbol(
-    "get_default_theta_sketch_columns",
-    theta_sketches.get_default_theta_sketch_columns_py_entrypt,
-)
-
-ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyarrow.fs import FileSystem
+    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.table import Transaction
 
 
-def get_env_value(env_var):  # pragma: no cover
-    pass
+from bodo.io.iceberg import ICEBERG_WRITE_PARQUET_CHUNK_SIZE
 
 
-@overload(get_env_value)
-def overload_get_env_value(env_var):
-    """
-    Returns the current runtime value of an environment variable
-    """
-
-    def impl(env_var):  # pragma: no cover
-        with bodo.no_warning_objmode(env_value="string"):
-            env_value = os.environ.get(env_var, "0")
-        return env_value
-
-    return impl
-
-
-def get_enable_theta():  # pragma: no cover
+def get_enable_theta() -> bool:  # type: ignore
     pass
 
 
@@ -127,346 +102,11 @@ def overload_get_enable_theta():
     """
 
     def impl():  # pragma: no cover
-        with bodo.no_warning_objmode(ret_var="bool_"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_var="bool_"):
             ret_var = bodo.enable_theta_sketches
         return ret_var
 
     return impl
-
-
-@intrinsic
-def _init_theta_sketches(
-    typingctx,
-    column_bitmask_t,
-):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # table_info*
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="init_theta_sketches"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        theta_sketch_collection_type(array_info_type),
-        codegen,
-    )
-
-
-def get_supported_theta_sketch_columns(iceberg_pyarrow_schema):  # pragma: no cover
-    pass
-
-
-@overload(get_supported_theta_sketch_columns)
-def overload_get_supported_theta_sketch_columns(iceberg_pyarrow_schema):
-    """
-    Returns a boolean array indicating which columns have types that can
-    support theta sketches.
-    """
-    arr_type = bodo.boolean_array_type
-
-    def impl(iceberg_pyarrow_schema):  # pragma: no cover
-        res_info = _get_supported_theta_sketch_columns(iceberg_pyarrow_schema)
-        res = info_to_array(res_info, arr_type)
-        delete_info(res_info)
-        return res
-
-    return impl
-
-
-@intrinsic
-def _get_supported_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # array_info*
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_supported_theta_sketch_columns"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        array_info_type(pyarrow_schema_type),
-        codegen,
-    )
-
-
-def get_default_theta_sketch_columns(iceberg_pyarrow_schema):  # pragma: no cover
-    pass
-
-
-@overload(get_default_theta_sketch_columns)
-def overload_get_default_theta_sketch_columns(iceberg_pyarrow_schema):
-    """
-    Returns a boolean array indicating which columns have types that output
-    theta sketches by default.
-    """
-    arr_type = bodo.boolean_array_type
-
-    def impl(iceberg_pyarrow_schema):  # pragma: no cover
-        res_info = _get_default_theta_sketch_columns(iceberg_pyarrow_schema)
-        res = info_to_array(res_info, arr_type)
-        delete_info(res_info)
-        return res
-
-    return impl
-
-
-@intrinsic
-def _get_default_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # array_info*
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_default_theta_sketch_columns"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        array_info_type(pyarrow_schema_type),
-        codegen,
-    )
-
-
-def init_theta_sketches_wrapper(column_bitmask):  # pragma: no cover
-    pass
-
-
-@overload(init_theta_sketches_wrapper)
-def overload_init_theta_sketches_wrapper(column_bit_mask):
-    """
-    Creates a new theta sketch collection when starting to write an Iceberg table.
-
-    Args:
-        column_bit_mask (Boolean Array): An array of booleans indicating which columns
-            have theta sketches enabled.
-
-    Returns:
-        C++ Object: A new theta sketch collection object, which is effectively a pointer
-            to an array of theta sketches, with null entries for columns without sketches.
-    """
-
-    def impl(column_bit_mask):  # pragma: no cover
-        return _init_theta_sketches(array_to_info(column_bit_mask))
-
-    return impl
-
-
-@intrinsic
-def _iceberg_writer_fetch_theta(typingctx, array_info_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # array_info*
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="fetch_ndv_approximations"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        array_info_type(theta_sketch_collection_type),
-        codegen,
-    )
-
-
-def iceberg_writer_fetch_theta(writer):
-    pass
-
-
-@overload(iceberg_writer_fetch_theta)
-def overload_iceberg_writer_fetch_theta(writer):
-    """
-    Fetches the current values of the theta sketch approximations
-    of NDV for each column in an iceberg writer. For each column
-    that does not have a theta sketch, returns null instead. Largely
-    used for testing purposes.
-    """
-    arr_type = bodo.FloatingArrayType(types.float64)
-
-    def impl(writer):  # pragma: no cover
-        res_info = _iceberg_writer_fetch_theta(writer["theta_sketches"])
-        res = info_to_array(res_info, arr_type)
-        delete_info(res_info)
-        return res
-
-    return impl
-
-
-@intrinsic
-def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_schema_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # array_info*
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="read_puffin_file_ndvs"
-        )
-
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        array_info_type(types.voidptr, types.voidptr, types.pyarrow_schema_type),
-        codegen,
-    )
-
-
-def read_puffin_file_ndvs(puffin_file_loc):  # pragma: no cover
-    pass
-
-
-@overload(read_puffin_file_ndvs)
-def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
-    """
-    Reads the NDV values from a puffin file. This is used for testing purposes
-    to verify that the theta sketches are being written correctly.
-    """
-    arr_type = bodo.FloatingArrayType(types.float64)
-
-    def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(
-            puffin_file_loc, parallel=True
-        )
-        res_info = _read_puffin_file_ndvs(
-            unicode_to_utf8(puffin_file_loc),
-            unicode_to_utf8(bucket_region),
-            iceberg_schema,
-        )
-        res = info_to_array(res_info, arr_type)
-        delete_info(res_info)
-        return res
-
-    return impl
-
-
-@intrinsic
-def _write_puffin_file(
-    typingctx,
-    puffin_file_loc_t,
-    bucket_region_t,
-    snapshot_id_t,
-    sequence_number_t,
-    theta_sketches_t,
-    output_pyarrow_schema_t,
-    arrow_fs_t,
-    exist_puffin_loc_t,
-):
-    def codegen(context, builder, sig, args):
-        (
-            puffin_file_loc,
-            bucket_region,
-            snapshot_id,
-            sequence_number,
-            theta_sketches,
-            output_pyarrow_schema,
-            arrow_fs,
-            exist_puffin_loc,
-        ) = args
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),  # puffin_file_loc
-                lir.IntType(8).as_pointer(),  # bucket_region
-                lir.IntType(64),  # snapshot_id
-                lir.IntType(64),  # sequence_number
-                lir.IntType(8).as_pointer(),  # theta_sketches
-                lir.IntType(8).as_pointer(),  # output_pyarrow_schema
-                lir.LiteralStructType(
-                    [lir.IntType(8).as_pointer(), lir.IntType(1)]
-                ),  # arrow_fs
-                lir.IntType(8).as_pointer(),  # exist_puffin_loc
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="write_puffin_file"
-        )
-        ret = builder.call(
-            fn_tp,
-            [
-                puffin_file_loc,
-                bucket_region,
-                snapshot_id,
-                sequence_number,
-                theta_sketches,
-                output_pyarrow_schema,
-                arrow_fs,
-                exist_puffin_loc,
-            ],
-        )
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        # Wrap the PyObject* in a version that can track reference counts.
-        return bodo.utils.py_objs.create_struct_from_pyobject(
-            sig.return_type, ret, context, builder, context.get_python_api(builder)
-        )
-
-    return (
-        types.statistics_file_type(
-            types.voidptr,  # Pass UTF-8 string as void*
-            types.voidptr,  # const Pass UTF-8 string as void*
-            types.int64,
-            types.int64,
-            theta_sketch_collection_type,
-            output_pyarrow_schema_t,
-            types.optional(ArrowFs()),
-            types.voidptr,  # Pass UTF-8 string as void*
-        ),
-        codegen,
-    )
-
-
-def fetch_snapshot_id(rank, conn, db_schema, table_name):
-    """
-    Fetches the snapshot_id from the current Iceberg transaction.
-    """
-    from bodo_iceberg_connector.catalog_conn import parse_conn_str
-    from bodo_iceberg_connector.py4j_support import get_catalog
-
-    snapshot_id = -1
-    if rank == 0:
-        catalog_type, _ = parse_conn_str(conn)
-        catalog = get_catalog(conn, catalog_type)
-        # TODO: get this from the write commit function instead so we can
-        # avoid getting the wrong snapshotID
-        snapshot_id = catalog.getSnapshotId(db_schema, table_name)
-    snapshot_id = MPI.COMM_WORLD.bcast(snapshot_id)
-    return snapshot_id
-
-
-@numba.njit
-def create_iceberg_rest_s3_fs(
-    catalog_uri: str, bearer_token: str, warehouse: str, schema: str, table_name: str
-):
-    if catalog_uri == "" or bearer_token == "" or warehouse == "":
-        return None
-    return get_rest_catalog_fs(catalog_uri, bearer_token, warehouse, schema, table_name)
 
 
 class IcebergWriterType(StreamingStateType):
@@ -502,28 +142,30 @@ iceberg_writer_payload_type = IcebergWriterPayloadType()
 
 
 iceberg_writer_payload_members = (
-    # Iceberg connection string
+    # Connection String to Iceberg Table
     ("conn", types.unicode_type),
-    # Table name to write
-    ("table_name", types.unicode_type),
-    # Database schema to create a table
-    ("db_schema", types.unicode_type),
-    # Action Iceberg takes. Currently one of "create", "append", "replace"
-    ("mode", types.unicode_type),
+    # Table identifier to write to
+    ("table_id", types.unicode_type),
+    # Action Iceberg takes if table exists. Currently one of "fail", "append", "replace"
+    ("if_exists", types.unicode_type),
     # Location of the data/ folder in the warehouse
     ("table_loc", types.unicode_type),
-    # Known Schema ID when files were written
-    ("iceberg_schema_id", types.int64),
     # JSON Encoding of Iceberg Schema to include in Parquet metadata
     ("iceberg_schema_str", types.unicode_type),
     # Output pyarrow schema that should be written to the Iceberg table.
     # This also contains the Iceberg field IDs in the fields' metadata
     # which is important during the commit step.
     ("output_pyarrow_schema", pyarrow_schema_type),
+    # Partition Spec Object for Iceberg Table
+    ("partition_spec", partition_spec_type),
     # Array of Tuples containing Partition Spec for Iceberg Table (passed to C++)
-    ("partition_spec", python_list_of_heterogeneous_tuples_type),
+    ("partition_tuples", python_list_of_heterogeneous_tuples_type),
+    # Sort Order ID for Iceberg Table
+    ("sort_order_id", types.int64),
     # Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
-    ("sort_order", python_list_of_heterogeneous_tuples_type),
+    ("sort_tuples", python_list_of_heterogeneous_tuples_type),
+    # Properties for Iceberg Table
+    ("properties", dict_type),
     # List of written file infos needed by Iceberg for committing
     ("iceberg_files_info", python_list_of_heterogeneous_tuples_type),
     # Whether write is occurring in parallel
@@ -540,9 +182,9 @@ iceberg_writer_payload_members = (
     # Collection of theta sketch data for the columns that have it
     ("theta_sketches", theta_sketch_collection_type),
     # Transaction ID for the write
-    ("txn_id", types.int64),
-    # Arrow filesystem for Iceberg REST S3 FS
-    ("arrow_fs", types.optional(ArrowFs())),
+    ("txn", transaction_type),
+    # Arrow filesystem for Iceberg FS
+    ("arrow_fs", pyarrow_fs_type),
     # location of the s3 bucket
     ("bucket_region", types.unicode_type),
     # Max Parquet file chunk size
@@ -684,143 +326,111 @@ def unbox_iceberg_writer(typ, val, c):
     )  # pragma: no cover
 
 
+def conn_wrapper_to_str(conn_wrapper) -> str:  # pragma: no cover
+    pass
+
+
+@overload(conn_wrapper_to_str)
+def overload_conn_wrapper_to_str(conn_wrapper):
+    """Convert a connection wrapper to a string"""
+    from bodo.ir.iceberg_ext import IcebergConnectionType
+
+    if isinstance(conn_wrapper, IcebergConnectionType):
+
+        def impl(conn_wrapper):
+            return conn_wrapper.conn_str
+
+        return impl
+
+    assert conn_wrapper == types.unicode_type
+
+    def impl(conn_wrapper):
+        return conn_wrapper
+
+    return impl
+
+
 def start_write_wrapper(
     conn,
-    schema,
-    table_name,
-    table_loc,
-    iceberg_schema_id,
+    table_id,
+    if_exists,
+    df_schema,
     create_table_info,
-    mode,
-    output_pyarrow_schema,
-    partition_spec,
-    sort_order,
-):
+) -> tuple[
+    Transaction,
+    FileSystem,
+    str,
+    pa.Schema,
+    str,
+    PartitionSpec,
+    list,
+    int,
+    list,
+    dict[str, str],
+]:  # type: ignore
     pass
 
 
 @overload(start_write_wrapper)
 def overload_start_write_wrapper(
     conn,
-    schema,
-    table_name,
-    table_loc,
-    iceberg_schema_id,
+    table_id,
+    if_exists,
+    df_schema,
     create_table_info,
-    mode,
-    output_pyarrow_schema,
-    partition_spec,
-    sort_order,
 ):
-    """Wrapper around objmode call to connector.start_write() to avoid Numba
-    compiler errors"""
+    """Wrapper around objmode call to wrap_start_write to avoid Numba compiler errors"""
 
     def impl(
         conn,
-        schema,
-        table_name,
-        table_loc,
-        iceberg_schema_id,
+        table_id,
+        if_exists,
+        df_schema,
         create_table_info,
-        mode,
-        output_pyarrow_schema,
-        partition_spec,
-        sort_order,
     ):  # pragma: no cover
-        with bodo.no_warning_objmode(txn_id="i8", table_loc="unicode_type"):
-            (txn_id, table_loc) = wrap_start_write(
-                conn,
-                schema,
-                table_name,
-                table_loc,
-                iceberg_schema_id,
-                create_table_info,
-                output_pyarrow_schema,
-                partition_spec,
-                sort_order,
-                mode,
-            )
-        return txn_id, table_loc
-
-    return impl
-
-
-def get_table_details_before_write_wrapper(
-    table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
-):  # pragma: no cover
-    pass
-
-
-@overload(get_table_details_before_write_wrapper)
-def overload_get_table_details_before_write_wrapper(
-    table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
-):
-    """Wrapper around objmode call to get_table_details_before_write() to avoid Numba
-    compiler errors
-    """
-
-    def impl(
-        table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
-    ):  # pragma: no cover
-        with bodo.no_warning_objmode(
-            table_loc="unicode_type",
-            iceberg_schema_id="i8",
-            partition_spec="python_list_of_heterogeneous_tuples_type",
-            sort_order="python_list_of_heterogeneous_tuples_type",
+        with bodo.ir.object_mode.no_warning_objmode(
+            txn=transaction_type,
+            fs="pyarrow_fs_type",
+            data_loc="unicode_type",
+            output_schema="pyarrow_schema_type",
             iceberg_schema_str="unicode_type",
-            output_pyarrow_schema="pyarrow_schema_type",
-            mode="unicode_type",
+            partition_spec="partition_spec_type",
+            partition_tuples="python_list_of_heterogeneous_tuples_type",
+            sort_order_id="i8",
+            sort_tuples="python_list_of_heterogeneous_tuples_type",
+            properties="dict_type",
         ):
             (
-                table_loc,
-                _,
-                iceberg_schema_id,
-                partition_spec,
-                sort_order,
+                txn,
+                fs,
+                data_loc,
+                output_schema,
                 iceberg_schema_str,
-                # This has the Iceberg field IDs in the metadata of every field
-                # which is required for correctness.
-                output_pyarrow_schema,
-                mode,
-            ) = get_table_details_before_write(
-                table_name,
+                partition_spec,
+                partition_tuples,
+                sort_order_id,
+                sort_tuples,
+                properties,
+            ) = wrap_start_write(
                 conn,
-                schema,
-                df_pyarrow_schema,
+                table_id,
+                df_schema,
                 if_exists,
-                allow_downcasting,
+                False,  # allow_downcasting
+                create_table_info,
             )
         return (
-            table_loc,
-            iceberg_schema_id,
-            partition_spec,
-            sort_order,
+            txn,
+            fs,
+            data_loc,
+            output_schema,
             iceberg_schema_str,
-            output_pyarrow_schema,
-            mode,
+            partition_spec,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
         )
-
-    return impl
-
-
-def get_rest_catalog_config_wrapper(con_str):  # pragma: no cover
-    pass
-
-
-@overload(get_rest_catalog_config_wrapper)
-def overload_get_rest_catalog_config_wrapper(con_str):
-    def impl(con_str):  # pragma: no cover
-        with bodo.no_warning_objmode(
-            catalog_uri="unicode_type",
-            bearer_token="unicode_type",
-            warehouse="unicode_type",
-        ):
-            catalog_uri, bearer_token, warehouse = "", "", ""
-            conf = get_rest_catalog_config(con_str)
-            if conf is not None:
-                catalog_uri, bearer_token, warehouse = conf
-
-        return catalog_uri, bearer_token, warehouse
 
     return impl
 
@@ -834,78 +444,36 @@ def overload_get_empty_pylist():
     """Return an empty Python list object"""
 
     def impl():  # pragma: no cover
-        with bodo.no_warning_objmode(a="python_list_of_heterogeneous_tuples_type"):
+        with bodo.ir.object_mode.no_warning_objmode(
+            a="python_list_of_heterogeneous_tuples_type"
+        ):
             a = []
         return a
 
     return impl
 
 
-def _get_table_target_file_size_bytes(con_str, schema, table_name):  # pragma no cover
-    from bodo_iceberg_connector.table_info import bodo_connector_get_table_property
-
-    try:
-        max_pq_chunksize = bodo_connector_get_table_property(
-            con_str, schema, table_name, "write.target-file-size-bytes"
-        )
-        # if the field is not present, use the default value
-        if max_pq_chunksize is None:
-            max_pq_chunksize = ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-        else:
-            # java long int format e.g. "536870912L"
-            if max_pq_chunksize[-1] == "L":
-                max_pq_chunksize = max_pq_chunksize[:-1]
-            max_pq_chunksize = int(max_pq_chunksize)
-    except Exception as e:
-        warnings.warn(
-            f"Got exception while trying to get write.target-file-size-bytes: {e}, continuing with default value"
-        )
-        max_pq_chunksize = ICEBERG_WRITE_PARQUET_CHUNK_SIZE
-
-    return max_pq_chunksize
-
-
-def get_table_target_file_size_bytes(
-    con_str, schema, table_name, is_parallel
-):  # pragma no cover
+@numba.njit
+def get_table_target_file_size_bytes(properties):
     """Get's the 'write.target_file_size_bytes' property from a table. If the property is
     not found or there is an issue with reading the property, a default value is used.
 
     Args:
-        con_str (str): the connection string
-        schema (str): the name of the database
-        table_name (str): the name of the table
-        is_parallel (bool): if True, run on just rank 0
+        properties (dict[str, str]): The properties of the table
     Returns:
         int: The value of 'write.target_file_size_bytes'
     """
-    pass
-
-
-@overload(get_table_target_file_size_bytes)
-def overload_get_table_target_file_size_bytes(con_str, schema, table_name, is_parallel):
-    """Returns 'the write.target-file-size-bytes' property of a table"""
-
-    def impl(con_str, schema, table_name, is_parallel):  # pragma: no cover
-        with bodo.no_warning_objmode(max_pq_chunksize="int64"):
-            if is_parallel:
-                max_pq_chunksize = run_rank0(_get_table_target_file_size_bytes)(
-                    con_str, schema, table_name
-                )
-            else:
-                max_pq_chunksize = _get_table_target_file_size_bytes(
-                    con_str, schema, table_name
-                )
-        return max_pq_chunksize
-
-    return impl
+    with bodo.ir.object_mode.no_warning_objmode(output="i8"):
+        output = properties.get(
+            "write.target-file-size-bytes", ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+        )
+    return output
 
 
 def iceberg_writer_init(
     operator_id,
     conn,
-    table_name,
-    schema,
+    table_id,
     col_names_meta,
     if_exists,
     create_table_meta=None,
@@ -920,8 +488,7 @@ def gen_iceberg_writer_init_impl(
     iceberg_writer_type,
     operator_id,
     conn,
-    table_name,
-    schema,
+    table_id,
     col_names_meta,
     if_exists,
     create_table_meta=None,
@@ -961,8 +528,7 @@ def gen_iceberg_writer_init_impl(
     def impl_iceberg_writer_init(
         operator_id,
         conn,
-        table_name,
-        schema,
+        table_id,
         col_names_meta,
         if_exists,
         create_table_meta=None,
@@ -971,59 +537,44 @@ def gen_iceberg_writer_init_impl(
         _is_parallel=False,
     ):
         ev = tracing.Event("iceberg_writer_init", is_parallel=_is_parallel)
-        con_str = bodo.io.iceberg.format_iceberg_conn_njit(conn)
-
+        conn_str = conn_wrapper_to_str(conn)
         (
+            txn,
+            fs,
             table_loc,
-            iceberg_schema_id,
-            partition_spec,
-            sort_order,
+            output_pa_schema,
             iceberg_schema_str,
-            # This has the Iceberg Field IDs
-            # in the fields' metadata.
-            output_pyarrow_schema,
-            mode,
-        ) = get_table_details_before_write_wrapper(
-            table_name,
-            con_str,
-            schema,
-            df_pyarrow_schema,
-            if_exists,
-            # allow_downcasting
-            False,
-        )
-        (
-            txn_id,
-            table_loc,
-        ) = start_write_wrapper(
-            con_str,
-            schema,
-            table_name,
-            table_loc,
-            iceberg_schema_id,
-            create_table_info,
-            mode,
-            output_pyarrow_schema,
             partition_spec,
-            sort_order,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
+        ) = start_write_wrapper(
+            conn_str,
+            table_id,
+            if_exists,
+            df_pyarrow_schema,
+            create_table_meta,
         )
-        catalog_uri, bearer_token, warehouse = get_rest_catalog_config_wrapper(con_str)
 
         # Initialize writer
         writer = iceberg_writer_alloc(iceberg_writer_type)
-        writer["conn"] = con_str
-        writer["table_name"] = table_name
-        writer["db_schema"] = schema
-        writer["mode"] = mode
+        writer["conn"] = conn_str
+        writer["table_id"] = table_id
+        writer["if_exists"] = if_exists
         writer["table_loc"] = table_loc
-        writer["iceberg_schema_id"] = iceberg_schema_id
         writer["iceberg_schema_str"] = iceberg_schema_str
-        writer["output_pyarrow_schema"] = output_pyarrow_schema
+        writer["output_pyarrow_schema"] = output_pa_schema
         writer["partition_spec"] = partition_spec
-        writer["sort_order"] = sort_order
+        writer["partition_tuples"] = partition_tuples
+        writer["sort_order_id"] = sort_order_id
+        writer["sort_tuples"] = sort_tuples
+        writer["properties"] = properties
         writer["iceberg_files_info"] = get_empty_pylist()
         writer["parallel"] = _is_parallel
         writer["finished"] = False
+        writer["txn"] = txn
+        writer["arrow_fs"] = fs
         writer["is_last_state"] = bodo.libs.distributed_api.init_is_last_state()
         writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
             operator_id,
@@ -1037,16 +588,14 @@ def gen_iceberg_writer_init_impl(
         # Since streaming write is used only for SQL, replicated in this
         # context means actually replicated data (instead of independent sequential
         # functions with different data).
-        writer["max_pq_chunksize"] = get_table_target_file_size_bytes(
-            con_str, schema, table_name, is_parallel=True
-        )
+        writer["max_pq_chunksize"] = get_table_target_file_size_bytes(properties)
         allow_theta = allow_theta_sketches and get_enable_theta()
         if allow_theta:
-            if mode == "append":
+            if if_exists == "append":
                 # For insert into the columns are an intersection of the existing sketches
                 # and the types we can support.
                 existing_columns = table_columns_have_theta_sketches_wrapper(
-                    writer["conn"], writer["db_schema"], writer["table_name"]
+                    writer["txn"]
                 )
                 possible_columns = get_supported_theta_sketch_columns(
                     writer["output_pyarrow_schema"]
@@ -1059,7 +608,7 @@ def gen_iceberg_writer_init_impl(
 
             # Find the columns that are enabled for theta sketches
             enabled_columns = table_columns_enabled_theta_sketches_wrapper(
-                writer["conn"], writer["db_schema"], writer["table_name"]
+                writer["txn"]
             )
             # The final enabled theta sketches are an intersection of the columns
             # the have the property set and the supported columns by Bodo.
@@ -1069,10 +618,6 @@ def gen_iceberg_writer_init_impl(
         use_theta_sketches = allow_theta and theta_columns.any()
         writer["use_theta_sketches"] = use_theta_sketches
         writer["theta_sketches"] = init_theta_sketches_wrapper(theta_columns)
-        writer["txn_id"] = txn_id
-        writer["arrow_fs"] = create_iceberg_rest_s3_fs(
-            catalog_uri, bearer_token, warehouse, schema, table_name
-        )
 
         # Barrier ensures that internal stage exists before we upload files to it
         bodo.barrier()
@@ -1082,84 +627,40 @@ def gen_iceberg_writer_init_impl(
     return impl_iceberg_writer_init
 
 
-def table_columns_have_theta_sketches_wrapper(
-    conn, schema, table_name
-):  # pragma: no cover
+def table_columns_have_theta_sketches_wrapper(txn):  # pragma: no cover
     pass
 
 
 @overload(table_columns_have_theta_sketches_wrapper)
-def overload_table_columns_have_theta_sketches_wrapper(conn, schema, table_name):
+def overload_table_columns_have_theta_sketches_wrapper(txn):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
-    _output_type = bodo.boolean_array_type
+    _output_type = bodo.types.boolean_array_type
 
-    def impl(conn, schema, table_name):  # pragma: no cover
-        with bodo.no_warning_objmode(existing_columns=_output_type):
-            existing_columns = table_columns_have_theta_sketches(
-                conn, schema, table_name
-            )
+    def impl(txn):  # pragma: no cover
+        with bodo.ir.object_mode.no_warning_objmode(existing_columns=_output_type):
+            existing_columns = table_columns_have_theta_sketches(txn.table_metadata)
         return existing_columns
 
     return impl
 
 
-def table_columns_enabled_theta_sketches_wrapper(
-    conn, schema, table_name
-):  # pragma: no cover
+def table_columns_enabled_theta_sketches_wrapper(txn):  # pragma: no cover
     pass
 
 
 @overload(table_columns_enabled_theta_sketches_wrapper)
-def overload_table_columns_enabled_theta_sketches_wrapper(conn, schema, table_name):
+def overload_table_columns_enabled_theta_sketches_wrapper(txn):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
-    _output_type = bodo.boolean_array_type
+    _output_type = bodo.types.boolean_array_type
 
-    def impl(conn, schema, table_name):  # pragma: no cover
-        with bodo.no_warning_objmode(enabled_columns=_output_type):
-            enabled_columns = table_columns_enabled_theta_sketches(
-                conn, schema, table_name
-            )
+    def impl(txn):  # pragma: no cover
+        with bodo.ir.object_mode.no_warning_objmode(enabled_columns=_output_type):
+            enabled_columns = table_columns_enabled_theta_sketches(txn)
         return enabled_columns
 
     return impl
-
-
-def delete_theta_sketches(theta_sketches):  # pragma: no cover
-    pass
-
-
-@overload(delete_theta_sketches)
-def overload_delete_theta_sketches(theta_sketches):
-    """Delete the theta sketches"""
-
-    def impl(theta_sketches):  # pragma: no cover
-        _delete_theta_sketches(theta_sketches)
-
-    return impl
-
-
-@intrinsic
-def _delete_theta_sketches(typingctx, theta_sketches_t):
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="delete_theta_sketches"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        types.void(theta_sketch_collection_type),
-        codegen,
-    )
 
 
 @infer_global(iceberg_writer_init)
@@ -1192,7 +693,7 @@ def overload_append_py_list(pylist, to_append):
     """Append a Python list object to existing Python list object"""
 
     def impl(pylist, to_append):  # pragma: no cover
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             pylist.extend(to_append)
 
     return impl
@@ -1290,15 +791,16 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["table_loc"],
                     table_info,
                     col_names_info,
-                    writer["partition_spec"],
-                    writer["sort_order"],
+                    writer["partition_tuples"],
+                    writer["sort_tuples"],
                     writer["iceberg_schema_str"],
                     # Don't pass parallel=True because streaming is not synchronized.
                     False,
                     writer["output_pyarrow_schema"],
                     writer["arrow_fs"],
                     writer["theta_sketches"],
-                    bucket_region=bucket_region,
+                    bucket_region,
+                    writer["properties"],
                 )
                 append_py_list(writer["iceberg_files_info"], iceberg_files_info)
 
@@ -1307,52 +809,47 @@ def gen_iceberg_writer_append_table_impl_inner(
 
         # ===== Part 3: Commit Iceberg write
         if is_last:
-            conn = writer["conn"]
-            db_schema = writer["db_schema"]
-            table_name = writer["table_name"]
-            table_loc = writer["table_loc"]
-            iceberg_schema_id = writer["iceberg_schema_id"]
-            mode = writer["mode"]
+            if_exists = writer["if_exists"]
             all_iceberg_files_infos = writer["iceberg_files_info"]
-            txn_id = writer["txn_id"]
+            txn = writer["txn"]
+            partition_spec = writer["partition_spec"]
+            sort_order_id = writer["sort_order_id"]
 
             # Fetch any existing puffin files:
-            if writer["use_theta_sketches"] and mode == "append":
-                old_puffin_file_path = get_old_statistics_file_path_wrapper(
-                    txn_id, conn, db_schema, table_name
-                )
-            else:
-                old_puffin_file_path = ""
+            use_theta_sketches = writer["use_theta_sketches"]
+            with bodo.ir.object_mode.no_warning_objmode(
+                old_puffin_file_path="unicode_type"
+            ):
+                if use_theta_sketches and if_exists == "append":
+                    old_puffin_file_path = get_old_statistics_file_path(txn)
+                else:
+                    old_puffin_file_path = ""
 
-            with bodo.no_warning_objmode(success="bool_"):
+            with bodo.ir.object_mode.no_warning_objmode(success="bool_"):
                 (
                     fnames,
-                    file_size_bytes,
-                    metrics,
+                    file_records,
+                    partition_infos,
                 ) = generate_data_file_info(all_iceberg_files_infos)
 
-                # Send file names, metrics and schema to Iceberg connector
+                # Register file names, metrics and schema in transaction
                 success = register_table_write(
-                    txn_id,
-                    conn,
-                    db_schema,
-                    table_name,
-                    table_loc,
+                    txn,
                     fnames,
-                    file_size_bytes,
-                    metrics,
-                    iceberg_schema_id,
-                    mode,
+                    file_records,
+                    partition_infos,
+                    partition_spec,
+                    sort_order_id,
                 )
 
-            if writer["use_theta_sketches"]:
-                with bodo.no_warning_objmode(
+            if use_theta_sketches:
+                with bodo.ir.object_mode.no_warning_objmode(
                     snapshot_id="int64",
                     sequence_number="int64",
                     puffin_loc="unicode_type",
                 ):
                     snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(
-                        txn_id, conn, db_schema, table_name
+                        txn
                     )
 
                 statistic_file_info = _write_puffin_file(
@@ -1365,19 +862,13 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["arrow_fs"],
                     unicode_to_utf8(old_puffin_file_path),
                 )
-                with bodo.no_warning_objmode():
-                    commit_statistics_file(
-                        conn, db_schema, table_name, snapshot_id, statistic_file_info
-                    )
+                conn_str = writer["conn"]
+                table_id = writer["table_id"]
+                with bodo.ir.object_mode.no_warning_objmode():
+                    commit_statistics_file(conn_str, table_id, statistic_file_info)
 
             # Delete the theta sketches. An object exists even if there are no sketches.
             delete_theta_sketches(writer["theta_sketches"])
-
-            # Now that puffin files are finished we no longer need the transaction
-            with bodo.no_warning_objmode():
-                remove_transaction(txn_id, conn, db_schema, table_name)
-
-            arrow_filesystem_del(writer["arrow_fs"])
 
             if not success:
                 # TODO [BE-3249] If it fails due to schema changing, then delete the files.
@@ -1434,24 +925,6 @@ def lower_iceberg_writer_append_table(context, builder, sig, args):
     return context.compile_internal(builder, impl_wrapper, sig, args)
 
 
-def get_old_statistics_file_path_wrapper(
-    txn_id, conn, db_schema, table_name
-):  # pragma: no cover
-    pass
-
-
-@overload(get_old_statistics_file_path_wrapper)
-def overload_get_old_statistics_file_path_wrapper(txn_id, conn, db_schema, table_name):
-    def impl(txn_id, conn, db_schema, table_name):  # pragma: no cover
-        with bodo.no_warning_objmode(old_puffin_file_path="unicode_type"):
-            old_puffin_file_path = get_old_statistics_file_path(
-                txn_id, conn, db_schema, table_name
-            )
-        return old_puffin_file_path
-
-    return impl
-
-
 def convert_to_snowflake_iceberg_table_py(
     snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
 ):  # pragma: no cover
@@ -1471,12 +944,10 @@ def convert_to_snowflake_iceberg_table_py(
     err = None  # Forward declaration
     if bodo.get_rank() == 0:
         try:
-            import bodo_iceberg_connector
+            catalog = conn_str_to_catalog(iceberg_conn)
+            table = catalog.load_table(f"{iceberg_base.replace('/', '.')}.{table_name}")
+            full_metadata_path = table.metadata_location
 
-            iceberg_conn = bodo.io.iceberg.format_iceberg_conn(iceberg_conn)
-            full_metadata_path = bodo_iceberg_connector.get_table_metadata_path(
-                iceberg_conn, iceberg_base.replace("/", "."), table_name
-            )
             # Extract the metadata path that starts with our base location
             idx = full_metadata_path.find(iceberg_base)
             if idx == -1:
@@ -1554,7 +1025,7 @@ def overload_convert_to_snowflake_iceberg_table(
     def impl(
         snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
     ):  # pragma: no cover
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
                 snowflake_conn,
                 iceberg_conn,

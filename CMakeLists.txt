@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.23...3.31 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
 # External Packages
@@ -29,13 +29,10 @@ find_program(CCACHE_EXECUTABLE "ccache")
 find_program(SCCACHE_EXECUTABLE "sccache")
 
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
-  set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
-  set(CMAKE_C_COMPILER_LAUNCHER ccache)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
-  set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
-  set(CMAKE_C_COMPILER_LAUNCHER sccache)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
 endif()
-
 
 # ---------------------------- Enable C++ Linting ----------------------------
 # Clang-Tidy is only available on MacOS as we use GCC on Linux
@@ -56,10 +53,8 @@ endif()
 set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
 cmake_print_variables(BUILD_WITH_V8)
 if (BUILD_WITH_V8)
-    # Needed for Prix64 to be defined in g++/Centos
-    add_compile_definitions("__STDC_FORMAT_MACROS")
-    include(FetchContent)
-
+  # Needed for Prix64 to be defined in g++/Centos
+  add_compile_definitions("__STDC_FORMAT_MACROS")
   FetchContent_Declare(
     v8
     GIT_REPOSITORY https://github.com/bnoordhuis/v8-cmake.git
@@ -79,22 +74,31 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+#Prevent symbol collisions
+add_compile_definitions(duckdb=bododuckdb)
+FetchContent_Declare(
+    duckdb
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/bodo/pandas/vendor/duckdb
+    EXCLUDE_FROM_ALL
+)
+
+FetchContent_MakeAvailable(duckdb)
 
 # If we're building dependencies (not getting them from conda), we need to build AWS SDK
 if("$ENV{CONDA_PREFIX}" STREQUAL "")
-    set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
-    set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
-    FetchContent_Declare(
-      AWSSDK
-      GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
-      GIT_TAG         1.11.472
-      OVERRIDE_FIND_PACKAGE
-    )
-    FetchContent_MakeAvailable(AWSSDK)
-    find_package(AWSSDK REQUIRED COMPONENTS core)
-    install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
-    unset(BUILD_ONLY)
-    unset(ENABLE_TESTING)
+  set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
+  set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
+  FetchContent_Declare(
+    AWSSDK
+    GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
+    GIT_TAG          1.11.472
+    OVERRIDE_FIND_PACKAGE
+  )
+  FetchContent_MakeAvailable(AWSSDK)
+  find_package(AWSSDK REQUIRED COMPONENTS core)
+  install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
+  unset(BUILD_ONLY)
+  unset(ENABLE_TESTING)
 elseif(WIN32)
   # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
   # find_package locates the import library so we can make it availible to our extension.
@@ -104,13 +108,8 @@ endif()
 
 # Find additional import libraries needed to compile on Windows
 if(WIN32)
-  find_package(CURL REQUIRED)
   find_package(OpenSSL REQUIRED)
 endif()
-
-# Add boost as a dependency
-find_package(Boost 1.85 REQUIRED COMPONENTS json)
-include_directories(${Boost_INCLUDE_DIRS})
 
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
@@ -138,9 +137,18 @@ set(datasketches_INSTALL_DIR ${INSTALL_DIR})
 message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
+
+# CMAKE_BUILD_TYPE is not set when using Visual Studio generator because
+# technically there could be multiple build configurations in the same build
+# environment.
+# TODO [BSE-4599] Switch to Ninja on Windows for consistency.
+if (DEFINED ENV{BODO_WINDOWS_BUILD_TYPE})
+  message(STATUS "Setting build type to $ENV{BODO_WINDOWS_BUILD_TYPE}")
+  set(CMAKE_BUILD_TYPE "$ENV{BODO_WINDOWS_BUILD_TYPE}")
+endif()
+
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
-
 if (NOT CMAKE_BUILD_TYPE)
   message(STATUS "No build type selected, default to RelWithDebInfo")
   set(CMAKE_BUILD_TYPE "RelWithDebInfo")
@@ -157,6 +165,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Don't use GCC / Clang Extensions, only C++ Standard
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Don't bother checking for C++ Modules
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
 # Get Pretty Color diagnostics in Ninja and C++ Compiler
 # Same as enabling `-fcolor-diagnostics` by default
@@ -165,10 +175,6 @@ set(CMAKE_COLOR_DIAGNOSTICS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Enable -Werror by Default
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
-
-# Ignore CFLAGS and CXXFLAGS from Conda
-set(CMAKE_C_FLAGS "")
-set(CMAKE_CXX_FLAGS "")
 
 # Enable Link-Time Optimizations (LTO)
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -203,21 +209,18 @@ if (WIN32)
     "/wd4100" # Supress warning about unreferenced formal parameter.
     "/wd4551" # Suppress warnings about function call missing argument list
     "/w"      # disable other warnings
-    "/FS"
     "/GS"       # Enable buffer security checks
     "/guard:cf" # Enable control flow guard (security feature)
     "/EHsc"
   )
   add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
-  else()
+else()
   add_compile_options(
     "-Wno-c99-designator"         # Check if still necessary?
     "-Wno-return-type-c-linkage"  # Check if still necessary?
     "-Wno-macro-redefined"        # Check if still necessary?
     "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
-    "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
-    "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
-    "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
+    "-fwrapv"                     # Conda used to force-add. Its an optimization for integer overflow
   )
 endif()
 
@@ -226,11 +229,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
   if (NOT WIN32)
     add_compile_options(
       "-g"
-      "-O1"
+      "-O0"
       "-fno-omit-frame-pointer"
     )
   else()
     add_compile_options(
+      "/FS"  # Force writes to PDBs to be serialized
       "/Zi"  # Generate debug information
     )
     add_link_options("/DEBUG") # Generate debug symbols
@@ -317,13 +321,16 @@ endif()
 
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
-  message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
-  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
-  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
+  # NOTE: The new mpich wheels have library dependencies that are not available during the build
+  #       process and cause errors for wheel repair.
+  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
+  message(STATUS "Downloading Bodo's previous version to vendor MPICH")
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
+  execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
+  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/bodo-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB MPICH_WHEEL "mpich-*.whl")
+  file(GLOB MPICH_WHEEL "bodo-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
   message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
 
@@ -344,7 +351,7 @@ endif()
 cmake_print_variables(MPI_INCLUDE_DIR)
 
 # Vendor MPI4Py
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
+if(DEFINED ENV{BODO_VENDOR_MPI4PY} AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
   message(STATUS "Copying MPI4Py to Source Directory")
   # Extract the location of the site-packages directory containing mpi4py
   execute_process(
@@ -352,10 +359,10 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
     OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
-  file(COPY ${MPI4PY_PACKAGE_DIR} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
+  file(GLOB MPI4PY_CONTENTS "${MPI4PY_PACKAGE_DIR}/*")
+  file(COPY ${MPI4PY_CONTENTS} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
+  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
 endif()
-message(STATUS "Copying MPI4Py to Bodo Directory")
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
 
 # Find PyArrow Include and Lib Directory
 # TODO: Use Arrow Directories from Conda Instead if Available
@@ -385,7 +392,6 @@ set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_I
 
 
 # ------------------------ Cython Target - bodo.io.csv_json_reader -----------------------
-
 add_custom_command(
   OUTPUT bodo/io/csv_json_reader.cpp
   DEPENDS bodo/io/csv_json_reader.pyx
@@ -397,9 +403,9 @@ add_custom_command(
 )
 
 python_add_library(csv_json_reader
-MODULE WITH_SOABI
-"bodo/io/_csv_json_reader.cpp"
-"bodo/io/csv_json_reader.cpp"
+  MODULE WITH_SOABI
+  "bodo/io/_csv_json_reader.cpp"
+  "bodo/io/csv_json_reader.cpp"
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
@@ -426,23 +432,6 @@ target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
-# ----------------------- Cython Target - bodo.io._hdfs -----------------------
-add_custom_command(
-  OUTPUT bodo/io/_hdfs.cpp
-  DEPENDS bodo/io/_hdfs.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/_hdfs.cpp" "bodo/io/_hdfs.pyx"
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/io/_hdfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/_hdfs.cpp"
-  COMMENT "Cythonizing Source bodo/io/_hdfs.pyx into bodo/io/_hdfs.cpp"
-)
-
-python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
-target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
-target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(_hdfs PRIVATE arrow arrow_python)
-install(TARGETS _hdfs DESTINATION "bodo/io/")
-
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
 if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
   set(BODO_DEV_BUILD "1")
@@ -455,7 +444,8 @@ add_custom_command(
   DEPENDS bodo/utils/tracing.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c" "bodo/utils/tracing.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "bodo/utils/tracing.c" "bodo/utils/tracing.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/utils/tracing.c" "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c"
   COMMENT "Cythonizing Source bodo/utils/tracing.pyx into bodo/utils/tracing.c"
 )
 
@@ -471,7 +461,8 @@ add_custom_command(
   DEPENDS bodo/memory.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp" "bodo/memory.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/memory.cpp" "bodo/memory.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/memory.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp"
   COMMENT "Cythonizing Source bodo/memory.pyx into bodo/memory.cpp"
 )
 
@@ -487,7 +478,8 @@ add_custom_command(
   DEPENDS bodo/tests/memory_tester.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/tests/memory_tester.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp"
   COMMENT "Cythonizing Source bodo/tests/memory_tester.pyx into bodo/tests/memory_tester.cpp"
 )
 
@@ -515,32 +507,91 @@ if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
-# ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
+
+# TODO[BSE-5071]: Re-enable native typer when its coverage improved
+# # ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
+# add_custom_command(
+#   OUTPUT bodo/transforms/type_inference/native_typer.cpp
+#   DEPENDS bodo/transforms/type_inference/native_typer.pyx
+#   VERBATIM
+#   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+#   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
+#   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
+#   COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
+# )
+
+# python_add_library(
+#   native_typer
+#   MODULE WITH_SOABI
+#     "bodo/transforms/type_inference/native_typer.cpp"
+#     "bodo/transforms/type_inference/type.cpp"
+#     "bodo/transforms/type_inference/typeinfer.cpp"
+#     "bodo/transforms/type_inference/ir.cpp"
+# )
+# target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
+# target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
+# target_link_libraries(native_typer PRIVATE fmt::fmt)
+# install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
+
+
+# ---------------------- Cython Target - plan_optimizer -----------------------
 add_custom_command(
-  OUTPUT bodo/transforms/type_inference/native_typer.cpp
-  DEPENDS bodo/transforms/type_inference/native_typer.pyx
+  OUTPUT bodo/pandas/plan_optimizer.cpp
+  DEPENDS bodo/pandas/plan_optimizer.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
-  COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/pandas/plan_optimizer.cpp" "bodo/pandas/plan_optimizer.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/pandas/plan_optimizer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp"
+  COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
-python_add_library(
-  native_typer
+
+# ---------------------- Native Target - crypto_funcs -----------------------
+
+python_add_library(crypto_funcs
   MODULE WITH_SOABI
-    "bodo/transforms/type_inference/native_typer.cpp"
-    "bodo/transforms/type_inference/type.cpp"
-    "bodo/transforms/type_inference/typeinfer.cpp"
-    "bodo/transforms/type_inference/ir.cpp"
+  "bodo/libs/_crypto_funcs.cpp"
+  "bodo/libs/_base64.cpp"
 )
-target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
-target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(native_typer PRIVATE fmt::fmt)
-install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
+target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
+if (WIN32)
+  target_link_libraries(crypto_funcs PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(crypto_funcs PRIVATE ssl crypto)
+endif()
+install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
+
+
+# ---------------------- Native Target - memory_cpp -----------------------
+
+python_add_library(memory_cpp
+  MODULE WITH_SOABI
+  "bodo/libs/_pymemory.cpp"
+  "bodo/libs/_memory.cpp"
+  "bodo/libs/_utils.cpp"
+  "bodo/libs/_storage_manager.cpp"
+)
+target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+install(TARGETS memory_cpp DESTINATION "bodo/")
 
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
+  "bodo/pandas/plan_optimizer.cpp"
+  "bodo/pandas/_bodo_scan_function.cpp"
+  "bodo/pandas/_bodo_write_function.cpp"
+  "bodo/pandas/_plan.cpp"
+  "bodo/pandas/_pipeline.cpp"
+  "bodo/pandas/_physical_conv.cpp"
+  "bodo/pandas/_util.cpp"
+  "bodo/pandas/physical/expression.cpp"
+  "bodo/pandas/physical/operator.cpp"
+  "bodo/pandas/physical/read_iceberg.cpp"
+  "bodo/pandas/physical/reduce.cpp"
+  "bodo/pandas/optimizer/runtime_join_filter.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
@@ -562,7 +613,7 @@ set(sources_list
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_base64.cpp"
+  "bodo/libs/_bodo_ext.cpp"
   "bodo/libs/_bodo_common.cpp"
   "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
@@ -587,7 +638,6 @@ set(sources_list
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
   "bodo/libs/_lead_lag.cpp"
-  "bodo/libs/_crypto_funcs.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
@@ -617,7 +667,6 @@ set(sources_list
   "bodo/libs/_utils.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
-  "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
@@ -664,7 +713,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
-    "bodo/tests/test_iceberg/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
@@ -692,11 +740,22 @@ cmake_print_variables(NO_HDF5)
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
-target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS})
+target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
+# plan_optimizer build on top of DuckDB
+target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
+)
+target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
+)
+target_link_libraries(ext PRIVATE
+  duckdb_static
+)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  if (NOT WIN32)
+    target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+  endif()
 elseif (DEFINED ENV{BODO_SKIP_CPP_TESTS})
   # Remove the IS_TESTING flag.
   target_compile_definitions(
@@ -748,11 +807,8 @@ if (NOT WIN32)
 endif()
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
-
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
-
+target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
-
 target_link_libraries(ext PRIVATE
   npymath
   arrow
@@ -766,24 +822,11 @@ target_link_libraries(ext PRIVATE
 )
 
 if (NOT WIN32)
-  # On Windows we do not link Boost_LIBRARIES here to avoid having multiple defnitions of everything.
-  # We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
-  target_link_libraries(ext PRIVATE pthread ${Boost_LIBRARIES})
-else()
-  target_link_libraries(ext PRIVATE
-    CURL::libcurl
-    OpenSSL::SSL
-    OpenSSL::Crypto
-  )
+  target_link_libraries(ext PRIVATE pthread)
 endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
 cmake_print_variables(IS_PLATFORM)
-
-# Build with our fork of Arrow
-if (IS_PLATFORM OR ("$ENV{USE_BODO_ARROW_FORK}" STREQUAL "1"))
-  target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
-endif()
 
 if (BUILD_WITH_V8)
   message(STATUS "Building with V8")
@@ -813,6 +856,11 @@ else()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 
-set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-add_dependencies(ext csv_json_reader _hdfs tracing pyarrow_wrappers datasketches)
+
+# TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
+# set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
+# # Exclude Cython generated code from clang-tidy since it can hang
+# set_source_files_properties(bodo/pandas/plan_optimizer.cpp PROPERTIES CXX_CLANG_TIDY "")
+
+add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches)
 install(TARGETS ext DESTINATION "bodo/")

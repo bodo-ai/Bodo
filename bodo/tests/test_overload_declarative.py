@@ -1,36 +1,14 @@
+from __future__ import annotations
+
 from types import NoneType
 
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
-import bodo.hiframes
-import bodo.hiframes.series_impl
-from bodo.ir.argument_checkers import (
-    BooleanScalarArgumentChecker,
-    ConstantArgumentChecker,
-    DatetimeLikeSeriesArgumentChecker,
-    FloatScalarArgumentChecker,
-    GenericArgumentChecker,
-    IntegerScalarArgumentChecker,
-    NDistinctValueArgumentChecker,
-    NumericScalarArgumentChecker,
-    NumericSeriesArgumentChecker,
-    NumericSeriesBinOpChecker,
-    OptionalArgumentChecker,
-    OverloadArgumentsChecker,
-    OverloadAttributeChecker,
-    StringScalarArgumentChecker,
-    StringSeriesArgumentChecker,
-)
-from bodo.ir.declarative_templates import (
-    overload_attribute_declarative,
-    overload_method_declarative,
-)
 from bodo.tests.utils import check_func
-from bodo.utils.typing import BodoError, is_overload_const_str_equal
 
 pytestmark = pytest.mark.skipif(
     bodo.tests.utils.test_spawn_mode_enabled,
@@ -90,13 +68,23 @@ def _val_to_string(val):
 )
 def test_literal_argument_checkers(args, kwargs, expected_err_msg):
     """Test argument checkers check method"""
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        ConstantArgumentChecker,
+        NDistinctValueArgumentChecker,
+        OverloadArgumentsChecker,
+    )
+    from bodo.ir.declarative_templates import overload_method_declarative
+    from bodo.utils.typing import BodoError
+
     arguments_str = ", ".join(map(_val_to_string, args))
     kwargs_str = ", ".join(
         f"{key}={_val_to_string(value)}" for key, value in kwargs.items()
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something",
         path="pd.Series.do_something",
         unsupported_args=["arg4"],
@@ -185,6 +173,17 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
 )
 def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_constant):
     """Test argument checkers check method"""
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        BooleanScalarArgumentChecker,
+        FloatScalarArgumentChecker,
+        IntegerScalarArgumentChecker,
+        OverloadArgumentsChecker,
+        StringScalarArgumentChecker,
+    )
+    from bodo.ir.declarative_templates import overload_method_declarative
+    from bodo.utils.typing import BodoError
 
     arguments_str = ", ".join(map(_val_to_string, args))
     kwargs_str = ", ".join(
@@ -192,7 +191,7 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something2",
         path="pd.Series.do_something2",
         unsupported_args=[],
@@ -319,6 +318,17 @@ def test_numeric_series_argument_checkers(
     other, fill_value, expected_err_msg, use_constant
 ):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        NumericScalarArgumentChecker,
+        NumericSeriesBinOpChecker,
+        OptionalArgumentChecker,
+        OverloadArgumentsChecker,
+    )
+    from bodo.ir.declarative_templates import overload_method_declarative
+    from bodo.utils.typing import BodoError
+
     args = (other,)
     kwargs = {"fill_value": fill_value}
 
@@ -328,7 +338,7 @@ def test_numeric_series_argument_checkers(
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "sub2",
         path="pd.Series.sub2",
         unsupported_args=[],
@@ -413,9 +423,19 @@ def test_numeric_series_argument_checkers(
 )
 def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        DatetimeLikeSeriesArgumentChecker,
+        NumericSeriesArgumentChecker,
+        OverloadArgumentsChecker,
+        StringSeriesArgumentChecker,
+    )
+    from bodo.ir.declarative_templates import overload_method_declarative
+    from bodo.utils.typing import BodoError
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something3",
         path="pd.Series.do_something3",
         unsupported_args=[],
@@ -487,6 +507,15 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     and if S is a Series of ints then arg1 must be 'int' and if it is a Series of floats
     then arg1 must be 'float'
     """
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        GenericArgumentChecker,
+        NumericSeriesArgumentChecker,
+        OverloadArgumentsChecker,
+    )
+    from bodo.ir.declarative_templates import overload_method_declarative
+    from bodo.utils.typing import BodoError, is_overload_const_str_equal
 
     def check_fn(context, arg_typ):
         series_type = context["self"]
@@ -510,7 +539,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
         return 'only supports constant value "int" for Series of integer data and "float" for Series of float data.'
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something4",
         path="pd.Series.do_something4",
         unsupported_args=[],
@@ -562,8 +591,17 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     ],
 )
 def test_overload_attr(S, expected_err_msg):
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.hiframes.series_impl
+    from bodo.ir.argument_checkers import (
+        OverloadAttributeChecker,
+        StringSeriesArgumentChecker,
+    )
+    from bodo.ir.declarative_templates import overload_attribute_declarative
+    from bodo.utils.typing import BodoError
+
     @overload_attribute_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "some_attr",
         "pd.Series.some_attr",
         description="this is an attribute",

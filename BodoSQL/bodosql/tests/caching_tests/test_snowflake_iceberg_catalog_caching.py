@@ -17,16 +17,11 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_caching,
     pytest_snowflake,
-    temp_env_override,
 )
 
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 
 
-@pytest.mark.skip(
-    "TODO[BSE-4283]: fix Java error when relaunching gateway with redirect"
-)
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
     """
     Test that if the prefetch flag is set, a prefetch occurs
@@ -67,11 +62,7 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
         query = "SELECT A, B, C FROM BODOSQL_ICEBERG_READ_TEST"
         stream = StringIO()
         logger = create_string_io_logger(stream)
-        connector_output = tmp_path / "connector_output.txt"
-        with (
-            set_logging_stream(logger, 1),
-            temp_env_override({"BODO_ICEBERG_OUTPUT_PATH": str(connector_output)}),
-        ):
+        with set_logging_stream(logger, 1):
             check_caching(
                 impl,
                 (bc, query),
@@ -86,15 +77,10 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
                 stream,
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
-            # Iceberg connector is used only on rank 0 so tmp_path of other ranks is
-            # not valid (see get_iceberg_file_list_parallel).
-            if check_cache and (bodo.get_rank() == 0):
-                with open(connector_output) as f:
-                    contents = f.read()
-                    assert (
-                        'BODO VERBOSE: PrefetchSnowflakeCatalog::loadTable: Loading `"TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"` from prefetch'
-                        in contents
-                    )
+            check_logger_msg(
+                stream,
+                'Loading table `"TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"` from prefetch',
+            )
 
     finally:
         bodo.prefetch_sf_iceberg = old_prefetch_flag

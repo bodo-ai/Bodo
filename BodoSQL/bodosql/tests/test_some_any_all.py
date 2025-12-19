@@ -115,7 +115,7 @@ def test_some_any_all_interval_non_null_tuples(
     # Convert Spark input to int since it doesn't support timedelta nulls properly
     df = bodosql_interval_types["TABLE1"].copy()
     for col in df.columns.copy():
-        df[col] = df[col].astype(int)
+        df[col] = df[col].astype(np.int64)
 
     check_query(
         query,

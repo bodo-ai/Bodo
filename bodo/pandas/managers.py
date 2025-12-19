@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable
 
@@ -17,7 +19,11 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.spawn.utils import debug_msg
+
+if pt.TYPE_CHECKING:
+    from bodo.ext.plan_optimizer import LogicalOperator
 
 
 class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
@@ -31,87 +37,87 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
     @classmethod
     # BlockManager is implemented in Cython so we can't override __init__ directly
     def __new__(cls, *args, **kwargs):
-        if result_id := kwargs.get("result_id"):
+        if "result_id" in kwargs or "plan" in kwargs:
             # This is the lazy case
+            result_id = kwargs.get("result_id", None)
             head = kwargs["head"]
             nrows = kwargs["nrows"]
             collect_func = kwargs["collect_func"]
             del_func = kwargs["del_func"]
             index_data = kwargs.get("index_data", None)
+            plan = kwargs.get("plan", None)
             dummy_blocks = head.blocks
             # XXX Copy?
             col_index = [head.axes[0]]
             row_indexes = []
             for ss_axis in head.axes[1:]:
                 # BSE-4099: Support other types of indexes
-                match type(ss_axis):
-                    case pd.RangeIndex:
-                        row_indexes.append(
-                            pd.RangeIndex(
-                                ss_axis.start,
-                                ss_axis.start + (ss_axis.step * nrows),
-                                ss_axis.step,
-                                name=ss_axis.name,
-                            )
+                if isinstance(ss_axis, pd.RangeIndex):
+                    row_indexes.append(
+                        pd.RangeIndex(
+                            ss_axis.start,
+                            ss_axis.start + (ss_axis.step * nrows),
+                            ss_axis.step,
+                            name=ss_axis.name,
                         )
-                    case pd.Index:
-                        assert index_data is not None
-                        row_indexes.append(pd.Index(index_data, name=ss_axis.name))
-                    case pd.MultiIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.MultiIndex.from_frame(
-                                index_data,
-                                sortorder=ss_axis.sortorder,
-                                names=ss_axis.names,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.MultiIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.MultiIndex.from_frame(
+                            index_data,
+                            sortorder=ss_axis.sortorder,
+                            names=ss_axis.names,
                         )
-                    case pd.IntervalIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.IntervalIndex.from_arrays(
-                                index_data[0],
-                                index_data[1],
-                                ss_axis.closed,
-                                ss_axis.name,
-                                dtype=ss_axis.dtype,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.IntervalIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.IntervalIndex.from_arrays(
+                            index_data[0],
+                            index_data[1],
+                            ss_axis.closed,
+                            ss_axis.name,
+                            dtype=ss_axis.dtype,
                         )
-                    case pd.CategoricalIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.CategoricalIndex(
-                                index_data,
-                                categories=ss_axis.categories,
-                                ordered=ss_axis.ordered,
-                                name=ss_axis.name,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.CategoricalIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.CategoricalIndex(
+                            index_data,
+                            categories=ss_axis.categories,
+                            ordered=ss_axis.ordered,
+                            name=ss_axis.name,
                         )
-                    case pd.DatetimeIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.DatetimeIndex(
-                                index_data,
-                                name=ss_axis.name,
-                                tz=ss_axis.tz,
-                                freq=ss_axis.freq,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.DatetimeIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.DatetimeIndex(
+                            index_data,
+                            name=ss_axis.name,
+                            tz=ss_axis.tz,
+                            freq=ss_axis.freq,
                         )
-                    case pd.PeriodIndex:
-                        assert index_data is not None
-                        row_indexes.append(index_data)
-                    case pd.TimedeltaIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.TimedeltaIndex(
-                                index_data, name=ss_axis.name, unit=ss_axis.unit
-                            )
+                    )
+                elif isinstance(ss_axis, pd.PeriodIndex):
+                    assert index_data is not None
+                    row_indexes.append(index_data)
+                elif isinstance(ss_axis, pd.TimedeltaIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.TimedeltaIndex(
+                            index_data, name=ss_axis.name, unit=ss_axis.unit
                         )
-
-                    case _:
-                        raise ValueError(
-                            f"Index type {type(ss_axis)} not supported in LazyBlockManager"
-                        )
+                    )
+                elif isinstance(ss_axis, pd.Index):
+                    assert index_data is not None
+                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
+                else:
+                    raise ValueError(
+                        f"Index type {type(ss_axis)} not supported in LazyBlockManager"
+                    )
 
             obj = super().__new__(
                 cls,
@@ -119,6 +125,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                 col_index + row_indexes,
                 verify_integrity=False,
             )
+            obj._plan = plan
             obj._md_nrows = nrows
             obj._md_head = head
             obj._md_result_id = result_id
@@ -128,6 +135,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         else:
             # This is the normal BlockManager case
             obj = super().__new__(*args, **kwargs)
+            obj._plan = None
             obj._md_nrows = None
             obj._md_head = None
             obj._md_result_id = None
@@ -146,15 +154,23 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         result_id=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
         | None = None,
     ):
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             blocks,
             axes,
-            verify_integrity=verify_integrity if (result_id is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
         if result_id is not None:
             # Set pandas internal metadata
@@ -189,10 +205,53 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         else:
             return super().__repr__()
 
+    def execute_plan(self):
+        from bodo.pandas.plan import execute_plan
+
+        data = execute_plan(self._plan)
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            head_df = pd.DataFrame._from_mgr(self._md_head, [])
+            out = type(data).from_lazy_mgr(self, head_df)
+            return out
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
+            self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+            BlockManager._rebuild_blknos_and_blklocs(self)
+            return data
+
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
+        # Execute the plan if we have one
+        if self._plan is not None:
+            debug_msg(
+                self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
+            )
+            self.execute_plan()
+            # We might fallthrough here if data is distributed
+
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             assert self._md_nrows is not None
@@ -202,6 +261,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self._collect_func = None
 
             self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
@@ -220,6 +280,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "logger",
             "_collect_func",
             "_del_func",
+            "_plan",
+            "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # Most of the time _rebuild_blknos_and_blklocs is called by pandas internals
@@ -231,6 +294,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         if name in {
             "blocks",
             "get_slice",
+            "copy",
+            "take",
             "_rebuild_blknos_and_blklocs",
             "__reduce__",
             "__setstate__",
@@ -268,6 +333,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         head=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -280,9 +346,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         self._md_head = head
         self._collect_func = collect_func
         self._del_func = del_func
-        if result_id is not None:
+        self._plan = plan
+        if result_id is not None or plan is not None:
             assert nrows is not None
-            assert result_id is not None
             assert head is not None
             assert collect_func is not None
             assert del_func is not None
@@ -292,63 +358,69 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             # Create axis based on head
             head_axis = head.axes[0]
             # BSE-4099: Support other types of indexes
-            match type(head_axis):
-                case pd.RangeIndex:
-                    axis_ = pd.RangeIndex(
-                        head_axis.start,
-                        head_axis.start + (head_axis.step * nrows),
-                        head_axis.step,
-                        name=head_axis.name,
-                    )
-                case pd.Index:
-                    assert index_data is not None
-                    axis_ = pd.Index(index_data, name=head_axis.name)
-                case pd.MultiIndex:
-                    axis_ = pd.MultiIndex.from_frame(
-                        index_data, sortorder=head_axis.sortorder, names=head_axis.names
-                    )
-                case pd.IntervalIndex:
-                    assert index_data is not None
-                    axis_ = pd.IntervalIndex.from_arrays(
-                        index_data[0],
-                        index_data[1],
-                        head_axis.closed,
-                        head_axis.name,
-                        dtype=head_axis.dtype,
-                    )
-                case pd.CategoricalIndex:
-                    assert index_data is not None
-                    axis_ = pd.CategoricalIndex(
-                        index_data,
-                        categories=head_axis.categories,
-                        ordered=head_axis.ordered,
-                        name=head_axis.name,
-                    )
-                case pd.DatetimeIndex:
-                    assert index_data is not None
-                    axis_ = pd.DatetimeIndex(
-                        index_data,
-                        name=head_axis.name,
-                        tz=head_axis.tz,
-                        freq=head_axis.freq,
-                    )
-                case pd.PeriodIndex:
-                    assert index_data is not None
-                    axis_ = index_data
-                case pd.TimedeltaIndex:
-                    assert index_data is not None
-                    axis_ = pd.TimedeltaIndex(
-                        index_data, name=head_axis.name, unit=head_axis.unit
-                    )
-                case _:
-                    raise ValueError(
-                        "Index type {type(head_axis)} not supported in LazySingleBlockManager"
-                    )
+            if isinstance(head_axis, pd.RangeIndex):
+                axis_ = pd.RangeIndex(
+                    head_axis.start,
+                    head_axis.start + (head_axis.step * nrows),
+                    head_axis.step,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.MultiIndex):
+                axis_ = pd.MultiIndex.from_frame(
+                    index_data, sortorder=head_axis.sortorder, names=head_axis.names
+                )
+            elif isinstance(head_axis, pd.IntervalIndex):
+                assert index_data is not None
+                axis_ = pd.IntervalIndex.from_arrays(
+                    index_data[0],
+                    index_data[1],
+                    head_axis.closed,
+                    head_axis.name,
+                    dtype=head_axis.dtype,
+                )
+            elif isinstance(head_axis, pd.CategoricalIndex):
+                assert index_data is not None
+                axis_ = pd.CategoricalIndex(
+                    index_data,
+                    categories=head_axis.categories,
+                    ordered=head_axis.ordered,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.DatetimeIndex):
+                assert index_data is not None
+                axis_ = pd.DatetimeIndex(
+                    index_data,
+                    name=head_axis.name,
+                    tz=head_axis.tz,
+                    freq=head_axis.freq,
+                )
+            elif isinstance(head_axis, pd.PeriodIndex):
+                assert index_data is not None
+                axis_ = index_data
+            elif isinstance(head_axis, pd.TimedeltaIndex):
+                assert index_data is not None
+                axis_ = pd.TimedeltaIndex(
+                    index_data, name=head_axis.name, unit=head_axis.unit
+                )
+            elif isinstance(head_axis, pd.Index):
+                assert index_data is not None
+                axis_ = pd.Index(index_data, name=head_axis.name)
+            else:
+                raise ValueError(
+                    "Index type {type(head_axis)} not supported in LazySingleBlockManager"
+                )
 
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             block_,
             axis_,
-            verify_integrity=verify_integrity if (result_id is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
 
     def get_dtypes(self) -> np.typing.NDArray[np.object_]:
@@ -390,10 +462,53 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         else:
             return super().__repr__()
 
+    def execute_plan(self):
+        from bodo.pandas.plan import execute_plan
+
+        data = execute_plan(self._plan)
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            head_s = pd.Series._from_mgr(self._md_head, [])
+            head_s._name = data._name
+            return type(data).from_lazy_mgr(self, head_s)
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
+            self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+            return data
+
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
+        # Execute the plan if we have one
+        if self._plan is not None:
+            debug_msg(
+                self.logger,
+                "[LazySingleBlockManager] Executing Plan and collecting data...",
+            )
+            self.execute_plan()
+            # We might fallthrough here if data is distributed
+
         if self._md_result_id is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None
@@ -403,6 +518,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             )
             data = self._collect_func(self._md_result_id)
             self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
 
             self._md_result_id = None
             self._md_nrows = None
@@ -422,9 +538,12 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "logger",
             "_collect_func",
             "_del_func",
+            "_plan",
+            "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        if name == "blocks":
+        if name in {"blocks", "copy", "take"}:
             self._collect()
         return super().__getattribute__(name)
 
@@ -437,30 +556,23 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self._del_func(r_id)
             self._del_func = None
 
-    def __len__(self) -> int:
-        """
-        Get length of the arrays in the manager.
-        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
-        """
-        if self._md_head is not None:
-            return self._md_nrows
-        return super().__len__()
-
     def get_slice(self, slobj: slice, axis: int = 0) -> SingleBlockManager:
         """
         Returns a new SingleBlockManager with the data sliced along the given axis.
         If we don't have the data yet, and the slice is within the head, we slice the head,
         otherwise we collect and slice the full data. A slice along axis 1 will always lead to a full collection.
         """
+        from bodo.pandas.utils import normalize_slice_indices_for_lazy_md
+
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        # Normalize negative and None start/stop/step values
-        start, stop, step = slobj.indices(len(self))
+        start, stop, step = normalize_slice_indices_for_lazy_md(slobj, len(self))
 
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
+            and stop is not None
             and stop <= len(self._md_head)
             and axis == 0
         ):

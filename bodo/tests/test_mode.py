@@ -82,30 +82,43 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
         type based on the input integer.
         is_slow [boolean]: Is this argument parameterization a slow test?
     """
-    val_from_format = lambda x: eval(
-        format_str.format(x), {"bodo": bodo, "datetime": datetime, "pd": pd}
-    )
-    data_dict = {
-        13: [val_from_format(500)] * 2 + [val_from_format(5000)] * 3,
-        10: [val_from_format((i**8) % (10**4 - 1)) for i in range(500)],
-        -1: [None] * 4 + [val_from_format(0)] + [val_from_format(7**6)] * 3,
-        50: [None] * 4,
-        42: [val_from_format(2**i) for i in range(16)] + [val_from_format(2**10)],
-        1024: [val_from_format(76543)],
-        256: [val_from_format(2**i) for i in [10, 10, 11, 11, 11, 12]],
-    }
-    answer_dict = {
-        13: val_from_format(5000),
-        10: val_from_format(6561),
-        -1: val_from_format(7**6),
-        50: None,
-        42: val_from_format(2**10),
-        1024: val_from_format(76543),
-        256: val_from_format(2**11),
-    }
+
+    def val_from_format(x):
+        return eval(
+            format_str.format(x), {"bodo": bodo, "datetime": datetime, "pd": pd}
+        )
+
+    # Creating lambdas to avoid evaluating "bodo.types.Time" outside of test
+    # where JIT is not imported.
+    def create_data_dict():
+        import bodo.decorators  # noqa
+
+        return {
+            13: [val_from_format(500)] * 2 + [val_from_format(5000)] * 3,
+            10: [val_from_format((i**8) % (10**4 - 1)) for i in range(500)],
+            -1: [None] * 4 + [val_from_format(0)] + [val_from_format(7**6)] * 3,
+            50: [None] * 4,
+            42: [val_from_format(2**i) for i in range(16)] + [val_from_format(2**10)],
+            1024: [val_from_format(76543)],
+            256: [val_from_format(2**i) for i in [10, 10, 11, 11, 11, 12]],
+        }
+
+    def create_answer_dict():
+        import bodo.decorators  # noqa
+
+        return {
+            13: val_from_format(5000),
+            10: val_from_format(6561),
+            -1: val_from_format(7**6),
+            50: None,
+            42: val_from_format(2**10),
+            1024: val_from_format(76543),
+            256: val_from_format(2**11),
+        }
+
     slow_mark_opt = pytest.mark.slow if is_slow else ()
     return pytest.param(
-        data_dict, answer_dict, None, False, id=name, marks=slow_mark_opt
+        create_data_dict, create_answer_dict, None, False, id=name, marks=slow_mark_opt
     )
 
 
@@ -266,7 +279,9 @@ def make_string_mode_test_params(name, alphabet, is_dict, is_slow):
         make_date_time_mode_test_params(
             "date", "datetime.date.fromordinal(710000+{})", False
         ),
-        make_date_time_mode_test_params("time", "bodo.Time(nanosecond={}**2)", False),
+        make_date_time_mode_test_params(
+            "time", "bodo.types.Time(microsecond={}**2)", False
+        ),
         make_bool_mode_test_params("bool_nullable", pd.BooleanDtype(), True, False),
         make_bool_mode_test_params("bool_numpy", None, False, False),
         make_string_mode_test_params(
@@ -330,6 +345,10 @@ def test_mode(data_dict, answer_dict, dtype, is_dict, memory_leak_check):
         A       5
         B       1
     """
+    # Create data_dict and answer_dict if they are lazy parameters
+    # Avoids importing the compiler at collection time.
+    data_dict = data_dict() if callable(data_dict) else data_dict
+    answer_dict = answer_dict() if callable(answer_dict) else answer_dict
 
     def impl(df):
         # Note we choose all of these flag + code format because

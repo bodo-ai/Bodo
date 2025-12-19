@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import typing as pt
 import warnings
@@ -556,7 +558,7 @@ def overload_attribute_declarative(
             specific properties at compile time and raises an error. This
             check is translated into documentation. Defaults to None.
         hyperlink: Link to external documentation. Defaults to None.
-        **kwargs: Additional key word arguments accepted by Bodo/Numba for
+        **kwargs: Additional keyword arguments accepted by Bodo/Numba for
             overloaded attributes (see numba_compat.py)
     """
 

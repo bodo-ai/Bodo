@@ -1,5 +1,7 @@
 """Timestamp extension for Pandas Timestamp with timezone support."""
 
+from __future__ import annotations
+
 import calendar
 import datetime
 import operator
@@ -37,7 +39,9 @@ from numba.extending import (
 
 import bodo
 import bodo.libs.str_ext
+import bodo.pandas as bd
 import bodo.pandas_compat
+import bodo.types
 from bodo.hiframes.datetime_date_ext import (
     DatetimeDateType,
     _ord2ymd,
@@ -52,6 +56,10 @@ from bodo.hiframes.datetime_timedelta_ext import (
     pd_timedelta_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs import hdatetime_ext
 from bodo.libs.pd_datetime_arr_ext import get_tz_type_info
 from bodo.libs.str_arr_ext import string_array_type
@@ -150,29 +158,32 @@ def check_tz_aware_unsupported(val, func_name):
         raise BodoError(
             f"{func_name} on Timezone-aware timestamp not yet supported. Please convert to timezone naive with ts.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DatetimeArrayType) and val.tz is not None:
+    elif isinstance(val, bodo.types.DatetimeArrayType) and val.tz is not None:
         raise BodoError(
             f"{func_name} on Timezone-aware array not yet supported. Please convert to timezone naive with arr.tz_convert(None)"
         )
     elif (
-        isinstance(val, bodo.DatetimeIndexType)
-        and isinstance(val.data, bodo.DatetimeArrayType)
+        isinstance(val, bodo.types.DatetimeIndexType)
+        and isinstance(val.data, bodo.types.DatetimeArrayType)
         and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware index not yet supported. Please convert to timezone naive with index.tz_convert(None)"
         )
     elif (
-        isinstance(val, bodo.SeriesType)
-        and isinstance(val.data, bodo.DatetimeArrayType)
+        isinstance(val, bodo.types.SeriesType)
+        and isinstance(val.data, bodo.types.DatetimeArrayType)
         and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware series not yet supported. Please convert to timezone naive with series.dt.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DataFrameType):
+    elif isinstance(val, bodo.types.DataFrameType):
         for arr_typ in val.data:
-            if isinstance(arr_typ, bodo.DatetimeArrayType) and arr_typ.tz is not None:
+            if (
+                isinstance(arr_typ, bodo.types.DatetimeArrayType)
+                and arr_typ.tz is not None
+            ):
                 raise BodoError(
                     f"{func_name} on Timezone-aware columns not yet supported. Please convert each column to timezone naive with series.dt.tz_convert(None)"
                 )
@@ -425,7 +436,10 @@ def tz_has_transition_times(tz: str | int | None):
     return False
 
 
+# Overload regular Pandas and our exported Pandas Timestamp so
+# "import bodo.pandas as pd" works correctly inside JIT as well.
 @overload(pd.Timestamp, no_unliteral=True, jit_options={"cache": True})
+@overload(bd.Timestamp, no_unliteral=True, jit_options={"cache": True})
 def overload_pd_timestamp(
     ts_input=_no_input,
     freq=None,
@@ -591,7 +605,7 @@ def overload_pd_timestamp(
         return impl_float
 
     # parse string input
-    if ts_input == bodo.string_type or is_overload_constant_str(ts_input):
+    if ts_input == bodo.types.string_type or is_overload_constant_str(ts_input):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         types.pd_timestamp_tz_naive_type = pd_timestamp_tz_naive_type
@@ -622,7 +636,7 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            with bodo.objmode(res=typ):
+            with numba.objmode(res=typ):
                 res = pd.Timestamp(ts_input, tz=tz)
             return res
 
@@ -1183,7 +1197,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
             "deltas": deltas,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -1621,7 +1635,7 @@ def timedelta64_to_integer(typingctx, val=None):
     return types.int64(val), codegen
 
 
-@lower_cast(bodo.timedelta64ns, types.int64)
+@lower_cast(numba.core.types.NPTimedelta("ns"), types.int64)
 def cast_td64_to_integer(context, builder, fromty, toty, val):
     # td64 is stored as int64 so just return value
     return val
@@ -1632,7 +1646,7 @@ def parse_datetime_str(val):  # pragma: no cover
     """Parse datetime string value to dt64
     Just calling Pandas since the Pandas code is complex
     """
-    with bodo.objmode(res="int64"):
+    with numba.objmode(res="int64"):
         res = pd.Timestamp(val).value
     return integer_to_dt64(res)
 
@@ -1640,7 +1654,7 @@ def parse_datetime_str(val):  # pragma: no cover
 @numba.njit(cache=True)
 def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
     """convert datetime.timedelta to np.timedelta64"""
-    with bodo.objmode(res='NPTimedelta("ns")'):
+    with numba.objmode(res='NPTimedelta("ns")'):
         res = pd.to_timedelta(val)
         # Pandas 2 returns us precision for some reason
         res = res.to_timedelta64().astype(np.dtype("timedelta64[ns]"))
@@ -1651,7 +1665,7 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
 def series_str_dt64_astype(data):  # pragma: no cover
     """convert string array to datetime64 array using
     objmode and Series implementation."""
-    with bodo.objmode(res="NPDatetime('ns')[::1]"):
+    with numba.objmode(res="NPDatetime('ns')[::1]"):
         # Convert to series to enable Pandas str parsing.
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
@@ -1664,7 +1678,7 @@ def series_str_dt64_astype(data):  # pragma: no cover
 def series_str_td64_astype(data):  # pragma: no cover
     """convert string array to timedelta64 array using
     objmode."""
-    with bodo.objmode(res="NPTimedelta('ns')[::1]"):
+    with numba.objmode(res="NPTimedelta('ns')[::1]"):
         # No need to use Series because Timedelta doesn't
         # have extra parsing.
         # NOTE: Pandas 2 returns a TimedeltaArray so to_numpy is needed
@@ -1682,7 +1696,7 @@ def datetime_datetime_to_dt64(val):  # pragma: no cover
 def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     """convert array of datetime.date to np.datetime64"""
     n = len(arr)
-    res = np.empty(n, bodo.datetime64ns)
+    res = np.empty(n, bodo.types.datetime64ns)
     for i in range(n):
         if bodo.libs.array_kernels.isna(arr, i):
             bodo.libs.array_kernels.setna(res, i)
@@ -1711,7 +1725,7 @@ def to_datetime_scalar(
     """call pd.to_datetime() with scalar value 'a'
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
-    with bodo.objmode(t="pd_timestamp_tz_naive_type"):
+    with numba.objmode(t="pd_timestamp_tz_naive_type"):
         # A `tz_localize(None)` is required to handle inputs with a tz offset
         # because the return type is a naive timestamp.
         t = pd.to_datetime(
@@ -1742,7 +1756,7 @@ def pandas_string_array_to_datetime(
     origin,
     cache,
 ):  # pragma: no cover
-    with bodo.objmode(result="datetime_index"):
+    with numba.objmode(result="datetime_index"):
         # pd.to_datetime(string_array) returns DatetimeIndex
         result = pd.to_datetime(
             arr,
@@ -1840,7 +1854,7 @@ def overload_to_datetime(
     # This covers string as a literal or not
     # and integer as a literal or not
     if (
-        arg_a == bodo.string_type
+        arg_a == bodo.types.string_type
         or is_overload_constant_str(arg_a)
         or is_overload_constant_int(arg_a)
         or isinstance(arg_a, types.Integer)
@@ -2030,7 +2044,7 @@ def overload_to_datetime(
     # Categorical array with string values
     if (
         isinstance(arg_a, CategoricalArrayType)
-        and arg_a.dtype.elem_type == bodo.string_type
+        and arg_a.dtype.elem_type == bodo.types.string_type
     ):
         dt64_dtype = np.dtype("datetime64[ns]")
 
@@ -2073,7 +2087,7 @@ def overload_to_datetime(
         return impl_cat_arr
 
     # Dictionary-encoded string array
-    if arg_a == bodo.dict_str_arr_type:
+    if arg_a == bodo.types.dict_str_arr_type:
 
         def impl_dict_str_arr(
             arg_a,
@@ -2126,7 +2140,7 @@ def overload_to_datetime(
 
     # np datetime input. This ignores other fields and just returns value wrapped
     # in a timestamp
-    if arg_a == bodo.datetime64ns:
+    if arg_a == bodo.types.datetime64ns:
 
         def impl_np_datetime(
             arg_a,
@@ -2222,7 +2236,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     if is_overload_constant_str(arg_a) or arg_a in (
         pd_timedelta_type,
         datetime_timedelta_type,
-        bodo.string_type,
+        bodo.types.string_type,
     ):
 
         def impl_string(arg_a, unit="ns", errors="raise"):  # pragma: no cover
@@ -2283,7 +2297,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_int
 
-        if arg_a.dtype == bodo.timedelta64ns:
+        if arg_a.dtype == bodo.types.timedelta64ns:
 
             def impl_td64(arg_a, unit="ns", errors="raise"):  # pragma: no cover
                 arr = bodo.utils.conversion.coerce_to_ndarray(arg_a)
@@ -2292,7 +2306,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
             return impl_td64
 
         # Either a string array or numpy unichr array
-        if arg_a.dtype == bodo.string_type or isinstance(
+        if arg_a.dtype == bodo.types.string_type or isinstance(
             arg_a.dtype, types.UnicodeCharSeq
         ):
             # Call a kernel that enters objmode once for all conversion to avoid overhead
@@ -2326,11 +2340,28 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_datetime_timedelta
 
+        if arg_a == bodo.types.timedelta_array_type:
+
+            def impl_timedelta_arr(
+                arg_a, unit="ns", errors="raise"
+            ):  # pragma: no cover
+                n = len(arg_a)
+                B = np.empty(n, td64_dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    val = iNaT
+                    if not bodo.libs.array_kernels.isna(arg_a, i):
+                        timedelta_val = arg_a[i]
+                        val = timedelta_val.value
+                    B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
+
+            return impl_timedelta_arr
+
     if is_overload_none(arg_a):  # pragma: no cover
         # None input
         return lambda arg_a, unit="ns", errors="raise": None
 
-    raise_bodo_error(f"pd.to_timedelta(): cannot convert date type {arg_a.dtype}")
+    raise_bodo_error(f"pd.to_timedelta(): cannot convert data type {arg_a.dtype}")
 
 
 @register_jitable
@@ -2351,7 +2382,7 @@ def float_to_timedelta_val(data, precision, multiplier):  # pragma: no cover
 def pandas_string_array_to_timedelta(
     arg_a, unit="ns", errors="raise"
 ):  # pragma: no cover
-    with bodo.objmode(result="timedelta_index"):
+    with numba.objmode(result="timedelta_index"):
         # pd.to_timedelta(string_array) returns TimedeltaIndex
         # Cannot pass in a unit if args are strings
         result = pd.to_timedelta(arg_a, errors=errors)
@@ -2425,7 +2456,7 @@ def create_timestamp_cmp_op_overload(op):
                 )
 
         # Timestamp/dt64 scalar
-        if isinstance(lhs, PandasTimestampType) and rhs == bodo.datetime64ns:
+        if isinstance(lhs, PandasTimestampType) and rhs == bodo.types.datetime64ns:
             if lhs.tz is not None:
                 return lambda lhs, rhs: op(
                     bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
@@ -2439,7 +2470,7 @@ def create_timestamp_cmp_op_overload(op):
                 )  # pragma: no cover
 
         # dt64 scalar/Timestamp
-        if lhs == bodo.datetime64ns and isinstance(rhs, PandasTimestampType):
+        if lhs == bodo.types.datetime64ns and isinstance(rhs, PandasTimestampType):
             if rhs.tz is not None:
                 return lambda lhs, rhs: op(
                     lhs,
@@ -2877,7 +2908,7 @@ def strftime(ts, format):
         raise BodoError(f"{cls_name}.strftime(): 'strftime' argument must be a string")
 
     def impl(ts, format):  # pragma: no cover
-        with bodo.objmode(res="unicode_type"):
+        with numba.objmode(res="unicode_type"):
             res = ts.strftime(format)
         return res
 
@@ -2915,7 +2946,7 @@ def now_impl_overload(tz=None):
         )
 
     def impl(tz=None):  # pragma: no cover
-        with bodo.objmode(d=tz_typ):
+        with numba.objmode(d=tz_typ):
             d = pd.Timestamp.now(tz)
         return d
 
@@ -2980,7 +3011,7 @@ def typeof_python_calendar(val, c):
 
 @overload_method(types.NPDatetime, "__str__", jit_options={"cache": True})
 def overload_datetime64_str(val):
-    if val == bodo.datetime64ns:
+    if val == bodo.types.datetime64ns:
         # for right now, just going to use isoformat. This will omit fractional values,
         # similar to how the current str(timestamp) implementation omits fractional values.
         # see BE-1407
@@ -3038,10 +3069,10 @@ timestamp_unsupported_methods = [
 def _install_pd_timestamp_unsupported():
     for attr_name in timestamp_unsupported_attrs:
         full_name = "pandas.Timestamp." + attr_name
-        bodo.overload_unsupported_attribute(PandasTimestampType, attr_name, full_name)
+        overload_unsupported_attribute(PandasTimestampType, attr_name, full_name)
     for fname in timestamp_unsupported_methods:
         full_name = "pandas.Timestamp." + fname
-        bodo.overload_unsupported_method(PandasTimestampType, fname, full_name)
+        overload_unsupported_method(PandasTimestampType, fname, full_name)
 
 
 _install_pd_timestamp_unsupported()

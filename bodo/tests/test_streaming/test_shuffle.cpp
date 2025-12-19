@@ -217,8 +217,8 @@ static bodo::tests::suite tests([] {
                 {"A", "B"}, {true, true}, {}, std::vector<ctype>(array_size, 1),
                 std::vector<bool>(array_size, true));
 
-            size_t n_nulls_expected = 0;
-            size_t n_false_expected = 0;
+            uint64_t n_nulls_expected = 0;
+            uint64_t n_false_expected = 0;
             if (rank == 0) {
                 for (size_t i = 0; i < array_size; i += 25) {
                     table->columns[0]->set_null_bit(i, false);
@@ -231,19 +231,19 @@ static bodo::tests::suite tests([] {
                 }
             }
             CHECK_MPI(
-                MPI_Bcast(&n_nulls_expected, 1, MPI_UNSIGNED_LONG, 0,
+                MPI_Bcast(&n_nulls_expected, 1, MPI_UNSIGNED_LONG_LONG, 0,
                           MPI_COMM_WORLD),
                 "test_async_shuffle_nullable_bool: MPI error on MPI_Bcast:");
             CHECK_MPI(
-                MPI_Bcast(&n_false_expected, 1, MPI_UNSIGNED_LONG, 0,
+                MPI_Bcast(&n_false_expected, 1, MPI_UNSIGNED_LONG_LONG, 0,
                           MPI_COMM_WORLD),
                 "test_async_shuffle_nullable_bool: MPI error on MPI_Bcast:");
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
-            size_t n_nulls = 0;
-            size_t n_false = 0;
-            size_t length_col1 = 0;
-            size_t length_col2 = 0;
+            uint64_t n_nulls = 0;
+            uint64_t n_false = 0;
+            uint64_t length_col1 = 0;
+            uint64_t length_col2 = 0;
             if (shuffle_table.get() != nullptr) {
                 length_col1 = shuffle_table->columns[0]->length;
                 length_col2 = shuffle_table->columns[1]->length;
@@ -260,22 +260,26 @@ static bodo::tests::suite tests([] {
                     }
                 }
             }
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &n_nulls, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_nullable_bool: MPI error on "
-                      "MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &n_false, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_nullable_bool: MPI error on "
-                      "MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_nullable_bool: MPI error on "
-                      "MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_col2, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_nullable_bool: MPI error on "
-                      "MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &n_nulls, 1, MPI_UNSIGNED_LONG_LONG,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_nullable_bool: MPI error on "
+                "MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &n_false, 1, MPI_UNSIGNED_LONG_LONG,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_nullable_bool: MPI error on "
+                "MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_nullable_bool: MPI error on "
+                "MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_col2, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_nullable_bool: MPI error on "
+                "MPI_Allreduce:");
             bodo::tests::check(
                 length_col1 == array_size,
                 fmt::format("length_col1: {} != {}", length_col1, array_size)
@@ -306,8 +310,8 @@ static bodo::tests::suite tests([] {
                 {"A", "B"}, {false, true}, {"B"}, std::vector<int>(array_size),
                 dict_data_vec);
 
-            size_t n_nulls_expected = 0;
-            size_t values_expected[10] = {};
+            uint64_t n_nulls_expected = 0;
+            uint64_t values_expected[10] = {};
             if (rank == 0) {
                 for (size_t i = 0; i < array_size; i += 25) {
                     table->columns[1]->set_null_bit(i, false);
@@ -319,17 +323,17 @@ static bodo::tests::suite tests([] {
                     }
                 }
             }
-            CHECK_MPI(MPI_Bcast(&n_nulls_expected, 1, MPI_UNSIGNED_LONG, 0,
+            CHECK_MPI(MPI_Bcast(&n_nulls_expected, 1, MPI_UNSIGNED_LONG_LONG, 0,
                                 MPI_COMM_WORLD),
                       "test_async_shuffle_dict: MPI error on MPI_Bcast:");
-            CHECK_MPI(MPI_Bcast(&values_expected, 10, MPI_UNSIGNED_LONG, 0,
+            CHECK_MPI(MPI_Bcast(&values_expected, 10, MPI_UNSIGNED_LONG_LONG, 0,
                                 MPI_COMM_WORLD),
                       "test_async_shuffle_dict: MPI error on MPI_Bcast:");
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
-            size_t n_nulls = 0;
-            size_t length_col1 = 0;
-            size_t values[10] = {};
+            uint64_t n_nulls = 0;
+            uint64_t length_col1 = 0;
+            uint64_t values[10] = {};
             if (shuffle_table.get() != nullptr) {
                 length_col1 = shuffle_table->columns[1]->length;
                 for (size_t i = 0; i < shuffle_table->nrows(); i++) {
@@ -355,15 +359,18 @@ static bodo::tests::suite tests([] {
                     }
                 }
             }
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &n_nulls, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &values, 10,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &n_nulls, 1, MPI_UNSIGNED_LONG_LONG,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &values, 10, MPI_UNSIGNED_LONG_LONG,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_dict: MPI error on MPI_Allreduce:");
 
             bodo::tests::check(n_nulls == n_nulls_expected);
             for (size_t i = 0; i < 10; i++) {
@@ -399,9 +406,9 @@ static bodo::tests::suite tests([] {
             auto table = std::make_unique<table_info>(cols);
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
-            size_t length_col1 = 0;
-            size_t length_inner_arr = 0;
-            size_t inner_lens[6] = {};
+            uint64_t length_col1 = 0;
+            uint64_t length_inner_arr = 0;
+            uint64_t inner_lens[6] = {};
             if (shuffle_table.get() != nullptr) {
                 length_col1 = shuffle_table->columns[0]->length;
                 length_inner_arr =
@@ -423,16 +430,16 @@ static bodo::tests::suite tests([] {
             }
 
             CHECK_MPI(
-                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1, MPI_UNSIGNED_LONG,
-                              MPI_SUM, MPI_COMM_WORLD),
+                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
                 "test_async_shuffle_array_item: MPI error on MPI_Allreduce:");
             CHECK_MPI(
                 MPI_Allreduce(MPI_IN_PLACE, &length_inner_arr, 1,
-                              MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
                 "test_async_shuffle_array_item: MPI error on MPI_Allreduce:");
             CHECK_MPI(
-                MPI_Allreduce(MPI_IN_PLACE, &inner_lens, 6, MPI_UNSIGNED_LONG,
-                              MPI_SUM, MPI_COMM_WORLD),
+                MPI_Allreduce(MPI_IN_PLACE, &inner_lens, 6,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
                 "test_async_shuffle_array_item: MPI error on MPI_Allreduce:");
             bodo::tests::check(
                 length_col1 == array_size,
@@ -639,8 +646,8 @@ static bodo::tests::suite tests([] {
             auto table = std::make_unique<table_info>(cols);
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
-            size_t length_col1 = 0;
-            std::vector<size_t> child_lens(child_arrays.size(), 0);
+            uint64_t length_col1 = 0;
+            std::vector<uint64_t> child_lens(child_arrays.size(), 0);
             if (shuffle_table != nullptr) {
                 length_col1 = shuffle_table->columns[0]->length;
                 bodo::tests::check(
@@ -651,11 +658,12 @@ static bodo::tests::suite tests([] {
                         shuffle_table->columns[0]->child_arrays[i]->length;
                 }
             }
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_struct: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_struct: MPI error on MPI_Allreduce:");
             CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, child_lens.data(),
-                                    child_lens.size(), MPI_UNSIGNED_LONG,
+                                    child_lens.size(), MPI_UNSIGNED_LONG_LONG,
                                     MPI_SUM, MPI_COMM_WORLD),
                       "test_async_shuffle_struct: MPI error on MPI_Allreduce:");
             for (auto child_len : child_lens) {
@@ -711,9 +719,9 @@ static bodo::tests::suite tests([] {
 
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
-            size_t shuffled_nulls = 0;
-            size_t length_col1 = 0;
-            size_t length_keys = 0;
+            uint64_t shuffled_nulls = 0;
+            uint64_t length_col1 = 0;
+            uint64_t length_keys = 0;
             if (shuffle_table != nullptr) {
                 auto shuffled_child =
                     shuffle_table->columns[0]->child_arrays[0];
@@ -727,15 +735,18 @@ static bodo::tests::suite tests([] {
                 }
                 bodo::tests::check(shuffle_table->ncols() == 1);
             }
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_map: MPI error on MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &shuffled_nulls, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_map: MPI error on MPI_Allreduce:");
-            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &length_keys, 1,
-                                    MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD),
-                      "test_async_shuffle_map: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_map: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &shuffled_nulls, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_map: MPI error on MPI_Allreduce:");
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, &length_keys, 1,
+                              MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+                "test_async_shuffle_map: MPI error on MPI_Allreduce:");
             bodo::tests::check(shuffled_nulls == expected_nulls);
             bodo::tests::check(length_col1 == array_size);
             bodo::tests::check(length_keys == expected_len_keys);

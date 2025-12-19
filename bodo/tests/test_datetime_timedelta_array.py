@@ -16,10 +16,12 @@ from bodo.tests.utils import check_func, get_num_test_workers
 
 @pytest.fixture(
     params=[
-        np.append(
-            datetime.timedelta(days=5, seconds=4, weeks=4),
-            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
-        )
+        pd.Series(
+            np.append(
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+            )
+        ).array
     ]
 )
 def timedelta_arr_value(request):
@@ -87,7 +89,7 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
 
     np.random.seed(0)
     idx = np.random.randint(0, len(timedelta_arr_value), 11)
-    val = pd.timedelta_range(start="7 hours", periods=len(idx)).to_pytimedelta()
+    val = pd.timedelta_range(start="7 hours", periods=len(idx)).array
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
@@ -99,7 +101,7 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
     )
 
     idx = np.random.ranf(len(timedelta_arr_value)) < 0.2
-    val = pd.timedelta_range(start="7 hours", periods=idx.sum()).to_pytimedelta()
+    val = pd.timedelta_range(start="7 hours", periods=idx.sum()).array
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
@@ -111,7 +113,7 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
     )
 
     idx = slice(1, 4)
-    val = pd.timedelta_range(start="7 hours", periods=3).to_pytimedelta()
+    val = pd.timedelta_range(start="7 hours", periods=3).array
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
@@ -125,16 +127,14 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_nbytes(timedelta_arr_value, memory_leak_check):
-    """test DatetimeTimeDeltaArrayType nbytes"""
+    """test TimeDeltaArrayType nbytes"""
 
     def impl(arr):
         return arr.nbytes
 
     n_pes = get_num_test_workers()
-    py_out = (
-        264 + n_pes
-    )  # 88*3 = 264 for data (days, seconds, microseconds), one byte for null_bitmap per rank
-    check_func(impl, (timedelta_arr_value,), py_output=266, only_seq=True)
+    py_out = 88 + n_pes  # 88 for data , one byte for null_bitmap per rank
+    check_func(impl, (timedelta_arr_value,), py_output=90, only_seq=True)
     if n_pes == 1:  # np=1 has 2 bytes for null_bitmap
         py_out += 1
     check_func(impl, (timedelta_arr_value,), py_output=py_out, only_1DVar=True)

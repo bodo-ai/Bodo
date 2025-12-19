@@ -28,7 +28,7 @@ from bodo.io.helpers import (
     _get_stream_writer_payload,
     stream_writer_alloc_codegen,
 )
-from bodo.io.parquet_pio import parquet_write_table_cpp
+from bodo.io.parquet_write import parquet_write_table_cpp
 from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
     temporary_directory_type,
@@ -131,20 +131,6 @@ snowflake_writer_payload_members = (
     # Old environment variables that were overwritten to update credentials
     # for uploading to stage
     ("old_creds", types.DictType(types.unicode_type, types.unicode_type)),
-    # Whether the stage is ADLS backed and we'll be writing parquet files to it
-    # directly using our existing HDFS and Parquet infrastructure
-    ("azure_stage_direct_upload", types.boolean),
-    # If azure_stage_direct_upload=True, we replace bodo.HDFS_CORE_SITE_LOC
-    # with a new core-site.xml. `old_core_site` contains the original contents
-    # of the file or "__none__" if file didn't originally exist, so that it
-    # can be restored later after copy into
-    ("old_core_site", types.unicode_type),
-    # If azure_stage_direct_upload=True, we replace contents in
-    # SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION if any with the SAS token for
-    # this upload. `old_sas_token` contains the original contents of the file
-    # or "__none__" if file didn't originally exist, so that it can be
-    # restored later after copy into
-    ("old_sas_token", types.unicode_type),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
     # Whether the `copy_intosfqids` exists.
@@ -355,16 +341,13 @@ def overload_connect_and_get_upload_info_jit(conn):
     """JIT version of connect_and_get_upload_info which wraps objmode (isolated to avoid Numba objmode bugs)"""
 
     def impl(conn):
-        with bodo.no_warning_objmode(
+        with bodo.ir.object_mode.no_warning_objmode(
             cursor="snowflake_connector_cursor_type",
             tmp_folder="temporary_directory_type",
             stage_name="unicode_type",
             stage_path="unicode_type",
             upload_using_snowflake_put="boolean",
             old_creds="DictType(unicode_type, unicode_type)",
-            azure_stage_direct_upload="boolean",
-            old_core_site="unicode_type",
-            old_sas_token="unicode_type",
         ):
             (
                 cursor,
@@ -373,9 +356,6 @@ def overload_connect_and_get_upload_info_jit(conn):
                 stage_path,
                 upload_using_snowflake_put,
                 old_creds,
-                azure_stage_direct_upload,
-                old_core_site,
-                old_sas_token,
             ) = bodo.io.snowflake.connect_and_get_upload_info(conn)
 
         return (
@@ -385,9 +365,6 @@ def overload_connect_and_get_upload_info_jit(conn):
             stage_path,
             upload_using_snowflake_put,
             old_creds,
-            azure_stage_direct_upload,
-            old_core_site,
-            old_sas_token,
         )
 
     return impl
@@ -451,9 +428,6 @@ def gen_snowflake_writer_init_impl(
             stage_path,
             upload_using_snowflake_put,
             old_creds,
-            azure_stage_direct_upload,
-            old_core_site,
-            old_sas_token,
         ) = connect_and_get_upload_info_jit(conn)
         writer["cursor"] = cursor
         writer["tmp_folder"] = tmp_folder
@@ -461,15 +435,8 @@ def gen_snowflake_writer_init_impl(
         writer["stage_path"] = stage_path
         writer["upload_using_snowflake_put"] = upload_using_snowflake_put
         writer["old_creds"] = old_creds
-        writer["azure_stage_direct_upload"] = azure_stage_direct_upload
-        writer["old_core_site"] = old_core_site
-        writer["old_sas_token"] = old_sas_token
         # Barrier ensures that internal stage exists before we upload files to it
         bodo.barrier()
-        # Force reset the existing hadoop filesystem instance, to use new SAS token.
-        # See to_sql() for more detailed comments
-        if azure_stage_direct_upload:
-            bodo.libs.distributed_api.disconnect_hdfs_njit()
         # Compute bucket region
         writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             stage_path, _is_parallel
@@ -551,7 +518,7 @@ def gen_snowflake_writer_append_table_impl_inner(
     n_cols = len(col_names_meta)
     py_table_typ = table
 
-    if col_precisions_meta == bodo.none:
+    if col_precisions_meta == bodo.types.none:
         col_precisions_tup = None
     else:
         col_precisions_tup = unwrap_typeref(col_precisions_meta).meta
@@ -626,8 +593,17 @@ def gen_snowflake_writer_append_table_impl_inner(
             out_table_len = len(out_table)
             if out_table_len > 0:
                 ev_upload_table = tracing.Event("upload_table", is_parallel=False)
+                chunk_file_path = f"{writer['copy_into_dir']}/file{writer['file_count_local']}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet"
                 # Note: writer['stage_path'] already has trailing slash
-                chunk_path = f"{writer['stage_path']}{writer['copy_into_dir']}/file{writer['file_count_local']}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet"
+                if (
+                    writer["stage_path"].startswith("abfs://")
+                    or writer["stage_path"].startswith("abfss://")
+                ) and "?" in writer["stage_path"]:
+                    # We need to move the query parameters to the end of the path
+                    container_path, query = writer["stage_path"].split("?")
+                    chunk_path = f"{container_path}{chunk_file_path}?{query}"
+                else:
+                    chunk_path = f"{writer['stage_path']}{chunk_file_path}"
                 # To escape backslashes, we want to replace ( \ ) with ( \\ ), which can
                 # be written as the string literals ( \\ ) and ( \\\\ ).
                 # To escape quotes, we want to replace ( ' ) with ( \' ), which can
@@ -648,16 +624,9 @@ def gen_snowflake_writer_append_table_impl_inner(
                         py_table_to_cpp_table(out_table, py_table_typ)
                     ),
                     array_to_info(col_names_arr),
-                    0,
-                    False,  # write_index
                     unicode_to_utf8("null"),  # metadata
                     unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),
                     False,  # is_parallel
-                    0,  # write_rangeindex_to_metadata
-                    0,
-                    0,
-                    0,  # range index start, stop, step
-                    unicode_to_utf8("null"),  # idx_name
                     unicode_to_utf8(writer["bucket_region"]),
                     out_table_len,  # row_group_size
                     unicode_to_utf8("null"),  # prefix
@@ -665,7 +634,6 @@ def gen_snowflake_writer_append_table_impl_inner(
                     unicode_to_utf8("UTC"),  # Explicitly set tz='UTC'
                     True,  # Explicitly downcast nanoseconds to microseconds
                     False,  # Create write directory if not exists
-                    True,  # Force HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
                 )
                 ev_pq_write_cpp.finalize()
                 # In case of Snowflake PUT, upload local parquet to internal stage
@@ -675,7 +643,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                     file_count_local = writer["file_count_local"]
                     stage_name = writer["stage_name"]
                     copy_into_dir = writer["copy_into_dir"]
-                    with bodo.no_warning_objmode():
+                    with bodo.ir.object_mode.no_warning_objmode():
                         bodo.io.snowflake.do_upload_and_cleanup(
                             cursor,
                             file_count_local,
@@ -710,7 +678,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 location = writer["location"]
                 if_exists = writer["if_exists"]
                 table_type = writer["table_type"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     begin_write_transaction(
                         cursor,
                         location,
@@ -729,14 +697,14 @@ def gen_snowflake_writer_append_table_impl_inner(
                 cursor = writer["cursor"]
                 copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
                 file_count_global_prev = writer["file_count_global_prev"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
             else:
-                with bodo.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                with bodo.ir.object_mode.no_warning_objmode():
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             # Execute async COPY INTO form rank 0
             if bodo.get_rank() == 0:
                 cursor = writer["cursor"]
@@ -744,7 +712,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 location = writer["location"]
                 copy_into_dir = writer["copy_into_dir"]
                 flatten_table = writer["flatten_table"]
-                with bodo.no_warning_objmode(
+                with bodo.ir.object_mode.no_warning_objmode(
                     copy_into_new_sfqid="unicode_type",
                     flatten_sql="unicode_type",
                     flatten_table="unicode_type",
@@ -792,22 +760,24 @@ def gen_snowflake_writer_append_table_impl_inner(
                 cursor = writer["cursor"]
                 copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
                 file_count_global_prev = writer["file_count_global_prev"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
                     if flatten_sql == "":
                         cursor.execute(
                             "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                         )
             else:
-                with bodo.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                with bodo.ir.object_mode.no_warning_objmode():
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             if (not parallel or bodo.get_rank() == 0) and writer["flatten_sql"] != "":
                 cursor = writer["cursor"]
                 flatten_sql = writer["flatten_sql"]
-                with bodo.no_warning_objmode(flatten_sfqid="unicode_type"):
+                with bodo.ir.object_mode.no_warning_objmode(
+                    flatten_sfqid="unicode_type"
+                ):
                     err = None
                     try:
                         # TODO: BSE-1929 call flatten_sql once for each copy into
@@ -817,7 +787,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                         flatten_sfqid = cursor.sfqid
                     except Exception as e:
                         err = e
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
                     cursor.execute(
                         "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                     )
@@ -830,40 +800,25 @@ def gen_snowflake_writer_append_table_impl_inner(
                         writer["copy_into_sfqids_exists"] = True
                         writer["copy_into_sfqids"] = flatten_sfqid
             else:
-                with bodo.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                with bodo.ir.object_mode.no_warning_objmode():
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             if bodo.get_rank() == 0:
                 writer["copy_into_prev_sfqid"] = ""
                 writer["flatten_sql"] = ""
                 writer["flatten_table"] = ""
                 writer["file_count_global_prev"] = 0
-            # Force reset the existing Hadoop filesystem instance to avoid
-            # conflicts with any future ADLS operations in the same process
-            if writer["azure_stage_direct_upload"]:
-                bodo.libs.distributed_api.disconnect_hdfs_njit()
             # Drop internal stage, close Snowflake connection cursor, put back
             # environment variables, restore contents in case of ADLS stage
             cursor = writer["cursor"]
             stage_name = writer["stage_name"]
             old_creds = writer["old_creds"]
             tmp_folder = writer["tmp_folder"]
-            azure_stage_direct_upload = writer["azure_stage_direct_upload"]
-            old_core_site = writer["old_core_site"]
-            old_sas_token = writer["old_sas_token"]
-            with bodo.no_warning_objmode():
+            with bodo.ir.object_mode.no_warning_objmode():
                 if cursor is not None:
                     bodo.io.snowflake.drop_internal_stage(cursor, stage_name)
                     cursor.close()
                 bodo.io.snowflake.update_env_vars(old_creds)
                 tmp_folder.cleanup()
-                if azure_stage_direct_upload:
-                    bodo.io.snowflake.update_file_contents(
-                        bodo.HDFS_CORE_SITE_LOC, old_core_site
-                    )
-                    bodo.io.snowflake.update_file_contents(
-                        bodo.io.snowflake.SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION,
-                        old_sas_token,
-                    )
             if writer["parallel"]:
                 bodo.barrier()
             writer["finished"] = True

@@ -1,6 +1,6 @@
 #include <arrow/array.h>
 #include <arrow/table.h>
-#include "/tmp/datasketches-prefix/include/DataSketches/theta_sketch.hpp"
+#include <DataSketches/theta_sketch.hpp>
 #include "_bodo_common.h"
 
 /**

@@ -79,6 +79,7 @@ const char* Bodo_FTypes_names[] = {"no_op",
                                    "idxmin_na_first",
                                    "idxmax_na_first",
                                    "idx_n_columns",
+                                   "stream_udf",
                                    "n_ftypes"};
 
 const std::string get_name_for_Bodo_FTypes(int enumVal) {

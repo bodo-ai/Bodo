@@ -193,10 +193,10 @@ class SnowflakeReader : public ArrowReader {
         Py_INCREF(ds);  // call incref to keep the reference
         // PyTuple_GetItem borrows a reference
         PyObject* total_len = PyTuple_GetItem(ds_tuple, 1);
-        this->total_nrows = PyLong_AsLong(total_len);
+        this->total_nrows = PyLong_AsLongLong(total_len);
         // PyTuple_GetItem borrows a reference
         PyObject* sf_exec_time_us_py = PyTuple_GetItem(ds_tuple, 2);
-        int64_t sf_exec_time_us = PyLong_AsLong(sf_exec_time_us_py);
+        int64_t sf_exec_time_us = PyLong_AsLongLong(sf_exec_time_us_py);
         this->metrics.sf_data_prep_time = sf_exec_time_us;
         Py_DECREF(ds_tuple);
         this->sf_conn = PyObject_GetAttrString(ds, "conn");

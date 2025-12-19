@@ -82,7 +82,7 @@ def contains_util(arr, pattern, dict_encoding_state, func_id):
     verify_string_binary_arg(arr, "CONTAINS", "arr")
     verify_string_binary_arg(pattern, "CONTAINS", "pattern")
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     arg_names = ["arr", "pattern", "dict_encoding_state", "func_id"]
     arg_types = [arr, pattern, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
@@ -709,7 +709,7 @@ def char_util(arr):
     scalar_text += "else:\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -744,7 +744,7 @@ def initcap_util(arr, delim, dict_encoding_state, func_id):
     scalar_text += "      capitalized += arg0[j].lower()\n"
     scalar_text += "res[i] = capitalized"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1138,7 +1138,7 @@ def endswith_util(source, suffix, dict_encoding_state, func_id):
     propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.endswith(arg1)"
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1177,7 +1177,7 @@ def format_util(arr, places):
     scalar_text = "prec = max(arg1, 0)\n"
     scalar_text += "res[i] = format(arg0, f',.{prec}f')"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1223,7 +1223,9 @@ def insert_util(arr, pos, length, inject, dict_encoding_state, func_id):
     scalar_text += "suffixIndex = prefixIndex + max(arg2, 0)\n"
     scalar_text += "res[i] = arg0[:prefixIndex] + arg3 + arg0[suffixIndex:]"
 
-    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if arr_is_string else bodo.types.binary_array_type
+    )
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1279,7 +1281,11 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
         elif func_name == "RIGHT":
             scalar_text += "   res[i] = arg0[-arg1:]\n"
 
-        out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+        out_dtype = (
+            bodo.types.string_array_type
+            if arr_is_string
+            else bodo.types.binary_array_type
+        )
 
         use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
@@ -1340,7 +1346,11 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         ):
             raise BodoError("Pad string and arr must be the same type!")
 
-        out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+        out_dtype = (
+            bodo.types.string_array_type
+            if arr_is_string
+            else bodo.types.binary_array_type
+        )
 
         verify_int_arg(length, func_name, "length")
         verify_string_binary_arg(pad_string, func_name, f"{func_name.lower()}_string")
@@ -1509,7 +1519,7 @@ def repeat_util(arr, repeats, dict_encoding_state, func_id):
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg0 * arg1"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     # NOTE: we can cause duplicate values in the case that repeats == 0 (everything goes to empty str)
@@ -1555,7 +1565,7 @@ def replace_util(arr, to_replace, replace_with, dict_encoding_state, func_id):
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg0.replace(arg1, arg2)"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1590,7 +1600,9 @@ def reverse_util(arr, dict_encoding_state, func_id):
     propagate_null = [True] + [False] * 2
     scalar_text = "res[i] = arg0[::-1]"
 
-    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if arr_is_string else bodo.types.binary_array_type
+    )
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1666,7 +1678,7 @@ def space_util(n_chars, dict_encoding_state, func_id):
     scalar_text += "else:\n"
     scalar_text += "   res[i] = ' ' * arg0"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1718,7 +1730,7 @@ def split_part_util(source, delim, part, dict_encoding_state, func_id):
     scalar_text += "else:\n"
     scalar_text += "    res[i] = tokens[arg2 if arg2 <= 0 else arg2-1]\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1761,7 +1773,7 @@ def startswith_util(source, prefix, dict_encoding_state, func_id):
     propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.startswith(arg1)"
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1865,7 +1877,7 @@ def strtok_util(source, delim, part, dict_encoding_state, func_id):
     scalar_text += "   else:\n"
     scalar_text += "      res[i] = tokens[arg2-1]\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1925,7 +1937,7 @@ def strtok_to_array_util(
     arg_names = ["source", "delim", "dict_encoding_state", "func_id"]
     arg_types = [source, delim, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.ArrayItemArrayType(bodo.string_array_type)
+    out_dtype = bodo.types.ArrayItemArrayType(bodo.types.string_array_type)
 
     scalar_text = "tokens = []\n"
     scalar_text += "buffer = ''\n"
@@ -1974,7 +1986,9 @@ def substring_util(arr, start, length, dict_encoding_state, func_id):
     verify_int_arg(start, "SUBSTRING", "start")
     verify_int_arg(length, "SUBSTRING", "length")
 
-    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if arr_is_string else bodo.types.binary_array_type
+    )
 
     arg_names = ["arr", "start", "length", "dict_encoding_state", "func_id"]
     arg_types = [arr, start, length, dict_encoding_state, func_id]
@@ -2018,7 +2032,9 @@ def substring_suffix_util(arr, start, dict_encoding_state, func_id):
     arr_is_string = verify_string_binary_arg(arr, "SUBSTRING", "arr")
     verify_int_arg(start, "SUBSTRING", "start")
 
-    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if arr_is_string else bodo.types.binary_array_type
+    )
 
     arg_names = ["arr", "start", "dict_encoding_state", "func_id"]
     arg_types = [arr, start, dict_encoding_state, func_id]
@@ -2072,7 +2088,7 @@ def substring_index_util(arr, delimiter, occurrences, dict_encoding_state, func_
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg1.join(arg0.split(arg1)[arg2:])\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -2123,7 +2139,7 @@ def translate_util(arr, source, target, dict_encoding_state, func_id):
     scalar_text += "      translated += arg2[index]\n"
     scalar_text += "res[i] = translated"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -2239,7 +2255,7 @@ def create_trim_fn_util_overload(fn_name):
         else:
             scalar_text = "res[i] = arg0.strip(arg1)\n"
 
-        out_dtype = bodo.string_array_type
+        out_dtype = bodo.types.string_array_type
 
         use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
@@ -2314,12 +2330,12 @@ def create_one_arg_str_fn_util_overload(fn_name):
         if fn_name == "length":
             # Length also supports binary data.
             verify_string_binary_arg(arr, fn_name, "arr")
-            out_dtype = bodo.IntegerArrayType(types.int64)
+            out_dtype = bodo.types.IntegerArrayType(types.int64)
             may_cause_duplicate_dict_array_values = False
             fn_call = "len(arg0)"
         else:
             verify_string_arg(arr, fn_name, "arr")
-            out_dtype = bodo.string_array_type
+            out_dtype = bodo.types.string_array_type
             may_cause_duplicate_dict_array_values = True
             fn_call = f"arg0.{fn_name}()"
 
@@ -2404,7 +2420,7 @@ def split_util(string, separator, dict_encoding_state, func_id):  # pragma: no c
     arg_names = ["string", "separator", "dict_encoding_state", "func_id"]
     arg_types = [string, separator, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.ArrayItemArrayType(bodo.string_array_type)
+    out_dtype = bodo.types.ArrayItemArrayType(bodo.types.string_array_type)
     scalar_text = "if arg1 == '':\n"
     scalar_text += "    str_list = [arg0]\n"
     scalar_text += "else:\n"
@@ -2466,7 +2482,7 @@ def sha2_util(msg, digest_size, dict_encoding_state, func_id):
     arg_names = ["msg", "digest_size", "dict_encoding_state", "func_id"]
     arg_types = [msg, digest_size, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     # TODO: support bytes for SHA2
     if is_valid_binary_arg(msg):
         scalar_text = "msg_str = arg0._to_str()\n"
@@ -2523,7 +2539,7 @@ def md5_util(msg, dict_encoding_state, func_id):
     arg_names = ["msg", "dict_encoding_state", "func_id"]
     arg_types = [msg, dict_encoding_state, func_id]
     propagate_null = [True] + [False] * 2
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     if is_valid_binary_arg(msg):
         scalar_text = "msg_str = arg0._to_str()\n"
     else:
@@ -2593,7 +2609,7 @@ def hex_encode_util(msg, case, dict_encoding_state, func_id):
     arg_names = ["msg", "case", "dict_encoding_state", "func_id"]
     arg_types = [msg, case, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     if is_valid_binary_arg(msg):
         scalar_text = "msg_str = arg0._to_str()\n"
     else:
@@ -2694,7 +2710,9 @@ def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
     arg_names = ["msg", "_try", "_is_str", "dict_encoding_state", "func_id"]
     arg_types = [msg, _try, _is_str, dict_encoding_state, func_id]
     propagate_null = [True] + [False] * 4
-    out_dtype = bodo.string_array_type if _is_str_bool else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if _is_str_bool else bodo.types.binary_array_type
+    )
     if _is_str_bool:
         scalar_text = "ans, success = bodosql.kernels.crypto_funcs.hex_decode_string_algorithm(arg0)\n"
     else:
@@ -2815,7 +2833,7 @@ def base64_encode_util(msg, max_line_length, alphabet, dict_encoding_state, func
     arg_names = ["msg", "max_line_length", "alphabet", "dict_encoding_state", "func_id"]
     arg_types = [msg, max_line_length, alphabet, dict_encoding_state, func_id]
     propagate_null = [True] * 3 + [False] * 2
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     if is_valid_binary_arg(msg):
         scalar_text = "msg_str = arg0._to_str()\n"
     else:
@@ -2961,7 +2979,9 @@ def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_i
     arg_names = ["msg", "alphabet", "_try", "_is_str", "dict_encoding_state", "func_id"]
     arg_types = [msg, alphabet, _try, _is_str, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 4
-    out_dtype = bodo.string_array_type if _is_str_bool else bodo.binary_array_type
+    out_dtype = (
+        bodo.types.string_array_type if _is_str_bool else bodo.types.binary_array_type
+    )
     scalar_text = f"ans, success = bodosql.kernels.crypto_funcs.base64_decode_algorithm(arg0, char_62, char_63, char_pad, {_is_str_bool})\n"
     scalar_text += "if success:\n"
     scalar_text += "  res[i] = ans\n"
@@ -2989,7 +3009,7 @@ def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_i
 
 @numba.generated_jit(nopython=True)
 def uuid4(A):
-    if A == bodo.none:
+    if A == bodo.types.none:
 
         def impl(A):  # pragma: no cover
             return bodo.libs.uuid.uuidV4()
@@ -3017,7 +3037,7 @@ def uuid5_util(namespace, name, dict_encoding_state, func_id):
     verify_string_arg(namespace, "UUID_STRING", "namespace")
     verify_string_arg(name, "UUID_STRING", "name")
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     arg_names = ["namespace", "name", "dict_encoding_state", "func_id"]
     arg_types = [namespace, name, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2

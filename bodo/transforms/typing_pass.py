@@ -598,7 +598,7 @@ class TypingTransforms:
             isinstance(target_typ, (DataFrameType, DataFrameGroupByType, RollingType))
             and not is_literal_type(idx_typ)
             and (
-                idx_typ == bodo.string_type
+                idx_typ == bodo.types.string_type
                 or isinstance(idx_typ, types.Integer)
                 or (
                     isinstance(idx_typ, types.List) and not idx_typ.dtype == types.bool_
@@ -1701,7 +1701,7 @@ class TypingTransforms:
             len(call_list) == 2
             and (
                 isinstance(call_list[1], ir.Var)
-                or call_list[1] == "pandas"
+                or call_list[1] in ("pandas", "bodo.pandas")
                 or call_list[1] == "bodosql.kernels"
             )
         )
@@ -1824,7 +1824,7 @@ class TypingTransforms:
         list_set_typ = self.typemap.get(list_set_arg.name, None)
         require(
             isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
+            and list_set_typ.dtype != bodo.types.datetime64ns
             and not isinstance(
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -1865,7 +1865,7 @@ class TypingTransforms:
         # TODO: check if this requirement needs to be enforced
         require(
             is_arg1_global
-            and arg1_arr_type.dtype != bodo.datetime64ns
+            and arg1_arr_type.dtype != bodo.types.datetime64ns
             and not isinstance(
                 arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -2327,7 +2327,12 @@ class TypingTransforms:
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partition's string value)
             # BodoSQL generates pd.Series(arr) calls for expressions
-            if fdef in (("to_datetime", "pandas"), ("Series", "pandas")):
+            if fdef in (
+                ("to_datetime", "pandas"),
+                ("Series", "pandas"),
+                ("to_datetime", "bodo.pandas"),
+                ("Series", "bodo.pandas"),
+            ):
                 # We don't want to perform filter pushdown if there is a format argument
                 # i.e. pd.to_datetime(col, format="%Y-%d-%m")
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
@@ -2517,7 +2522,8 @@ class TypingTransforms:
         # remove pd.Series() calls
         if (
             is_call(var_def)
-            and guard(find_callname, self.func_ir, var_def) == ("Series", "pandas")
+            and guard(find_callname, self.func_ir, var_def)
+            in (("Series", "pandas"), ("Series", "bodo.pandas"))
             and (len(var_def.args) == 1)
             and not var_def.kws
         ):
@@ -2935,10 +2941,10 @@ class TypingTransforms:
 
         func_name, func_mod = fdef
 
-        if fdef == ("read_sql_table", "pandas"):
+        if fdef in (("read_sql_table", "pandas"), ("read_sql_table", "bodo.pandas")):
             return self._run_call_read_sql_table(assign, rhs, func_name, label)
 
-        if func_mod == "pandas":
+        if func_mod in ("pandas", "bodo.pandas"):
             return self._run_call_pd_top_level(assign, rhs, func_name, label)
 
         # handle pd.Timestamp.method() calls
@@ -3697,7 +3703,7 @@ class TypingTransforms:
 
         # mapping of Series functions to their arguments that require constant values
         series_call_const_args = {
-            "map": [(0, "arg")],
+            "map": [(0, "arg"), (1, "na_action")],
             "apply": [(0, "func")],
             "to_frame": [(0, "name")],
             "value_counts": [
@@ -3747,6 +3753,10 @@ class TypingTransforms:
         self, assign: ir.Assign, rhs: ir.Expr, func_name, label
     ):
         """transform pd.read_sql_table into a SQL node"""
+        import bodo.io.iceberg
+        import bodo.io.iceberg.read_compilation
+        from bodo.ir.iceberg_ext import IcebergConnectionType
+
         func_str = "pandas.read_sql_table"
         lhs = assign.target
         kws = dict(rhs.kws)
@@ -3762,24 +3772,15 @@ class TypingTransforms:
             err_msg = "pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
             con_type = self.typemap[con_arg.name]
 
-            if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
-                con_str = con_type.get_conn_str()
+            if isinstance(con_type, IcebergConnectionType):
+                con_str = con_type.conn_str
             else:
                 con_str = self._get_const_value(
                     con_arg, label, rhs.loc, err_msg=err_msg
                 )
 
-            # Parse `con` String and Ensure its an Iceberg Connection
-            try:
-                con_str = bodo.io.iceberg.format_iceberg_conn(con_str)
-            except BodoError as e:
-                raise BodoError(
-                    "pandas.read_sql_table(): Only Iceberg is currently supported. "
-                    + e.msg
-                )
-            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var but
-            # right now it does because we need to call format_iceberg_conn on the value before passing to the IcebergReader
-            if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var
+            if not isinstance(con_type, IcebergConnectionType):
                 con_arg = ir.Const(con_str, con_arg.loc)
 
             if not isinstance(con_str, str):
@@ -3939,8 +3940,10 @@ class TypingTransforms:
             # we will make the decision ourselves. At this point, we will only
             # do the dict-encoding ourselves if the table is a Snowflake managed
             # Iceberg table. If it isn't, we will let Arrow do it.
-            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(
-                con_str
+            dict_encode_in_bodo = (
+                bodo.io.iceberg.read_compilation.is_snowflake_managed_iceberg_wh(
+                    con_str
+                )
             )
 
         # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
@@ -3972,7 +3975,7 @@ class TypingTransforms:
             use_default=True,
         )
         err_msg = "pandas.read_sql_table(): '_bodo_columns_var', if provided, must be a constant."
-        columns_obj = (
+        columns_obj: list[str] | None = (
             self._get_const_value(_bodo_columns_var, label, rhs.loc, err_msg=err_msg)
             if _bodo_columns_var
             else None
@@ -3980,6 +3983,11 @@ class TypingTransforms:
         if chunksize is None and columns_obj is not None:  # pragma: no cover
             raise BodoError(
                 "pandas.read_sql_table(): '_bodo_columns' can only be used with '_bodo_chunksize'"
+            )
+
+        if _bodo_merge_into and chunksize is not None:
+            raise BodoError(
+                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
             )
 
         _bodo_filter_var = get_call_expr_arg(
@@ -4035,78 +4043,65 @@ class TypingTransforms:
             else -1
         )
 
-        (
-            orig_col_names,
-            orig_arr_types,
-            pyarrow_table_schema,
-        ) = bodo.io.iceberg.get_iceberg_type_info(
-            table_name,
-            con_str,
-            database_schema,
-            is_merge_into_cow=_bodo_merge_into,
+        table_id: str = (
+            f"{database_schema}.{table_name}" if database_schema else table_name
         )
 
-        if columns_obj is not None:
-            name_to_type = dict(zip(orig_col_names, orig_arr_types))
-            col_names = columns_obj
-            arr_types = [name_to_type[col] for col in col_names]
-        else:
-            col_names = orig_col_names
-            arr_types = orig_arr_types
-
-        # check user-provided dict-encoded columns for errors
-        col_name_map = {c: i for i, c in enumerate(col_names)}
-        for c in _bodo_read_as_dict:
-            if c not in col_name_map:
-                raise BodoError(
-                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
-                )
-            col_ind = col_name_map[c]
-            if arr_types[col_ind] != bodo.string_array_type:
-                raise BodoError(
-                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
-                )
-
-        all_dict_str_cols = set(_bodo_read_as_dict)
-        if detect_dict_cols:
-            # Estimate which string columns should be dict-encoded using existing Parquet
-            # infrastructure.
-            str_columns: list[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
-                pyarrow_table_schema
+        _snapshot_id_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_id",
+            default=None,
+            use_default=True,
+        )
+        _snapshot_timestamp_ms_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_timestamp_ms",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_snapshot_id', if provided, must be a constant integer."
+        snapshot_id = (
+            self._get_const_value(_snapshot_id_arg, label, rhs.loc, err_msg=err_msg)
+            if _snapshot_id_arg is not None
+            else -1
+        )
+        err_msg = "pandas.read_sql_table(): '_snapshot_timestamp_ms', if provided, must be a constant integer."
+        snapshot_timestamp_ms = (
+            self._get_const_value(
+                _snapshot_timestamp_ms_arg, label, rhs.loc, err_msg=err_msg
             )
-            # remove user provided dict-encoded columns
-            str_columns = list(
-                set(str_columns).intersection(col_names) - set(_bodo_read_as_dict)
-            )
-            # Sort the columns to ensure same order on all ranks
-            str_columns = sorted(str_columns)
+            if _snapshot_timestamp_ms_arg is not None
+            else -1
+        )
 
-            dict_str_cols = bodo.io.iceberg.determine_str_as_dict_columns(
+        snapshot_id = bodo.io.iceberg.read_compilation.resolve_snapshot_id(
+            con_str, table_id, snapshot_id, snapshot_timestamp_ms
+        )
+
+        (orig_col_names, orig_arr_types, pyarrow_table_schema, col_names, arr_types) = (
+            bodo.io.iceberg.read_compilation.get_orig_and_runtime_schema(
                 con_str,
-                database_schema,
-                table_name,
-                str_columns,
-                pyarrow_table_schema,
+                table_id,
+                selected_cols=columns_obj,
+                read_as_dict_cols=_bodo_read_as_dict,
+                detect_dict_cols=detect_dict_cols,
+                is_merge_into_cow=_bodo_merge_into,
+                snapshot_id=snapshot_id,
             )
-            all_dict_str_cols.update(dict_str_cols)
+        )
 
-        # change string array types to dict-encoded
-        for c in all_dict_str_cols:
-            col_ind = col_name_map[c]
-            arr_types[col_ind] = bodo.dict_str_arr_type
-
-        index = bodo.RangeIndexType(None)
         df_type = DataFrameType(
             tuple(arr_types),
-            index,
+            bodo.types.RangeIndexType(None),
             tuple(col_names),
             is_table_format=True,
         )
-
-        if _bodo_merge_into and chunksize is not None:
-            raise BodoError(
-                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
-            )
 
         # Merge INTO default output types
         file_list_type = types.pyobject_of_list_type
@@ -4162,7 +4157,7 @@ class TypingTransforms:
 
         nodes = [
             bodo.ir.iceberg_ext.IcebergReader(
-                table_name,
+                table_id,
                 con,
                 lhs.name,
                 list(df_type.columns),
@@ -4173,11 +4168,11 @@ class TypingTransforms:
                 [],  # unsupported_arrow_types
                 None,  # index_column_name
                 types.none,  # index_column_type
-                database_schema,  # database_schema
                 pyarrow_table_schema,  # pyarrow_table_schema
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                snapshot_id,  # snapshot_id
                 chunksize=chunksize,
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
@@ -4426,7 +4421,8 @@ class TypingTransforms:
             f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
         }
         new_code = _replace_load_deref_code(
-            code.co_code, freevar_arg_map, code.co_argcount, code.co_nlocals
+            code,
+            freevar_arg_map,
         )
 
         # we can now change the IR/code since all checks are done (including
@@ -4519,6 +4515,7 @@ class TypingTransforms:
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
         """
         import bodosql
+        import bodosql.compiler  # isort:skip # noqa
         from bodosql.context_ext import BodoSQLContextType
 
         # In order to inline the sql() call, we must ensure that the type of the input dataframe(s)
@@ -5817,7 +5814,7 @@ class TypingTransforms:
                 isinstance(call_list[1], ir.Var)
                 # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
                 # by BodoSQL
-                or call_list[1] == "pandas"
+                or call_list[1] in ("pandas", "bodo.pandas")
                 or call_list[1] == "bodosql.kernels"
             ):
                 return call_list[0] in (
@@ -6023,7 +6020,7 @@ class TypingTransforms:
             # filter pushdown in that situation.
             return (
                 isinstance(list_set_typ, (types.List, types.Set))
-                and list_set_typ.dtype != bodo.datetime64ns
+                and list_set_typ.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     list_set_typ.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
@@ -6049,7 +6046,7 @@ class TypingTransforms:
             # series isin implementation does.
             return (
                 is_arg1_global
-                and arg1_arr_type.dtype != bodo.datetime64ns
+                and arg1_arr_type.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     arg1_arr_type.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
@@ -6201,10 +6198,17 @@ def _find_updated_containers(blocks, topo_order):
             ):
                 lhs = stmt.target.name
                 rhs = stmt.value.name
-                equiv_vars[lhs].add(rhs)
-                equiv_vars[rhs].add(lhs)
-                equiv_vars[lhs] |= equiv_vars[rhs]
-                equiv_vars[rhs] |= equiv_vars[lhs]
+                if lhs not in equiv_vars:
+                    equiv_vars[rhs].add(lhs)
+                    equiv_vars[lhs] = equiv_vars[rhs]
+                elif rhs not in equiv_vars:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[rhs] = equiv_vars[lhs]
+                else:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[lhs].add(lhs)
+                    equiv_vars[lhs] |= equiv_vars[rhs]
+                    equiv_vars[rhs] = equiv_vars[lhs]
                 if rhs in updated_containers:
                     _set_updated_container(
                         lhs, updated_containers[rhs], updated_containers, equiv_vars
@@ -6420,7 +6424,32 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
         updated_containers[w] = update_func
 
 
-def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals):
+def _bc_stream_to_bytecode(bc_stream, original_code):
+    """convert a stream of unpacked bytecode to a bytearray, reverses disassembly"""
+    import dis
+
+    from numba.core.bytecode import ARG_LEN, CODE_LEN
+
+    out = bytearray(original_code.co_code)
+    # TODO: Update this to match Python 3.13 dis code:
+    # https://github.com/python/cpython/blob/6280bb547840b609feedb78887c6491af75548e8/Lib/dis.py#L862
+    for (
+        offset,
+        op,
+        arg,
+    ) in bc_stream:
+        out[offset] = op
+        if op in dis.hasarg:
+            for i in range(ARG_LEN):
+                out[offset + CODE_LEN + i] = arg & 0xFF
+                arg >>= 8
+
+        else:
+            assert arg is None
+    return out
+
+
+def _replace_load_deref_code(code, freevar_arg_map):
     """replace load of free variables in byte code with load of new arguments and
     adjust local variable indices due to new arguments in co_varnames.
     # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
@@ -6430,51 +6459,57 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
     """
     import dis
 
-    from numba.core.bytecode import ARG_LEN, CODE_LEN, NO_ARG_LEN
+    prev_argcount = code.co_argcount
+    prev_n_locals = code.co_nlocals
 
-    # assuming these constants are 1 to simplify the code, very unlikely to change
-    assert CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1, (
-        "invalid bytecode version"
+    def _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals):
+        """
+        Patch the code object to replace the free variable load with an argument load.
+        Returns a stream of the updated bytecode.
+        """
+
+        # cannot handle cases that write to free variables
+        banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
+        # local variable access to be adjusted
+        local_varname_ops = (
+            dis.opmap["LOAD_FAST"],
+            dis.opmap["STORE_FAST"],
+            dis.opmap["DELETE_FAST"],
+        )
+        n_new_args = len(freevar_arg_map)
+        for inst in dis.get_instructions(code):
+            (
+                offset,
+                op,
+                arg,
+            ) = inst.offset, inst.opcode, inst.arg
+            require(op not in banned_ops)
+
+            # adjust local variable access since index includes arguments
+            if op in local_varname_ops and arg >= prev_argcount:
+                arg += n_new_args
+
+            # Python 3.11 copies free vars into local variables in the beginning of the
+            # function. We need to update LOAD_DEREF indices accordingly. See:
+            # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
+            # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
+            if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
+                freevar_arg_map = {
+                    k + prev_n_locals: v for k, v in freevar_arg_map.items()
+                }
+
+            # replace free variable load
+            if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
+                op = dis.opmap["LOAD_FAST"]
+                arg = freevar_arg_map[arg]
+            yield offset, op, arg
+
+    return bytes(
+        _bc_stream_to_bytecode(
+            _patch_opargs(code, freevar_arg_map, prev_argcount, prev_n_locals),
+            code,
+        )
     )
-    # cannot handle cases that write to free variables
-    banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
-    # local variable access to be adjusted
-    local_varname_ops = (
-        dis.opmap["LOAD_FAST"],
-        dis.opmap["STORE_FAST"],
-        dis.opmap["DELETE_FAST"],
-    )
-    n_new_args = len(freevar_arg_map)
-
-    new_code = np.empty(len(code), np.int8)
-    n = len(code)
-    i = 0
-    while i < n:
-        op = code[i]
-        arg = code[i + 1]
-        require(op not in banned_ops)
-
-        # adjust local variable access since index includes arguments
-        if op in local_varname_ops and arg >= prev_argcount:
-            arg += n_new_args
-
-        # Python 3.11 copies free vars into local variables in the beginning of the
-        # function. We need to update LOAD_DEREF indices accordingly. See:
-        # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
-        # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
-        if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
-            freevar_arg_map = {k + prev_n_locals: v for k, v in freevar_arg_map.items()}
-
-        # replace free variable load
-        if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
-            op = dis.opmap["LOAD_FAST"]
-            arg = freevar_arg_map[arg]
-
-        new_code[i] = op
-        new_code[i + 1] = arg
-        i += 2
-
-    return bytes(new_code)
 
 
 def _get_state_defining_call(func_ir, state, fn):

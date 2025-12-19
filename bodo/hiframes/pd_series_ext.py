@@ -23,10 +23,15 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.io import csv_cpp
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.float_arr_ext import FloatDtype
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
@@ -647,7 +652,9 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         # Return the signature
         return ret(*folded_args).replace(pysig=pysig)
 
-    def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
+    def _resolve_map_func(
+        self, ary, func, pysig, fname, f_args=None, kws=None, na_action=None
+    ):
         """Find type signature of Series.map/apply method.
         ary: Series type (TODO: rename)
         func: user-defined function
@@ -672,6 +679,10 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         if kws is None:
             kws = {}
         return_nullable = False
+
+        # The output may contain NAs from input in this case
+        if na_action == "ignore":
+            return_nullable = True
 
         # Is the function a UDF or a builtin
         is_udf = True
@@ -741,7 +752,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                 arrs = tuple(
                     to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
                 )
-                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+                ret_type = bodo.types.DataFrameType(arrs, ary.index, index_vals)
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
                 # Note: For homogenous Series we return a regular tuple, so
@@ -752,7 +763,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                     to_nullable_type(dtype_to_array_type(f_return_type.dtype))
                     for _ in range(n_cols)
                 )
-                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+                ret_type = bodo.types.DataFrameType(arrs, ary.index, index_vals)
             else:
                 data_arr = get_udf_out_arr_type(f_return_type, return_nullable)
                 ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
@@ -769,22 +780,35 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         func = args[0] if len(args) > 0 else kws["arg"]
         kws.pop("arg", None)
         na_action = args[1] if len(args) > 1 else kws.pop("na_action", types.none)
-
-        unsupported_args = {"na_action": na_action}
-        map_defaults = {"na_action": None}
-        check_unsupported_args(
-            "Series.map",
-            unsupported_args,
-            map_defaults,
-            package_name="pandas",
-            module_name="Series",
+        if not (
+            is_overload_none(na_action)
+            or (
+                is_overload_constant_str(na_action)
+                and (get_overload_const_str(na_action) == "ignore")
+            )
+        ):
+            raise BodoError(
+                "Series.map(): 'na_action' must be None or constant string 'ignore'"
+            )
+        na_action = (
+            get_overload_const_str(na_action)
+            if is_overload_constant_str(na_action)
+            else None
         )
+        # NOTE: pandas doesn't support args but we support it to make UDF engine simpler
+        f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
-        def map_stub(arg, na_action=None):  # pragma: no cover
-            pass
+        # add dummy default value for UDF kws to avoid errors
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        func_text = f"def map_stub(arg, na_action=None, args=(), {kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        map_stub = loc_vars["map_stub"]
 
         pysig = numba.core.utils.pysignature(map_stub)
-        return self._resolve_map_func(ary, func, pysig, "map")
+
+        return self._resolve_map_func(ary, func, pysig, "map", f_args, kws, na_action)
 
     @bound_function("series.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
@@ -951,6 +975,7 @@ str2bool_methods = (
 
 
 @overload(pd.Series, no_unliteral=True)
+@overload(bd.Series, no_unliteral=True)
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
 ):
@@ -1025,22 +1050,25 @@ def pd_series_overload(
 
         # If a dtype is provided we need to convert the passed dtype into an array_type
         if bodo.utils.conversion._is_str_dtype(dtype):
-            _arr_dtype = bodo.string_array_type
+            _arr_dtype = bodo.types.string_array_type
         else:
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
-                _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
+                _arr_dtype = bodo.types.IntegerArrayType(nb_dtype.dtype)
             elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
-                _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
+                _arr_dtype = bodo.types.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
-                _arr_dtype = bodo.boolean_array_type
-            elif nb_dtype == bodo.datetime64ns:  # pragma: no cover
+                _arr_dtype = bodo.types.boolean_array_type
+            elif nb_dtype == bodo.types.datetime64ns:  # pragma: no cover
                 _arr_dtype = bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(None)
             elif isinstance(nb_dtype, PandasDatetimeTZDtype):
                 _arr_dtype = bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(
                     nb_dtype.tz
                 )
-            elif isinstance(nb_dtype, types.Number) or nb_dtype == bodo.timedelta64ns:
+            elif (
+                isinstance(nb_dtype, types.Number)
+                or nb_dtype == bodo.types.timedelta64ns
+            ):
                 _arr_dtype = types.Array(nb_dtype, 1, "C")
             else:
                 raise BodoError("pd.Series with dtype: {dtype} not currently supported")
@@ -1179,7 +1207,7 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _is_parallel=False,
         ):  # pragma: no cover
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = series.to_csv(
                     None,
                     sep=sep,
@@ -1239,7 +1267,7 @@ def to_csv_overload(
             header &= (bodo.libs.distributed_api.get_rank() == 0) | _csv_output_is_dir(
                 unicode_to_utf8(path_or_buf)
             )
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = series.to_csv(
                 None,
                 sep=sep,
@@ -1264,7 +1292,7 @@ def to_csv_overload(
                 storage_options=storage_options,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)
+        bodo.io.helpers.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)
 
     return _impl
 
@@ -1274,7 +1302,7 @@ def lower_constant_series(context, builder, series_type, pyval):
     """embed constant Series value by getting constant values for data array and
     Index.
     """
-    if isinstance(series_type.data, bodo.DatetimeArrayType):
+    if isinstance(series_type.data, bodo.types.DatetimeArrayType):
         # TODO [BE-2441]: Unify?
         py_arr = pyval.array
     else:
@@ -1411,11 +1439,11 @@ def _install_series_unsupported():
 
     for attr_name in series_unsupported_attrs:
         full_name = "Series." + attr_name
-        bodo.overload_unsupported_attribute(SeriesType, attr_name, full_name)
+        overload_unsupported_attribute(SeriesType, attr_name, full_name)
 
     for fname in series_unsupported_methods:
         full_name = "Series." + fname
-        bodo.overload_unsupported_method(SeriesType, fname, full_name)
+        overload_unsupported_method(SeriesType, fname, full_name)
 
 
 _install_series_unsupported()
@@ -1651,13 +1679,11 @@ def _install_heter_series_unsupported():
 
     for attr_name in heter_series_unsupported_attrs:
         full_name = "HeterogeneousSeries." + attr_name
-        bodo.overload_unsupported_attribute(
-            HeterogeneousSeriesType, attr_name, full_name
-        )
+        overload_unsupported_attribute(HeterogeneousSeriesType, attr_name, full_name)
 
     for fname in heter_series_unsupported_methods:
         full_name = "HeterogeneousSeries." + fname
-        bodo.overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
+        overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
 
 
 _install_heter_series_unsupported()

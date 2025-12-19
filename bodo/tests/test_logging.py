@@ -9,7 +9,6 @@ import re
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 
 
 def _test_logging_impl(impl, l):
@@ -191,6 +190,8 @@ def test_logging_logger_lowering():
 
 
 def test_logging_logger_unsupported():
+    from bodo.utils.typing import BodoError
+
     @bodo.jit
     def test_unsupp_attr(l):
         return l.handlers

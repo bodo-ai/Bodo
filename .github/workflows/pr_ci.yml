@@ -16,6 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+      - name: Get Version
+        id: get_version
+        run: |
+          set -exo pipefail
+          pip install setuptools_scm
+          # Print to the logs
+          echo "bodo_version=$(python -m setuptools_scm)"
+          echo "bodo_version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+    outputs:
+      bodo_version: ${{ steps.get_version.outputs.bodo_version }}
 
   # 1) Validate changes and commit message
   validate:
@@ -24,11 +43,13 @@ jobs:
     outputs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
-      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') || github.event_name == 'workflow_dispatch' }}
+      run_tests: ${{ (steps.changes.outputs.not_docs && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
+      not_docs: ${{ steps.changes.outputs.not_docs }}
+      skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
           fetch-depth: "0"
@@ -40,9 +61,11 @@ jobs:
           filters: |
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
+            not_docs:
+              - '!docs/**'
 
       # Fetch the PR branch for the commit history
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .
@@ -63,7 +86,7 @@ jobs:
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
 
     steps:
-      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+      - uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: bodo-ai
           repo: customer-sample-code
@@ -83,7 +106,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build from Source
         uses: ./.github/actions/build-source
         with:
@@ -103,8 +126,8 @@ jobs:
 
   # 4) Actually run tests
   pr-ci:
-    needs: [compile-bodo]
-    name: Test
+    needs: [compile-bodo, get_version]
+    name: Test Compiler
     strategy:
       matrix:
         batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -117,18 +140,98 @@ jobs:
       pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NORMAL
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   spawn-ci:
-    needs: [compile-bodo]
+    needs: [compile-bodo, get_version]
     name: Test Spawn
     uses: ./.github/workflows/_test_python_source.yml
     with:
       batch: 1
       total-batches: 1
       pytest-marker: "spawn_mode"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: SPAWN
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  df-lib-non-jit-ci:
+    needs: [compile-bodo, get_version]
+    name: Test DF Library Non-JIT
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "df_lib and not jit_dependency and not weekly"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "DF_LIB_NO_JIT"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  df-lib-ci:
+    needs: [compile-bodo, get_version]
+    name: Test DF Library
+    strategy:
+      matrix:
+        batch: [1, 2]
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: ${{ matrix.batch }}
+      total-batches: 2
+      pytest-marker: "df_lib and jit_dependency and not weekly"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "DF_LIB"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  narwhals-ci-single-worker:
+    needs: [compile-bodo, get_version]
+    name: Test Narwhals Bodo Integration (1 Worker)
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: ""
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NARWHALS
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+      bodo-num-workers: "1"
+    secrets: inherit
+
+  narwhals-ci:
+    needs: [compile-bodo, get_version]
+    name: Test Narwhals Bodo Integration (Multiple Worker)
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: ""
+      collect-coverage: false
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NARWHALS
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  bodosql-cpp-ci:
+    needs: [compile-bodo, get_version]
+    name: Test BodoSQL C++ Backend
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "bodosql_cpp and not weekly"
+      collect-coverage: true
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "BODOSQL_CPP"
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
   java-ci:
@@ -151,15 +254,15 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
       # Get all source code for mapping coverage to LOC
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Disable shallow clones for better coverage reporting
           fetch-depth: 0
       # Download timing and coverage info
       - name: Download Timings
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           merge-multiple: true
 
@@ -203,9 +306,32 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # Notify GitHub Checks
-      # If any test runs failed, this step should fail
-      # This step failing will block the PR from being merged
       - name: Check Test Runs
         if: ${{ needs.pr-ci.result != 'success' }}
         run: exit 1
+
+  # Notify GitHub Checks
+  # If any test runs failed, this step should fail
+  # This step failing will block the PR from being merged
+  # Referenced blogpost: https://emmer.dev/blog/skippable-github-status-checks-aren-t-really-required/
+  status-check:
+    name: Status Check
+    if: always()
+    needs:
+      - collect-results
+      - df-lib-ci
+      - df-lib-non-jit-ci
+      - bodosql-cpp-ci
+      - validate
+    runs-on: ubuntu-latest
+    steps:
+      # Allows skipping if only docs files were changed, or [skip] flag was set.
+      - name: Skip check for docs-only PR
+        if: ${{ (needs.validate.outputs.not_docs != 'true') || (needs.validate.outputs.skip_flag == 'true') }}
+        run: echo "Docs-only PR, skipping status enforcement."
+      # Otherwise, requires all checks to pass.
+      - name: Fail if needed jobs failed or were skipped
+        if: ${{ (needs.validate.outputs.not_docs == 'true') && (needs.validate.outputs.skip_flag != 'true') }}
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}

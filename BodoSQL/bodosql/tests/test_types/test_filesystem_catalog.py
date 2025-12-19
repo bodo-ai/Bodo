@@ -12,8 +12,13 @@ import pytest
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
-from bodo.tests.utils import check_func
+from bodo.spawn.utils import run_rank0
+from bodo.tests.iceberg_database_helpers.utils import (
+    create_iceberg_table,
+)
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
+from bodosql.tests.utils import _check_query_equal
 
 
 @pytest.fixture(
@@ -195,3 +200,58 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
         path = os.path.join(root, "OUT_TABLE")
         result1 = pd.read_parquet(path)
         assert_frame_equal_unordered(result1, df1)
+
+
+@pytest.mark.slow
+@pytest.mark.iceberg
+@pytest_mark_one_rank
+@pytest.mark.bodosql_cpp
+def test_basic_iceberg_read(iceberg_database):
+    """
+    Test a simple read of an Iceberg table
+    """
+    table_name = "in_table"
+    input_df = pd.DataFrame(
+        {
+            "A": np.arange(10),
+            "B": [0 for i in range(5)] + [1 for i in range(5)],
+            "C": ["a11", "b2"] * 5,
+        }
+    )
+
+    @run_rank0
+    def setup():
+        create_iceberg_table(
+            input_df,
+            [
+                ("A", "int", False),
+                ("B", "int", False),
+                ("C", "string", False),
+            ],
+            table_name,
+        )
+
+    setup()
+    db_schema, warehouse_loc = iceberg_database()
+    catalog = bodosql.FileSystemCatalog(warehouse_loc)
+    bc1 = bodosql.BodoSQLContext(catalog=catalog)
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}"'
+    out = bc1.sql(query)
+    _check_query_equal(out, input_df[["B", "C"]])
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" WHERE A > 5'
+    out = bc1.sql(query)
+    expected = input_df[input_df.A > 5][["B", "C"]].reset_index(drop=True)
+    _check_query_equal(out, expected)
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" WHERE A > 5 and C = \'a11\''
+    out = bc1.sql(query)
+    expected = input_df[(input_df.A > 5) & (input_df.C == "a11")][
+        ["B", "C"]
+    ].reset_index(drop=True)
+    _check_query_equal(out, expected)
+
+    query = f'SELECT B, C FROM "{db_schema}"."{table_name}" limit 2'
+    out = bc1.sql(query)
+    assert len(out) == 2, "Expected only 2 rows from limit 2"

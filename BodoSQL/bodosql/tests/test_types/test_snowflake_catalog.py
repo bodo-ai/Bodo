@@ -27,7 +27,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     assert_tables_equal,
     check_func,
     create_snowflake_table,
@@ -40,6 +39,7 @@ from bodo.tests.utils import (
     pytest_snowflake,
     temp_config_override,
 )
+from bodo.tests.utils_jit import SeriesOptTestPipeline
 from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
@@ -165,7 +165,9 @@ def test_snowflake_catalog_insert_into(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test1", db, schema
@@ -186,7 +188,10 @@ def test_snowflake_catalog_insert_into(
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.concat(
-            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+            (
+                new_df,
+                pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}),
+            )
         )
         assert_tables_equal(output_df, result_df)
 
@@ -208,10 +213,12 @@ def test_snowflake_catalog_insert_into_read(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Recreate the expected output with an append.
     py_output = pd.concat(
-        (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+        (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}))
     )
     # Create the table
     with create_snowflake_table(
@@ -247,14 +254,19 @@ def test_snowflake_catalog_insert_into_null_literal(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test_nulls", db, schema
     ) as table_name:
         # Generate the expected output.
         py_output = pd.concat(
-            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+            (
+                new_df,
+                pd.DataFrame({"B": "literal", "C": np.arange(1, 11, dtype=np.int64)}),
+            )
         )
         write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
@@ -520,7 +532,7 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
     new_df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 10,
-            "B": np.arange(30),
+            "B": np.arange(30, dtype=np.int64),
         }
     )
 
@@ -722,7 +734,9 @@ def test_default_table_type(
         schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
 
@@ -760,7 +774,7 @@ def test_default_table_type(
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -809,7 +823,9 @@ def test_snowflake_catalog_create_table_temporary(
     catalog = test_db_snowflake_catalog
     schema = test_db_snowflake_catalog.connection_params["schema"]
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     def impl(bc, query):
         bc.sql(query)
@@ -932,7 +948,9 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
     schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     def impl(bc, query):
         bc.sql(query)
@@ -966,7 +984,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -1013,7 +1031,9 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     schema = test_db_snowflake_catalog.connection_params["schema"]
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
     # Create the table
 
     def impl(bc, query):
@@ -1051,7 +1071,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         result_df = pd.DataFrame(
             {
                 "COLUMN1": "literal",
-                "COLUMN2": np.arange(1, 11),
+                "COLUMN2": np.arange(1, 11, dtype=np.int64),
                 "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
@@ -1095,7 +1115,9 @@ def test_snowflake_catalog_create_table_already_exists_error(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
     with create_snowflake_table(
@@ -1138,7 +1160,9 @@ def test_snowflake_catalog_create_table_already_exists(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view(
+        "TABLE1", pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
+    )
 
     # Create the table
     with create_snowflake_table(
@@ -1161,7 +1185,11 @@ def test_snowflake_catalog_create_table_already_exists(
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
-            {"COLUMN1": 2, "COLUMN2": np.arange(10), "COLUMN3": "hello world"}
+            {
+                "COLUMN1": 2,
+                "COLUMN2": np.arange(10, dtype=np.int64),
+                "COLUMN3": "hello world",
+            }
         )
         assert_tables_equal(output_df, result_df)
         # create_snowflake_table handles dropping the table for us
@@ -1183,7 +1211,7 @@ def test_snowflake_catalog_simple_rewrite(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    local_table = pd.DataFrame({"A": np.arange(10)})
+    local_table = pd.DataFrame({"A": np.arange(10, dtype=np.int64)})
     bc = bc.add_or_replace_view("TABLE1", local_table)
 
     comm = MPI.COMM_WORLD
@@ -1993,10 +2021,6 @@ def test_filter_pushdown_row_count_caching(
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
     assert "5.9849e4 rows" in plan, "Plan should have 59849 rows in the cost estimate"
 
-    # Empirically, it takes a moment for the query history to update,
-    # so we sleep for a few seconds to ensure that the query history is updated
-    time.sleep(2)
-
     # This query will get the list of all queries that match the specified pattern
     # in the past minute
     metadata_query = """select * from table(information_schema.QUERY_HISTORY_BY_WAREHOUSE(
@@ -2008,7 +2032,15 @@ def test_filter_pushdown_row_count_caching(
                             CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_COMMENT" = ')
                     """
 
-    df = pd.read_sql(metadata_query, conn_str)
+    # Try 4 times to make sure history is updated
+    for _ in range(4):
+        # Empirically, it takes a moment for the query history to update,
+        # so we sleep for a few seconds to ensure that the query history is updated
+        time.sleep(2)
+        df = pd.read_sql(metadata_query, conn_str)
+        if len(df) == 2:
+            break
+
     # We expect two rows, one for each filter
     assert len(df) == 2, "We should have two rows in the query history"
     assert df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all(), (
@@ -2940,6 +2972,8 @@ def test_missing_select_permission_no_inline(
     To recreate, perform the following steps in Snowflake:
 
     -- switch to security admin
+    -- Create role CANNOT_READ_TABLE_OWNER
+    -- Switch to role CANNOT_READ_TABLE_OWNER
     -- Create a table which won't have read permissions for sysadmin
     create table CANNOT_READ_TABLE as select 'literal' as literal
     from TABLE(GENERATOR(ROWCOUNT => 10));
@@ -2949,6 +2983,7 @@ def test_missing_select_permission_no_inline(
     grant REFERENCES on CANNOT_READ_TABLE to Sysadmin
     -- Grant reference and select to CAN_READ_VIEW
     grant REFERENCES, SELECT on CAN_READ_VIEW to Sysadmin
+    -- Switch back to sysadmin
     -- Verify you can read
     select * from CAN_READ_VIEW
     -- Verify you cannot read
@@ -3247,7 +3282,7 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
             None,
             "2020-01-01 00:00:00.123456789 -0800",
             "2020-01-01 00:00:00.123456789 +0000",
-            "1900-01-01 01:01:01 +0000",
+            "1980-01-01 01:01:01 +0000",
         ]
         # In order to test nulls we need to convert None to "0" and then use an
         # IFF statement to convert it back to null. Otherwise flatten will drop
@@ -3266,17 +3301,21 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
                 {
                     "A": np.array(
                         [
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", -367),
+                            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2020-01-02 03:04:05", 367
+                            ),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2020-01-02 03:04:05", -367
+                            ),
                             None,
-                            bodo.TimestampTZ.fromLocal(
+                            bodo.types.TimestampTZ.fromLocal(
                                 "2020-01-01 00:00:00.123456789", -480
                             ),
-                            bodo.TimestampTZ.fromLocal(
+                            bodo.types.TimestampTZ.fromLocal(
                                 "2020-01-01 00:00:00.123456789", 0
                             ),
-                            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+                            bodo.types.TimestampTZ.fromLocal("1980-01-01 01:01:01", 0),
                         ]
                     )
                 }
@@ -3330,16 +3369,16 @@ def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
 
         bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
         ttz_values = [
-            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
-            bodo.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
-            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
+            bodo.types.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
+            bodo.types.TimestampTZ.fromLocal("1970-01-01 01:01:01", 0),
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
-            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", 0),
-            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 0),
-            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 12:30:00", 0),
+            bodo.types.TimestampTZ.fromUTC("1970-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("1970-01-01 00:00:00", 60),
         ] * 2
         ttz_df = pd.DataFrame({"A": pd.Series(ttz_values)})
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 import string
 import sys
@@ -9,6 +11,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
@@ -27,10 +31,10 @@ from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
     pytest_mark_snowflake,
-    reduce_sum,
     set_broadcast_join,
     temp_env_override,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 
 
@@ -6180,7 +6184,8 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
 def test_merging_runtime_join_filters(materialization_threshold, memory_leak_check):
     """Tests 4 runtime join filters with int, strings, dict encoded string arrs,
     castings from int64 <-> int32 and string <-> dict encoded string array"""
-    from bodo.utils.utils import run_rank0
+
+    from bodo.spawn.utils import run_rank0
 
     build_df = pd.DataFrame(
         {

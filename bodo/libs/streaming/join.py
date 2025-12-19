@@ -20,6 +20,7 @@ from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
+from bodo.libs import array_ext
 from bodo.libs.array import (
     array_info_type,
     cpp_table_to_py_table,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover
     pass
 
 
+ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 ll.add_symbol("join_state_init_py_entry", stream_join_cpp.join_state_init_py_entry)
 ll.add_symbol(
     "join_build_consume_batch_py_entry",
@@ -314,8 +316,8 @@ class JoinStateType(StreamingStateType):
         if all(t == input_types[0] for t in input_types):
             return input_types[0]
 
-        if isinstance(input_types[0], bodo.MapArrayType):
-            assert all(isinstance(t, bodo.MapArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.MapArrayType):
+            assert all(isinstance(t, bodo.types.MapArrayType) for t in input_types), (
                 f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
             )
             common_key_arr_type = JoinStateType._derive_common_key_type(
@@ -324,20 +326,24 @@ class JoinStateType(StreamingStateType):
             common_value_arr_types = JoinStateType._derive_common_key_type(
                 [t.value_arr_type for t in input_types]
             )
-            return bodo.MapArrayType(common_key_arr_type, common_value_arr_types)
+            return bodo.types.MapArrayType(common_key_arr_type, common_value_arr_types)
 
-        if isinstance(input_types[0], bodo.ArrayItemArrayType):
-            assert all(isinstance(t, bodo.ArrayItemArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.ArrayItemArrayType):
+            assert all(
+                isinstance(t, bodo.types.ArrayItemArrayType) for t in input_types
+            ), (
                 f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
             )
 
             common_element_type = JoinStateType._derive_common_key_type(
                 [t.dtype for t in input_types]
             )
-            return bodo.ArrayItemArrayType(common_element_type)
+            return bodo.types.ArrayItemArrayType(common_element_type)
 
-        if isinstance(input_types[0], bodo.StructArrayType):
-            assert all(isinstance(t, bodo.StructArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.StructArrayType):
+            assert all(
+                isinstance(t, bodo.types.StructArrayType) for t in input_types
+            ), (
                 f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
             )
             n_fields = len(input_types[0].data)
@@ -352,7 +358,7 @@ class JoinStateType(StreamingStateType):
                         [t.data[i] for t in input_types]
                     )
                 )
-            return bodo.StructArrayType(tuple(common_field_types), field_names)
+            return bodo.types.StructArrayType(tuple(common_field_types), field_names)
 
         # Handle non-nested types:
         are_bodosql_integer_arr_types = [
@@ -371,9 +377,12 @@ class JoinStateType(StreamingStateType):
             common_type = get_common_bodosql_integer_arr_type(input_types)
         else:
             # If the inputs are all string or dict, return string.
-            valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (
+                bodo.types.string_array_type,
+                bodo.types.dict_str_arr_type,
+            )
             if all(t in valid_str_types for t in input_types):
-                common_type = bodo.string_array_type
+                common_type = bodo.types.string_array_type
             else:
                 raise BodoError(
                     f"StreamingHashJoin: Build and probe keys must have the same types. {input_types=}"
@@ -475,7 +484,7 @@ class JoinStateType(StreamingStateType):
                 arr_types.append(keys_map[i])
             else:
                 arr_types.append(table_type.arr_types[i])
-        return bodo.TableType(tuple(arr_types))
+        return bodo.types.TableType(tuple(arr_types))
 
     @property
     def key_casted_build_table_type(self):
@@ -693,10 +702,10 @@ class JoinStateType(StreamingStateType):
         be in the front.
 
         Returns:
-            bodo.TableType: The type of the output table.
+            bodo.types.TableType: The type of the output table.
         """
         arr_types = self.probe_output_arrays + self.build_output_arrays
-        out_table_type = bodo.TableType(tuple(arr_types))
+        out_table_type = bodo.types.TableType(tuple(arr_types))
         return out_table_type
 
     def _get_table_live_col_arrs(
@@ -1459,7 +1468,10 @@ def _get_runtime_join_filter_info(
             cast_table_types.append(input_table_t)
         else:
             cast_arr_types = []
-            valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (
+                bodo.types.string_array_type,
+                bodo.types.dict_str_arr_type,
+            )
             for j in range(n_cols):
                 if j in input_idx_to_join_key_idxs[i]:
                     # If this is a key column, cast it to the join key type.
@@ -1477,7 +1489,7 @@ def _get_runtime_join_filter_info(
                         and (input_col_t in valid_str_types)
                         and (join_key_t in valid_str_types)
                     ):
-                        casted_type = bodo.string_array_type
+                        casted_type = bodo.types.string_array_type
                     else:
                         casted_type = join_key_types[input_idx_to_join_key_idxs[i][j]]
                     cast_arr_types.append(casted_type)
@@ -1485,8 +1497,8 @@ def _get_runtime_join_filter_info(
                     # At this point, this is the only case where a column level filter
                     # would be applied.
                     if (
-                        casted_type == bodo.dict_str_arr_type
-                        and join_key_t == bodo.dict_str_arr_type
+                        casted_type == bodo.types.dict_str_arr_type
+                        and join_key_t == bodo.types.dict_str_arr_type
                         and process_col_bitmask_lists[i][
                             input_idx_to_join_key_idxs[i][j]
                         ]
@@ -1497,7 +1509,7 @@ def _get_runtime_join_filter_info(
                     # If not a key column, then preserve the original type
                     cast_arr_types.append(input_table_t.arr_types[j])
 
-            cast_table_types.append(bodo.TableType(tuple(cast_arr_types)))
+            cast_table_types.append(bodo.types.TableType(tuple(cast_arr_types)))
         cast_table_types_tuple = tuple(cast_table_types)
 
     return (
@@ -1557,6 +1569,37 @@ def lower_runtime_join_filter(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
+@intrinsic
+def _retrieve_table(typingctx, cpp_table, row_bitmask):
+    """This function takes in a cpp table and a bitmask over it's rows
+    and returns a new table after applying the bitmask. If the bitmask is
+    all True copying is skipped.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # output is a table
+            [
+                lir.IntType(8).as_pointer(),  # in_table
+                lir.IntType(8).as_pointer(),  # row_bitmask
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="retrieve_table_py_entry"
+        )
+        func_args = [args[0], args[1]]
+        table_ret = builder.call(fn_tp, func_args)  # change this to bitmask
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    sig = cpp_table(
+        cpp_table,
+        array_info_type,
+    )
+
+    return sig, codegen
+
+
 def overload_runtime_join_filter(
     join_states, table, join_keys_idxs, process_col_bitmasks
 ):
@@ -1573,13 +1616,13 @@ def overload_runtime_join_filter(
     num_var_type_columns = 0
     for arr_type in input_table_t.arr_types:
         if (
-            arr_type == bodo.string_array_type
-            or arr_type == bodo.binary_array_type
+            arr_type == bodo.types.string_array_type
+            or arr_type == bodo.types.binary_array_type
             or isinstance(
                 arr_type,
                 (
-                    bodo.MapArrayType,
-                    bodo.ArrayItemArrayType,
+                    bodo.types.MapArrayType,
+                    bodo.types.ArrayItemArrayType,
                 ),
             )
         ):
@@ -1607,9 +1650,10 @@ def overload_runtime_join_filter(
         )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))
-    col_ind_arr = np.arange(n_cols)
+    col_ind_arr = np.arange(n_cols, dtype=np.int64)
     join_key_idxs_arrs = tuple(
-        np.array(join_key_idxs_list) for join_key_idxs_list in join_key_idxs_lists
+        np.array(join_key_idxs_list, dtype=np.int64)
+        for join_key_idxs_list in join_key_idxs_lists
     )
     process_col_bitmask_arrs = tuple(
         np.array(unwrap_typeref(process_col_bitmask).meta)
@@ -1651,7 +1695,7 @@ def impl_runtime_join_filter(
                 func_text += "    if applied_any_filter:\n"
                 func_text += "        row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
                 func_text += f"        cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
-                func_text += "        cpp_table = bodo.libs.array._retrieve_table(\n"
+                func_text += "        cpp_table = _retrieve_table(\n"
                 func_text += "            cpp_table, row_bitmask_arr\n"
                 func_text += "        )\n"
                 func_text += (
@@ -1678,7 +1722,7 @@ def impl_runtime_join_filter(
     row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)
 
     if applied_any_filter:
-        out_cpp_table = bodo.libs.array._retrieve_table(
+        out_cpp_table = _retrieve_table(
             cpp_table, row_bitmask_arr
         )
         out_table = bodo.libs.array.cpp_table_to_py_table(
@@ -1708,6 +1752,7 @@ def impl_runtime_join_filter(
         "can_apply_bloom_filters": can_apply_bloom_filters,
         "can_apply_column_filters": can_apply_col_filters,
         "_runtime_join_filter": _runtime_join_filter,
+        "_retrieve_table": _retrieve_table,
     }
     exec(func_text, global_vars, loc_vars)
 

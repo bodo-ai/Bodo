@@ -1,18 +1,13 @@
 import datetime
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.hiframes.boxing import (
-    _dtype_from_type_enum_list,
-    _infer_series_arr_type,
-)
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
-from bodo.tests.utils import reduce_sum
 
 
 @pytest.fixture(
@@ -38,6 +33,7 @@ def metadata_supported_index_types(request):
 @pytest.mark.slow
 def test_metadata_typemaps():
     """checks that _one_to_one_enum_to_type_map, and _one_to_one_type_to_enum_map are reflections of each other"""
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _one_to_one_enum_to_type_map,
         _one_to_one_type_to_enum_map,
@@ -116,7 +112,7 @@ def test_dtype_converter_non_literal_values(typ_val):
         Scalar boolean, datetime date (no specific reason, but it was trivial to support them)
     """
     from numba.core import types
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _dtype_to_type_enum_list,
@@ -176,7 +172,7 @@ def test_dtype_converter_literal_values(typ_val):
         These are tested seperatley, as we've previously had some segfaulting errors when handling boxing
         certain constants.
     """
-
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.boxing import (
         SeriesDtypeEnum,
         _dtype_from_type_enum_list,
@@ -210,15 +206,20 @@ def check_series_typing_metadata(orig_series, output_series):
     """Helper function that returns True if the series has Bodo metadata such that the dtype infered
     from the metadata will be the same as the infered dtype of the original series
     (original series must contain >= 1 non null element)
-
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import (
+        _dtype_from_type_enum_list,
+        _infer_series_arr_type,
+    )
+
     meta_dtype = _dtype_from_type_enum_list(
         output_series._bodo_meta["type_metadata"][1]
     )
     orig_arr_type = _infer_series_arr_type(orig_series)
     orig_dtype = (
         bodo.libs.int_arr_ext.IntDtype(orig_arr_type.dtype)
-        if isinstance(orig_arr_type, bodo.IntegerArrayType)
+        if isinstance(orig_arr_type, bodo.types.IntegerArrayType)
         else orig_arr_type.dtype
     )
     return (
@@ -235,6 +236,12 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     from the metadata will be the same as the infered dtypes of the original dataframe
     (original dataframe must contain 1 >= columns, each containing >= 1 non null element)
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import (
+        _dtype_from_type_enum_list,
+        _infer_series_arr_type,
+    )
+
     if not (
         hasattr(output_df, "_bodo_meta")
         and "type_metadata" in output_df._bodo_meta
@@ -384,73 +391,79 @@ def test_series_typing_metadata_struct(struct_series_val, memory_leak_check):
 # cause the output to not be dist
 
 
-@bodo.jit(distributed=["out"])
-def int_gen_dist_df():
-    out = pd.DataFrame({"A": pd.Series(np.arange(1))})
-    return out
+@pytest.fixture
+def gen_use_df_funcs(request):
+    """Lazily define and return (gen_func, use_func) for a given key."""
+    key = request.param
 
+    if key == "int":
 
-@bodo.jit(distributed=["df"])
-def int_use_dist_df(df):
-    return df["A"].sum()
+        @bodo.jit(distributed=["out"])
+        def gen():
+            out = pd.DataFrame({"A": pd.Series(np.arange(1))})
+            return out
 
+        @bodo.jit(distributed=["df"])
+        def use(df):
+            return df["A"].sum()
 
-@bodo.jit(distributed=["df"])
-def str_gen_dist_df():
-    df = pd.DataFrame({"A": pd.Series(np.arange(1))})
-    df["A"] = df["A"].astype(str)
-    return df
+    elif key == "str":
 
+        @bodo.jit(distributed=["out"])
+        def gen():
+            df = pd.DataFrame({"A": pd.Series(np.arange(1))})
+            df["A"] = df["A"].astype(str)
+            return df
 
-@bodo.jit(distributed=["df"])
-def str_use_dist_df(df):
-    df["B"] = df["A"] + "A"
-    return df
+        @bodo.jit(distributed=["df"])
+        def use(df):
+            df["B"] = df["A"] + "A"
+            return df
 
+    elif key == "bytes":
 
-@bodo.jit(distributed=["df"])
-def bytes_gen_dist_df():
-    df = pd.DataFrame({"A": pd.Series(np.arange(1))})
-    df["A"] = df["A"].apply(lambda x: b"foo")
-    return df
+        @bodo.jit(distributed=["out"])
+        def gen():
+            df = pd.DataFrame({"A": pd.Series(np.arange(1))})
+            df["A"] = df["A"].apply(lambda x: b"foo")
+            return df
 
+        @bodo.jit(distributed=["df"])
+        def use(df):
+            df["B"] = df["A"].apply(lambda x: x.hex())
+            return df
 
-@bodo.jit(distributed=["df"])
-def bytes_use_dist_df(df):
-    df["B"] = df["A"].apply(lambda x: x.hex())
-    return df
+    elif key == "struct":
 
+        @bodo.jit(distributed=["out"])
+        def gen():
+            df = pd.DataFrame({"A": pd.Series(np.arange(1))})
+            df["A"] = df["A"].apply(lambda x: {"key1": 10, "key2": -10, "key3": 200})
+            return df
 
-@bodo.jit(distributed=["df"])
-def struct_gen_dist_df():
-    df = pd.DataFrame({"A": pd.Series(np.arange(1))})
-    df["A"] = df["A"].apply(lambda x: {"key1": 10, "key2": -10, "key3": 200})
-    return df
+        # TODO: fix this, BE-1479
+        @bodo.jit
+        def use(df):
+            df["B"] = df["A"].apply(lambda x: x["key1"])
+            return df
 
-
-# TODO: fix this, BE-1479
-# @bodo.jit(distributed=["df"])
-@bodo.jit
-def struct_use_dist_df(df):
-    df["B"] = df["A"].apply(lambda x: x["key1"])
-    return df
+    return gen, use
 
 
 @pytest.mark.parametrize(
-    "gen_func, use_func",
-    [
-        pytest.param(int_gen_dist_df, int_use_dist_df, id="int"),
-        pytest.param(str_gen_dist_df, str_use_dist_df, id="str"),
-        pytest.param(bytes_gen_dist_df, bytes_use_dist_df, id="bytes"),
-        pytest.param(struct_gen_dist_df, struct_use_dist_df, id="struct"),
-    ],
+    "gen_use_df_funcs", ["int", "str", "bytes", "struct"], indirect=True
 )
-def test_df_return_metadata(gen_func, use_func):
+def test_df_return_metadata(gen_use_df_funcs):
     """
     Tests that Bodo can properly use the returned metadata across functions. "gen_func" is a Bodo function that returns
     a dataframe that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the dataframe's column's type was infered as the default (string).
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import _dtype_from_type_enum_list
+    from bodo.tests.utils_jit import reduce_sum
+
+    gen_func, use_func = gen_use_df_funcs
 
     # Disable this test with table format as we don't
     # have type metadata support with table format yet.
@@ -477,7 +490,7 @@ def test_df_return_metadata(gen_func, use_func):
     if out["A"].dtype == object:
         is_str = (
             _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1][0])
-            == bodo.string_array_type
+            == bodo.types.string_array_type
         )
 
         # if the dtype is str, it would be infered corectly, as the default is str
@@ -498,75 +511,72 @@ def test_df_return_metadata(gen_func, use_func):
             assert n_passed == bodo.get_size(), fail_msg
 
 
-# manually adding distributed flags, just to insure no future improvements
-# cause the output to not be dist
-@bodo.jit(distributed=["out"])
-def int_gen_dist_series():
-    out = pd.Series(np.arange(1))
-    return out
+@pytest.fixture
+def gen_use_series_funcs(request):
+    """Lazily define and return (gen_func, use_func) for a given key."""
+    key = request.param
 
+    if key == "int":
 
-@bodo.jit(distributed=["S"])
-def int_use_dist_series(S):
-    return S.sum()
+        @bodo.jit(distributed=["out"])
+        def gen():
+            return pd.Series(np.arange(1))
 
+        @bodo.jit(distributed=["S"])
+        def use(S):
+            return S.sum()
 
-@bodo.jit(distributed=["out"])
-def str_gen_dist_series():
-    out = pd.Series(np.arange(1)).apply(lambda x: str(x))
-    return out
+    elif key == "str":
 
+        @bodo.jit(distributed=["out"])
+        def gen():
+            return pd.Series(np.arange(1)).apply(lambda x: str(x))
 
-@bodo.jit(distributed=["df"])
-def str_use_dist_series(S):
-    return S + "A"
+        @bodo.jit(distributed=["df"])
+        def use(S):
+            return S + "A"
 
+    elif key == "bytes":
 
-@bodo.jit(distributed=["out"])
-def bytes_gen_dist_series():
-    out = pd.Series(np.arange(1)).apply(lambda x: b"hello!")
-    return out
+        @bodo.jit(distributed=["out"])
+        def gen():
+            return pd.Series(np.arange(1)).apply(lambda x: b"hello!")
 
+        # TODO: fix this, BE-1479
+        @bodo.jit
+        def use(S):
+            return S.apply(lambda x: x.hex())
 
-# TODO: fix this, BE-1479
-# @bodo.jit(distributed=["S"])
-@bodo.jit
-def bytes_use_dist_series(S):
-    return S.apply(lambda x: x.hex())
+    elif key == "struct":
 
+        @bodo.jit(distributed=["out"])
+        def gen():
+            return pd.Series(np.arange(1)).apply(
+                lambda x: {"key1": 10, "key2": -10, "key3": 200}
+            )
 
-@bodo.jit(distributed=["out"])
-def struct_gen_dist_series():
-    out = pd.Series(np.arange(1)).apply(
-        lambda x: {"key1": 10, "key2": -10, "key3": 200}
-    )
-    return out
+        # TODO: fix this, BE-1479
+        @bodo.jit
+        def use(S):
+            return S.apply(lambda x: x["key1"])
 
-
-# TODO: Variable 'S' has distributed flag in function 'struct_use_dist_series', but it's not possible to distribute it.
-# It's definitely distributed, I did a sanity check on it.
-# fix this, BE-1479
-# @bodo.jit(distributed=["S"])
-@bodo.jit
-def struct_use_dist_series(S):
-    return S.apply(lambda x: x["key1"])
+    return gen, use
 
 
 @pytest.mark.parametrize(
-    "gen_func, use_func",
-    [
-        pytest.param(int_gen_dist_series, int_use_dist_series, id="int"),
-        pytest.param(str_gen_dist_series, str_use_dist_series, id="str"),
-        pytest.param(bytes_gen_dist_series, bytes_use_dist_series, id="bytes"),
-        pytest.param(struct_gen_dist_series, struct_use_dist_series, id="struct"),
-    ],
+    "gen_use_series_funcs", ["int", "str", "bytes", "struct"], indirect=True
 )
-def test_series_return_metadata(gen_func, use_func):
+def test_series_return_metadata(gen_use_series_funcs):
     """
     Tests that Bodo can properly use the returned metadata across functions. "gen_func" is a Bodo function that returns
     a series that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the series dtype was infered as the default (string).
     """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.boxing import _dtype_from_type_enum_list
+    from bodo.tests.utils_jit import reduce_sum
+
+    gen_func, use_func = gen_use_series_funcs
 
     out = gen_func()
 
@@ -588,7 +598,7 @@ def test_series_return_metadata(gen_func, use_func):
     if out.dtype == object:
         is_str = (
             _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1])
-            == bodo.string_type
+            == bodo.types.string_type
         )
 
         # if the dtype is str, it would be infered corectly, as the default is str
@@ -614,6 +624,8 @@ def test_index_type_return(metadata_supported_index_types):
     Tests that the index typing information is properly preserved when returning a dataframe
     to pandas.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     idx = metadata_supported_index_types[:1]
     is_obj_index = pd.api.types.is_object_dtype(idx)
     is_str_idx = isinstance(idx[0], str)

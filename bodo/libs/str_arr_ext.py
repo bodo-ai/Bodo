@@ -112,7 +112,7 @@ def typeof_pyarrow_string_array(val, c):
     # use dict-encoded type if input is dict-encoded (boxed from Bodo dict-encoded
     # array since pandas doesn't use dict-encoded yet)
     if pa.types.is_dictionary(val._pa_array.combine_chunks().type):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
     return string_array_type
 
 
@@ -790,7 +790,7 @@ def get_str_arr_item_length(A, i):  # pragma: no cover
     """return the number of bytes in the string at index i.
     Note: may not be the same as the length of the string for non-ascii unicode.
     """
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
         # For dictionary encoded arrays we recurse on the dictionary.
         def impl(A, i):  # pragma: no cover
             idx = A._indices[i]
@@ -845,7 +845,7 @@ def get_str_arr_item_copy(B, j, A, i):  # pragma: no cover
 
     # Update the location of the string array + index for dict encoded
     # array input vs string array input
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
         load_input_array = "in_str_arr = A._data"
         input_index = "input_index = A._indices[i]"
     else:
@@ -968,7 +968,7 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
                 "bodo": bodo,
             },
             {},
-            globals(),
+            __name__,
         )
 
     return lambda data, str_null_bools=None: data  # pragma: no cover
@@ -1031,7 +1031,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         func_text += "  return\n"
 
         return bodo.utils.utils.bodo_exec(
-            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, globals()
+            func_text, {"cp_str_list_to_array": cp_str_list_to_array}, {}, __name__
         )
 
     return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
@@ -1044,7 +1044,7 @@ def str_list_to_array(str_list):
 @overload(str_list_to_array, no_unliteral=True, jit_options={"cache": True})
 def str_list_to_array_overload(str_list):
     """same as cp_str_list_to_array, except this call allocates output"""
-    if isinstance(str_list, types.List) and str_list.dtype == bodo.string_type:
+    if isinstance(str_list, types.List) and str_list.dtype == bodo.types.string_type:
 
         def str_list_impl(str_list):  # pragma: no cover
             n = len(str_list)
@@ -1202,7 +1202,7 @@ def empty_str_arr(in_seq):  # pragma: no cover
             "pre_alloc_string_array": pre_alloc_string_array,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -1212,7 +1212,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     Converts sequence (e.g. list, tuple, etc.) into a string array
     """
     in_seq = types.unliteral(in_seq)
-    if in_seq.dtype == bodo.bytes_type:
+    if in_seq.dtype == bodo.types.bytes_type:
         alloc_fn = "pre_alloc_binary_array"
     else:
         alloc_fn = "pre_alloc_string_array"
@@ -1230,7 +1230,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
             "pre_alloc_binary_array": pre_alloc_binary_array,
         },
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2290,7 +2290,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
         types.bool_,
         bodo.libs.bool_arr_ext.boolean_dtype,
-        bodo.dict_str_arr_type,
+        bodo.types.dict_str_arr_type,
     ):  # pragma: no cover
         raise BodoError("invalid dtype in StringArray.astype()")
 
@@ -2339,7 +2339,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
         return impl_bool
 
-    elif nb_dtype == bodo.dict_str_arr_type:
+    elif nb_dtype == bodo.types.dict_str_arr_type:
 
         def impl_dict_str(A, dtype, copy=True):  # pragma: no cover
             return str_arr_to_dict_str_arr(A)
@@ -2405,11 +2405,11 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
 
         return dict_arr
 
-    assert str_arr_t == bodo.string_array_type, (
+    assert str_arr_t == bodo.types.string_array_type, (
         "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
     )
 
-    sig = bodo.dict_str_arr_type(bodo.string_array_type)
+    sig = bodo.types.dict_str_arr_type(bodo.types.string_array_type)
     return sig, codegen
 
 
@@ -2557,7 +2557,7 @@ def pd_arr_encode(arr, encoding, errors):
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_encode(arr, encoding, errors):  # pragma: no cover
     """Encode string array using Pandas Series.str.encode in object mode"""
-    with bodo.no_warning_objmode(out_arr=binary_array_type):
+    with bodo.ir.object_mode.no_warning_objmode(out_arr=binary_array_type):
         out_arr = pd_arr_encode(arr, encoding, errors)
     return out_arr
 
@@ -2839,7 +2839,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = ( 
 @overload(glob.glob, no_unliteral=True, jit_options={"cache": True})
 def overload_glob_glob(pathname, recursive=False):
     def _glob_glob_impl(pathname, recursive=False):  # pragma: no cover
-        with bodo.objmode(l="list_str_type"):
+        with numba.objmode(l="list_str_type"):
             l = glob.glob(pathname, recursive=recursive)
         return l
 

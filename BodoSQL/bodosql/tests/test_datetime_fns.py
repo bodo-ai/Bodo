@@ -20,10 +20,10 @@ from bodo.tests.timezone_common import (  # noqa
     representative_tz,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
     dist_IR_contains,
     pytest_slow_unless_codegen,
 )
+from bodo.tests.utils_jit import DistTestPipeline
 from bodosql.kernels.datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )
@@ -896,7 +896,7 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
         ("%s", "%S"),
         ("%T", "%X"),
         ("%u", "%W"),
-        ('% %a %\\, %%a, %%, %%%%, "%", %', ' %a \\, %%a, %%, %%%%, "", %'),
+        ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
     ]
     # TODO: add addition format characters when/if they become supported
 )

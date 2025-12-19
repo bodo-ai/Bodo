@@ -2,22 +2,23 @@ import pandas as pd
 
 import bodo
 import bodosql
+from bodo.io.iceberg.catalog.s3_tables import S3TablesCatalog
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     assert_tables_equal,
     check_func,
     gen_unique_table_id,
     pytest_s3_tables,
-    run_rank0,
     temp_env_override,
 )
-from bodosql.bodosql_types.s3_tables_catalog import S3TablesConnectionType
+from bodosql.bodosql_types.s3_tables_catalog_ext import S3TablesConnectionType
 
 pytestmark = pytest_s3_tables
 
 
 # Refer to bodo/tests/test_s3_tables_iceberg.py for infrastructure
 # required to run these tests
-@temp_env_override({"AWS_REGION": "us-east-2"})
+@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2"})
 def test_basic_read(memory_leak_check, s3_tables_catalog):
     """
     Test reading an entire Iceberg table from S3 Tables in SQL
@@ -45,10 +46,9 @@ def test_basic_read(memory_leak_check, s3_tables_catalog):
     )
 
 
-@temp_env_override({"AWS_REGION": "us-east-2"})
+@temp_env_override({"AWS_DEFAULT_REGION": "us-east-2", "AWS_REGION": "us-east-2"})
 def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
     """tests that writing tables works"""
-    import bodo_iceberg_connector as bic
 
     in_df = pd.DataFrame(
         {
@@ -60,7 +60,7 @@ def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
     )
     bc = bodosql.BodoSQLContext(catalog=s3_tables_catalog)
     bc = bc.add_or_replace_view("TABLE1", in_df)
-    con_str = S3TablesConnectionType(s3_tables_catalog.warehouse).get_conn_str()
+    con_str = S3TablesConnectionType(s3_tables_catalog.warehouse).conn_str
     table_name = run_rank0(
         lambda: gen_unique_table_id("bodosql_catalog_write_iceberg_table").upper()
     )().lower()
@@ -99,18 +99,17 @@ def test_s3_tables_catalog_iceberg_write(s3_tables_catalog, memory_leak_check):
         exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occurred_in_test_body:
-            try:
-                run_rank0(bic.delete_table)(
-                    bodo.io.iceberg.format_iceberg_conn(con_str),
-                    "write_namespace",
-                    table_name,
+        try:
+            run_rank0(
+                lambda: (
+                    S3TablesCatalog(
+                        "s3_tables_catalog",
+                        **{"s3tables.warehouse": s3_tables_catalog.warehouse},
+                    ).purge_table(f"write_namespace.{table_name}")
                 )
-            except Exception:
+            )()
+        except Exception:
+            if exception_occurred_in_test_body:
                 pass
-        else:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str),
-                "write_namespace",
-                table_name,
-            )
+            else:
+                raise

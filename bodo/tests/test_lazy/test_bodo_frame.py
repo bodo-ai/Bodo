@@ -11,10 +11,13 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
-    pytest_mark_spawn_mode,
+    _test_equal,
+    pytest_mark_one_rank,
+    pytest_spawn_mode,
 )
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.utils import run_rank0
+
+pytestmark = pytest_spawn_mode
 
 
 @pytest.fixture
@@ -164,6 +167,9 @@ def test_bodo_df_lazy_managers_metadata_data(
     collecting data and data operations are accurate and collect data on
     BodoDataFrames using lazy managers.
     """
+    if pandas_managers[1] == ArrayManager:
+        pytest.skip("TODO: fix ArrayManager DataFrames test")
+
     head_df = pd.DataFrame(
         {
             "A0": pd.array([1, 2, 3, 4, 5], dtype="Int64"),
@@ -202,16 +208,17 @@ def test_bodo_df_lazy_managers_metadata_data(
             [8, 8, 8, 8, 8], index=pd.Index([1, 2, 3, 4, 5], dtype="Int64", name="A0")
         )
     )
-    assert lam_df.describe().equals(
-        pd.DataFrame(
-            {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
-            index=pd.Index(
-                ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
-                dtype="object",
-            ),
-            dtype="Float64",
-        )
+
+    expected = pd.DataFrame(
+        {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
+        index=pd.Index(
+            ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
+            dtype="object",
+        ),
+        dtype="Float64",
     )
+    _test_equal(lam_df.describe(), expected)
+
     # Make sure we have fetched data
     assert lam_df._mgr._md_result_id is None
 
@@ -224,6 +231,9 @@ def test_bodo_df_lazy_managers_data_metadata(
     are accurate after data collection on
     BodoDataFrames using lazy managers.
     """
+    if pandas_managers[1] == ArrayManager:
+        pytest.skip("TODO: fix ArrayManager DataFrames test")
+
     head_df = pd.DataFrame(
         {
             "A0": pd.array([1, 2, 3, 4, 5], dtype="Int64"),
@@ -255,16 +265,15 @@ def test_bodo_df_lazy_managers_data_metadata(
     )
 
     assert head_df.equals(lam_df.head(5))
-    assert lam_df.describe().equals(
-        pd.DataFrame(
-            {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
-            index=pd.Index(
-                ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
-                dtype="object",
-            ),
-            dtype="Float64",
-        )
+    expected = pd.DataFrame(
+        {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
+        index=pd.Index(
+            ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
+            dtype="object",
+        ),
+        dtype="Float64",
     )
+    _test_equal(lam_df.describe(), expected)
     # Make sure we have fetched data
     assert lam_df._mgr._md_result_id is None
     # Metadata still works after fetch
@@ -278,7 +287,12 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     """
     Test basic operations on a bodo series using a pandas manager.
     """
+
     _, pandas_manager = pandas_managers
+
+    if pandas_manager == ArrayManager:
+        pytest.skip("TODO: fix ArrayManager DataFrames test")
+
     base_df = pd.DataFrame(
         {
             "A0": pd.array([1, 2, 3, 4, 5] * 8, dtype="Int64"),
@@ -298,16 +312,17 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
             [8, 8, 8, 8, 8], index=pd.Index([1, 2, 3, 4, 5], dtype="Int64", name="A0")
         )
     )
-    assert df.describe().equals(
-        pd.DataFrame(
-            {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
-            index=pd.Index(
-                ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
-                dtype="object",
-            ),
-            dtype="Float64",
-        )
+
+    expected = pd.DataFrame(
+        {"A0": [40.0, 3.0, 1.4322297480788657, 1, 2, 3, 4, 5]},
+        index=pd.Index(
+            ["count", "mean", "std", "min", "25%", "50%", "75%", "max"],
+            dtype="object",
+        ),
+        dtype="Float64",
     )
+
+    _test_equal(df.describe(), expected)
 
 
 def test_del_func_called_if_not_collected(pandas_managers, head_df, collect_func):
@@ -408,18 +423,7 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
     lam_sliced_head_df = lam_df[1:3]
     assert lam_df._lazy
-    assert lam_sliced_head_df.equals(head_df[1:3])
-
-    # slicing for cols triggers a data fetch
-    lam_sliced_df = lam_df["A0"]
-    assert not lam_df._lazy
-    assert lam_sliced_df.equals(collect_func(0)["A0"])
-
-    # slicing for rows after slicing over cols
-    lam_sliced_twice_df = lam_sliced_df[1:3]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
-    lam_sliced_twice_df = lam_sliced_df[10:30]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
+    pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[1:3])
 
     # Slicing with negative indices (does not trigger a data fetch)
     lam = lazy_manager(
@@ -434,7 +438,18 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
     lam_sliced_head_df = lam_df.iloc[-38:-37]
     assert lam_df._lazy
-    assert lam_sliced_head_df.equals(head_df[2:3])
+    pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[2:3])
+
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
 
     # Trigger a fetch
     lam_sliced_head_df = lam_df.iloc[-3:]
@@ -442,62 +457,8 @@ def test_slice(pandas_managers, head_df, collect_func):
     pd.testing.assert_frame_equal(lam_sliced_head_df, collect_func(0)[-3:])
 
 
-@pytest_mark_spawn_mode
-def test_parquet(collect_func):
-    """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
-
-    @bodo.jit(spawn=True)
-    def _get_bodo_df(df):
-        return df
-
-    df = collect_func(0)
-    bodo_df = _get_bodo_df(df)
-    fname = os.path.join("bodo", "tests", "data", "example")
-    with ensure_clean2(fname):
-        bodo_df.to_parquet(fname)
-        assert bodo_df._lazy
-        read_df = pd.read_parquet(fname)
-
-    pd.testing.assert_frame_equal(
-        read_df,
-        df,
-        check_dtype=False,
-    )
-    pd.testing.assert_frame_equal(
-        bodo_df,
-        df,
-        check_dtype=False,
-    )
-
-
-@pytest_mark_spawn_mode
-def test_parquet_param(collect_func):
-    """Tests that to_parquet() raises an error on unsupported parameters"""
-
-    @bodo.jit(spawn=True)
-    def _get_bodo_df(df):
-        return df
-
-    df = collect_func(0)
-    bodo_df = _get_bodo_df(df)
-    fname = os.path.join("bodo", "tests", "data", "example")
-
-    with ensure_clean2(fname):
-        with pytest.raises(
-            bodo.utils.typing.BodoError,
-            match=r"DataFrame.to_parquet\(\): only pyarrow engine supported",
-        ):
-            bodo_df.to_parquet(fname, engine="fastparquet")
-        with pytest.raises(
-            bodo.utils.typing.BodoError,
-            match=r"to_parquet\(\): row_group_size must be integer",
-        ):
-            bodo_df.to_parquet(fname, row_group_size="a")
-
-
-@pytest_mark_spawn_mode
 @pytest.mark.iceberg
-@run_rank0
+@pytest_mark_one_rank
 def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
 
@@ -534,7 +495,6 @@ def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     )
 
 
-@pytest_mark_spawn_mode
 def test_csv(collect_func):
     """Tests that to_csv() writes the frame correctly and does not trigger data fetch"""
 
@@ -562,7 +522,19 @@ def test_csv(collect_func):
     )
 
 
-@pytest_mark_spawn_mode
+def test_csv_str(collect_func):
+    """Tests that to_csv() with string output works properly (returns all string data to spawner)"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    assert bodo_df.to_csv(index=False) == df.to_csv(index=False)
+    assert bodo_df._lazy
+
+
 def test_csv_param(collect_func):
     """Tests that to_csv() raises an error on unsupported parameters"""
 
@@ -592,7 +564,6 @@ def test_csv_param(collect_func):
             bodo_df.to_csv(fname, mode="r")
 
 
-@pytest_mark_spawn_mode
 def test_json(collect_func):
     """Tests that to_json() writes the frame correctly and does not trigger data fetch"""
 
@@ -622,5 +593,42 @@ def test_json(collect_func):
     pd.testing.assert_frame_equal(
         bodo_df,
         df,
+        check_dtype=False,
+    )
+
+
+def test_json_str(collect_func):
+    """Tests that to_json() with string output works properly (returns all string data to spawner)"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    assert bodo_df.to_json(orient="records", lines=True) == df.to_json(
+        orient="records", lines=True
+    )
+    assert bodo_df._lazy
+
+
+def test_map_partitions():
+    """Test map_partitions on BodoDataFrame"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    bodo_df = _get_bodo_df(df)
+
+    def f(df, a, b=3):
+        return df + a + 2 * b
+
+    out = bodo_df.map_partitions(f, 2, b=4)
+    assert out._lazy
+    pd.testing.assert_frame_equal(
+        out,
+        f(df, 2, b=4),
         check_dtype=False,
     )

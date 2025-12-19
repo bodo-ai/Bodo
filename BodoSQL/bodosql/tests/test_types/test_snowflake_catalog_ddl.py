@@ -2,12 +2,14 @@
 Tests DDL operations on a BodoSQL catalog.
 """
 
+import os
 from contextlib import contextmanager
 from copy import deepcopy
 from decimal import Decimal
 
 import pandas as pd
 import pytest
+import snowflake.connector
 
 import bodo
 import bodosql
@@ -17,8 +19,8 @@ from bodo.tests.utils import (
     create_snowflake_table_from_select_query,
     get_snowflake_connection_string,
     pytest_snowflake,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (
     test_db_snowflake_catalog,  # noqa
@@ -169,7 +171,7 @@ def test_create_schema_already_exists(test_db_snowflake_catalog, memory_leak_che
     py_output = pd.DataFrame({"STATUS": []})
 
     with schema_helper(conn, schema_name):
-        with pytest.raises(BodoError, match=f"Schema '{schema_name}' already exists."):
+        with pytest.raises(ValueError, match=f"Schema '{schema_name}' already exists."):
             check_func_seq(
                 lambda bc, query: bc.sql(query),
                 (bc, query),
@@ -271,7 +273,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
         bc.sql(table_query)
         with schema_helper(conn, schema_2, create=True):
-            with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
+            with pytest.raises(ValueError, match="Object 'TABLE1' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                 bc.execute_ddl(query)
 
@@ -284,7 +286,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         assert_equal_par(bodo_output, py_output)
 
         # Column B does not exist - validation should fail
-        with pytest.raises(BodoError, match="Column 'B' not found"):
+        with pytest.raises(ValueError, match="Column 'B' not found"):
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
             bc.execute_ddl(query)
 
@@ -349,7 +351,7 @@ def test_drop_schema_doesnt_exists(test_db_snowflake_catalog, memory_leak_check)
     py_output = pd.DataFrame({"STATUS": []})
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=f"Schema '{schema_name}' does not exist or drop cannot be performed.",
     ):
         check_func_seq(
@@ -534,7 +536,7 @@ def test_drop_table_not_found(purge, test_db_snowflake_catalog, memory_leak_chec
         conn,
     )
     assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
-    with pytest.raises(BodoError, match=""):
+    with pytest.raises(ValueError, match=""):
         query = f"DROP TABLE {table_name} {purge_str}"
         impl(bc, query)
 
@@ -642,7 +644,7 @@ def test_drop_viewortable_bug(
         _test_equal_guard(bodo_output, py_success_output)
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"{tableview} '{tableview_name}' does not exist or not authorized to drop.",
         ):
             bodo_output = bc.execute_ddl(query_drop_view)
@@ -657,7 +659,7 @@ def test_drop_viewortable_bug(
         )
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"{tableview} '{tableview_name}' does not exist or not authorized to drop.",
         ):
             check_func_seq(
@@ -699,7 +701,7 @@ def test_drop_view_error_does_not_exist(
         _test_equal_guard(bodo_output, py_output)
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             bc.execute_ddl(query_drop_view)
@@ -710,7 +712,7 @@ def test_drop_view_error_does_not_exist(
         _test_equal_guard(bodo_output, py_output)
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             bc.sql(query_drop_view)
@@ -725,7 +727,7 @@ def test_drop_view_error_does_not_exist(
         )
     else:
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to drop.",
         ):
             check_func_seq(
@@ -752,15 +754,21 @@ def test_drop_view_error_non_view(
     query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
     with table_helper(conn, view_name, create=True):
         # execute_ddl Version
-        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
+        with pytest.raises(
+            ValueError, match="Unable to drop Snowflake view from query"
+        ):
             bc.execute_ddl(query_drop_view)
 
         # Python Version
-        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
+        with pytest.raises(
+            ValueError, match="Unable to drop Snowflake view from query"
+        ):
             bc.sql(query_drop_view)
 
         # Jit Version
-        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
+        with pytest.raises(
+            ValueError, match="Unable to drop Snowflake view from query"
+        ):
             check_func_seq(
                 lambda bc, query: bc.sql(query),
                 (bc, query_drop_view),
@@ -882,7 +890,7 @@ def test_alter_table_rename_diffschema(test_db_snowflake_catalog, memory_leak_ch
             )  # Clean up if previously existed
 
             # Rename into non-existent schema
-            with pytest.raises(BodoError, match="does not exist or not authorized."):
+            with pytest.raises(ValueError, match="does not exist or not authorized."):
                 query = f"ALTER TABLE {schema}.{table_name} RENAME TO NONEXISTENT_SCHEMA.{table_name}_renamed"
                 bodo_output = impl(bc, query)
 
@@ -973,7 +981,7 @@ def test_alter_table_rename_not_found(test_db_snowflake_catalog, memory_leak_che
     assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
 
     # This should now throw an error.
-    with pytest.raises(BodoError, match="does not exist or not authorized"):
+    with pytest.raises(ValueError, match="does not exist or not authorized"):
         query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
         impl(bc, query)
 
@@ -1038,7 +1046,7 @@ def test_alter_table_rename_alreadyexists(test_db_snowflake_catalog, memory_leak
             # Execute ALTER TABLE query.
             query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
             # This should now throw an error.
-            with pytest.raises(BodoError, match="already exists"):
+            with pytest.raises(ValueError, match="already exists"):
                 impl(bc, query)
 
         finally:
@@ -1063,7 +1071,7 @@ def test_alter_table_not_supported(test_db_snowflake_catalog, memory_leak_check)
     # NOTE: These should all preferrably throw a nice error such as
     #       "This DDL operation is not supported yet", but this requires
     #       changing more of the parser, so I think this is lower priority for now.
-    with pytest.raises(BodoError, match="This DDL operation is currently unsupported"):
+    with pytest.raises(ValueError, match="This DDL operation is currently unsupported"):
         query = "ALTER TABLE test1 SWAP WITH renamedTable"
         impl(bc, query)
 
@@ -1193,7 +1201,7 @@ def test_alter_view_rename_not_found(test_db_snowflake_catalog, memory_leak_chec
     assert len(views) == 0, "View exists. Need to test with a non-existent view."
 
     # This should now throw an error.
-    with pytest.raises(BodoError, match="does not exist or not authorized"):
+    with pytest.raises(ValueError, match="does not exist or not authorized"):
         query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
         impl(bc, query)
 
@@ -1261,7 +1269,7 @@ def test_alter_view_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_
         # Execute ALTER TABLE query.
         query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
         # This should now throw an error.
-        with pytest.raises(BodoError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             impl(bc, query)
     finally:
         # Clean up after
@@ -1783,160 +1791,34 @@ def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Show Tables test failed"
 
 
-def _show_views_snowflake_sample_data_output(terse=True):
-    # This is a long test, yes, but this is the only reliably available
-    # query for SHOW VIEWS in the Snowflake sample database.
-    if terse:
-        return pd.DataFrame(
-            {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
-                "NAME": [
-                    "APPLICABLE_ROLES",
-                    "CLASSES",
-                    "CLASS_INSTANCES",
-                    "CLASS_INSTANCE_FUNCTIONS",
-                    "CLASS_INSTANCE_PROCEDURES",
-                    "COLUMNS",
-                    "CORTEX_SEARCH_SERVICES",
-                    "CURRENT_PACKAGES_POLICY",
-                    "DATABASES",
-                    "ELEMENT_TYPES",
-                    "ENABLED_ROLES",
-                    "EVENT_TABLES",
-                    "EXTERNAL_TABLES",
-                    "FIELDS",
-                    "FILE_FORMATS",
-                    "FUNCTIONS",
-                    "GIT_REPOSITORIES",
-                    "HYBRID_TABLES",
-                    "INDEXES",
-                    "INDEX_COLUMNS",
-                    "INFORMATION_SCHEMA_CATALOG_NAME",
-                    "LOAD_HISTORY",
-                    "MODEL_VERSIONS",
-                    "OBJECT_PRIVILEGES",
-                    "PACKAGES",
-                    "PIPES",
-                    "PROCEDURES",
-                    "REFERENTIAL_CONSTRAINTS",
-                    "REPLICATION_DATABASES",
-                    "REPLICATION_GROUPS",
-                    "SCHEMATA",
-                    "SEQUENCES",
-                    "SERVICES",
-                    "STAGES",
-                    "STREAMLITS",
-                    "TABLES",
-                    "TABLE_CONSTRAINTS",
-                    "TABLE_PRIVILEGES",
-                    "TABLE_STORAGE_METRICS",
-                    "USAGE_PRIVILEGES",
-                    "VIEWS",
-                ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
-                "KIND": ["VIEW"] * 41,
-            }
+def _show_views_snowflake_sample_data_output(terse: bool = True) -> pd.DataFrame:
+    """Fetch the SHOW VIEWS output directly from Snowflake sample DB."""
+    maybe_terse = " TERSE " if terse else ""
+
+    conn = snowflake.connector.connect(
+        user=os.environ["SF_USERNAME"],
+        password=os.environ["SF_PASSWORD"],
+        account="bodopartner.us-east-1",
+        warehouse="DEMO_WH",
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SHOW {maybe_terse} VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
         )
-    else:
-        return pd.DataFrame(
-            {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
-                "NAME": [
-                    "APPLICABLE_ROLES",
-                    "CLASSES",
-                    "CLASS_INSTANCES",
-                    "CLASS_INSTANCE_FUNCTIONS",
-                    "CLASS_INSTANCE_PROCEDURES",
-                    "COLUMNS",
-                    "CORTEX_SEARCH_SERVICES",
-                    "CURRENT_PACKAGES_POLICY",
-                    "DATABASES",
-                    "ELEMENT_TYPES",
-                    "ENABLED_ROLES",
-                    "EVENT_TABLES",
-                    "EXTERNAL_TABLES",
-                    "FIELDS",
-                    "FILE_FORMATS",
-                    "FUNCTIONS",
-                    "GIT_REPOSITORIES",
-                    "HYBRID_TABLES",
-                    "INDEXES",
-                    "INDEX_COLUMNS",
-                    "INFORMATION_SCHEMA_CATALOG_NAME",
-                    "LOAD_HISTORY",
-                    "MODEL_VERSIONS",
-                    "OBJECT_PRIVILEGES",
-                    "PACKAGES",
-                    "PIPES",
-                    "PROCEDURES",
-                    "REFERENTIAL_CONSTRAINTS",
-                    "REPLICATION_DATABASES",
-                    "REPLICATION_GROUPS",
-                    "SCHEMATA",
-                    "SEQUENCES",
-                    "SERVICES",
-                    "STAGES",
-                    "STREAMLITS",
-                    "TABLES",
-                    "TABLE_CONSTRAINTS",
-                    "TABLE_PRIVILEGES",
-                    "TABLE_STORAGE_METRICS",
-                    "USAGE_PRIVILEGES",
-                    "VIEWS",
-                ],
-                "RESERVED": [""] * 41,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
-                "COMMENT": [
-                    "The roles that can be applied to the current user.",
-                    "The BUNDLE CLASS that the current user has privileges to view.",
-                    "The BUNDLE INSTANCE that the current user has privileges to view.",
-                    "The functions defined in a bundle that are accessible to the current user's role.",
-                    "The procedures defined in a bundle that are accessible to the current user's role.",
-                    "The columns of tables defined in this database that are accessible to the current user's role.",
-                    "The Cortex Search Services defined in this database that are accessible to the current user's role.",
-                    "The packages policy set on the current account",
-                    "The databases that are accessible to the current user's role.",
-                    "The element types of structured array types defined in this database that are accessible to the current user's role.",
-                    "The roles that are enabled to the current user.",
-                    "The event tables defined in this database that are accessible to the current user's role.",
-                    "The external tables defined in this database that are accessible to the current user's role.",
-                    "The fields of structured object and map types defined in this database that are accessible to the current user's role.",
-                    "The file formats defined in this database that are accessible to the current user's role.",
-                    "The user-defined functions defined in this database that are accessible to the current user's role.",
-                    "Git repositories in this database that are accessible by the current user's role",
-                    "The hybrid tables defined in this database that are accessible to the current user's role.",
-                    "The indexes defined in this database that are accessible to the current user's role.",
-                    "The columns of indexes defined in this database that are accessible to the current user's role.",
-                    "Identifies the database (or catalog, in SQL terminology) that contains the information_schema",
-                    "The loading information of the copy command",
-                    "The MODEL VERSIONS that the current user has privileges to view ",
-                    "The privileges on all objects defined in this database that are accessible to the current user's role.",
-                    "Available packages in current account",
-                    "The pipes defined in this database that are accessible to the current user's role.",
-                    "The stored procedures defined in this database that are accessible to the current user's role.",
-                    "Referential Constraints in this database that are accessible to the current user",
-                    "The databases for replication that are accessible to the current user's role.",
-                    "The replication groups that are accessible to the current user's role.",
-                    "The schemas defined in this database that are accessible to the current user's role.",
-                    "The sequences defined in this database that are accessible to the current user's role.",
-                    "The services in this database that are accessible to the current user's role.",
-                    "Stages in this database that are accessible by the current user's role",
-                    "Streamlits in this database that are accessible by the current user's role",
-                    "The tables defined in this database that are accessible to the current user's role.",
-                    "Constraints defined on the tables in this database that are accessible to the current user",
-                    "The privileges on tables defined in this database that are accessible to the current user's role.",
-                    "All tables within an account, including expired tables.",
-                    "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
-                    "The views defined in this database that are accessible to the current user's role.",
-                ],
-                "OWNER": [""] * 41,
-                "TEXT": [""] * 41,
-                "IS_SECURE": ["false"] * 41,
-                "IS_MATERIALIZED": ["false"] * 41,
-                "OWNER_ROLE_TYPE": [""] * 41,
-                "CHANGE_TRACKING": ["OFF"] * 41,
-            }
-        )
+        rows = cur.fetchall()
+        colnames = [desc[0].upper() for desc in cur.description]
+        df = pd.DataFrame(rows, columns=colnames)
+
+        # Fix expected output to match format of bodo
+        df = df.drop(columns=["DATABASE_NAME"])
+        df["CREATED_ON"] = ["1969-12-31 16:00:00.000 -0800"] * len(df)
+        df["SCHEMA_NAME"] = ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * len(df)
+
+        return df
+    finally:
+        cur.close()
+        conn.close()
 
 
 def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
@@ -1946,8 +1828,9 @@ def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
     bodo_output = bc.execute_ddl(
         "SHOW TERSE VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
     )
-
     expected_output = _show_views_snowflake_sample_data_output()
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -1965,8 +1848,10 @@ def test_show_views_terse_jit(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    expected_output = _show_views_snowflake_sample_data_output()
     bodo_output = impl(bc, query)
+    expected_output = _show_views_snowflake_sample_data_output()
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(
         bodo_output,
         expected_output,
@@ -1987,6 +1872,8 @@ def test_show_views(test_db_snowflake_catalog, memory_leak_check):
     )
 
     expected_output = _show_views_snowflake_sample_data_output(terse=False)
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -2057,7 +1944,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
         bc.sql(table_query)
         with schema_helper(conn, schema_2, create=True):
-            with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
+            with pytest.raises(ValueError, match="Object 'TABLE1' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                 bc.execute_ddl(query)
 
@@ -2070,7 +1957,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         assert_equal_par(bodo_output, py_output)
 
         # Column B does not exist - validation should fail
-        with pytest.raises(BodoError, match="Column 'B' not found"):
+        with pytest.raises(ValueError, match="Column 'B' not found"):
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
             bc.execute_ddl(query)
 
@@ -2271,14 +2158,14 @@ def test_describe_view_error_does_not_exist(
     with view_helper_nontrivialview(conn, view_name, create=False):
         # execute_ddl Version
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to describe.",
         ):
             bc.execute_ddl(query_describe_view)
 
         # Python Version
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to describe.",
         ):
             bc.sql(query_describe_view)
@@ -2286,7 +2173,7 @@ def test_describe_view_error_does_not_exist(
         # Jit Version
         # Intentionally returns replicated output
         with pytest.raises(
-            BodoError,
+            ValueError,
             match=f"View '{view_name}' does not exist or not authorized to describe.",
         ):
             check_func_seq(

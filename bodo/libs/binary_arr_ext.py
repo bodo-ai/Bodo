@@ -7,6 +7,7 @@ import operator
 
 import llvmlite.binding as ll
 import numba
+import numba.np.arrayobj
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
@@ -364,7 +365,7 @@ def overload_bytes_fromhex(hex_str):
     """
     # Use types.unliteral to avoid issues with string literals
     hex_str = types.unliteral(hex_str)
-    if hex_str == bodo.string_type:
+    if hex_str == bodo.types.string_type:
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def impl(hex_str):  # pragma: no cover
@@ -405,7 +406,10 @@ def binary_list_to_array_overload(binary_list):
     """
     converts a list of binary values to a binary array.
     """
-    if isinstance(binary_list, types.List) and binary_list.dtype == bodo.bytes_type:
+    if (
+        isinstance(binary_list, types.List)
+        and binary_list.dtype == bodo.types.bytes_type
+    ):
 
         def binary_list_impl(binary_list):  # pragma: no cover
             n = len(binary_list)

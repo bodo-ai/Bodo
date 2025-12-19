@@ -3,6 +3,8 @@ transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
 
+from __future__ import annotations
+
 import datetime
 import itertools
 import sys
@@ -33,10 +35,12 @@ from numba.core.registry import CPUDispatcher
 import bodo
 import bodo.hiframes.pd_dataframe_ext
 import bodo.io
+import bodo.io.utils
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
 import bodo.ir.sort
+import bodo.pandas as bd
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType, PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
@@ -251,7 +255,7 @@ class UntypedPass:
         if (
             isinstance(val_def, ir.Global)
             and isinstance(val_def.value, pytypes.ModuleType)
-            and val_def.value == pd
+            and val_def.value in (pd, bd)
             and rhs.attr in ("read_csv", "read_parquet", "read_json")
         ):
             # put back the definition removed earlier but remove node
@@ -333,7 +337,7 @@ class UntypedPass:
         ):
             val_def.attr = "Index"
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 return compile_func_single_block(
                     eval("lambda: bodo.hiframes.pd_multi_index_ext.from_product"),
                     (),
@@ -351,7 +355,7 @@ class UntypedPass:
             and val_def.attr == "MultiIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.MultiIndex.{rhs.attr}() is not yet supported"
                 )
@@ -367,7 +371,7 @@ class UntypedPass:
             and val_def.attr == "IntervalIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.IntervalIndex.{rhs.attr}() is not yet supported"
                 )
@@ -379,7 +383,7 @@ class UntypedPass:
             and val_def.attr == "RangeIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.RangeIndex.{rhs.attr}() is not yet supported"
                 )
@@ -422,7 +426,7 @@ class UntypedPass:
             and val_def.attr == "Timestamp"
         ):
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 return compile_func_single_block(
                     eval("lambda: bodo.hiframes.pd_timestamp_ext.now_impl"),
                     (),
@@ -448,13 +452,15 @@ class UntypedPass:
         if rhs.attr in ["max", "min", "resolution"]:
             if is_expr(val_def, "getattr") and val_def.attr == "Timedelta":
                 mod_def = guard(get_definition, self.func_ir, val_def.value)
-                is_pd_Timedelta = isinstance(mod_def, ir.Global) and mod_def.value == pd
+                is_pd_Timedelta = isinstance(mod_def, ir.Global) and mod_def.value in (
+                    pd,
+                    bd,
+                )
             else:
                 # Handle relative imports by checking if the value matches importing from Python
-                is_pd_Timedelta = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
-                    and val_def.value == pd.Timedelta
-                )
+                is_pd_Timedelta = isinstance(
+                    val_def, (ir.Global, ir.FreeVar)
+                ) and val_def.value in (pd.Timedelta, bd.Timedelta)
             if is_pd_Timedelta:
                 raise BodoError(f"pandas.Timedelta.{rhs.attr} not yet supported.")
 
@@ -475,15 +481,14 @@ class UntypedPass:
             is_timestamp_unsupported = False
             if is_expr(val_def, "getattr") and val_def.attr == "Timestamp":
                 mod_def = guard(get_definition, self.func_ir, val_def.value)
-                is_timestamp_unsupported = (
-                    isinstance(mod_def, ir.Global) and mod_def.value == pd
-                )
+                is_timestamp_unsupported = isinstance(
+                    mod_def, ir.Global
+                ) and mod_def.value in (pd, bd)
             else:
                 # Handle relative imports by checking if the value matches importing from Python
-                is_timestamp_unsupported = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
-                    and val_def.value == pd.Timestamp
-                )
+                is_timestamp_unsupported = isinstance(
+                    val_def, (ir.Global, ir.FreeVar)
+                ) and val_def.value in (pd.Timestamp, bd.Timestamp)
             if is_timestamp_unsupported:
                 raise BodoError("pandas.Timestamp." + rhs.attr + " not supported yet")
 
@@ -597,34 +602,34 @@ class UntypedPass:
             )
 
         # handling pd.DataFrame() here since input can be constant dictionary
-        if fdef == ("DataFrame", "pandas"):
+        if fdef in (("DataFrame", "pandas"), ("DataFrame", "bodo.pandas")):
             return self._handle_pd_DataFrame(assign, lhs, rhs, label)
 
         # handling pd.read_csv() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_csv", "pandas"):
+        if fdef in (("read_csv", "pandas"), ("read_csv", "bodo.pandas")):
             return self._handle_pd_read_csv(assign, lhs, rhs, label)
 
         # handling pd.read_sql() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_sql", "pandas"):
+        if fdef in (("read_sql", "pandas"), ("read_sql", "bodo.pandas")):
             return self._handle_pd_read_sql(assign, lhs, rhs, label)
 
         # handling pd.read_json() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_json", "pandas"):
+        if fdef in (("read_json", "pandas"), ("read_json", "bodo.pandas")):
             return self._handle_pd_read_json(assign, lhs, rhs, label)
 
         # handling pd.read_excel() here since typing info needs to be extracted
-        if fdef == ("read_excel", "pandas"):
+        if fdef in (("read_excel", "pandas"), ("read_excel", "bodo.pandas")):
             return self._handle_pd_read_excel(assign, lhs, rhs, label)
 
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
-        if fdef == ("Series", "pandas"):
+        if fdef in (("Series", "pandas"), ("Series", "bodo.pandas")):
             return self._handle_pd_Series(assign, lhs, rhs)
 
         # replace pd.NamedAgg() with equivalent tuple to be handled in groupby typing
-        if fdef == ("NamedAgg", "pandas"):
+        if fdef in (("NamedAgg", "pandas"), ("NamedAgg", "bodo.pandas")):
             return self._handle_pd_named_agg(assign, lhs, rhs)
 
         # replace bodo.ExtendedNamedAgg() with equivalent tuple to be handled in groupby typing
@@ -641,7 +646,7 @@ class UntypedPass:
         ):
             return self._handle_pq_to_pandas(assign, lhs, rhs, func_mod)
 
-        if fdef == ("read_parquet", "pandas"):
+        if fdef in (("read_parquet", "pandas"), ("read_parquet", "bodo.pandas")):
             return self._handle_pd_read_parquet(assign, lhs, rhs)
 
         if fdef == ("fromfile", "numpy"):
@@ -895,6 +900,8 @@ class UntypedPass:
         Enable typing for dictionary data arg to bodosql.BodoSQLContext({'table1': df}).
         Converts constant dictionary to tuple with sentinel.
         """
+        import bodosql.compiler  # isort:skip # noqa
+
         kws = dict(rhs.kws)
         data_arg = get_call_expr_arg(
             "bodosql.BodoSQLContext", rhs.args, kws, 0, "tables"
@@ -2119,11 +2126,11 @@ class UntypedPass:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
                 if c in _bodo_read_as_dict:
-                    if dtype_map[c] != bodo.string_array_type:
+                    if dtype_map[c] != bodo.types.string_array_type:
                         raise BodoError(
                             f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not a string column"
                         )
-                    dtype_map[c] = bodo.dict_str_arr_type
+                    dtype_map[c] = bodo.types.dict_str_arr_type
 
         columns, _, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -2652,9 +2659,8 @@ class UntypedPass:
         (
             columns,
             data_arrs,
-            index_col,
+            index_cols,
             nodes,
-            _,
             _,
         ) = self.pq_handler.gen_parquet_read(
             fname,
@@ -2670,41 +2676,57 @@ class UntypedPass:
         )
         n_cols = len(columns)
 
-        if chunksize is not None and use_index and index_col is not None:
+        if chunksize is not None and use_index and index_cols:
             raise BodoError(
                 "pd.read_parquet(): Bodo currently does not support batched reads "
                 "of Parquet files with an index column"
             )
 
-        if not use_index or index_col is None:
+        if not use_index or len(index_cols) == 0:
             assert n_cols > 0
-            index_arg = (
+            agg_index_arg = (
                 "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
-
-        elif isinstance(index_col, dict):
-            if index_col["name"] is None:
-                index_col_name = None
-                index_col_name_str = None
+        elif len(index_cols) == 1:
+            index_col = index_cols[0]
+            if isinstance(index_col, dict):
+                if index_col["name"] is None:
+                    index_col_name = None
+                    index_col_name_str = None
+                else:
+                    index_col_name = index_col["name"]
+                    index_col_name_str = f"'{index_col_name}'"
+                # ignore range index information in pandas metadata
+                agg_index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
             else:
-                index_col_name = index_col["name"]
-                index_col_name_str = f"'{index_col_name}'"
-            # ignore range index information in pandas metadata
-            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
+                # if the index_col is __index_level_0__, it means it has no name.
+                # Thus we do not write the name instead of writing '__index_level_0__' as the name
+                field_name = None if "__index_level_" in index_col else index_col
+                agg_index_arg = (
+                    f"bodo.utils.conversion.convert_to_index(index_arr, {field_name!r})"
+                )
         else:
-            # if the index_col is __index_level_0_, it means it has no name.
-            # Thus we do not write the name instead of writing '__index_level_0_' as the name
-            index_name = None if "__index_level_" in index_col else index_col
-            index_arg = (
-                f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
-            )
+            index_field_names = []
+            for index_col in index_cols:
+                # I don't think RangeIndex is possible here, but just in case
+                assert isinstance(index_col, str)
+                index_field_names.append(
+                    None if "__index_level_" in index_col else index_col
+                )
+            agg_index_arg = f"bodo.hiframes.pd_multi_index_ext.init_multi_index(bodo.libs.struct_arr_ext.get_data(index_arr), {tuple(index_field_names)!r})"
 
         # _bodo_read_as_table = do not wrap the output table in a DataFrame
-        if _bodo_read_as_table or chunksize is not None:  # pragma: no cover
+        if _bodo_read_as_table or chunksize is not None:
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
-            func_text = "def _init_df(T, index_arr):\n"
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
+            func_text = (
+                f"def _init_df(T, index_arr):\n"
+                f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+                f"    (T,),\n"
+                f"    {agg_index_arg},\n"
+                f"    __col_name_meta_value_pq_read\n"
+                f"  )\n"
+            )
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _init_df = loc_vars["_init_df"]
@@ -3234,7 +3256,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     # categorical type
     if isinstance(t, pd.CategoricalDtype):
         cats = tuple(t.categories)
-        elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+        elem_typ = bodo.types.string_type if len(cats) == 0 else bodo.typeof(cats[0])
         typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
         return CategoricalArrayType(typ)
 
@@ -3353,6 +3375,7 @@ class JSONFileInfo(FileInfo):
         self.json_sample_nrows = json_sample_nrows
         super().__init__()
 
+    # TODO: Return type is not consistent with base class and Parquet?
     def _get_schema(self, fname):
         return _get_json_df_type_from_file(
             fname,
@@ -3497,7 +3520,9 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
         # Column is alive if its in the dtype_map or date_cols
         if col_name in dtype_map or i in date_cols or col_name in date_cols:
             # Pandas prioritizes dtype_map over date_cols
-            col_type = dtype_map.get(col_name, types.Array(bodo.datetime64ns, 1, "C"))
+            col_type = dtype_map.get(
+                col_name, types.Array(bodo.types.datetime64ns, 1, "C")
+            )
             columns.append(col_name)
             out_types.append(col_type)
             data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
@@ -3515,7 +3540,7 @@ def _get_sql_types_arr_colnames(
     downcast_decimal_to_double: bool = False,
     orig_table_const: str | None = None,
     orig_table_indices_const: tuple[int] | None = None,
-    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    snowflake_conn_cache: dict[str, SnowflakeConnection] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """
@@ -3553,7 +3578,7 @@ def _get_sql_types_arr_colnames(
         A very large tuple (TODO: add docs)
     """
     # find db type
-    db_type, _ = sql_ext.parse_dbtype(con_const)
+    db_type, _ = bodo.io.utils.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Does the SQL node have side effects (e.g. DELETE). If
@@ -3653,7 +3678,7 @@ def _get_sql_df_type_from_db(
     downcast_decimal_to_double: bool,
     orig_table_const: str | None = None,
     orig_table_indices_const: tuple[int] | None = None,
-    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    snowflake_conn_cache: dict[str, SnowflakeConnection] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """access the database to find df type for read_sql() output.
@@ -3828,14 +3853,14 @@ def _get_sql_df_type_from_db(
                 # so it will fall in the else-stmt
                 if db_type == "mysql" and sql_word in ("DESCRIBE", "DESC"):
                     colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
-                    index_type = bodo.RangeIndexType(bodo.none)
+                    index_type = bodo.types.RangeIndexType(bodo.types.none)
                     data_type = (
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
                     )
                     df_type = DataFrameType(data_type, index_type, colnames)
                 else:
@@ -3958,6 +3983,7 @@ class CSVFileInfo(FileInfo):
         self.csv_sample_nrows = csv_sample_nrows
         super().__init__()
 
+    # TODO: Return type is not consistent with base class and Parquet?
     def _get_schema(self, fname):
         return _get_csv_df_type_from_file(
             fname,

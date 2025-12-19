@@ -236,10 +236,14 @@ def generate_xcorr_return_type(func_mod, args, kws):
     if not is_overload_constant_bool(usevlines):
         raise_bodo_error(f"{func_mod}.xcorr(): usevlines must be a constant boolean")
     # If usevlines is True we return Tuple(Array(int64), Array(float64), lineCollection, Line2D)
+    is_int32 = (
+        sys.platform == "win32" and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
+    )
+    int_dtype = types.int32 if is_int32 else types.int64
     if is_overload_true(usevlines):
         return types.Tuple(
             [
-                types.Array(types.int64, 1, "C"),
+                types.Array(int_dtype, 1, "C"),
                 types.Array(types.float64, 1, "C"),
                 types.mpl_line_collection_type,
                 types.mpl_line_2d_type,
@@ -248,7 +252,7 @@ def generate_xcorr_return_type(func_mod, args, kws):
     # Otherwise we return a Tuple(Array(int64), Array(float64), Line2D, None)
     return types.Tuple(
         [
-            types.Array(types.int64, 1, "C"),
+            types.Array(int_dtype, 1, "C"),
             types.Array(types.float64, 1, "C"),
             types.mpl_line_2d_type,
             types.none,
@@ -680,7 +684,7 @@ def overload_savefig(
         pad_inches=0.1,
         metadata=None,
     ):  # pragma: no cover
-        with bodo.no_warning_objmode():
+        with bodo.ir.object_mode.no_warning_objmode():
             plt.savefig(
                 fname=fname,
                 dpi=dpi,
@@ -732,7 +736,7 @@ def overload_subplots(
         subplot_kw=None,
         gridspec_kw=None,
     ):
-        with bodo.no_warning_objmode(axes="{type_name}"):
+        with bodo.ir.object_mode.no_warning_objmode(axes="{type_name}"):
             axes = fig.subplots(
                 nrows=nrows,
                 ncols=ncols,

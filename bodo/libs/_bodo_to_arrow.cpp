@@ -1,12 +1,16 @@
 #include "_bodo_to_arrow.h"
 
 #include <cassert>
+#include <cstring>
 #include <memory>
 
 #include <arrow/array.h>
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/type_fwd.h>
+#include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -160,19 +164,13 @@ get_data_type_from_bodo_fixed_width_array(
             }
             break;
         case Bodo_CTypes::TIMEDELTA:
+            in_num_bytes = sizeof(int64_t) * array->length;
             // Convert timedelta to ns frequency in case of
             // snowflake write
             if (convert_timedelta_to_int64) {
-                in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::int64();
             } else {
-                // NOTE: Parquet/Iceberg will raise an error on Python side when
-                // _get_numba_typ_from_pa_typ is reached. raise error for any
-                // other operation.
-                throw std::runtime_error(
-                    "Converting Bodo arrays to Arrow format is "
-                    "currently "
-                    "not supported for Timedelta.");
+                type = arrow::duration(arrow::TimeUnit::NANO);
             }
             break;
         case Bodo_CTypes::DATETIME:
@@ -181,6 +179,8 @@ get_data_type_from_bodo_fixed_width_array(
             in_num_bytes = sizeof(int64_t) * array->length;
             if (tz.length() > 0) {
                 type = arrow::timestamp(time_unit, tz);
+            } else if (array->timezone.length() > 0) {
+                type = arrow::timestamp(time_unit, array->timezone);
             } else {
                 type = arrow::timestamp(time_unit);
             }
@@ -209,7 +209,7 @@ get_data_type_from_bodo_fixed_width_array(
  * 'duration' type).
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for Iceberg, for
- * which we specify "UTC".
+ * which we specify "UTC". This argument overrides the original timezone.
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
@@ -700,14 +700,25 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     size_t num_cols = table->ncols();
     std::vector<std::string> field_names(num_cols);
     for (size_t i = 0; i < num_cols; i++) {
-        field_names[i] = "A" + std::to_string(i);
+        // Use column names if available
+        if (table->column_names.size() > 0) {
+            field_names[i] = table->column_names[i];
+        } else {
+            field_names[i] = "A" + std::to_string(i);
+        }
     }
-    return bodo_table_to_arrow(std::move(table), std::move(field_names));
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {};
+    if (table->metadata != nullptr) {
+        schema_metadata = std::make_shared<arrow::KeyValueMetadata>(
+            table->metadata->keys, table->metadata->values);
+    }
+    return bodo_table_to_arrow(std::move(table), std::move(field_names),
+                               schema_metadata);
 }
 
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table, std::vector<std::string> field_names,
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata,
+    const std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata,
     bool convert_timedelta_to_int64, std::string tz,
     arrow::TimeUnit::type time_unit, bool downcast_time_ns_to_us,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
@@ -740,7 +751,7 @@ void arrow_buffer_dtor(void *ptr, size_t size, void *dtor_info_raw) {
     delete arrow_buf;
 
     // Free the DtorInfo struct
-    NRT_MemSys::instance()->mi_allocator.free(dtor_info);
+    global_memsys->mi_allocator.free(dtor_info);
 }
 
 }  // extern "C"
@@ -1158,10 +1169,19 @@ std::shared_ptr<array_info> arrow_numeric_array_to_bodo(
         arrow_num_arr->values(), (void *)arrow_num_arr->raw_values(),
         n * numpy_item_size[typ_enum], typ_enum, pool);
 
-    return std::make_shared<array_info>(
+    auto bodo_arr = std::make_shared<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {data_buf_buffer, null_bitmap_buffer}));
+
+    if constexpr (std::is_same_v<T, arrow::TimestampArray>) {
+        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(
+            arrow_num_arr->type());
+        // Store original timezone info (for DataFrame Library)
+        bodo_arr->timezone = timestamp_type->timezone();
+    }
+
+    return bodo_arr;
 }
 
 /**
@@ -1223,45 +1243,88 @@ std::shared_ptr<array_info> arrow_boolean_array_to_bodo(
 }
 
 /**
- * @brief Convert Arrow string or binary array to Bodo array_info with zero-copy
- * The output Bodo array holds references to the Arrow array's buffers and
- * releases them when deleted. A LargeStringArray is a LargeBinaryArray, so
- * this method works for both types.
+ * @brief Convert Arrow string or binary array to Bodo array_info.
  *
- * @param arrow_bin_arr Input Arrow string or binary array
- * @param typ_enum Underlying dtype of elements (string or binary)
+ * @tparam ArrowArrayType The input Arrow array type.
+ * @tparam ArrowArrayLargeType The corresponding large Arrow array type
+ * (e.g. LargeStringArray for StringArray).
+ * @param arrow_arr Input Arrow string or binary array.
+ * @param large_type Arrow datatype corresponding to ArrowArrayLargeType.
+ * @param bodo_ctype The Bodo datatype enum.
  * @param array_id The identifier for equivalent arrays. If < 0 we need
  * to generate a new id.
- * @param pool Pointer to BufferPool used to allocate `buf` if allocation
- * came from Bodo or known Arrow source
- * @return array_info* Output Bodo array
+ * @param src_pool Pointer to BufferPool used to allocate `buf` if allocation
+ * came from Bodo or known Arrow source.
+ * @return std::shared_ptr<array_info> Output Bodo array.
  */
+template <typename ArrowArrayType, typename ArrowArrayLargeType>
 std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
-    std::shared_ptr<arrow::LargeBinaryArray> arrow_bin_arr,
-    Bodo_CTypes::CTypeEnum typ_enum, int64_t array_id,
-    bodo::IBufferPool *pool) {
+    std::shared_ptr<arrow::Array> arrow_arr,
+    std::shared_ptr<arrow::DataType> large_type,
+    Bodo_CTypes::CTypeEnum bodo_ctype, int64_t array_id,
+    bodo::IBufferPool *src_pool) {
+    using in_offset_t = typename ArrowArrayType::offset_type;
+    auto arrow_bin_arr = static_pointer_cast<ArrowArrayType>(arrow_arr);
     int64_t n = arrow_bin_arr->length();
-
-    std::shared_ptr<BodoBuffer> char_buf_buffer = arrow_buffer_to_bodo(
-        arrow_bin_arr->value_data(), (void *)arrow_bin_arr->raw_data(),
-        arrow_bin_arr->total_values_length(), Bodo_CTypes::UINT8, pool);
-    std::shared_ptr<BodoBuffer> offset_buffer = arrow_buffer_to_bodo(
-        arrow_bin_arr->value_offsets(),
-        (void *)arrow_bin_arr->raw_value_offsets(), (n + 1) * sizeof(offset_t),
-        Bodo_CType_offset, pool);
-    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
-        arrow_bin_arr->null_bitmap(), arrow_bin_arr->null_bitmap_data(),
-        arrow_bin_arr->offset(), arrow_bin_arr->null_count(), n, pool);
+    in_offset_t *in_offsets = (in_offset_t *)arrow_bin_arr->raw_value_offsets();
+    in_offset_t first_offset = in_offsets[0];
 
     if (array_id < 0) {
         array_id = generate_array_id(n);
     }
 
-    return std::make_shared<array_info>(
-        bodo_array_type::STRING, typ_enum, n,
-        std::vector<std::shared_ptr<BodoBuffer>>(
-            {char_buf_buffer, offset_buffer, null_bitmap_buffer}),
-        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, array_id);
+    if (first_offset == 0) {
+        // Upcast int32 offsets to int64 to match Bodo String array.
+        if (!std::is_same<ArrowArrayType, ArrowArrayLargeType>::value) {
+            auto res = arrow::compute::Cast(
+                *arrow_arr, large_type, arrow::compute::CastOptions::Safe(),
+                bodo::default_buffer_exec_context());
+            CHECK_ARROW_AND_ASSIGN(res, "Cast", arrow_arr);
+        }
+
+        // Convert Arrow String/Binary array to Bodo array_info with zero-copy
+        // The output Bodo array holds references to the Arrow array's buffers
+        // and releases them when deleted.
+        auto casted_bin_arr =
+            std::static_pointer_cast<ArrowArrayLargeType>(arrow_arr);
+        std::shared_ptr<BodoBuffer> char_buf_buffer = arrow_buffer_to_bodo(
+            casted_bin_arr->value_data(), (void *)casted_bin_arr->raw_data(),
+            casted_bin_arr->total_values_length(), Bodo_CTypes::UINT8,
+            src_pool);
+        std::shared_ptr<BodoBuffer> offset_buffer = arrow_buffer_to_bodo(
+            casted_bin_arr->value_offsets(),
+            (void *)casted_bin_arr->raw_value_offsets(),
+            (n + 1) * sizeof(offset_t), Bodo_CType_offset, src_pool);
+        std::shared_ptr<BodoBuffer> null_bitmap_buffer =
+            arrow_null_bitmap_to_bodo(
+                casted_bin_arr->null_bitmap(),
+                casted_bin_arr->null_bitmap_data(), casted_bin_arr->offset(),
+                casted_bin_arr->null_count(), n, src_pool);
+
+        return std::make_shared<array_info>(
+            bodo_array_type::STRING, bodo_ctype, n,
+            std::vector<std::shared_ptr<BodoBuffer>>(
+                {char_buf_buffer, offset_buffer, null_bitmap_buffer}),
+            std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, array_id);
+    } else {
+        // Arrow arrays that are outputs of slicing may have a non-zero first
+        // offset, which is not supported in Bodo. Copying data explicitly in
+        // this case.
+        int64_t total_chars = in_offsets[n] - first_offset;
+        std::shared_ptr<array_info> out_arr =
+            alloc_string_array(bodo_ctype, n, total_chars, array_id);
+        offset_t *out_offsets = (offset_t *)out_arr->buffers[1]->mutable_data();
+        for (size_t i = 0; i < static_cast<size_t>(n) + 1; i++) {
+            out_offsets[i] = in_offsets[i] - first_offset;
+        }
+        std::memcpy(out_arr->buffers[0]->mutable_data(),
+                    arrow_bin_arr->raw_data() + first_offset, total_chars);
+        for (int64_t i = 0; i < n; i++) {
+            ::arrow::bit_util::SetBitTo((uint8_t *)out_arr->null_bitmask(), i,
+                                        !arrow_bin_arr->IsNull(i));
+        }
+        return out_arr;
+    }
 }
 
 /**
@@ -1290,7 +1353,13 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
         throw std::runtime_error(
             "arrow_dictionary_array_to_bodo(): Expected dict_array->dtype to "
             "be string, but found " +
-            std::to_string(dict_array->dtype));
+            GetDtype_as_string(dict_array->dtype));
+    }
+    if (idx_array->dtype != Bodo_CTypes::INT32) {
+        throw std::runtime_error(
+            "arrow_dictionary_array_to_bodo(): Expected idx_array->dtype to "
+            "be int32, but found " +
+            GetDtype_as_string(idx_array->dtype));
     }
     return create_dict_string_array(dict_array, idx_array);
 }
@@ -1300,38 +1369,25 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
-            return arrow_string_binary_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr),
-                Bodo_CTypes::STRING, array_id, src_pool);
-        // convert 32-bit offset array to 64-bit offset array to match Bodo data
-        // layout
-        case arrow::Type::STRING: {
-            static_assert(OFFSET_BITWIDTH == 64);
-            auto res =
-                arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
-                                     arrow::compute::CastOptions::Safe(),
-                                     bodo::default_buffer_exec_context());
-            std::shared_ptr<arrow::Array> casted_arr;
-            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
-            return arrow_string_binary_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeStringArray>(casted_arr),
-                Bodo_CTypes::STRING, array_id, src_pool);
-        }
+            return arrow_string_binary_array_to_bodo<arrow::LargeStringArray,
+                                                     arrow::LargeStringArray>(
+                arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
+                src_pool);
+        case arrow::Type::STRING:
+            return arrow_string_binary_array_to_bodo<arrow::StringArray,
+                                                     arrow::LargeStringArray>(
+                arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
+                src_pool);
         case arrow::Type::LARGE_BINARY:
-            return arrow_string_binary_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeBinaryArray>(arrow_arr),
-                Bodo_CTypes::BINARY, array_id, src_pool);
-        // convert 32-bit offset array to 64-bit offset array to match Bodo data
-        // layout
-        case arrow::Type::BINARY: {
-            static_assert(OFFSET_BITWIDTH == 64);
-            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_binary());
-            std::shared_ptr<arrow::Array> casted_arr;
-            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
-            return arrow_string_binary_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeBinaryArray>(casted_arr),
-                Bodo_CTypes::BINARY, array_id, src_pool);
-        }
+            return arrow_string_binary_array_to_bodo<arrow::LargeBinaryArray,
+                                                     arrow::LargeBinaryArray>(
+                arrow_arr, arrow::large_binary(), Bodo_CTypes::BINARY, array_id,
+                src_pool);
+        case arrow::Type::BINARY:
+            return arrow_string_binary_array_to_bodo<arrow::BinaryArray,
+                                                     arrow::LargeBinaryArray>(
+                arrow_arr, arrow::large_binary(), Bodo_CTypes::BINARY, array_id,
+                src_pool);
         case arrow::Type::LARGE_LIST:
             return arrow_list_array_to_bodo(
                 std::static_pointer_cast<arrow::LargeListArray>(arrow_arr),
@@ -1396,12 +1452,11 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
             std::shared_ptr<arrow::TimestampType> type =
                 std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
-            // Ensure we are always working with Naive/UTC timestamps and
-            // nanosecond precision.
-            if (type->unit() != arrow::TimeUnit::NANO ||
-                (type->timezone() != "" && type->timezone() != "UTC")) {
+            // Ensure we are always working with nanosecond precision.
+            if (type->unit() != arrow::TimeUnit::NANO) {
                 auto res = arrow::compute::Cast(
-                    *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
+                    *ts_arr,
+                    arrow::timestamp(arrow::TimeUnit::NANO, type->timezone()),
                     arrow::compute::CastOptions::Safe(),
                     bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
@@ -1411,6 +1466,20 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             }
             return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
                 ts_arr, Bodo_CTypes::DATETIME, src_pool);
+        }
+        case arrow::Type::DURATION: {
+            auto dur_arr =
+                std::static_pointer_cast<arrow::DurationArray>(arrow_arr);
+            std::shared_ptr<arrow::DurationType> type =
+                std::static_pointer_cast<arrow::DurationType>(dur_arr->type());
+            if (type->unit() != arrow::TimeUnit::NANO) {
+                throw std::runtime_error(
+                    "arrow_array_to_bodo(): Duration type must be in "
+                    "nanoseconds, but found " +
+                    type->ToString());
+            }
+            return arrow_numeric_array_to_bodo<arrow::DurationArray>(
+                dur_arr, Bodo_CTypes::TIMEDELTA, src_pool);
         }
         case arrow::Type::INT32:
             return arrow_numeric_array_to_bodo<arrow::Int32Array>(
@@ -1448,9 +1517,12 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 time_arr =
                     std::static_pointer_cast<arrow::Time64Array>(casted_arr);
             }
-            return arrow_numeric_array_to_bodo<arrow::Time64Array>(
-                std::static_pointer_cast<arrow::Time64Array>(time_arr),
-                Bodo_CTypes::TIME, src_pool);
+            std::shared_ptr<array_info> bodo_arr =
+                arrow_numeric_array_to_bodo<arrow::Time64Array>(
+                    std::static_pointer_cast<arrow::Time64Array>(time_arr),
+                    Bodo_CTypes::TIME, src_pool);
+            bodo_arr->precision = 9;  // nanosecond precision
+            return bodo_arr;
         }
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
@@ -1478,97 +1550,29 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     }
 }
 
-std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
-    const std::shared_ptr<arrow::DataType> arrow_type) {
-    switch (arrow_type->id()) {
-        // String array
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::STRING: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::STRING);
-        }
-        // Binary array
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::BINARY: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::BINARY);
-        }
-        // array(item) array
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST: {
-            assert(arrow_type->num_fields() == 1);
-            std::unique_ptr<bodo::DataType> inner =
-                arrow_type_to_bodo_data_type(arrow_type->field(0)->type());
-            return std::make_unique<bodo::ArrayType>(std::move(inner));
-        }
-        // map array
-        case arrow::Type::MAP: {
-            std::shared_ptr<arrow::MapType> map_type =
-                std::static_pointer_cast<arrow::MapType>(arrow_type);
-            std::unique_ptr<bodo::DataType> key_type =
-                arrow_type_to_bodo_data_type(map_type->key_type());
-            std::unique_ptr<bodo::DataType> value_type =
-                arrow_type_to_bodo_data_type(map_type->item_type());
-            return std::make_unique<bodo::MapType>(std::move(key_type),
-                                                   std::move(value_type));
-        }
-        // struct array
-        case arrow::Type::STRUCT: {
-            std::vector<std::unique_ptr<bodo::DataType>> field_types;
-            for (int i = 0; i < arrow_type->num_fields(); i++) {
-                field_types.push_back(
-                    arrow_type_to_bodo_data_type(arrow_type->field(i)->type()));
-            }
-            return std::make_unique<bodo::StructType>(std::move(field_types));
-        }
-        // all fixed-size nullable types
-        case arrow::Type::DECIMAL128:
-        case arrow::Type::DOUBLE:
-        case arrow::Type::FLOAT:
-        case arrow::Type::BOOL:
-        case arrow::Type::UINT64:
-        case arrow::Type::INT64:
-        case arrow::Type::UINT32:
-        case arrow::Type::DATE32:
-        case arrow::Type::TIMESTAMP:
-        case arrow::Type::INT32:
-        case arrow::Type::UINT16:
-        case arrow::Type::INT16:
-        case arrow::Type::UINT8:
-        case arrow::Type::INT8:
-        case arrow::Type::TIME32:
-        case arrow::Type::TIME64: {
-            return std::make_unique<bodo::DataType>(
-                bodo_array_type::NULLABLE_INT_BOOL,
-                arrow_to_bodo_type(arrow_type->id()));
-        }
-        // dictionary-encoded array
-        case arrow::Type::DICTIONARY: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::DICT,
-                                                    Bodo_CTypes::STRING);
-        }
-        // null array
-        case arrow::Type::NA: {
-            // null array is currently stored as string array in C++
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::STRING);
-        }
-        case arrow::Type::EXTENSION: {
-            // Cast the type to an ExtensionArray to access the extension name
-            auto ext_type =
-                std::static_pointer_cast<arrow::ExtensionType>(arrow_type);
-            auto name = ext_type->extension_name();
-            if (name == "arrow_timestamp_tz") {
-                return std::make_unique<bodo::DataType>(
-                    bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ);
-            }
-            [[fallthrough]];
-        }
-        default:
+std::shared_ptr<table_info> arrow_table_to_bodo(
+    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(table->num_columns());
+    for (int64_t i = 0; i < table->num_columns(); i++) {
+        if (table->column(i)->num_chunks() != 1) {
             throw std::runtime_error(
-                "arrow_type_to_bodo_data_type(): Arrow type " +
-                arrow_type->ToString() + " not supported");
+                "arrow_table_to_bodo(): Column " + std::to_string(i) +
+                " does not have exactly one chunk, found " +
+                std::to_string(table->column(i)->num_chunks()));
+        }
+        std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
+        std::shared_ptr<array_info> out_arr =
+            arrow_array_to_bodo(arr, src_pool);
+        out_arrs.push_back(out_arr);
     }
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
+    out_table->column_names = table->ColumnNames();
+    out_table->metadata =
+        std::make_shared<TableMetadata>(table->schema()->metadata()->keys(),
+                                        table->schema()->metadata()->values());
+    return out_table;
 }
 
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
@@ -1621,4 +1625,12 @@ std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
         }
     }
     return null_bitmap;
+}
+
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
+                               false /*convert_timedelta_to_int64*/, "",
+                               time_unit, false /*downcast_time_ns_to_us*/,
+                               bodo::default_buffer_memory_manager());
 }

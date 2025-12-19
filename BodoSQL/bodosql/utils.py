@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """
 BodoSQL utils used to help construct Python code.
 """
 
 import py4j
 
-from bodo.utils.typing import BodoError
 from bodosql.imported_java_classes import JavaEntryPoint
 
 
@@ -27,7 +28,7 @@ def error_to_string(e: Exception) -> str:
     Returns:
         str: A string message of the error.
     """
-    if isinstance(e, BodoError):
+    if type(e).__name__ == "BodoError":
         # If called from a BodoError we should just return the message
         message = e.msg
     elif isinstance(e, py4j.protocol.Py4JJavaError):

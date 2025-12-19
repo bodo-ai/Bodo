@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 from datetime import date, datetime
 from typing import Any
@@ -9,9 +11,8 @@ import pyspark.sql.types as spark_types
 import pytest
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.mpi4py import MPI
-from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     SORT_ORDER as partsort_order,
 )
@@ -40,21 +41,18 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
     transform_str,
 )
-from bodo.tests.test_iceberg.test_iceberg import _check_for_sql_read_head_only
+from bodo.tests.test_iceberg.test_read import _check_for_sql_read_head_only
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
     _gather_output,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
     convert_non_pandas_columns,
-    reduce_sum,
-    run_rank0,
 )
 
 pytestmark = [
@@ -76,6 +74,8 @@ def test_read_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -83,7 +83,7 @@ def test_read_schema_evolved_table(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = run_rank0(spark_reader.read_iceberg_table)(table_name, db_schema)
+    py_out = run_rank0(pyiceberg_reader.read_iceberg_table)(table_name, db_schema)
     if "STRUCT_FIELD_ADD" in table_name:
         # In the STRUCT FIELD ADD case, Spark returns integers
         # in the new_column_one sub-field as floats since there
@@ -130,6 +130,9 @@ def test_write_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
+    from bodo.spawn.utils import run_rank0
+    from bodo.tests.utils_jit import reduce_sum
+
     if ("DECIMALS_TABLE" in table_name) or (
         "DECIMALS_PRECISION_PROMOTION_TABLE" in table_name
     ):
@@ -167,10 +170,7 @@ def test_write_schema_evolved_table(
 
     passed = 1
     if bodo.get_rank() == 0:
-        spark = get_spark()
-        spark.sql("CLEAR CACHE;")
-        spark.sql(f"REFRESH TABLE hadoop_prod.iceberg_db.{table_name};")
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
 
         # For easier comparison, convert semi-structured columns in
         # both tables to comparable types:
@@ -204,6 +204,7 @@ def test_filter_pushdown(
     even when the tables have gone through one or more levels
     of schema evolution.
     """
+    from bodo.spawn.utils import run_rank0
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -258,6 +259,8 @@ def test_filter_pushdown_adversarial_renamed_and_swapped_cols(
     over time and have been re-ordered such that columns originally
     at position 2 & 3 in a table have both swapped names and locations.
     """
+    from bodo.spawn.utils import run_rank0
+
     table_name = "filter_pushdown_adversarial"
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
@@ -568,6 +571,8 @@ def test_filter_pushdown_on_newly_added_column(
     filters to verify that the null handling and equality semantics
     are correct.
     """
+    from bodo.spawn.utils import run_rank0
+
     (
         dtype,
         use_dict_encoding,
@@ -712,7 +717,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "bic.FilterExpr('IS_NULL', [bic.ColumnRef('some_new_column')])",
+            "pie.IsNull('some_new_column')",
             "(ds.field('{some_new_column}').is_null())",
         ]
 
@@ -786,7 +791,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "bic.FilterExpr('IN', [bic.ColumnRef('some_new_column'), bic.Scalar(f0)])",
+            "pie.In('some_new_column', literal(f0))",
             "(ds.field('{some_new_column}').isin(f0))",
         ]
     else:
@@ -843,6 +848,9 @@ def test_filter_pushdown_filter_on_pruned_column(
     This stress-tests some of the ordering semantics and guarantees
     in our code. We test this with both streaming and non-streaming.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.spawn.utils import run_rank0
+
     table_name = "ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -924,6 +932,8 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
     Tests that Limit Pushdown is successfully enabled even when the
     table has gone through schema evolution.
     """
+    from bodo.tests.utils_jit import DistTestPipeline
+
     table_name = "ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -963,6 +973,8 @@ def test_read_partition_schema_evolved_table(
     more exhaustive tests, one can remove the filter in the
     pytest parameter for 'table_name'.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -970,7 +982,7 @@ def test_read_partition_schema_evolved_table(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = run_rank0(spark_reader.read_iceberg_table)(table_name, db_schema)
+    py_out = run_rank0(pyiceberg_reader.read_iceberg_table)(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -1011,6 +1023,9 @@ def test_write_partition_schema_evolved_table(
     more exhaustive tests, one can remove
     the filter in the pytest parameter for 'table_name'.
     """
+    from bodo.spawn.utils import run_rank0
+    from bodo.tests.utils_jit import reduce_sum
+
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_WRITE_TEST"
 
@@ -1044,10 +1059,7 @@ def test_write_partition_schema_evolved_table(
 
     passed = 1
     if bodo.get_rank() == 0:
-        spark = get_spark()
-        spark.sql("CLEAR CACHE;")
-        spark.sql(f"REFRESH TABLE hadoop_prod.iceberg_db.{table_name};")
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
 
         # For easier comparison, convert semi-structured columns in
         # both tables to comparable types:
@@ -1082,6 +1094,8 @@ def test_partition_schema_evolved_table_filter_pushdown(
     partition evolution, including schema evolution on the partition
     columns and vice-versa.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -1132,6 +1146,8 @@ def test_mixed_partition_schema_evolution(
     Smoke test that we can read from tables that have gone through
     both schema and partition evolution.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_MIXED_PARTITION_SCHEMA_EVOLUTION"
     part_table_name = "part_NUMERIC_TABLE_A_bucket_50"
@@ -1174,7 +1190,7 @@ def test_mixed_partition_schema_evolution(
             f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP PARTITION FIELD Bucket(30, A)"
         )
         append_to_iceberg_table(df, sql_schema, table_name, spark)
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup(df, sql_schema)
@@ -1200,6 +1216,8 @@ def test_evolved_struct_fields_within_list_and_map(
     Test that we are able to read tables after the sub-fields
     of a struct within list/map fields have been modified.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     table_name = "ADD_DROP_FIELD_TO_STRUCT_IN_LIST_TEST"
 
@@ -1436,7 +1454,7 @@ def test_evolved_struct_fields_within_list_and_map(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         py_out["F"] = py_out["F"].astype(
             pd.ArrowDtype(
                 pa.large_list(pa.struct([("A", pa.int32()), ("C", pa.string())]))
@@ -1475,6 +1493,8 @@ def test_rename_and_swap_struct_fields(
     where two sub-fields of a struct have been renamed and
     swapped over time.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_TEST"
 
@@ -1649,7 +1669,7 @@ def test_rename_and_swap_struct_fields(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup()
@@ -1678,6 +1698,8 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
     time the struct itself is within other nested types like
     another struct or a map or a list.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_INSIDE_OTHERS_TEST"
 
@@ -1924,7 +1946,7 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup()
@@ -1946,6 +1968,8 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
 
 
 def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_check):
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     table_name = "PARTSORT_EVOLUTION_TEST_TABLE"
 
@@ -2013,6 +2037,8 @@ def test_drop_and_readd_struct_field(
     and also when the struct itself is inside another nested field
     like another struct or a map or a list.
     """
+    from bodo.spawn.utils import run_rank0
+
     db_schema, warehouse_loc = iceberg_database()
     table_name = "DROP_AND_READD_STRUCT_FIELDS_TEST"
 
@@ -2117,7 +2143,7 @@ def test_drop_and_readd_struct_field(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         py_out["A"] = py_out["A"].astype(
             pd.ArrowDtype(pa.struct([("a", pa.int32()), ("b", pa.string())]))
         )

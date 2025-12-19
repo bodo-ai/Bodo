@@ -11,9 +11,8 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, compress_dir, uncompress_dir
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
-from bodo.utils.typing import BodoError
 
 
 def compress_file(fname):
@@ -30,24 +29,6 @@ def remove_files(file_names):
     if bodo.get_rank() == 0:
         for fname in file_names:
             os.remove(fname)
-    bodo.barrier()
-
-
-def compress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [
-            f
-            for f in os.listdir(dir_name)
-            if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0
-        ]:
-            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
-    bodo.barrier()
-
-
-def uncompress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
-            subprocess.run(["gunzip", fname], cwd=dir_name)
     bodo.barrier()
 
 
@@ -201,6 +182,7 @@ def test_json_read_multiline_object(datapath, memory_leak_check):
 
 def test_json_invalid_path_const(memory_leak_check):
     """test error raise when file path provided as constant but is invalid."""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return pd.read_json("in_data_invalid.json")
@@ -387,7 +369,7 @@ def test_json_write_orient(test_df, orient):
         else:
             dtype = None
 
-        return pd.read_json(fname, orient=orient, dtype=dtype)
+        return pd.read_json(fname, orient=orient, dtype=dtype, dtype_backend="pyarrow")
 
     json_write_test(test_impl, read_impl, test_df, "C")
 

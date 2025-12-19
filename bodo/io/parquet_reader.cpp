@@ -85,8 +85,8 @@ static void fill_input_file_name_col_dict(
 // -------- ParquetReader --------
 void ParquetReader::add_piece(PyObject* piece, int64_t num_rows) {
     // p = piece.path
-    PyObject* p = PyObject_GetAttrString(piece, "path");
-    const char* c_path = PyUnicode_AsUTF8(p);
+    PyObjectPtr p = PyObject_GetAttrString(piece, "path");
+    const char* c_path = PyUnicode_AsUTF8(p.get());
     file_paths.emplace_back(c_path);
     pieces_nrows.push_back(num_rows);
     if (this->input_file_name_col) {
@@ -112,40 +112,35 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows) {
 
     // for this parquet file: store partition value of each partition column
     get_partition_info(piece);
-    Py_DECREF(p);
 }
 
 PyObject* ParquetReader::get_dataset() {
     // partitioning = "hive" if use_hive else None
-    PyObject* partitioning = use_hive ? PyUnicode_FromString("hive") : Py_None;
+    PyObjectPtr partitioning =
+        use_hive ? PyUnicode_FromString("hive") : Py_None;
 
     // import bodo.io.parquet_pio
-    PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+    PyObjectPtr pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
     // ds = bodo.io.parquet_pio.get_parquet_dataset(path, get_row_counts=True,
     // filters, storage_options, read_categories=False, tot_rows_to_read,
     // schema, partitioning)
     PyObject* ds = PyObject_CallMethod(
-        pq_mod, "get_parquet_dataset", "OOOOOLOO", path, Py_True, expr_filters,
-        storage_options, Py_False, tot_rows_to_read, this->pyarrow_schema,
-        partitioning);
+        pq_mod, "get_parquet_dataset", "OOOOOLOO", this->path, Py_True,
+        expr_filters.get(), this->storage_options, Py_False, tot_rows_to_read,
+        this->pyarrow_schema, partitioning.get());
     if (ds == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
-    Py_DECREF(path);
-    Py_DECREF(pq_mod);
-    Py_DECREF(partitioning);
     if (PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
 
     this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
-    this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));
 
     // prefix = ds.prefix
-    PyObject* prefix_py = PyObject_GetAttrString(ds, "_prefix");
+    PyObjectPtr prefix_py = PyObject_GetAttrString(ds, "_prefix");
     this->prefix.assign(PyUnicode_AsUTF8(prefix_py));
-    Py_DECREF(prefix_py);
 
     this->filesystem = PyObject_GetAttrString(ds, "filesystem");
     return ds;
@@ -159,13 +154,13 @@ void ParquetReader::init_pq_scanner() {
 
     // Construct Python lists from C++ vectors for values used in
     // get_scanner_batches
-    PyObject* fnames_list_py = PyList_New(this->file_paths.size());
+    PyObjectPtr fnames_list_py = PyList_New(this->file_paths.size());
     size_t i = 0;
     for (auto p : this->file_paths) {
         PyList_SetItem(fnames_list_py, i++, PyUnicode_FromString(p.c_str()));
     }
 
-    PyObject* str_as_dict_cols_py =
+    PyObjectPtr str_as_dict_cols_py =
         PyList_New(this->str_as_dict_colnames.size());
     i = 0;
     for (auto field_name : this->str_as_dict_colnames) {
@@ -173,24 +168,24 @@ void ParquetReader::init_pq_scanner() {
                        PyUnicode_FromString(field_name.c_str()));
     }
 
-    PyObject* selected_fields_py = PyList_New(selected_fields.size());
+    PyObjectPtr selected_fields_py = PyList_New(selected_fields.size());
     i = 0;
     for (int field_num : selected_fields) {
         PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
     }
 
-    PyObject* batch_size_py =
-        batch_size == -1 ? Py_None : PyLong_FromLong(batch_size);
-    PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+    PyObjectPtr pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
     // This only loads record batches that match the filter.
     // get_scanner_batches returns a tuple with the record batch reader and the
     // updated offset for the first batch.
-    PyObject* scanner_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
-        this->expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
-        this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
-        this->count, this->ds_partitioning, this->pyarrow_schema,
-        batch_size_py);
+    PyObjectPtr scanner_batches_tup = PyObject_CallMethod(
+        pq_mod, "get_scanner_batches", "OOOdiOOLLOOLLL", fnames_list_py.get(),
+        this->expr_filters.get(), selected_fields_py.get(), avg_num_pieces,
+        int(parallel), this->filesystem.get(), str_as_dict_cols_py.get(),
+        this->start_row_first_piece, this->count, this->ds_partitioning.get(),
+        this->pyarrow_schema, batch_size == -1 ? 128 * 1024 : batch_size,
+        static_cast<int64_t>(this->batch_readahead),
+        static_cast<int64_t>(this->frag_readahead));
     if (scanner_batches_tup == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -199,21 +194,9 @@ void ParquetReader::init_pq_scanner() {
     this->reader = PyTuple_GetItem(scanner_batches_tup, 0);
     Py_INCREF(this->reader);  // call incref to keep the reference
 
-    this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
+    this->rows_to_skip =
+        PyLong_AsLongLong(PyTuple_GetItem(scanner_batches_tup, 1));
     this->rows_left_cur_piece = this->pieces_nrows[0];
-
-    Py_DECREF(pq_mod);
-    Py_DECREF(this->expr_filters);
-    Py_DECREF(selected_fields_py);
-    Py_DECREF(this->storage_options);
-    Py_DECREF(this->filesystem);
-    Py_DECREF(fnames_list_py);
-    Py_DECREF(str_as_dict_cols_py);
-    Py_DECREF(this->pyarrow_schema);
-    Py_DECREF(this->ds_partitioning);
-    Py_DECREF(batch_size_py);
-
-    Py_DECREF(scanner_batches_tup);
 }
 
 std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
@@ -260,7 +243,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
         while (this->rows_left_to_read > 0 &&
                this->out_batches->total_remaining <
                    static_cast<size_t>(this->batch_size)) {
-            PyObject* batch_py =
+            PyObjectPtr batch_py =
                 PyObject_CallMethod(this->reader, "read_next_batch", nullptr);
             if (batch_py == nullptr && PyErr_Occurred() &&
                 PyErr_ExceptionMatches(PyExc_StopIteration)) {
@@ -288,7 +271,6 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
                 throw std::runtime_error(
                     "ParquetReader::read_batch(): The next batch is null");
             }
-            Py_DECREF(batch_py);
             int64_t batch_offset =
                 std::min(this->rows_to_skip, batch->num_rows());
             int64_t length = std::min(this->rows_left_to_read,
@@ -372,7 +354,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
     size_t cur_piece = 0;
     int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
-    PyObject* batch_py = nullptr;
+    PyObjectPtr batch_py = nullptr;
     while ((batch_py = PyObject_CallMethod(this->reader, "read_next_batch",
                                            nullptr))) {
         auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
@@ -411,7 +393,6 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
             }
         }
         this->rows_to_skip -= batch_offset;
-        Py_DECREF(batch_py);
     }
 
     if (batch_py == nullptr && PyErr_Occurred() &&
@@ -473,24 +454,21 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
 }
 
 void ParquetReader::get_partition_info(PyObject* piece) {
-    PyObject* partition_keys_py =
+    PyObjectPtr partition_keys_py =
         PyObject_GetAttrString(piece, "partition_keys");
     if (PyList_Size(partition_keys_py) > 0) {
         part_vals.emplace_back();
         std::vector<int64_t>& vals = part_vals.back();
 
-        PyObject* part_keys_iter = PyObject_GetIter(partition_keys_py);
-        PyObject* key_val_tuple;
+        PyObjectPtr part_keys_iter = PyObject_GetIter(partition_keys_py);
+        PyObjectPtr key_val_tuple = nullptr;
         while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
             // PyTuple_GetItem returns borrowed reference, no need to decref
             PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
             int64_t part_val = PyLong_AsLongLong(part_val_py);
             vals.emplace_back(part_val);
-            Py_DECREF(key_val_tuple);
         }
-        Py_DECREF(part_keys_iter);
     }
-    Py_DECREF(partition_keys_py);
 }
 
 /**

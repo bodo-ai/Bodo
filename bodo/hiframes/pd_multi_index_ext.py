@@ -1,5 +1,7 @@
 """Support for MultiIndex type of Pandas"""
 
+from __future__ import annotations
+
 import operator
 
 import numba
@@ -28,12 +30,23 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
+IndexNameType = (
+    types.NoneType
+    | types.StringLiteral
+    | types.UnicodeType
+    | types.Integer
+    | types.IntegerLiteral
+)
+
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
 # the data into `levels` and `codes`
 # TODO: support factorizing similar to pd.core.algorithms._factorize_array
 class MultiIndexType(types.ArrayCompatible):
     """type class for pd.MultiIndex object"""
+
+    array_types: tuple[types.ArrayCompatible, ...]
+    names_typ: tuple[IndexNameType, ...]
 
     def __init__(self, array_types, names_typ=None, name_typ=None):
         # NOTE: store array types instead of just dtypes since we currently store whole
@@ -80,7 +93,10 @@ class MultiIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("data", types.Tuple(fe_type.array_types)),
-            ("names", types.Tuple(fe_type.names_typ)),
+            (
+                "names",
+                types.Tuple(fe_type.names_typ),
+            ),  # TODO: Use FrozenList like Pandas
             ("name", fe_type.name_typ),
         ]
         super().__init__(dmm, fe_type, members)
@@ -229,12 +245,12 @@ def from_product_overload(iterables, sortorder=None, names=None):
     setattr(types, t_name, multiindex_type)
     func_text = f"""
 def impl(iterables, sortorder=None, names=None):
-    with bodo.objmode(mi='{t_name}'):
+    with numba.objmode(mi='{t_name}'):
         mi = pd.MultiIndex.from_product(iterables, names=names)
     return mi
 """
     loc_vars = {}
-    exec(func_text, {"pd": pd, "bodo": bodo}, loc_vars)
+    exec(func_text, {"pd": pd, "bodo": bodo, "numba": numba}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 

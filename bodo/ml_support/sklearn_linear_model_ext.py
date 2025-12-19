@@ -3,7 +3,9 @@
 import sys
 import warnings
 
+import numba
 import numpy as np
+import pandas as pd
 import sklearn.feature_extraction
 from numba.extending import (
     overload,
@@ -15,7 +17,6 @@ from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 
 import bodo
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_predict_log_proba,
     parallel_predict_proba,
@@ -44,7 +45,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoSGDClassifierType = install_py_obj_class(
+BodoSGDClassifierType, _ = install_py_obj_class(
     types_name="sgd_classifier_type",
     python_type=sklearn.linear_model.SGDClassifier,
     module=this_module,
@@ -77,8 +78,6 @@ def sklearn_linear_model_SGDClassifier_overload(
     warm_start=False,
     average=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_SGDClassifier_impl(
         loss="hinge",
         penalty="l2",
@@ -102,7 +101,7 @@ def sklearn_linear_model_SGDClassifier_overload(
         warm_start=False,
         average=False,
     ):  # pragma: no cover
-        with bodo.objmode(m="sgd_classifier_type"):
+        with numba.objmode(m="sgd_classifier_type"):
             m = sklearn.linear_model.SGDClassifier(
                 loss=loss,
                 penalty=penalty,
@@ -153,9 +152,13 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     else:
         raise ValueError(f"loss {m.loss} not supported")
 
-    regC = False
-    if isinstance(m, sklearn.linear_model.SGDRegressor):
-        regC = True
+    if isinstance(y_classes, pd.arrays.ArrowExtensionArray):
+        y_classes = y_classes.to_numpy()
+
+    if not (regC := isinstance(m, sklearn.linear_model.SGDRegressor)):
+        # Function used to produce input for loss function
+        predict_func = m.predict_proba if m.loss == "log_loss" else m.decision_function
+
     for _ in range(m.max_iter):
         if regC:
             m.partial_fit(X, y)
@@ -170,12 +173,12 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
             y_pred = m.predict(X)
             cur_loss = loss_func(y, y_pred)
         else:
-            y_pred = m.decision_function(X)
+            y_pred = predict_func(X)
             cur_loss = loss_func(y, y_pred, labels=y_classes)
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
         # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
-        if m.tol > np.NINF and cur_loss > best_loss - m.tol * total_datasize:
+        if m.tol > -np.inf and cur_loss > best_loss - m.tol * total_datasize:
             no_improvement_count += 1
         else:
             no_improvement_count = 0
@@ -197,7 +200,6 @@ def overload_sgdc_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    check_sklearn_version()
     """
     Provide implementations for the fit function.
     In case input is replicated, we simply call sklearn,
@@ -232,7 +234,7 @@ def overload_sgdc_model_fit(
             y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
             y_classes = bodo.allgatherv(y_classes, False)
 
-            with bodo.objmode(m="sgd_classifier_type"):
+            with numba.objmode(m="sgd_classifier_type"):
                 m = fit_sgd(m, X, y, y_classes, _is_data_distributed)
 
             return m
@@ -249,7 +251,7 @@ def overload_sgdc_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with bodo.objmode(m="sgd_classifier_type"):
+            with numba.objmode(m="sgd_classifier_type"):
                 m = m.fit(X, y, coef_init, intercept_init, sample_weight)
             return m
 
@@ -291,7 +293,7 @@ def get_sgdc_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:,:]"):
+        with numba.objmode(result="float64[:,:]"):
             result = m.coef_
         return result
 
@@ -310,7 +312,7 @@ def get_sgdc_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoSGDRegressorType = install_py_obj_class(
+BodoSGDRegressorType, _ = install_py_obj_class(
     types_name="sgd_regressor_type",
     python_type=sklearn.linear_model.SGDRegressor,
     module=this_module,
@@ -341,8 +343,6 @@ def sklearn_linear_model_SGDRegressor_overload(
     warm_start=False,
     average=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_SGDRegressor_impl(
         loss="squared_error",
         penalty="l2",
@@ -364,7 +364,7 @@ def sklearn_linear_model_SGDRegressor_overload(
         warm_start=False,
         average=False,
     ):  # pragma: no cover
-        with bodo.objmode(m="sgd_regressor_type"):
+        with numba.objmode(m="sgd_regressor_type"):
             m = sklearn.linear_model.SGDRegressor(
                 loss=loss,
                 penalty=penalty,
@@ -401,8 +401,6 @@ def overload_sgdr_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    check_sklearn_version()
-
     if is_overload_true(_is_data_distributed):
         if not is_overload_none(sample_weight):
             raise BodoError(
@@ -428,7 +426,7 @@ def overload_sgdr_model_fit(
             _is_data_distributed=False,
         ):  # pragma: no cover
             # TODO: Rebalance the data X and y to be the same size on every rank
-            with bodo.objmode(m="sgd_regressor_type"):
+            with numba.objmode(m="sgd_regressor_type"):
                 m = fit_sgd(m, X, y, _is_data_distributed)
 
             bodo.barrier()
@@ -447,7 +445,7 @@ def overload_sgdr_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with bodo.objmode(m="sgd_regressor_type"):
+            with numba.objmode(m="sgd_regressor_type"):
                 m = m.fit(X, y, coef_init, intercept_init, sample_weight)
             return m
 
@@ -480,7 +478,7 @@ def overload_sgdr_model_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLogisticRegressionType = install_py_obj_class(
+BodoLogisticRegressionType, _ = install_py_obj_class(
     types_name="logistic_regression_type",
     python_type=sklearn.linear_model.LogisticRegression,
     module=this_module,
@@ -507,8 +505,6 @@ def sklearn_linear_model_logistic_regression_overload(
     n_jobs=None,
     l1_ratio=None,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_logistic_regression_impl(
         penalty="l2",
         dual=False,
@@ -526,7 +522,7 @@ def sklearn_linear_model_logistic_regression_overload(
         n_jobs=None,
         l1_ratio=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="logistic_regression_type"):
+        with numba.objmode(m="logistic_regression_type"):
             m = sklearn.linear_model.LogisticRegression(
                 penalty=penalty,
                 dual=dual,
@@ -552,7 +548,7 @@ def sklearn_linear_model_logistic_regression_overload(
 @register_jitable
 def _raise_SGD_warning(sgd_name):
     """raise a BodoWarning for distributed training with SGD instead of user algorithm."""
-    with bodo.no_warning_objmode:
+    with bodo.ir.object_mode.no_warning_objmode:
         warnings.warn(
             f"Data is distributed so Bodo will fit model with SGD solver optimization ({sgd_name})",
             BodoWarning,
@@ -574,7 +570,7 @@ def overload_logistic_regression_fit(
         def _logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -591,7 +587,7 @@ def overload_logistic_regression_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDClassifier")
-            with bodo.objmode(clf="sgd_classifier_type"):
+            with numba.objmode(clf="sgd_classifier_type"):
                 # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
                 if m.l1_ratio is None:
                     l1_ratio = 0.15
@@ -611,7 +607,7 @@ def overload_logistic_regression_fit(
                     l1_ratio=l1_ratio,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with bodo.objmode():
+            with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -656,7 +652,7 @@ def get_logisticR_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:,:]"):
+        with numba.objmode(result="float64[:,:]"):
             result = m.coef_
         return result
 
@@ -671,7 +667,7 @@ def get_logisticR_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLinearRegressionType = install_py_obj_class(
+BodoLinearRegressionType, _ = install_py_obj_class(
     types_name="linear_regression_type",
     python_type=sklearn.linear_model.LinearRegression,
     module=this_module,
@@ -688,15 +684,13 @@ def sklearn_linear_model_linear_regression_overload(
     n_jobs=None,
     positive=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_linear_regression_impl(
         fit_intercept=True,
         copy_X=True,
         n_jobs=None,
         positive=False,
     ):  # pragma: no cover
-        with bodo.objmode(m="linear_regression_type"):
+        with numba.objmode(m="linear_regression_type"):
             m = sklearn.linear_model.LinearRegression(
                 fit_intercept=fit_intercept,
                 copy_X=copy_X,
@@ -723,7 +717,7 @@ def overload_linear_regression_fit(
         def _linear_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -740,14 +734,14 @@ def overload_linear_regression_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with bodo.objmode(clf="sgd_regressor_type"):
+            with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_error",
                     penalty=None,
                     fit_intercept=m.fit_intercept,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with bodo.objmode():
+            with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
             return m
@@ -778,7 +772,7 @@ def get_lr_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.coef_
         return result
 
@@ -793,7 +787,7 @@ def get_lr_coef(m):
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoLassoType = install_py_obj_class(
+BodoLassoType, _ = install_py_obj_class(
     types_name="lasso_type",
     python_type=sklearn.linear_model.Lasso,
     module=this_module,
@@ -815,8 +809,6 @@ def sklearn_linear_model_lasso_overload(
     random_state=None,
     selection="cyclic",
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_lasso_impl(
         alpha=1.0,
         fit_intercept=True,
@@ -829,7 +821,7 @@ def sklearn_linear_model_lasso_overload(
         random_state=None,
         selection="cyclic",
     ):  # pragma: no cover
-        with bodo.objmode(m="lasso_type"):
+        with numba.objmode(m="lasso_type"):
             m = sklearn.linear_model.Lasso(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
@@ -863,7 +855,7 @@ def overload_lasso_fit(
         def _lasso_fit_impl(
             m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight, check_input)
             return m
 
@@ -884,7 +876,7 @@ def overload_lasso_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with bodo.objmode(clf="sgd_regressor_type"):
+            with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_error",
                     penalty="l1",
@@ -896,7 +888,7 @@ def overload_lasso_fit(
                     random_state=m.random_state,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with bodo.objmode():
+            with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -931,7 +923,7 @@ def overload_lasso_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRidgeType = install_py_obj_class(
+BodoRidgeType, _ = install_py_obj_class(
     types_name="ridge_type",
     python_type=sklearn.linear_model.Ridge,
     module=this_module,
@@ -951,8 +943,6 @@ def sklearn_linear_model_ridge_overload(
     positive=False,
     random_state=None,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_ridge_impl(
         alpha=1.0,
         fit_intercept=True,
@@ -963,7 +953,7 @@ def sklearn_linear_model_ridge_overload(
         positive=False,
         random_state=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="ridge_type"):
+        with numba.objmode(m="ridge_type"):
             m = sklearn.linear_model.Ridge(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
@@ -994,7 +984,7 @@ def overload_ridge_fit(
         def _ridge_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -1011,7 +1001,7 @@ def overload_ridge_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with bodo.objmode(clf="sgd_regressor_type"):
+            with numba.objmode(clf="sgd_regressor_type"):
                 if m.max_iter is None:
                     max_iter = 1000
                 else:
@@ -1026,7 +1016,7 @@ def overload_ridge_fit(
                     random_state=m.random_state,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with bodo.objmode():
+            with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -1058,7 +1048,7 @@ def get_ridge_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.coef_
         return result
 

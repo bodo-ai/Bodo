@@ -10,12 +10,11 @@ from typing import cast
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
 import bodo
+from bodo.mpi4py import MPI
 
 # This gateway is always None on every rank but rank 0,
 # it is initialized by the get_gateway call.
 gateway = None
-
-from bodo.libs.distributed_api import bcast_scalar
 
 
 def get_java_path() -> str:
@@ -36,8 +35,8 @@ def get_java_path() -> str:
             if java_home != os.path.join(conda_prefix, "lib", "jvm"):
                 warnings.warn(
                     "$JAVA_HOME is currently set to a location that isn't installed by Conda. "
-                    "It is recommended that you use OpenJDK v11 from Conda with BodoSQL. To do so, first run\n"
-                    "    conda install openjdk=11 -c conda-forge\n"
+                    "It is recommended that you use OpenJDK v17 from Conda with BodoSQL. To do so, first run\n"
+                    "    conda install openjdk=17 -c conda-forge\n"
                     "and then reactivate your environment via\n"
                     f"    conda deactivate && conda activate {conda_prefix}"
                 )
@@ -46,8 +45,8 @@ def get_java_path() -> str:
         else:
             warnings.warn(
                 "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed by not reactivates. BodoSQL will default to using you system's Java."
-                "It is recommended that you use OpenJDK v11 from Conda with BodoSQL. To do so, first run\n"
-                "    conda install openjdk=11 -c conda-forge\n"
+                "It is recommended that you use OpenJDK v17 from Conda with BodoSQL. To do so, first run\n"
+                "    conda install openjdk=17 -c conda-forge\n"
                 "and then reactivate your environment via\n"
                 f"    conda deactivate && conda activate {conda_prefix}"
             )
@@ -80,6 +79,15 @@ def get_gateway():
 
         # Die on exit will close the gateway server when this python process exits or is killed.
         try:
+            out_fd = sys.stdout
+            err_fd = sys.stderr
+
+            # Jupyter does not support writing to stderr
+            # https://discourse.jupyter.org/t/how-to-know-from-python-script-if-we-are-in-jupyterlab/23993/4
+            if bodo.spawn.utils.is_jupyter_on_windows():
+                out_fd = None
+                err_fd = None
+
             java_path = get_java_path()
             port_no = cast(
                 int,
@@ -87,8 +95,10 @@ def get_gateway():
                     jarpath=full_path,
                     java_path=java_path,
                     die_on_exit=True,
-                    redirect_stdout=sys.stdout,
-                    redirect_stderr=sys.stderr,
+                    redirect_stdout=out_fd,
+                    redirect_stderr=err_fd,
+                    # Required by Arrow: https://arrow.apache.org/docs/java/install.html
+                    javaopts=["--add-opens=java.base/java.nio=ALL-UNNAMED"],
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
@@ -96,8 +106,9 @@ def get_gateway():
             msg = f"Error when launching the BodoSQL JVM. {str(e)}"
             failed = True
 
-    failed = bcast_scalar(failed)
-    msg = bcast_scalar(msg)
+    comm = MPI.COMM_WORLD
+    failed = comm.bcast(failed)
+    msg = comm.bcast(msg)
     if failed:
         raise Exception(msg)
     return gateway

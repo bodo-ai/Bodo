@@ -1,12 +1,15 @@
 """IR node for the parquet data access"""
 
-from typing import TYPE_CHECKING
+from __future__ import annotations
+
+import typing as pt
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.dataset as ds
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
@@ -19,8 +22,10 @@ from numba.core.ir_utils import (
 )
 from numba.extending import (
     NativeValue,
+    box,
     intrinsic,
     models,
+    overload,
     register_model,
     unbox,
 )
@@ -32,16 +37,14 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
+    numba_to_pyarrow_schema,
+    pyarrow_schema_type,
     storage_options_dict_type,
 )
-from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
-    ParquetFileInfo,
-    get_filters_pyobject,
     parquet_file_schema,
-    parquet_predicate_type,
 )
 from bodo.ir.connector import Connector
 from bodo.libs.array import (
@@ -51,6 +54,7 @@ from bodo.libs.array import (
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
@@ -59,7 +63,10 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
+    FileInfo,
     FilenameType,
+    FileSchema,
+    get_overload_const_str,
     is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
@@ -71,13 +78,41 @@ from bodo.utils.utils import (
     sanitize_varname,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if pt.TYPE_CHECKING:  # pragma: no cover
     from llvmlite.ir.builder import IRBuilder
     from numba.core.base import BaseContext
 
 
 ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
 ll.add_symbol("pq_reader_init_py_entry", arrow_cpp.pq_reader_init_py_entry)
+
+
+class ParquetPredicateType(types.Type):
+    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetPredicateType()")
+
+
+parquet_predicate_type = ParquetPredicateType()
+types.parquet_predicate_type = parquet_predicate_type  # type: ignore
+register_model(ParquetPredicateType)(models.OpaqueModel)
+
+
+@unbox(ParquetPredicateType)
+def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetPredicateType)
+def box_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 class ReadParquetFilepathType(types.Opaque):
@@ -101,6 +136,41 @@ def unbox_read_parquet_fpath_type(typ, val, c):
     return NativeValue(val)
 
 
+class ParquetFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a parquet dataset"""
+
+    def __init__(
+        self,
+        columns,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
+        use_hive=True,
+    ):
+        self.columns = columns  # columns to select from parquet dataset
+        self.storage_options = storage_options
+        self.input_file_name_col = input_file_name_col
+        self.read_as_dict_cols = read_as_dict_cols
+        self.use_hive = use_hive
+        super().__init__()
+
+    def _get_schema(self, fname) -> FileSchema:
+        try:
+            return parquet_file_schema(
+                fname,
+                selected_columns=self.columns,
+                storage_options=self.storage_options,
+                input_file_name_col=self.input_file_name_col,
+                read_as_dict_cols=self.read_as_dict_cols,
+                use_hive=self.use_hive,
+            )
+        except OSError as e:
+            if "non-file path" in str(e):
+                raise FileNotFoundError(str(e))
+            raise
+
+
 class ParquetHandler:
     """analyze and transform parquet IO calls"""
 
@@ -114,7 +184,7 @@ class ParquetHandler:
         self,
         file_name,
         lhs: ir.Var,
-        columns,
+        columns: list[str],
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
@@ -162,13 +232,12 @@ class ParquetHandler:
             # FilenameType. If so, the schema will be part of the type
             var_def = guard(get_definition, self.func_ir, file_name)
             if isinstance(var_def, ir.Arg) and isinstance(
-                self.args[var_def.index], FilenameType
+                (typ := self.args[var_def.index]), FilenameType
             ):
-                typ: FilenameType = self.args[var_def.index]
                 (
                     col_names,
                     col_types,
-                    index_col,
+                    index_cols,
                     col_indices,
                     partition_names,
                     unsupported_columns,
@@ -179,7 +248,7 @@ class ParquetHandler:
                 (
                     col_names,
                     col_types,
-                    index_col,
+                    index_cols,
                     col_indices,
                     partition_names,
                     unsupported_columns,
@@ -200,7 +269,7 @@ class ParquetHandler:
             col_types_total = list(table_types.values())
 
             # TODO: allow specifying types of only selected columns
-            col_names: list[str] = all_col_names if columns is None else columns
+            col_names = all_col_names if columns is None else columns
             col_indices = [all_col_names_map[c] for c in col_names]
             col_types = [col_types_total[all_col_names_map[c]] for c in col_names]
 
@@ -210,9 +279,7 @@ class ParquetHandler:
             # while; newer versions added options to specify the index in
             # metadata only. Need to investigate and/or have another parameter
             # TODO: https://bodo.atlassian.net/browse/BE-4110
-            index_col = next(
-                (x for x in col_names if x.startswith("__index_level_")), None
-            )
+            index_cols = [x for x in col_names if x.startswith("__index_level_")]
 
             partition_names = []
             # If a user provides the schema, all types must be valid Bodo types.
@@ -222,17 +289,15 @@ class ParquetHandler:
                 DataFrameType(data=tuple(col_types), columns=tuple(col_names)),
             )
 
-        index_colname = (
-            None if (isinstance(index_col, dict) or index_col is None) else index_col
-        )
-        # If we have an index column, remove it from the type to simplify the table.
-        index_column_index = None
-        index_column_type = types.none
-        if index_colname:
-            type_index = col_names.index(index_colname)
+        index_column_info = {}
+        for index_col in index_cols:
+            if isinstance(index_col, dict):
+                continue
+            type_index = col_names.index(index_col)
             index_column_index = col_indices.pop(type_index)
             index_column_type = col_types.pop(type_index)
             col_names.pop(type_index)
+            index_column_info[index_column_index] = index_column_type
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -258,8 +323,7 @@ class ParquetHandler:
                 loc,
                 partition_names,
                 storage_options,
-                index_column_index if use_index else None,
-                index_column_type if use_index else types.none,
+                index_column_info,
                 input_file_name_col,
                 unsupported_columns,
                 unsupported_arrow_types,
@@ -270,7 +334,7 @@ class ParquetHandler:
             )
         ]
 
-        return col_names, data_arrs, index_col, nodes, col_types, index_column_type
+        return col_names, data_arrs, index_cols, nodes, col_types
 
 
 class ParquetReader(Connector):
@@ -288,8 +352,7 @@ class ParquetReader(Connector):
         partition_names,
         # These are the same storage_options that would be passed to pandas
         storage_options,
-        index_column_index,
-        index_column_type,
+        index_column_info: dict[int, types.ArrayCompatible],
         input_file_name_col,
         unsupported_columns,
         unsupported_arrow_types,
@@ -329,8 +392,7 @@ class ParquetReader(Connector):
         self.filters = None
         # storage_options passed to pandas during read_parquet
         self.storage_options = storage_options
-        self.index_column_index = index_column_index
-        self.index_column_type = index_column_type
+        self.index_column_info = index_column_info
         # Columns within the output table type that are actually used.
         # These will be updated during optimzations and do not contain
         # the actual columns numbers that should be loaded. For more
@@ -352,9 +414,16 @@ class ParquetReader(Connector):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return f"({self.df_out_varname}) = ReadParquet({self.file_name.name}, {self.out_table_col_names}, {self.col_indices}, {self.out_table_col_types}, {self.original_table_col_types}, {self.original_df_colnames}, {self.out_vars}, {self.partition_names}, {self.filters}, {self.storage_options}, {self.index_column_index}, {self.index_column_type}, {self.out_used_cols}, {self.input_file_name_col}, {self.unsupported_columns}, {self.unsupported_arrow_types}, {self.arrow_schema}, chunksize={self.chunksize}, sql_op_id={self.sql_op_id})"
+        return f"({self.df_out_varname}) = ReadParquet({self.file_name.name}, {self.out_table_col_names}, {self.col_indices}, {self.out_table_col_types}, {self.original_table_col_types}, {self.original_df_colnames}, {self.out_vars}, {self.partition_names}, {self.filters}, {self.storage_options}, {self.index_column_info}, {self.out_used_cols}, {self.input_file_name_col}, {self.unsupported_columns}, {self.unsupported_arrow_types}, {self.arrow_schema}, chunksize={self.chunksize}, sql_op_id={self.sql_op_id})"
 
-    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+    def _index_type(self) -> types.ArrayCompatible | types.NoneType:
+        if len(self.index_column_info) == 0:
+            return types.none
+        if len(self.index_column_info) == 1:
+            return next(iter(self.index_column_info.values()))
+        return StructArrayType(tuple(self.index_column_info.values()))
+
+    def out_vars_and_types(self) -> list[tuple[str, pt.Any]]:
         return (
             [
                 (
@@ -365,7 +434,7 @@ class ParquetReader(Connector):
             if self.is_streaming
             else [
                 (self.out_vars[0].name, TableType(tuple(self.out_table_col_types))),
-                (self.out_vars[1].name, self.index_column_type),
+                (self.out_vars[1].name, self._index_type()),
             ]
         )
 
@@ -401,9 +470,8 @@ def remove_dead_pq(
 
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
-        # To do this we mark the index_column_index as None
-        pq_node.index_column_index = None
-        pq_node.index_column_type = types.none
+        # To do this we mark the index_column_info as empty
+        pq_node.index_column_info = {}
 
     # TODO: Update the usecols if only 1 of the variables is live.
     return pq_node
@@ -556,8 +624,7 @@ def pq_distributed_run(
         extra_args,
         parallel,
         meta_head_only_info,
-        pq_node.index_column_index,
-        pq_node.index_column_type,
+        pq_node.index_column_info,
         pq_node.input_file_name_col,
         not pq_node.is_live_table,
         pq_node.arrow_schema,
@@ -602,13 +669,14 @@ def pq_distributed_run(
     nodes[-2].target = pq_node.out_vars[0]
     # assign output index array
     nodes[-1].target = pq_node.out_vars[1]
+
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert not (pq_node.index_column_index is None and not pq_node.is_live_table), (
+    assert not (len(pq_node.index_column_info) == 0 and not pq_node.is_live_table), (
         "At most one of table and index should be dead if the Parquet IR node is live"
     )
-    if pq_node.index_column_index is None:
+    if len(pq_node.index_column_info) == 0:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
     elif not pq_node.is_live_table:
@@ -625,8 +693,7 @@ def pq_reader_params(
     partition_names,
     input_file_name_col,
     out_used_cols,
-    index_column_index,
-    index_column_type,
+    index_column_info: dict,
     out_types: list[types.ArrayCompatible],
 ):
     # head-only optimization: we may need to read only the first few rows
@@ -677,7 +744,7 @@ def pq_reader_params(
             # Track which partitions are valid to simplify filtering later
             partition_indices.add(col_indices[i])
 
-    if index_column_index is not None:
+    for index_column_index in index_column_info.keys():
         selected_cols.append(index_column_index)
     selected_cols = sorted(selected_cols)
     selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
@@ -692,8 +759,8 @@ def pq_reader_params(
     nullable_cols = [
         (
             int(is_nullable_ignore_sentinels(out_types[col_indices_map[col_in_idx]]))
-            if col_in_idx != index_column_index
-            else int(is_nullable_ignore_sentinels(index_column_type))
+            if col_in_idx not in index_column_info
+            else int(is_nullable_ignore_sentinels(index_column_info[col_in_idx]))
         )
         for col_in_idx in selected_cols
     ]
@@ -702,8 +769,8 @@ def pq_reader_params(
     # in dictionary-encoded format
     str_as_dict_cols = []
     for col_in_idx in selected_cols:
-        if col_in_idx == index_column_index:
-            t = index_column_type
+        if col_in_idx in index_column_info:
+            t = index_column_info[col_in_idx]
         else:
             t = out_types[col_indices_map[col_in_idx]]
         if t == dict_str_arr_type:
@@ -758,6 +825,31 @@ def pq_reader_params(
     )
 
 
+def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
+    expr_filter_str_val = get_overload_const_str(expr_filter_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
+    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
+    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
+    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["bodo"] = bodo
+    glbs["ds"] = ds
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
+
+
 def _gen_pq_reader_py(
     col_names: list[str],
     col_indices,
@@ -769,8 +861,7 @@ def _gen_pq_reader_py(
     extra_args,
     is_parallel,
     meta_head_only_info,
-    index_column_index,
-    index_column_type,
+    index_column_info: dict,
     input_file_name_col,
     is_dead_table: bool,
     pyarrow_schema: pa.Schema,
@@ -798,22 +889,18 @@ def _gen_pq_reader_py(
         partition_names,
         input_file_name_col,
         out_used_cols,
-        index_column_index,
-        index_column_type,
+        index_column_info,
         out_types,
     )
 
-    index_arr_ind = (
-        selected_cols_map[index_column_index]
-        if index_column_index is not None
-        else None
-    )
-    index_arr_type = index_column_type
+    index_arr_inds = {
+        selected_cols_map[idx]: types for idx, types in index_column_info.items()
+    }
     py_table_type = TableType(tuple(out_types))
     if is_dead_table:
         py_table_type = types.none
 
-    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # table_idx is a list of index values for each array in the bodo.types.TableType being loaded from C++.
     # For a list column, the value is an integer which is the location of the column in the C++ Table.
     # Dead columns have the value -1.
 
@@ -874,11 +961,10 @@ def _gen_pq_reader_py(
         sanitized_col_names,
         sel_partition_names_map,
         input_file_name_col,
-        index_arr_ind,
+        index_arr_inds,
         use_hive,
         is_dead_table,
         table_idx,
-        index_arr_type,
         pyarrow_schema_no_meta,
         *extra_args,
     )
@@ -948,10 +1034,22 @@ def _gen_pq_reader_py(
         if len(out_used_cols) == 0:
             # Set the table length using the total rows if don't load any columns
             func_text += "    T = set_table_len(T, local_rows)\n"
-    if index_column_index is None:
+
+    if len(index_arr_inds) == 0:
         func_text += "    index_arr = None\n"
+    elif len(index_arr_inds) == 1:
+        func_text += f"    index_arr = array_from_cpp_table(out_table, {next(iter(index_arr_inds))}, index_arr_types[0])\n"
     else:
-        func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
+        index_names = list(map(str, index_arr_inds.keys()))
+        func_text += "    index_arr = init_struct_arr({}, ({}), np.empty((local_rows + 7) >> 3, np.uint8), ({}))\n".format(
+            len(index_arr_inds),
+            ", ".join(
+                f"array_from_cpp_table(out_table, {i}, index_arr_types[{idx}])"
+                for idx, i in enumerate(index_names)
+            ),
+            ", ".join(f'"f{idx}"' for idx in range(len(index_arr_inds))),
+        )
+
     func_text += "    delete_table(out_table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return (total_rows, T, index_arr)\n"
@@ -962,7 +1060,7 @@ def _gen_pq_reader_py(
         f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
         f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
         f"pyarrow_schema_{call_id}": pyarrow_schema_no_meta,
-        "index_arr_type": index_arr_type,
+        "index_arr_types": tuple(index_arr_inds.values()),
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
@@ -974,12 +1072,13 @@ def _gen_pq_reader_py(
         "np": np,
         "pd": pd,
         "bodo": bodo,
+        "ds": ds,
         "get_node_portion": bodo.libs.distributed_api.get_node_portion,
         "set_table_len": bodo.hiframes.table.set_table_len,
+        "init_struct_arr": bodo.libs.struct_arr_ext.init_struct_arr,
     }
 
-    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, globals())
-
+    pq_reader_py = bodo_exec(func_text, glbs, loc_vars, __name__)
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True, cache=True)
     return jit_func
 
@@ -995,8 +1094,7 @@ def _gen_pq_reader_chunked_py(
     extra_args,
     is_parallel,
     meta_head_only_info,
-    index_column_index,
-    index_column_type,
+    index_column_info: dict,
     input_file_name_col,
     is_dead_table: bool,
     pyarrow_schema: pa.Schema,
@@ -1050,8 +1148,7 @@ def _gen_pq_reader_chunked_py(
         partition_names,
         input_file_name_col,
         out_used_cols,
-        index_column_index,
-        index_column_type,
+        index_column_info,
         out_table_col_types,
     )
 
@@ -1109,6 +1206,7 @@ def _gen_pq_reader_chunked_py(
         "arrow_reader_t": ArrowReaderType(col_names, out_table_col_types),
         "np": np,
         "bodo": bodo,
+        "ds": ds,
     }
 
     loc_vars = {}
@@ -1121,7 +1219,7 @@ def _gen_pq_reader_chunked_py(
 def get_fname_pyobject(fname):
     """Convert fname native object (which can be a string or a list of strings)
     to its corresponding PyObject by going through unboxing and boxing"""
-    with bodo.no_warning_objmode(fname_py="read_parquet_fpath_type"):
+    with bodo.ir.object_mode.no_warning_objmode(fname_py="read_parquet_fpath_type"):
         fname_py = fname
     return fname_py
 
@@ -1210,7 +1308,7 @@ def pq_reader_init_py_entry(
         "pq_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
     )
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [

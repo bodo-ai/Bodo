@@ -35,9 +35,13 @@ def build_libs(obj):
         )
         to_jar_path = os.path.join("bodosql", "jars")
         os.makedirs(to_jar_path, exist_ok=True)
-        os.rename(
-            executable_jar_path, os.path.join(to_jar_path, "bodosql-executable.jar")
-        )
+        dst_jar_path = os.path.join(to_jar_path, "bodosql-executable.jar")
+        # NOTE: rename fails on Windows if destination exists
+        try:
+            os.remove(dst_jar_path)
+        except OSError:
+            pass
+        os.rename(executable_jar_path, dst_jar_path)
     except ExecError as e:
         obj.error("maven build failed with error:", e)
 

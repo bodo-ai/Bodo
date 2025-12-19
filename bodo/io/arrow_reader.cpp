@@ -10,7 +10,9 @@
 #include <arrow/dataset/scanner.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/status.h>
+#include <arrow/type_fwd.h>
 #include <arrow/util/future.h>
+#include <arrow/util/thread_pool.h>
 #include <fmt/format.h>
 #include <listobject.h>
 #include <pyerrors.h>
@@ -816,15 +818,14 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
             return out_array;
         }
 
-        std::shared_ptr<::arrow::Array> out_arrow_array;
-        // TODO make this more efficient:
-        // This copies to new buffers managed by Arrow, and then we copy
-        // again to our own buffers in
-        // info_to_array https://bodo.atlassian.net/browse/BE-1426
-        out_arrow_array = arrow::Concatenate(arrays, pool).ValueOrDie();
+        arrow::Result<std::shared_ptr<arrow::Array>> res =
+            arrow::Concatenate(arrays, pool);
+        std::shared_ptr<arrow::Array> concat_res;
+        CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
         arrays.clear();  // memory of each array will be freed now
 
-        out_array = arrow_array_to_bodo(out_arrow_array, pool);
+        out_array = arrow_array_to_bodo(concat_res, pool);
+
         return out_array;
     }
 
@@ -869,19 +870,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
-        bool is_categorical = arrow::is_dictionary(type);
-        if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
-            is_categorical) {
-            if (is_categorical) {
-                auto dict_type =
-                    std::dynamic_pointer_cast<arrow::DictionaryType>(
-                        field->type());
-                columns.push_back(std::make_unique<PrimitiveBuilder>(
-                    dict_type->index_type(), num_rows, false, is_categorical));
-            } else {
-                columns.push_back(std::make_unique<PrimitiveBuilder>(
-                    field->type(), num_rows, nullable_field, is_categorical));
-            }
+        if (arrow::is_primitive(type) || arrow::is_decimal(type)) {
+            columns.push_back(std::make_unique<PrimitiveBuilder>(
+                field->type(), num_rows, nullable_field, false));
         } else if (arrow::is_string(type) &&
                    (str_as_dict_cols.count(field->name()) > 0)) {
             if (create_dict_from_string) {
@@ -1643,21 +1634,6 @@ table_info* ArrowReader::unify_table_with_dictionary_builders(
         }
     }
     return new table_info(out_arrs, table->nrows());
-}
-
-std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        throw std::runtime_error(msg); \
-    }
-
-    CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
-    std::shared_ptr<arrow::Schema> schema;
-    CHECK_ARROW_READER_AND_ASSIGN(
-        arrow::py::unwrap_schema(pyarrow_schema),
-        "Unwrapping Arrow Schema from Python Object Failed", schema);
-    return schema;
-#undef CHECK
 }
 
 /**

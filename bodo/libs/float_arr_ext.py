@@ -29,11 +29,6 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hstr_ext  # noqa: F401  # isort:skip
-
-
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
@@ -309,7 +304,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_float_arr_ext_alloc_float_array = (
 )
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem, no_unliteral=True, jit_options={"cache": True})
 def float_arr_getitem(A, ind):  # pragma: no cover
     if not isinstance(A, FloatingArrayType):
         return
@@ -364,7 +359,7 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
     typ_err_msg = f"setitem for FloatingArray with indexing type {idx} received an incorrect 'value' type {val}."
 
     is_scalar = isinstance(
-        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+        val, (types.Integer, types.Boolean, types.Float, bodo.types.Decimal128Type)
     )
 
     # scalar case
@@ -448,7 +443,7 @@ def numpy_arr_setitem(A, idx, val):
     return impl_np_setitem_float_arr
 
 
-@overload(len, no_unliteral=True)
+@overload(len, no_unliteral=True, jit_options={"cache": True})
 def overload_float_arr_len(A):  # pragma: no cover
     if isinstance(A, FloatingArrayType):
         return lambda A: len(A._data)

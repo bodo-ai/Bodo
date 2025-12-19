@@ -1,19 +1,23 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.adapter.pandas.PandasTableScan
 import com.bodosql.calcite.application.PythonLoggers.toggleLoggers
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoGlueCatalog
 import com.bodosql.calcite.catalog.BodoS3TablesCatalog
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.FileSystemCatalog
+import com.bodosql.calcite.catalog.IcebergRESTCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalog
-import com.bodosql.calcite.catalog.TabularCatalog
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.schema.LocalSchema
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumnImpl
+import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.bodosql.calcite.table.LocalTable
+import org.apache.calcite.prepare.RelOptTableImpl
+import org.apache.calcite.rel.RelNode
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.Properties
 
@@ -77,6 +81,27 @@ class PythonEntryPoint {
             generator.getOptimizedPlanString(
                 sql,
                 includeCosts,
+                dynamicParamTypes,
+                namedParamTypeMap,
+            )
+
+        /**
+         * Return the optimized plan for the query.
+         * @param generator The generator to use.
+         * @param sql The SQL query to optimize.
+         * @param dynamicParamTypes The dynamic parameter types.
+         * @param namedParamTypeMap The named parameter types.
+         * @return The optimized plan.
+         */
+        @JvmStatic
+        fun getOptimizedPlan(
+            generator: RelationalAlgebraGenerator,
+            sql: String,
+            dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
+            namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
+        ): RelNode =
+            generator.getOptimizedPlan(
+                sql,
                 dynamicParamTypes,
                 namedParamTypeMap,
             )
@@ -321,20 +346,23 @@ class PythonEntryPoint {
         fun buildBodoS3TablesCatalog(warehouse: String): BodoS3TablesCatalog = BodoS3TablesCatalog(warehouse)
 
         /**
-         * Build a TabularCatalog object.
+         * Build a IcebergRESTCatalog object.
          * @param warehouse The warehouse to use.
          * @param restUri The REST URI to use.
          * @param token The token to use. This may not always be required.
          * @param credential The credential to use. This may not always be required.
-         * @return The TabularCatalog object.
+         * @param defaultSchema The default schema to use.
+         * @return The IcebergRESTCatalog object.
          */
         @JvmStatic
-        fun buildTabularCatalog(
-            warehouse: String,
+        fun buildIcebergRESTCatalog(
             restUri: String,
+            warehouse: String,
             token: String?,
             credential: String?,
-        ): TabularCatalog = TabularCatalog(warehouse, restUri, token, credential)
+            scope: String?,
+            defaultSchema: String?,
+        ): IcebergRESTCatalog = IcebergRESTCatalog(restUri, warehouse, token, credential, scope, defaultSchema)
 
         /**
          * Build a FileSystemCatalog object.
@@ -545,5 +573,18 @@ class PythonEntryPoint {
                 prefetchSFIceberg,
                 defaultTz,
             )
+
+        /**
+         * Return name of local table from scan node.
+         * @param scan Input scan node
+         * @return name of local table
+         */
+        @JvmStatic
+        fun getLocalTableName(scan: PandasTableScan): String {
+            // TODO: Make sure the scan node is a local table in the right format
+            val bodoSQLTable = (scan.table as RelOptTableImpl).table() as BodoSqlTable
+            val table = bodoSQLTable as LocalTable
+            return table.name
+        }
     }
 }

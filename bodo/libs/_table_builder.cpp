@@ -597,26 +597,6 @@ void table_builder_reset(TableBuilderState* state) { state->builder.Reset(); }
 
 void delete_table_builder_state(TableBuilderState* state) { delete state; }
 
-struct ChunkedTableBuilderState {
-    const std::shared_ptr<bodo::Schema> table_schema;
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    std::unique_ptr<ChunkedTableBuilder> builder;
-
-    ChunkedTableBuilderState(const std::shared_ptr<bodo::Schema> table_schema_,
-                             size_t chunk_size)
-        : table_schema(std::move(table_schema_)) {
-        // Create dictionary builders for all columns
-        for (const std::unique_ptr<bodo::DataType>& t :
-             table_schema->column_types) {
-            dict_builders.emplace_back(
-                create_dict_builder_for_array(t->copy(), false));
-        }
-        builder = std::make_unique<ChunkedTableBuilder>(ChunkedTableBuilder(
-            table_schema, dict_builders, chunk_size,
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES));
-    }
-};
-
 ChunkedTableBuilderState* chunked_table_builder_state_init_py_entry(
     int8_t* arr_c_types, int8_t* arr_array_types, int n_arrs,
     int64_t chunk_size) {

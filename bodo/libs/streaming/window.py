@@ -2,6 +2,8 @@
 Support for streaming window functions.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 
 import llvmlite.binding as ll
@@ -135,25 +137,25 @@ class WindowStateType(StreamingStateType):
         if is_nullable(arr_type2):
             common_arr_type = to_nullable_type(common_arr_type)
 
-        if isinstance(common_arr_type, bodo.MapArrayType):
-            assert isinstance(arr_type2, bodo.MapArrayType)
+        if isinstance(common_arr_type, bodo.types.MapArrayType):
+            assert isinstance(arr_type2, bodo.types.MapArrayType)
             common_key_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.key_arr_type, arr_type2.key_arr_type
             )
             common_value_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.value_arr_type, arr_type2.value_arr_type
             )
-            return bodo.MapArrayType(common_key_type, common_value_type)
+            return bodo.types.MapArrayType(common_key_type, common_value_type)
 
-        if isinstance(common_arr_type, bodo.ArrayItemArrayType):
-            assert isinstance(arr_type2, bodo.ArrayItemArrayType)
+        if isinstance(common_arr_type, bodo.types.ArrayItemArrayType):
+            assert isinstance(arr_type2, bodo.types.ArrayItemArrayType)
             common_element_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.dtype, arr_type2.dtype
             )
-            return bodo.ArrayItemArrayType(common_element_type)
+            return bodo.types.ArrayItemArrayType(common_element_type)
 
-        if isinstance(common_arr_type, bodo.StructArrayType):
-            assert isinstance(arr_type2, bodo.StructArrayType)
+        if isinstance(common_arr_type, bodo.types.StructArrayType):
+            assert isinstance(arr_type2, bodo.types.StructArrayType)
             n_fields = len(common_arr_type.data)
             field_names = common_arr_type.names
             assert len(arr_type2.data) == n_fields and arr_type2.names == field_names
@@ -162,9 +164,9 @@ class WindowStateType(StreamingStateType):
                 common_field_types.append(
                     WindowStateType.derive_common_arr_types(arr1_field, arr2_field)
                 )
-            return bodo.StructArrayType(tuple(common_field_types))
+            return bodo.types.StructArrayType(tuple(common_field_types))
 
-        valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+        valid_str_types = (bodo.types.string_array_type, bodo.types.dict_str_arr_type)
         if common_arr_type in valid_str_types:
             # if the input column is a dictionary keep it as a dict, and if it is a string keep it as string
             assert arr_type2 in valid_str_types
@@ -215,7 +217,7 @@ class WindowStateType(StreamingStateType):
         if len(args_arr_types) == 0:
             args_arr_types.append(scalar_to_arrtype(None))
 
-        return bodo.TableType(tuple(build_table_arr_types)), bodo.TableType(
+        return bodo.types.TableType(tuple(build_table_arr_types)), bodo.types.TableType(
             tuple(args_arr_types)
         )
 
@@ -489,12 +491,12 @@ class WindowStateType(StreamingStateType):
                     in_dtype = input_type.dtype
 
                     # Here we use the typing rules for sum + division to derive the type for mean. This differs from Snowflake behavior: Snowflake adds 3 to the scale by default. If the input scale is >34 it gives an error
-                    if isinstance(in_dtype, bodo.Decimal128Type):
+                    if isinstance(in_dtype, bodo.types.Decimal128Type):
                         out_p = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
                         _, out_s = decimal_division_output_precision_scale(
                             out_p, in_dtype.scale, out_p, 0
                         )
-                        out_dtype = bodo.Decimal128Type(
+                        out_dtype = bodo.types.Decimal128Type(
                             out_p,
                             out_s,
                         )
@@ -522,8 +524,8 @@ class WindowStateType(StreamingStateType):
                         output_type = input_type
                     elif func_name == "sum":
                         in_dtype = input_type.dtype
-                        if isinstance(in_dtype, bodo.Decimal128Type):
-                            out_dtype = bodo.Decimal128Type(
+                        if isinstance(in_dtype, bodo.types.Decimal128Type):
+                            out_dtype = bodo.types.Decimal128Type(
                                 bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION,
                                 in_dtype.scale,
                             )
@@ -551,7 +553,7 @@ class WindowStateType(StreamingStateType):
             else:
                 raise BodoError(func_name + " is not a supported window function.")
 
-        return bodo.TableType(tuple(input_arr_types))
+        return bodo.types.TableType(tuple(input_arr_types))
 
     @staticmethod
     def _derive_cpp_indices(partition_indices, order_by_indices, num_cols):

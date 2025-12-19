@@ -1,9 +1,9 @@
 """Tests bytecode changes that are unique to Bodo."""
 
-import numba
-from numba.core import ir
+import numba  # noqa TID253
+from numba.core import ir  # noqa TID253
 
-from bodo.tests.utils import DeadcodeTestPipeline, check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 
 def test_very_large_tuple(memory_leak_check):
@@ -11,6 +11,8 @@ def test_very_large_tuple(memory_leak_check):
     Tests that when there is a very large tuple it only
     generates a single build_tuple in the IR.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+
     func_text = "def impl(t):\n"
     func_text += "  return (\n"
     for i in range(200):
@@ -37,3 +39,42 @@ def test_very_large_tuple(memory_leak_check):
     assert num_build_tuples == 1, (
         "After DCE the IR should only contain a single build tuple"
     )
+
+
+def get_bc_stream(code):
+    import dis
+
+    for inst in dis.get_instructions(code):
+        yield inst.offset, inst.opcode, inst.arg
+
+
+@pytest_mark_one_rank
+def test_bc_stream_to_bytecode():
+    """
+    Tests that _bc_stream_bytecode correctly reverses disassembled bytecode.
+    """
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.transforms.typing_pass import _bc_stream_to_bytecode
+
+    test_code = _bc_stream_to_bytecode.__code__
+    assert (
+        _bc_stream_to_bytecode(get_bc_stream(test_code), test_code) == test_code.co_code
+    )
+
+
+@pytest_mark_one_rank
+def test_bc_stream_to_bytecode_all_typing_pass():
+    """
+    Tests that _bc_stream_bytecode correctly reverses disassembled bytecode for all typing pass functions.
+    """
+    import bodo.decorators  # isort:skip # noqa
+    import bodo.transforms.typing_pass
+    from bodo.transforms.typing_pass import _bc_stream_to_bytecode
+
+    for obj in vars(bodo.transforms.typing_pass).values():
+        if callable(obj) and hasattr(obj, "__code__"):
+            test_code = obj.__code__
+            assert (
+                _bc_stream_to_bytecode(get_bc_stream(test_code), test_code)
+                == test_code.co_code
+            )

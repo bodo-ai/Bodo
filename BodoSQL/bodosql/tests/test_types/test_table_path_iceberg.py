@@ -15,7 +15,7 @@ from bodo.tests.conftest import (  # noqa: F401
     iceberg_database,
     iceberg_table_conn,
 )
-from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers import pyiceberg_reader, spark_reader
 from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -76,7 +76,7 @@ def test_simple_table_read(
         df = bc.sql("SELECT * FROM iceberg_tbl")
         return df
 
-    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
 
     if table_name == "SIMPLE_BOOL_BINARY_TABLE":
         # Bodo outputs binary data as bytes while Spark does bytearray (which Bodo doesn't support),
@@ -233,6 +233,7 @@ def test_explicit_dict_encoding(
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     bodo.tests.utils.test_spawn_mode_enabled,
     reason="Spawn workers don't set READ_STR_AS_DICT_THRESHOLD",
@@ -290,7 +291,7 @@ def test_implicit_dict_encoding(
             )
 
 
-@pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet")
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -346,7 +347,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     )
 
 
-@pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-4569] MERGE INTO with PyIceberg is not supported yet")
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL2"
     db_schema, warehouse_loc = iceberg_database(table_name)

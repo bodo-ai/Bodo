@@ -6,7 +6,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.map_arr_ext import contains_map_array
 from bodo.tests.utils import check_func, get_num_test_workers
 
 
@@ -169,37 +168,56 @@ def test_getitem_slice(map_arr_value):
     check_func(test_impl, (map_arr_value, idx), dist_test=False)
 
 
+@pytest.fixture
+def map_contains_arr(request):
+    """Fixture to lazily evaluate arr parameter to avoid importing
+    compiler at collection time."""
+    import bodo.decorators  # noqa
+
+    lazy_arr = request.param
+
+    return lazy_arr()
+
+
 @pytest.mark.parametrize(
-    "arr,answer",
+    "map_contains_arr,answer",
     [
         pytest.param(
-            bodo.MapArrayType(bodo.int64, bodo.float64), True, id="simple_map_array"
+            lambda: bodo.types.MapArrayType(bodo.types.int64, bodo.types.float64),
+            True,
+            id="simple_map_array",
         ),
-        pytest.param(bodo.IntegerArrayType(bodo.int64), False, id="simple_false"),
         pytest.param(
-            bodo.ArrayItemArrayType(
-                bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.FloatingArrayType(bodo.float64),
+            lambda: bodo.types.IntegerArrayType(bodo.types.int64),
+            False,
+            id="simple_false",
+        ),
+        pytest.param(
+            lambda: bodo.types.ArrayItemArrayType(
+                bodo.types.MapArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.FloatingArrayType(bodo.types.float64),
                 )
             ),
             True,
             id="map_inside_array",
         ),
         pytest.param(
-            bodo.ArrayItemArrayType(
-                bodo.ArrayItemArrayType(bodo.IntegerArrayType(bodo.int64))
+            lambda: bodo.types.ArrayItemArrayType(
+                bodo.types.ArrayItemArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int64)
+                )
             ),
             False,
             id="array_false",
         ),
         pytest.param(
-            bodo.StructArrayType(
+            lambda: bodo.types.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.MapArrayType(
-                        bodo.IntegerArrayType(bodo.int64),
-                        bodo.FloatingArrayType(bodo.float64),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.MapArrayType(
+                        bodo.types.IntegerArrayType(bodo.types.int64),
+                        bodo.types.FloatingArrayType(bodo.types.float64),
                     ),
                 ),
                 ("ints", "map"),
@@ -208,10 +226,12 @@ def test_getitem_slice(map_arr_value):
             id="map_inside_struct",
         ),
         pytest.param(
-            bodo.StructArrayType(
+            lambda: bodo.types.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.ArrayItemArrayType(bodo.IntegerArrayType(bodo.int64)),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.ArrayItemArrayType(
+                        bodo.types.IntegerArrayType(bodo.types.int64)
+                    ),
                 ),
                 ("ints", "array"),
             ),
@@ -219,6 +239,9 @@ def test_getitem_slice(map_arr_value):
             id="struct_false",
         ),
     ],
+    indirect=["map_contains_arr"],
 )
-def test_contains_map_array(arr, answer):
-    assert contains_map_array(arr) == answer
+def test_contains_map_array(map_contains_arr, answer):
+    from bodo.libs.map_arr_ext import contains_map_array
+
+    assert contains_map_array(map_contains_arr) == answer

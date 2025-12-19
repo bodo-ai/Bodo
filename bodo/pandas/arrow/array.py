@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable
 
@@ -49,7 +51,7 @@ class LazyArrowExtensionArray(
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-    ) -> "LazyArrowExtensionArray":
+    ) -> LazyArrowExtensionArray:
         """
         Create a LazyArrowExtensionArray from a lazy metadata object.
         """
@@ -111,6 +113,12 @@ class LazyArrowExtensionArray(
             self._md_nrows = None
             self._md_head = None
             self._collect_func = None
+
+    def is_lazy_plan(self):
+        return False
+
+    def execute_plan(self):
+        raise ValueError("execute_plan not possible on ArrowExtensionArray")
 
     def __getattribute__(self, name: str) -> pt.Any:
         """

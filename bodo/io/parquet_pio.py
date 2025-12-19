@@ -1,5 +1,10 @@
+"""Parquet I/O utilities. This file should import JIT lazily to avoid slowing down
+non-JIT code paths.
+"""
+
 from __future__ import annotations
 
+import json
 import os
 import random
 import time
@@ -9,46 +14,25 @@ from collections import defaultdict
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
-import llvmlite.binding as ll
 import numpy as np
-import pyarrow  # noqa
 import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
-from numba.core import types
-from numba.extending import (
-    NativeValue,
-    box,
-    intrinsic,
-    models,
-    overload,
-    register_model,
-    unbox,
-)
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArrayType,
-    PDCategoricalDtype,
-)
 from bodo.io.fs_io import (
     expand_path_globs,
     getfs,
     parse_fpath,
 )
-from bodo.io.helpers import _get_numba_typ_from_pa_typ
-from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.distributed_api import get_end, get_start
 from bodo.mpi4py import MPI
-from bodo.utils.typing import (
-    BodoError,
-    BodoWarning,
-    FileInfo,
-    FileSchema,
-    get_overload_const_str,
-)
+
+if pt.TYPE_CHECKING:
+    import pyarrow.compute as pc
+
+    from bodo.utils.typing import FileSchema
+
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # the ratio of total_uncompressed_size of a Parquet string column vs number of values,
@@ -56,147 +40,6 @@ REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 READ_STR_AS_DICT_THRESHOLD = 1.0
 
 LIST_OF_FILES_ERROR_MSG = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
-
-
-class ParquetPredicateType(types.Type):
-    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
-    It is just a Python object passed as pointer to C++
-    """
-
-    def __init__(self):
-        super().__init__(name="ParquetPredicateType()")
-
-
-parquet_predicate_type = ParquetPredicateType()
-types.parquet_predicate_type = parquet_predicate_type  # type: ignore
-register_model(ParquetPredicateType)(models.OpaqueModel)
-
-
-@unbox(ParquetPredicateType)
-def unbox_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ParquetPredicateType)
-def box_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
-class ParquetFilterScalarsListType(types.Type):
-    """
-    Type for filter scalars for Parquet filtering
-    (e.g. [("f0", 2), ("f1", [1, 2, 3]), ("f2", "BODO")]).
-    It is a list of tuples. Each tuple has
-    a string for the variable name and the second element
-    can be any Python type (e.g. string, int, list, date, etc.)
-    It is just a Python object passed as pointer to C++
-    """
-
-    def __init__(self):
-        super().__init__(name="ParquetFilterScalarsListType()")
-
-
-parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
-types.parquet_filter_scalars_list_type = parquet_filter_scalars_list_type  # type: ignore
-register_model(ParquetFilterScalarsListType)(models.OpaqueModel)
-
-
-@unbox(ParquetFilterScalarsListType)
-def unbox_parquet_filter_scalars_list_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ParquetFilterScalarsListType)
-def box_parquet_filter_scalars_list_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
-class ParquetFileInfo(FileInfo):
-    """FileInfo object passed to ForceLiteralArg for
-    file name arguments that refer to a parquet dataset"""
-
-    def __init__(
-        self,
-        columns,
-        storage_options=None,
-        input_file_name_col=None,
-        read_as_dict_cols=None,
-        use_hive=True,
-    ):
-        self.columns = columns  # columns to select from parquet dataset
-        self.storage_options = storage_options
-        self.input_file_name_col = input_file_name_col
-        self.read_as_dict_cols = read_as_dict_cols
-        self.use_hive = use_hive
-        super().__init__()
-
-    def _get_schema(self, fname):
-        try:
-            return parquet_file_schema(
-                fname,
-                selected_columns=self.columns,
-                storage_options=self.storage_options,
-                input_file_name_col=self.input_file_name_col,
-                read_as_dict_cols=self.read_as_dict_cols,
-                use_hive=self.use_hive,
-            )
-        except OSError as e:
-            if "non-file path" in str(e):
-                raise FileNotFoundError(str(e))
-            raise
-
-
-def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
-    pass
-
-
-@overload(get_filters_pyobject, no_unliteral=True)
-def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
-    """generate a pyobject for filter expression to pass to C++"""
-    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
-    expr_filter_str_val = get_overload_const_str(expr_filter_str)
-    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
-    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
-    if len(var_tup):
-        func_text += f"  {var_unpack}, = var_tup\n"
-    func_text += "  with bodo.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
-    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
-    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
-    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
-    loc_vars = {}
-    glbs = globals()
-    glbs["bodo"] = bodo
-    exec(func_text, glbs, loc_vars)
-    return loc_vars["impl"]
-
-
-def get_filter_scalars_pyobject(vars):  # pragma: no cover
-    pass
-
-
-@overload(get_filter_scalars_pyobject, no_unliteral=True)
-def overload_get_filter_scalars_pyobject(var_tup):
-    """
-    Generate a PyObject for a list of the scalars in
-    a filter to pass to C++.
-    """
-    func_text = "def impl(var_tup):\n"
-    func_text += "  with bodo.no_warning_objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
-    func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
-    func_text += "  return filter_scalars_py\n"
-    loc_vars = {}
-    glbs = globals()
-    glbs["bodo"] = bodo
-    exec(func_text, glbs, loc_vars)
-    return loc_vars["impl"]
 
 
 def unify_schemas(
@@ -303,12 +146,20 @@ class ParquetDataset:
             self.partitioning_schema = partitioning.schema
         else:
             self.partitioning_dictionaries = {}
-        # Convert large_string Arrow types to string
+        # Convert large_string Arrow types to string and dictionary to int32 indices
         # (see comment in bodo.io.parquet_pio.unify_schemas)
         for i in range(len(self.schema)):
             f = self.schema.field(i)
             if f.type == pa.large_string():
                 self.schema = self.schema.set(i, f.with_type(pa.string()))
+            elif isinstance(f.type, pa.DictionaryType):
+                if f.type.index_type != pa.int32():
+                    self.schema = self.schema.set(
+                        i,
+                        f.with_type(
+                            pa.dictionary(pa.int32(), f.type.value_type, f.type.ordered)
+                        ),
+                    )
         # IMPORTANT: only include partition columns in filters passed to
         # pq.ParquetDataset(), otherwise `get_fragments` could look inside the
         # parquet files
@@ -427,7 +278,7 @@ def get_fpath_without_protocol_prefix(
         tuple[str | list[str], str]: Filepath(s) without the prefix
             and the prefix itself.
     """
-    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+    if protocol in {"abfs", "abfss"}:  # pragma: no cover
         # PyArrow AzureBlobFileSystem is initialized with account_name only
         # so the host / container name should be included in the files
         prefix = f"{protocol}://"
@@ -450,7 +301,9 @@ def get_fpath_without_protocol_prefix(
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
-    elif protocol in {"hdfs", "abfs", "abfss"}:
+    elif protocol == "s3a":
+        prefix = "s3a://"
+    elif protocol == "hdfs":
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files
@@ -468,6 +321,45 @@ def get_fpath_without_protocol_prefix(
     else:
         fpath_noprefix = fpath
     return fpath_noprefix, prefix
+
+
+def fpath_without_protocol_prefix(fpath: str) -> str:
+    """
+    Get the filepath(s) without the prefix associated with
+    the protocol. e.g. in the s3 case, this will remove the
+    "s3://" from the start of the path(s).
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths.
+
+    Returns:
+        tuple[str | list[str], str]: Filepath(s) without the prefix
+            and the prefix itself.
+    """
+    parsed_url = urlparse(fpath)
+    protocol = parsed_url.scheme
+
+    if protocol in {"abfs", "abfss", "wasb", "wasbs"}:
+        # pragma: no cover
+        # PyArrow AzureBlobFileSystem is initialized with account_name only
+        # so the host / container name should be included in the files
+        url = urlparse(fpath)
+        container = (
+            parsed_url.netloc if parsed_url.username is None else parsed_url.username
+        )
+        return f"{container}{url.path}"
+
+    prefix = ""
+
+    if protocol == "hdfs":
+        # HDFS filesystem is initialized with host:port info. Once
+        # initialized, the filesystem needs the <protocol>://<host><port>
+        # prefix removed to query and access files
+        prefix = f"{protocol}://{parsed_url.netloc}"
+    elif protocol in {"s3", "s3a", "gcs", "gs"}:
+        prefix = f"{protocol}://"
+
+    return fpath[len(prefix) :]
 
 
 def get_bodo_pq_dataset_from_fpath(
@@ -508,6 +400,7 @@ def get_bodo_pq_dataset_from_fpath(
             the caller can handle error synchronization (since this function
             should be called from a single rank).
     """
+    import bodo
 
     nthreads = 1  # Number of threads to use on this rank to collect metadata
     cpu_count = os.cpu_count()
@@ -564,24 +457,46 @@ def get_bodo_pq_dataset_from_fpath(
 
         return dataset
     except Exception as e:
+        # Import compiler lazily to access BodoError
+        import bodo.decorators  # isort:skip # noqa
+
         # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
         # back to numba and come back as an InternalError.
         # where numba errors are hidden from the user.
         # See [BE-1188] for an example
-        # Raising a BodoError lets messages come back and be seen by the user.
+        # Raising a bodo.utils.typing.BodoError lets messages come back and be seen by the user.
         if isinstance(e, IsADirectoryError):
             # We suppress Arrow's error message since it doesn't apply to Bodo
             # (the bit about doing a union of datasets)
-            e = BodoError(LIST_OF_FILES_ERROR_MSG)
+            e = bodo.utils.typing.BodoError(LIST_OF_FILES_ERROR_MSG)
         elif isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
-            e = BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
+            e = bodo.utils.typing.BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
         else:
-            e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
+            e = bodo.utils.typing.BodoError(
+                f"error from pyarrow: {type(e).__name__}: {str(e)}\n"
+            )
         return e
     finally:
         # Restore pyarrow default IO thread count
         pa.set_io_thread_count(pa_default_io_thread_count)
+
+
+# Create an mpi4py reduction function.
+def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, unused):
+    # Attempt to unify the schemas, but if any schema is associated with a row
+    # count of 0, disregard it.
+    schema_a, count_a = schema_a_and_row_count
+    schema_b, count_b = schema_b_and_row_count
+    if count_a == 0 and count_b > 0:
+        return (schema_b, count_b)
+    if count_a > 0 and count_b == 0:
+        return (schema_a, count_a)
+    return (pa.unify_schemas([schema_a, schema_b]), count_a + count_b)
+
+
+# Initialize local MPI operation for schema unification lazily
+pa_schema_unify_mpi_op = None
 
 
 def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
@@ -596,16 +511,22 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
             that the files allocated to this rank will read.
 
     Raises:
-        BodoError: If schemas couldn't be unified.
+        bodo.utils.typing.BodoError: If schemas couldn't be unified.
     """
+    import bodo
+
+    global pa_schema_unify_mpi_op
+
     ev = tracing.Event("unify_schemas_across_ranks")
     error = None
 
     comm = MPI.COMM_WORLD
+    if pa_schema_unify_mpi_op is None:
+        pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
     try:
         dataset.schema, _ = comm.allreduce(
             (dataset.schema, total_rows_chunk),
-            bodo.io.helpers.pa_schema_unify_mpi_op,
+            pa_schema_unify_mpi_op,
         )
     except Exception as e:
         error = e
@@ -614,9 +535,54 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     if comm.allreduce(error is not None, op=MPI.LOR):
         for error in comm.allgather(error):
             if error:
+                # Import compiler lazily to access BodoError
+                import bodo.decorators  # isort:skip # noqa
+
                 msg = f"Schema in some files were different.\n{str(error)}"
-                raise BodoError(msg)
+                raise bodo.utils.typing.BodoError(msg)
     ev.finalize()
+
+
+def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
+    """Unifies schema of *dataset* with incoming piece/fragment.
+
+    Args:
+        dataset (ParquetDataset): The Parquet dataset to update with the unified
+            schema.
+        piece (ParquetPiece): Piece corresponding to the fragment being unified.
+        frag (pa.Dataset.Fragment): Fragment of the dataset to unify.
+
+    Raises:
+        bodo.utils.typing.BodoError: If the schemas cannot be unified
+    """
+    import bodo
+
+    # Two files are compatible if arrow can unify their schemas.
+    file_schema = frag.metadata.schema.to_arrow_schema()
+    fileset_schema_names = set(file_schema.names)
+    # Check the names are the same because pa.unify_schemas
+    # will unify a schema where a column is in 1 file but not
+    # another.
+    dataset_schema_names = set(dataset.schema.names) - set(dataset.partition_names)
+    # File schema can only be a (potentially) more restrictive
+    # version of the starting schema, therefore, the file shouldn't
+    # have extra columns. Any columns that are expected but are
+    # missing from the file will be filled with nulls at read time.
+    added_columns = fileset_schema_names - dataset_schema_names
+    if added_columns:
+        # Import compiler lazily to access BodoError
+        import bodo.decorators  # isort:skip # noqa
+
+        msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
+        raise bodo.utils.typing.BodoError(msg)
+    try:
+        dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
+    except Exception as e:
+        # Import compiler lazily to access BodoError
+        import bodo.decorators  # isort:skip # noqa
+
+        msg = f"Schema in {piece} was different.\n{str(e)}"
+        raise bodo.utils.typing.BodoError(msg)
 
 
 def populate_row_counts_in_pq_dataset_pieces(
@@ -655,6 +621,8 @@ def populate_row_counts_in_pq_dataset_pieces(
         filters (pc.Expression, optional): Arrow expression filters
             to apply. Defaults to None.
     """
+    import bodo
+
     ev_row_counts = tracing.Event("get_row_counts")
     # getting row counts and validating schema requires reading
     # the file metadata from the parquet files and is very expensive
@@ -664,8 +632,8 @@ def populate_row_counts_in_pq_dataset_pieces(
         ev_row_counts.add_attribute("g_filters", str(filters))
     ds_scan_time = 0.0
     num_pieces = len(dataset.pieces)
-    start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
-    end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
+    start = bodo.get_start(num_pieces, bodo.get_size(), bodo.get_rank())
+    end = bodo.get_end(num_pieces, bodo.get_size(), bodo.get_rank())
     total_rows_chunk = 0
     total_row_groups_chunk = 0
     total_row_groups_size_chunk = 0
@@ -703,30 +671,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             # file schema doesn't match the dataset schema exactly.
             # Currently this is only applicable for Iceberg reads.
             if validate_schema:
-                # Two files are compatible if arrow can unify their schemas.
-                file_schema = frag.metadata.schema.to_arrow_schema()
-                fileset_schema_names = set(file_schema.names)
-                # Check the names are the same because pa.unify_schemas
-                # will unify a schema where a column is in 1 file but not
-                # another.
-                dataset_schema_names = set(dataset.schema.names) - set(
-                    dataset.partition_names
-                )
-                # File schema can only be a (potentially) more restrictive
-                # version of the starting schema, therefore, the file shouldn't
-                # have extra columns. Any columns that are expected but are
-                # missing from the file will be filled with nulls at read time.
-                added_columns = fileset_schema_names - dataset_schema_names
-                if added_columns:
-                    msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
-                    raise BodoError(msg)
-                try:
-                    dataset.schema = unify_schemas(
-                        [dataset.schema, file_schema], "permissive"
-                    )
-                except Exception as e:
-                    msg = f"Schema in {piece} was different.\n{str(e)}"
-                    raise BodoError(msg)
+                unify_fragment_schema(dataset, piece, frag)
 
             t0 = time.time()
             # We use the expected schema instead of the file schema. This schema
@@ -759,7 +704,12 @@ def populate_row_counts_in_pq_dataset_pieces(
                 if isinstance(fpath, list) and isinstance(
                     error, (OSError, FileNotFoundError)
                 ):
-                    raise BodoError(str(error) + LIST_OF_FILES_ERROR_MSG)
+                    # Import compiler lazily to access BodoError
+                    import bodo.decorators  # isort:skip # noqa
+
+                    raise bodo.utils.typing.BodoError(
+                        str(error) + LIST_OF_FILES_ERROR_MSG
+                    )
                 raise error
 
     # Now unify the schemas across all ranks.
@@ -787,7 +737,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             fpath_tidbit = fpath
 
         warnings.warn(
-            BodoWarning(
+            bodo.BodoWarning(
                 f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
                 f"For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
             )
@@ -805,7 +755,7 @@ def populate_row_counts_in_pq_dataset_pieces(
         and protocol in REMOTE_FILESYSTEMS
     ):
         warnings.warn(
-            BodoWarning(
+            bodo.BodoWarning(
                 f"Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"
             )
         )
@@ -1082,7 +1032,9 @@ def get_scanner_batches(
     rows_to_read: int,  # total number of rows this process is going to read
     partitioning,
     schema: pa.Schema,
-    batch_size: int | None = None,
+    batch_size: int,
+    batch_readahead: int,
+    fragment_readahed: int,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match filters (or all rows if filters is None). Only project the
@@ -1139,10 +1091,10 @@ def get_scanner_batches(
         # this at some point.
         columns=selected_names,
         filter=filters,
-        batch_size=batch_size or 128 * 1024,
+        batch_size=batch_size,
         use_threads=True,
-        # XXX Specify batch_readahead (default: 16)?
-        # XXX Specify fragment_readahead (default: 4)?
+        batch_readahead=batch_readahead,
+        fragment_readahead=fragment_readahed,
         # XXX Specify memory pool?
     ).to_reader()
     return rb_reader, start_offset
@@ -1155,11 +1107,15 @@ def _add_categories_to_pq_dataset(pq_dataset):
     """
     import pyarrow as pa
 
+    import bodo
     from bodo.mpi4py import MPI
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
-        raise BodoError(
+        # Import compiler lazily to access BodoError
+        import bodo.decorators  # isort:skip # noqa
+
+        raise bodo.utils.typing.BodoError(
             "No pieces found in Parquet dataset. Cannot get read categorical values"
         )
 
@@ -1201,28 +1157,26 @@ def _add_categories_to_pq_dataset(pq_dataset):
     pq_dataset._category_info = category_info
 
 
-def get_pandas_metadata(schema, num_pieces):
+def get_pandas_metadata(schema) -> tuple[list[str | dict], dict[str, bool | None]]:
     # find pandas index column if any
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
-    index_col = None
+    index_cols = []
     # column_name -> is_nullable (or None if unknown)
     nullable_from_metadata: defaultdict[str, bool | None] = defaultdict(lambda: None)
-    key = b"pandas"
-    if schema.metadata is not None and key in schema.metadata:
-        import json
-
-        pandas_metadata = json.loads(schema.metadata[key].decode("utf8"))
+    KEY = b"pandas"
+    if schema.metadata is not None and KEY in schema.metadata:
+        pandas_metadata = json.loads(schema.metadata[KEY].decode("utf8"))
         if pandas_metadata is None:
-            return index_col, nullable_from_metadata
+            return [], nullable_from_metadata
 
-        n_indices = len(pandas_metadata["index_columns"])
-        if n_indices > 1:
-            raise BodoError("read_parquet: MultiIndex not supported yet")
-        index_col = pandas_metadata["index_columns"][0] if n_indices else None
+        index_cols = pandas_metadata["index_columns"]
         # ignore non-str/dict index metadata
-        if not isinstance(index_col, str) and not isinstance(index_col, dict):
-            index_col = None
+        index_cols = [
+            index_col
+            for index_col in index_cols
+            if isinstance(index_col, str) or isinstance(index_col, dict)
+        ]
 
         for col_dict in pandas_metadata["columns"]:
             col_name = col_dict["name"]
@@ -1235,7 +1189,7 @@ def get_pandas_metadata(schema, num_pieces):
                     nullable_from_metadata[col_name] = True
                 else:
                     nullable_from_metadata[col_name] = False
-    return index_col, nullable_from_metadata
+    return index_cols, nullable_from_metadata
 
 
 def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> list[str]:
@@ -1357,9 +1311,14 @@ def parquet_file_schema(
     use_hive: bool = True,
 ) -> FileSchema:
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
+    # Import compiler lazily to access BodoError
+    import bodo
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.io.helpers import _get_numba_typ_from_pa_typ
+    from bodo.libs.dict_arr_ext import dict_str_arr_type
+
     col_names = []
     col_types = []
-
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
@@ -1370,10 +1329,10 @@ def parquet_file_schema(
         read_categories=True,
         partitioning="hive" if use_hive else None,
     )
+    pq_dataset = parquet_dataset_unify_nulls(pq_dataset)
 
     partition_names = pq_dataset.partition_names
     pa_schema = pq_dataset.schema
-    num_pieces = len(pq_dataset.pieces)
 
     # Get list of string columns
     str_columns = get_str_columns_from_pa_schema(pa_schema)
@@ -1389,7 +1348,7 @@ def parquet_file_schema(
         if bodo.get_rank() == 0:
             warnings.warn(
                 f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}",
-                bodo.utils.typing.BodoWarning,
+                bodo.BodoWarning,
             )
     # Remove non-string columns from read_as_dict_cols
     read_as_dict_cols.intersection_update(str_columns_set)
@@ -1407,10 +1366,11 @@ def parquet_file_schema(
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with
     # names of list types columns (arrow 0.17.0)
     # col_names is an array that contains all the column's name and
-    # index's name if there is one, otherwise "__index__level_0"
+    # index's name if there is one, otherwise "__index__level_0__"
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
-    index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
+    index_cols, nullable_from_metadata = get_pandas_metadata(pa_schema)
+    index_col_names: set[str] = {name for name in index_cols if isinstance(name, str)}
     col_types_total = []
     is_supported_list = []
     arrow_types = []
@@ -1420,7 +1380,7 @@ def parquet_file_schema(
         field = pa_schema.field(c)
         dtype, supported = _get_numba_typ_from_pa_typ(
             field,
-            c == index_col,
+            c in index_col_names,
             nullable_from_metadata[c],
             pq_dataset._category_info,
             str_as_dict=c in str_as_dict,
@@ -1463,16 +1423,25 @@ def parquet_file_schema(
     # make sure selected columns are in the schema
     for c in selected_columns:
         if c not in col_names_map:
-            raise BodoError(f"Selected column {c} not in Parquet file schema")
-    if (
-        index_col
-        and not isinstance(index_col, dict)
-        and index_col not in selected_columns
-    ):
-        # if index_col is "__index__level_0" or some other name, append it.
-        # If the index column is not selected when reading parquet, the index
-        # should still be included.
-        selected_columns.append(index_col)
+            # Import compiler lazily to access BodoError
+            import bodo.decorators  # isort:skip # noqa
+
+            raise bodo.utils.typing.BodoError(
+                f"Selected column {c} not in Parquet file schema"
+            )
+    for index_col in index_cols:
+        if not isinstance(index_col, dict) and index_col not in selected_columns:
+            # if index_col is "__index__level_0__" or some other name, append it.
+            # If the index column is not selected when reading parquet, the index
+            # should still be included.
+            selected_columns.append(index_col)
+
+    # Convert dictionary columns to use int32 indices
+    # since our c++ dict string array uses int32 indices
+    for i in range(len(arrow_types)):
+        if isinstance(arrow_types[i], pa.DictionaryType):
+            arrow_types[i] = pa.dictionary(pa.int32(), arrow_types[i].value_type)
+            pa_schema = pa_schema.set(i, pa_schema.field(i).with_type(arrow_types[i]))
 
     col_names = selected_columns
     col_indices = []
@@ -1491,7 +1460,7 @@ def parquet_file_schema(
     return (
         col_names,
         col_types,
-        index_col,
+        index_cols,
         col_indices,
         partition_names,
         unsupported_columns,
@@ -1502,6 +1471,16 @@ def parquet_file_schema(
 
 def _get_partition_cat_dtype(dictionary):
     """get categorical dtype for Parquet partition set"""
+    from numba.core import types
+
+    # Import compiler lazily
+    import bodo
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.pd_categorical_ext import (
+        CategoricalArrayType,
+        PDCategoricalDtype,
+    )
+
     # using 'dictionary' instead of 'keys' attribute since 'keys' may not have the
     # right data type (e.g. string instead of int64)
     assert dictionary is not None
@@ -1514,200 +1493,42 @@ def _get_partition_cat_dtype(dictionary):
     return CategoricalArrayType(cat_dtype)
 
 
-# ------------------------- Parquet Write C++ ------------------------- #
-from llvmlite import ir as lir
-from numba.core import cgutils
-
-from bodo.io import arrow_cpp
-
-ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
-ll.add_symbol("pq_write_create_dir_py_entry", arrow_cpp.pq_write_create_dir_py_entry)
-ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
-
-
-@intrinsic
-def parquet_write_table_cpp(
-    typingctx,
-    filename_t,
-    table_t,
-    col_names_t,
-    index_t,
-    write_index,
-    metadata_t,
-    compression_t,
-    is_parallel_t,
-    write_range_index,
-    start,
-    stop,
-    step,
-    name,
-    bucket_region,
-    row_group_size,
-    file_prefix,
-    convert_timedelta_to_int64,
-    timestamp_tz,
-    downcast_time_ns_to_us,
-    create_dir,
-    force_hdfs=False,
-):
+def parquet_dataset_unify_nulls(
+    dataset: ParquetDataset,
+) -> ParquetDataset:
     """
-    Call C++ parquet write function
+    Gets the ParquetDataset from fpath, unifying types of null columns if present.
+
+    NOTE: This function is intended to handle
+    the common case where the first file opened contains some null columns which have
+    non-null values in other files.
     """
+    # If there are no null columns, skip unify step.
+    if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
+        return dataset
 
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(64),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(32),
-                lir.IntType(32),
-                lir.IntType(32),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),  # convert_timedelta_to_int64
-                lir.IntType(8).as_pointer(),  # tz
-                lir.IntType(1),  # downcast_time_ns_to_us
-                lir.IntType(1),  # create_dir
-                lir.IntType(1),  # force_hdfs
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        types.int64(
-            types.voidptr,
-            table_t,
-            col_names_t,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-            types.int32,
-            types.int32,
-            types.int32,
-            types.voidptr,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.boolean,  # convert_timedelta_to_int64
-            types.voidptr,  # tz
-            types.boolean,  # downcast_time_ns_to_us
-            types.boolean,  # create dir
-            types.boolean,  # force_hdfs
-        ),
-        codegen,
+    # Open the dataset similar to
+    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L717
+    pieces = dataset.pieces
+    fpaths = [p.path for p in dataset.pieces]
+    dataset_ = ds.dataset(
+        fpaths,
+        filesystem=dataset.filesystem,
+        partitioning=dataset.partitioning,
     )
 
+    # If there are nulls in the schema, inspect the fragments
+    # until the null columns can be resolved to a non-null type.
+    row_count = 0
+    for piece, frag in zip(pieces, dataset_.get_fragments()):
+        unify_fragment_schema(dataset, piece, frag)
+        row_count += piece._bodo_num_rows
+        if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
+            break
 
-@intrinsic
-def pq_write_create_dir(
-    typingctx,
-    filename_t,
-):
-    """
-    Call C++ parquet write directory creation function
-    """
+    comm = MPI.COMM_WORLD
 
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_create_dir_py_entry"
-        )
-        builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    if comm.Get_size() > 1:
+        unify_schemas_across_ranks(dataset, row_count)
 
-    return (
-        types.none(
-            types.voidptr,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
-def parquet_write_table_partitioned_cpp(
-    typingctx,
-    filename_t,
-    data_table_t,
-    col_names_t,
-    col_names_no_partitions_t,
-    cat_table_t,
-    part_col_idxs_t,
-    num_part_col_t,
-    compression_t,
-    is_parallel_t,
-    bucket_region,
-    row_group_size,
-    file_prefix,
-    timestamp_tz,
-):
-    """
-    Call C++ parquet write partitioned function
-
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(32),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),  # tz
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_partitioned_py_entry"
-        )
-        builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-
-    return (
-        types.void(
-            types.voidptr,
-            data_table_t,
-            col_names_t,
-            col_names_no_partitions_t,
-            types.voidptr,
-            types.voidptr,
-            types.int32,
-            types.voidptr,
-            types.boolean,
-            types.voidptr,
-            types.int64,
-            types.voidptr,
-            types.voidptr,  # tz
-        ),
-        codegen,
-    )
+    return dataset

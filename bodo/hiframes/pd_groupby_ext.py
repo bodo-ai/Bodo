@@ -1,5 +1,7 @@
 """Support for Pandas Groupby operations"""
 
+from __future__ import annotations
+
 import operator
 from enum import Enum
 
@@ -32,15 +34,17 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
     array_to_info,
     delete_table,
-    get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
-    reverse_shuffle_table,
     shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -402,11 +406,11 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             raise BodoError(
                 f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
             )
-        return bodo.DecimalArrayType(new_precision, new_scale), "ok"
+        return bodo.types.DecimalArrayType(new_precision, new_scale), "ok"
     elif func_name == "percentile_disc" and isinstance(in_dtype, Decimal128Type):
         # PERCENTILE_DISC
         # Maintain the same precision and scale as the input.
-        return bodo.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
+        return bodo.types.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
 
     elif (
         func_name
@@ -429,7 +433,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
-            return bodo.boolean_array_type, "ok"
+            return bodo.types.boolean_array_type, "ok"
         return (
             None,
             f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
@@ -475,13 +479,13 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                 None,
                 f"Unsupported array type for {func_name}: {arr_type}",
             )
-        return bodo.MapArrayType(key_arr_type, arr_type), "ok"
+        return bodo.types.MapArrayType(key_arr_type, arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if (
             is_list_string
             or in_dtype == types.unicode_type
-            or arr_type == bodo.binary_array_type
+            or arr_type == bodo.types.binary_array_type
         ):
             if func_name not in {
                 "count",
@@ -498,7 +502,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                     f"column type of strings or list of strings is not supported in groupby built-in function {func_name}",
                 )
         else:
-            if isinstance(in_dtype, bodo.PDCategoricalDtype):
+            if isinstance(in_dtype, bodo.types.PDCategoricalDtype):
                 if func_name in ("min", "max") and not in_dtype.ordered:
                     return (
                         None,
@@ -1437,6 +1441,11 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         kws = dict(kws)
         # pop transform() unsupported keyword arguments from kws
         transform_func = args[0] if len(args) > 0 else kws.pop("func", None)
+        transform_func = get_literal_value(transform_func)
+        if bodo.utils.typing.is_builtin_function(transform_func):
+            # Builtin function case (e.g. df.groupby("B").transform(sum))
+            transform_func = bodo.utils.typing.get_builtin_function_name(transform_func)
+
         engine = kws.pop("engine", None)
         engine_kwargs = kws.pop("engine_kwargs", None)
         unsupported_args = {"engine": engine, "engine_kwargs": engine_kwargs}
@@ -1457,11 +1466,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         dict_add_multimap(gb_info, ((c,), (), name_operation), c)
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        operation = (
-            name_operation
-            if name_operation != "transform"
-            else get_literal_value(transform_func)
-        )
+        operation = name_operation if name_operation != "transform" else transform_func
         if operation in ("sum", "cumsum"):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
@@ -1492,7 +1497,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         # Column output depends on the operation in transform.
         if name_operation == "transform":
             out_dtype, err_msg = get_groupby_output_dtype(
-                data, get_literal_value(transform_func), grp.df_type.index
+                data, transform_func, grp.df_type.index
             )
 
             if err_msg == "ok":
@@ -1595,9 +1600,9 @@ def get_window_func_types():
         "std": to_nullable_type(dtype_to_array_type(types.float64)),
         "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
         "mean": to_nullable_type(dtype_to_array_type(types.float64)),
-        "min_row_number_filter": bodo.boolean_array_type,
-        "booland_agg": bodo.boolean_array_type,
-        "boolor_agg": bodo.boolean_array_type,
+        "min_row_number_filter": bodo.types.boolean_array_type,
+        "booland_agg": bodo.types.boolean_array_type,
+        "boolor_agg": bodo.types.boolean_array_type,
         # None = output dtype matches input dtype
         "any_value": None,
         "first": None,
@@ -2383,6 +2388,15 @@ def get_group_indices(keys, dropna, _is_parallel):  # pragma: no cover
 @overload(get_group_indices)
 def get_group_indices_overload(keys, dropna, _is_parallel):
     """get group indices (labels) for a tuple of key arrays."""
+    from bodo.libs.array import table_type
+
+    get_groupby_labels = types.ExternalFunction(
+        "get_groupby_labels_py_entry",
+        types.int64(
+            table_type, types.voidptr, types.voidptr, types.boolean, types.bool_
+        ),
+    )
+
     func_text = "def impl(keys, dropna, _is_parallel):\n"
     # convert arrays to table
     func_text += (
@@ -2544,6 +2558,29 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
 
 def reverse_shuffle(data, shuffle_info):  # pragma: no cover
     return data
+
+
+@intrinsic
+def reverse_shuffle_table(typingctx, table_t, shuffle_info_t):
+    """call reverse shuffle if shuffle info not none"""
+    from llvmlite import ir as lir
+
+    from bodo.libs.array import table_type
+
+    def codegen(context, builder, sig, args):
+        if sig.args[-1] == types.none:
+            return context.get_constant_null(table_type)
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="reverse_shuffle_table"
+        )
+        return builder.call(fn_tp, args)
+
+    return table_type(table_type, shuffle_info_t), codegen
 
 
 @overload(reverse_shuffle)
@@ -2715,29 +2752,29 @@ def _install_groupby_unsupported():
     """
 
     for attr_name in groupby_unsupported_attr:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in groupby_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
     # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
     # have separate types.
     for attr_name in series_only_unsupported_attrs:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"SeriesGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"SeriesGroupBy.{fname}"
         )
 
     for fname in dataframe_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 

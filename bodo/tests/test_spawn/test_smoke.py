@@ -6,12 +6,11 @@ from bodo.tests.utils import pytest_spawn_mode
 pytestmark = pytest_spawn_mode
 
 
-@bodo.jit(spawn=True)
-def setitem_jit(A):
-    A[0] = 1
-
-
 def test_setitem(memory_leak_check):
+    @bodo.jit(spawn=True)
+    def setitem_jit(A):
+        A[0] = 1
+
     @bodo.jit(spawn=True)
     def do_test():
         arr = np.zeros(1)

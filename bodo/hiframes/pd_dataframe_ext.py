@@ -2,9 +2,11 @@
 Implement pd.DataFrame typing and data model handling.
 """
 
-import json
+from __future__ import annotations
+
 import operator
 import time
+import typing as pt
 from collections.abc import Sequence
 from functools import cached_property
 
@@ -12,7 +14,6 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
@@ -37,12 +38,15 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.io.utils
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
     HeterogeneousIndexType,
     NumericIndexType,
     RangeIndexType,
+    SingleIndexType,
     is_pd_index_type,
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -55,9 +59,13 @@ from bodo.hiframes.table import (
     get_table_data,
     set_table_data_codegen,
 )
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.io import json_cpp
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
+    append_arr_info_list_to_cpp_table,
     arr_info_list_to_table,
     array_from_cpp_table,
     array_to_info,
@@ -65,16 +73,14 @@ from bodo.libs.array import (
     py_table_to_cpp_table,
     shuffle_table,
 )
-from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
-from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.utils import tracing
 from bodo.utils.cg_helpers import is_ll_eq
-from bodo.utils.conversion import fix_arr_dtype, index_to_array
+from bodo.utils.conversion import fix_arr_dtype, index_to_array, index_to_array_list
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
@@ -143,11 +149,13 @@ ll.add_symbol("json_write", json_cpp.json_write)
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
     """Temporary type class for DataFrame objects."""
 
+    index: SingleIndexType | MultiIndexType
+
     ndim = 2
 
     def __init__(
         self,
-        data: Sequence["types.ArrayCompatible"] | None = None,
+        data: Sequence[types.ArrayCompatible] | None = None,
         index=None,
         columns: Sequence[str] | None = None,
         dist=None,
@@ -620,12 +628,12 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         )
         data_type = types.BaseTuple.from_types(dtypes)
         null_tup_type = types.Tuple([types.bool_] * len(data_type))
-        nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
+        nullable_dtype = bodo.types.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pd_timestamp_tz_naive_type
+            name_dtype = bodo.types.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):
-            name_dtype = bodo.pd_timedelta_type
+            name_dtype = bodo.types.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
             row_typ = HeterogeneousSeriesType(nullable_dtype, index_type, name_dtype)
         else:
@@ -1139,7 +1147,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     not changed.
     """
     assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType), (
-        "init_dataframe(): invalid index type"
+        f"init_dataframe(): invalid index type of {index_typ}"
     )
 
     n_cols = len(data_tup_typ.types)
@@ -1895,7 +1903,7 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     data_arrs = []
     for i in range(n_cols):
         col = pyval.iloc[:, i]
-        if isinstance(df_type.data[i], bodo.DatetimeArrayType):
+        if isinstance(df_type.data[i], bodo.types.DatetimeArrayType):
             # TODO [BE-2441]: Unify?
             py_arr = col.array
         else:
@@ -2278,6 +2286,7 @@ def _cast_df_data_to_tuple_format(
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.DataFrame, inline="always", no_unliteral=True, jit_options={"cache": True})
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
     # TODO: error checking
@@ -2295,7 +2304,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
         func_text,
         {"bodo": bodo, "np": np, "__col_name_meta_value_pd_overload": col_var},
         {},
-        globals(),
+        __name__,
     )
 
 
@@ -2496,7 +2505,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 
     # object array of NaNs if dtype not specified
     if is_overload_none(dtype):
-        dtype = "bodo.string_array_type"
+        dtype = "bodo.types.string_array_type"
     else:
         dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
@@ -2518,7 +2527,7 @@ class LenTemplate(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         # TODO: Fuse more templates
-        if isinstance(args[0], (DataFrameType, bodo.TableType)):
+        if isinstance(args[0], (DataFrameType, bodo.types.TableType)):
             return types.int64(*args)
 
 
@@ -2712,13 +2721,13 @@ class JoinTyper(AbstractTemplate):
             if right_key in left_df.column_index:
                 columns.append(right_key)
                 if (
-                    right_key_type == bodo.dict_str_arr_type
-                    and left_key_type == bodo.string_array_type
+                    right_key_type == bodo.types.dict_str_arr_type
+                    and left_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = right_key_type
                 data.append(out_col)
@@ -2730,13 +2739,13 @@ class JoinTyper(AbstractTemplate):
             if left_key in right_df.column_index:
                 columns.append(left_key)
                 if (
-                    left_key_type == bodo.dict_str_arr_type
-                    and right_key_type == bodo.string_array_type
+                    left_key_type == bodo.types.dict_str_arr_type
+                    and right_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = left_key_type
                 data.append(out_col)
@@ -2748,13 +2757,13 @@ class JoinTyper(AbstractTemplate):
             )
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
-                if in_type == bodo.dict_str_arr_type:
+                if in_type == bodo.types.dict_str_arr_type:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     in_type = right_df.data[right_df.column_index[col]]
                 data.append(in_type)
             else:
-                if in_type == bodo.dict_str_arr_type and col in left_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in left_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if right_index:
@@ -2774,7 +2783,7 @@ class JoinTyper(AbstractTemplate):
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                if in_type == bodo.dict_str_arr_type and col in right_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in right_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if left_index:
@@ -2795,9 +2804,11 @@ class JoinTyper(AbstractTemplate):
         if indicator_value:
             columns.append("_merge")
             data.append(
-                bodo.CategoricalArrayType(
-                    bodo.PDCategoricalDtype(
-                        ("left_only", "right_only", "both"), bodo.string_type, False
+                bodo.types.CategoricalArrayType(
+                    bodo.types.PDCategoricalDtype(
+                        ("left_only", "right_only", "both"),
+                        bodo.types.string_type,
+                        False,
                     )
                 )
             )
@@ -2852,6 +2863,7 @@ def lower_join_dummy(context, builder, sig, args):
 
 
 @overload(pd.concat, inline="always", no_unliteral=True)
+@overload(bd.concat, inline="always", no_unliteral=True)
 def concat_overload(
     objs,
     axis=0,
@@ -3630,151 +3642,11 @@ def pivot_impl(
     return impl
 
 
-def gen_pandas_parquet_metadata(
-    column_names,
-    data_types,
-    index,
-    write_non_range_index_to_metadata,
-    write_rangeindex_to_metadata,
-    partition_cols=None,
-    is_runtime_columns=False,
-):
-    """
-    returns dict with pandas dataframe metadata for parquet storage.
-    For more information, see:
-    https://pandas.pydata.org/pandas-docs/stable/development/developer.html#storing-pandas-dataframe-objects-in-apache-parquet-format
-    """
-
-    pandas_metadata = {}
-
-    pandas_metadata["columns"] = []
-
-    if partition_cols is None:
-        partition_cols = []
-    for col_name, col_type in zip(column_names, data_types):
-        if col_name in partition_cols:
-            # partition columns are not written to parquet files, and don't appear
-            # in pandas metadata
-            continue
-        # Currently only timezone types contain metadata
-        metadata = None
-        if isinstance(col_type, bodo.DatetimeArrayType):
-            pandas_type = "datetimetz"
-            numpy_type = "datetime64[ns]"
-            # Reuse pyarrow to construct the metadata.
-            if isinstance(col_type.tz, int):
-                tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(col_type.tz)
-            else:
-                tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
-            metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
-        elif isinstance(col_type, types.Array) or col_type == boolean_array_type:
-            pandas_type = numpy_type = col_type.dtype.name
-            if numpy_type.startswith("datetime"):
-                pandas_type = "datetime"
-        elif is_str_arr_type(col_type):
-            pandas_type = "unicode"
-            numpy_type = "object"
-        elif col_type == binary_array_type:
-            pandas_type = "bytes"
-            numpy_type = "object"
-        elif isinstance(col_type, DecimalArrayType):
-            pandas_type = numpy_type = "object"
-        elif isinstance(col_type, IntegerArrayType):
-            dtype_name = col_type.dtype.name
-            # Pandas dtype is int8/uint8/int16/...
-            # numpy dtype is Int8/UInt8/Int16/... (capitalize to specify nullable array)
-            if dtype_name.startswith("int"):
-                numpy_type = "Int" + dtype_name[3:]
-            elif dtype_name.startswith("uint"):
-                numpy_type = "UInt" + dtype_name[4:]
-            else:  # pragma: no cover
-                if is_runtime_columns:
-                    # If columns are determined at runtime we don't have names
-                    col_name = "Runtime determined column of type"
-                raise BodoError(
-                    f"to_parquet(): unknown dtype in nullable Integer column {col_name} {col_type}"
-                )
-            pandas_type = col_type.dtype.name
-        elif isinstance(col_type, bodo.FloatingArrayType):
-            dtype_name = col_type.dtype.name
-            # Pandas dtype is float32/float64
-            # numpy dtype is Float32/Float64 (capitalize to specify nullable array)
-            pandas_type = dtype_name
-            numpy_type = dtype_name.capitalize()
-        elif col_type == datetime_date_array_type:
-            pandas_type = "datetime"
-            numpy_type = "object"
-        elif isinstance(col_type, TimeArrayType):
-            pandas_type = "datetime"
-            numpy_type = "object"
-        elif isinstance(
-            col_type,
-            (
-                bodo.ArrayItemArrayType,
-                bodo.StructArrayType,
-                bodo.MapArrayType,
-            ),
-        ):
-            # TODO: provide meaningful pandas_type when possible.
-            # For example "pandas_type": "list[list[int64]]", "numpy_type": "object"
-            # can occur
-            pandas_type = "object"
-            numpy_type = "object"
-        # TODO: metadata for categorical arrays
-        else:  # pragma: no cover
-            if is_runtime_columns:
-                # If columns are determined at runtime we don't have names
-                col_name = "Runtime determined column of type"
-            raise BodoError(
-                f"to_parquet(): unsupported column type for metadata generation : {col_name} {col_type}"
-            )
-
-        col_metadata = {
-            "name": col_name,
-            "field_name": col_name,
-            "pandas_type": pandas_type,
-            "numpy_type": numpy_type,
-            "metadata": metadata,
-        }
-        pandas_metadata["columns"].append(col_metadata)
-
-    if write_non_range_index_to_metadata:
-        # TODO multi-level
-        if isinstance(index, MultiIndexType):
-            raise BodoError("to_parquet: MultiIndex not supported yet")
-        if "none" in index.name:
-            _idxname = "__index_level_0__"
-            _colidxname = None
-        else:
-            _idxname = "%s"
-            _colidxname = "%s"
-
-        pandas_metadata["index_columns"] = [_idxname]
-
-        # add index column metadata
-        pandas_metadata["columns"].append(
-            {
-                "name": _colidxname,
-                "field_name": _idxname,
-                "pandas_type": index.pandas_type_name,
-                "numpy_type": index.numpy_type_name,
-                "metadata": None,
-            }
-        )
-    elif write_rangeindex_to_metadata:
-        pandas_metadata["index_columns"] = [
-            {"kind": "range", "name": "%s", "start": "%d", "stop": "%d", "step": "%d"}
-        ]
-    else:
-        pandas_metadata["index_columns"] = []
-
-    pandas_metadata["pandas_version"] = pd.__version__
-
-    return pandas_metadata
-
-
 @overload_method(
-    DataFrameType, "to_parquet", no_unliteral=True, jit_options={"cache": True}
+    DataFrameType,
+    "to_parquet",
+    no_unliteral=True,
+    # jit_options={"cache": True}
 )
 def to_parquet_overload(
     df,
@@ -3801,6 +3673,8 @@ def to_parquet_overload(
         package_name="pandas",
         module_name="IO",
     )
+    df = pt.cast(DataFrameType, df)
+
     # If a DataFrame has runtime columns then you cannot specify
     # partition_cols since the column names aren't known at compile
     # time.
@@ -3835,9 +3709,12 @@ def to_parquet_overload(
         part_col_idxs = []
         for part_col_name in partition_cols:
             try:
+                # TODO: Support index columns as partition columns
                 idx = df.columns.index(part_col_name)
             except ValueError:
-                raise BodoError(f"Partition column {part_col_name} is not in dataframe")
+                raise BodoError(
+                    f"Partition column `{part_col_name}` is not in dataframe"
+                )
             part_col_idxs.append(idx)
     else:
         partition_cols = None
@@ -3856,7 +3733,8 @@ def to_parquet_overload(
             "to_parquet(): _bodo_timestamp_tz must be None or a constant string"
         )
 
-    from bodo.io.parquet_pio import (
+    from bodo.io.parquet_write import (
+        gen_pandas_parquet_metadata,
         parquet_write_table_cpp,
         parquet_write_table_partitioned_cpp,
     )
@@ -3887,79 +3765,16 @@ def to_parquet_overload(
         and not is_overload_true(_is_parallel)
     )
 
-    # write pandas metadata for the parquet file
-    if df.has_runtime_cols:
-        # Parquet can't support multi-index in general. Support Multi-Index
-        # columns once MultiIndex is supported.
-        if isinstance(df.runtime_colname_typ, MultiIndexType):
-            raise BodoError(
-                "DataFrame.to_parquet(): Not supported with MultiIndex runtime column names. Please return the DataFrame to regular Python to update typing information."
-            )
-        if not isinstance(
-            df.runtime_colname_typ, bodo.hiframes.pd_index_ext.StringIndexType
-        ):
-            # This is the Pandas error message.
-            raise BodoError(
-                "DataFrame.to_parquet(): parquet must have string column names. Please return the DataFrame with runtime column names to regular Python to modify column names."
-            )
-        # If our DataFrame has runtime columns. Then we can't generate
-        # metadata str at compile time. Instead, we generate format strings
-        # for each column type and fill them at runtime. We still generate
-        # surrounding metadata and information for the index at compile time.
-        data_columns = df.runtime_data_types
-        num_col_types = len(data_columns)
-        metadata = gen_pandas_parquet_metadata(
-            [""] * num_col_types,
-            data_columns,
-            df.index,
-            write_non_range_index_to_metadata,
-            write_rangeindex_to_metadata,
-            partition_cols=partition_cols,
-            is_runtime_columns=True,
-        )
-        # Extract the info for columns to create format strings.
-        format_strings = metadata["columns"][:num_col_types]
-        # Remove all runtime column types
-        metadata["columns"] = metadata["columns"][num_col_types:]
-        # Create the format strings to lower.
-        format_strings = [json.dumps(x).replace('""', "{0}") for x in format_strings]
-        pandas_metadata_str = json.dumps(metadata)
-        # Find the location to insert the format strings. This is used to split
-        # pandas_metadata_str into two parts.
-        split_str = '"columns": ['
-        start_index = pandas_metadata_str.find(split_str)
-        if start_index == -1:
-            raise BodoError(
-                "DataFrame.to_parquet(): Unexpected metadata string for runtime columns.  Please return the DataFrame to regular Python to update typing information."
-            )
-        split_index = start_index + len(split_str)
-        pandas_metadata_str_start = pandas_metadata_str[:split_index]
-        # Name the end the original name for the index name replacements.
-        pandas_metadata_str = pandas_metadata_str[split_index:]
-        # If there are any remaining columns in metadata we need a comma
-        # at the end.
-        trailing_comma = len(metadata["columns"])
-    else:
-        pandas_metadata_str = json.dumps(
-            gen_pandas_parquet_metadata(
-                df.columns,
-                df.data,
-                df.index,
-                write_non_range_index_to_metadata,
-                write_rangeindex_to_metadata,
-                partition_cols=partition_cols,
-                is_runtime_columns=False,
-            )
-        )
-    if not is_overload_true(_is_parallel) and is_range_index:
-        pandas_metadata_str = pandas_metadata_str.replace('"%d"', "%d")
-        if df.index.name == "RangeIndexType(none)":
-            # if the index name is None then we need to write just "null" to the metadata file
-            # without quotation marks(null). But if a name is provided we need to
-            # wrap the name with quotation mark to indicate it is a string
-            pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
-
     func_text = "def bodo_df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
+
+    # Get all column names that will be written to parquet
+    # Note, index columns are added later for the non-partition case
+    # TODO: Extend for partitioned writes as well
+    if df.has_runtime_cols:
+        func_text += "    columns_index = get_dataframe_column_names(df)\n"
+        # Note: C++ assumes the array is always a string array.
+        func_text += "    col_names_arr = index_to_array(columns_index)\n"
+    func_text += "    col_names = array_to_info(col_names_arr)\n"
 
     # Why we are calling drop_duplicates_local_dictionary on all dict encoded arrays?
     # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
@@ -3982,61 +3797,17 @@ def to_parquet_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"    arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"    info_list = [{data_args}]\n"
         func_text += "    table = arr_info_list_to_table(info_list)\n"
-    if df.has_runtime_cols:
-        func_text += "    columns_index = get_dataframe_column_names(df)\n"
-        # Note: C++ assumes the array is always a string array.
-        func_text += "    names_arr = index_to_array(columns_index)\n"
-        func_text += "    col_names = array_to_info(names_arr)\n"
-    else:
-        func_text += "    col_names = array_to_info(col_names_arr)\n"
-    if not partition_cols:
-        if is_overload_true(index) or (
-            is_overload_none(index) and write_non_rangeindex
-        ):
-            func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
-            write_index = True
-        else:
-            func_text += "    index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
-            write_index = False
-    if df.has_runtime_cols:
-        # Compute the metadata string at runtime.
-        func_text += "    columns_lst = []\n"
-        func_text += "    num_cols = 0\n"
-        for i in range(len(df.runtime_data_types)):
-            # For each column in the block (list of columns of the same type),
-            # we use the block's format string to generate the metadata string
-            # for each column.
-            func_text += f"    for _ in range(len(py_table.block_{i})):\n"
-            # Format strings don't work in pure Numba, so use replace.
-            func_text += f"        columns_lst.append({format_strings[i]!r}.replace('{{0}}', '\"' + names_arr[num_cols] + '\"'))\n"
-            func_text += "        num_cols += 1\n"
-        if trailing_comma:
-            # Append an empty string to join with a comma
-            func_text += "    columns_lst.append('')\n"
-        func_text += '    columns_str = ", ".join(columns_lst)\n'
-        # Create the full metadata string.
-        func_text += (
-            '    metadata = """'
-            + pandas_metadata_str_start
-            + '""" + columns_str + """'
-            + pandas_metadata_str
-            + '"""\n'
-        )
-    else:
-        func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
+
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
     func_text += "    if _bodo_timestamp_tz is None:\n"
     func_text += "        _bodo_timestamp_tz = ''\n"
-    func_text += "    if df.index.name is not None:\n"
-    func_text += "        name_ptr = df.index.name\n"
-    func_text += "    else:\n"
-    func_text += "        name_ptr = 'null'\n"
+
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, parallel=_is_parallel)\n"
     col_names_no_parts_arr = None
@@ -4074,47 +3845,44 @@ def to_parquet_overload(
         func_text += (
             "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
         )
-    elif write_rangeindex_to_metadata:
-        func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
-        func_text += "                            table, col_names, index_col,\n"
-        func_text += "                            " + str(write_index) + ",\n"
-        func_text += "                            unicode_to_utf8(metadata),\n"
-        func_text += "                            unicode_to_utf8(compression),\n"
-        func_text += "                            _is_parallel, 1, df.index.start,\n"
-        func_text += "                            df.index.stop, df.index.step,\n"
-        func_text += "                            unicode_to_utf8(name_ptr),\n"
-        func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
-        func_text += (
-            "                              False,\n"  # convert_timedelta_to_int64
-        )
-        func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
-        )
-        func_text += "                              False,\n"  # downcast_time_ns_to_us
-        func_text += "                              True)\n"  # create_dir
     else:
-        func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
-        func_text += "                            table, col_names, index_col,\n"
-        func_text += "                            " + str(write_index) + ",\n"
-        func_text += "                            unicode_to_utf8(metadata),\n"
-        func_text += "                            unicode_to_utf8(compression),\n"
-        func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
-        func_text += "                            unicode_to_utf8(name_ptr),\n"
-        func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
+        # Parquet needs to include all columns, including index columns
+        if is_overload_true(index) or (
+            is_overload_none(index) and write_non_rangeindex
+        ):
+            func_text += "    index_arr_list = index_to_array_list(df.index)\n"
+            func_text += "    index_info_list = []\n"
+            for i in range(df.index.nlevels):
+                func_text += (
+                    f"    index_info_list.append(array_to_info(index_arr_list[{i}]))\n"
+                )
+            func_text += (
+                "    append_arr_info_list_to_cpp_table(table, index_info_list)\n"
+            )
         func_text += (
-            "                              False,\n"  # convert_timedelta_to_int64
+            # Generate Pandas metadata string to store in the Parquet schema.
+            # It requires both compile-time type info and runtime index name info
+            f"    metadata, out_names_arr = gen_pandas_parquet_metadata(df, col_names_arr, partition_cols, {write_non_range_index_to_metadata}, {write_rangeindex_to_metadata})\n"
+            # Update the columns list as well to include index columns
+            "    col_names = array_to_info(out_names_arr)\n"
+            # Actual write
+            "    parquet_write_table_cpp(\n"
+            "        unicode_to_utf8(path),\n"
+            "        table, col_names,\n"
+            "        unicode_to_utf8(metadata),\n"
+            "        unicode_to_utf8(compression),\n"
+            "        _is_parallel,\n"
+            "        unicode_to_utf8(bucket_region),\n"
+            "        row_group_size,\n"
+            "        unicode_to_utf8(_bodo_file_prefix),\n"
+            "        False,\n"  # convert_timedelta_to_int64
+            "        unicode_to_utf8(_bodo_timestamp_tz),\n"
+            "        False,\n"  # downcast_time_ns_to_us
+            "        True)\n"  # create_dir
         )
-        func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
-        )
-        func_text += "                              False,\n"  # downcast_time_ns_to_us
-        func_text += "                              True)\n"  # create_dir
 
     loc_vars = {}
+
     if df.has_runtime_cols:
         col_names_arr = None
     else:
@@ -4137,6 +3905,7 @@ def to_parquet_overload(
         "arr_info_list_to_table": arr_info_list_to_table,
         "str_arr_from_sequence": str_arr_from_sequence,
         "parquet_write_table_cpp": parquet_write_table_cpp,
+        "gen_pandas_parquet_metadata": gen_pandas_parquet_metadata,
         "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
         "index_to_array": index_to_array,
         "col_names_arr": col_names_arr,
@@ -4148,13 +3917,15 @@ def to_parquet_overload(
         "fix_arr_dtype": fix_arr_dtype,
         "decode_if_dict_array": decode_if_dict_array,
         "decode_if_dict_table": decode_if_dict_table,
+        "index_to_array_list": index_to_array_list,
+        "append_arr_info_list_to_cpp_table": append_arr_info_list_to_cpp_table,
     }
     glbls.update(extra_globals)
     return bodo_exec(
         func_text,
         glbls,
         loc_vars,
-        globals(),
+        __name__,
     )
 
 
@@ -4179,7 +3950,7 @@ def to_sql_exception_guard(
     ev = tracing.Event("to_sql_exception_guard", is_parallel=_is_parallel)
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con)
+    db_type, con_paswd = bodo.io.utils.parse_dbtype(con)
 
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case
@@ -4232,8 +4003,8 @@ def to_sql_exception_guard(
                     if col_dtype == datetime_date_array_type:
                         dtyp[c] = sa.types.Date
                     elif col_dtype in (
-                        bodo.string_array_type,
-                        bodo.dict_str_arr_type,
+                        bodo.types.string_array_type,
+                        bodo.types.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
                 # workaround to avoid issue with Oracle and Float values
@@ -4289,7 +4060,7 @@ def to_sql_exception_guard_encaps(
     _is_parallel=False,
 ):  # pragma: no cover
     ev = tracing.Event("to_sql_exception_guard_encaps", is_parallel=_is_parallel)
-    with bodo.no_warning_objmode(out="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
         ev_objmode = tracing.Event(
             "to_sql_exception_guard_encaps:objmode", is_parallel=_is_parallel
         )
@@ -4359,7 +4130,7 @@ def to_sql_overload(
     # Snowflake write imports
     # We need to import so that the types are in numba's type registry
     # when executing the code.
-    from bodo.io.parquet_pio import parquet_write_table_cpp
+    from bodo.io.parquet_write import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
     extra_globals = {}
@@ -4375,7 +4146,6 @@ def to_sql_overload(
                 "Python to modify column names."
             )
     col_names_arr = pd.array(df.columns)
-    n_cols = len(col_names_arr)
 
     func_text = (
         "def df_to_sql(\n"
@@ -4390,13 +4160,12 @@ def to_sql_overload(
     # ------------------------------ Iceberg Write -----------------------------
     func_text += (
         "    if con.startswith('iceberg'):\n"
-        "        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
         "        if schema is None:\n"
         "            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
         "        if chunksize is not None:\n"
         "            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
         "        if index and bodo.get_rank() == 0:\n"
-        "            warnings.warn('index is not supported for Iceberg tables.')      \n"
+        "            warnings.warn('index is not supported for Iceberg tables.')\n"
         "        if index_label is not None and bodo.get_rank() == 0:\n"
         "            warnings.warn('index_label is not supported for Iceberg tables.')\n"
     )
@@ -4419,7 +4188,7 @@ def to_sql_overload(
             # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
             # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
             # on all dict encoded arrays?) for why this is important.
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
@@ -4429,10 +4198,11 @@ def to_sql_overload(
     # Partition columns not supported through this API.
     func_text += (
         "        col_names = array_to_info(col_names_arr)\n"
+        "        table_id = name if schema == '' else f'{schema}.{name}'\n"
         "        bodo.io.iceberg.write.iceberg_write(\n"
-        "            con_str, schema, name, table, col_names,\n"
-        "            None, if_exists, _is_parallel, pyarrow_table_schema,\n"
-        f"            {n_cols}, _bodo_allow_downcasting,\n"
+        "            con, table_id, table, col_names,\n"
+        "            if_exists, _is_parallel, pyarrow_table_schema,\n"
+        "           _bodo_allow_downcasting,\n"
         "        )\n"
     )
 
@@ -4459,35 +4229,21 @@ def to_sql_overload(
     # In object mode: Connect to snowflake, create internal stage, and
     # get internal stage credentials on each rank
     func_text += (
-        "        with bodo.no_warning_objmode(\n"
+        "        with bodo.ir.object_mode.no_warning_objmode(\n"
         "            cursor='snowflake_connector_cursor_type',\n"
         "            tmp_folder='temporary_directory_type',\n"
         "            stage_name='unicode_type',\n"
         "            parquet_path='unicode_type',\n"
         "            upload_using_snowflake_put='boolean',\n"
         "            old_creds='DictType(unicode_type, unicode_type)',\n"
-        "            azure_stage_direct_upload='boolean',\n"
-        "            old_core_site='unicode_type',\n"
-        "            old_sas_token='unicode_type',\n"
         "        ):\n"
         "            (\n"
-        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds, azure_stage_direct_upload, old_core_site, old_sas_token,\n"
+        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds,\n"
         "            ) = bodo.io.snowflake.connect_and_get_upload_info(con)\n"
     )
 
     # Barrier ensures that internal stage exists before we upload files to it
     func_text += "        bodo.barrier()\n"
-
-    # Force reset the existing hadoop filesystem instance. This is very important
-    # in case there are multiple Snowflake writes (to the same Snowflake account)
-    # in the same process since Snowflake will usually create the stage in the
-    # same Azure storage account (but different containers). This means that we
-    # need to use the new SAS token. To do this, we need to force Hadoop to read
-    # the SAS Token again using the BodoSASTokenProvider (which will read it from
-    # the file again, which should now have the latest token).
-    # Note that this is a NOP if the filesystem hasn't been initialized yet.
-    func_text += "        if azure_stage_direct_upload:\n"
-    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
 
     # Estimate chunk size by repeating internal implementation of `df.memory_usage()`.
     # Calling `df.memory_usage()` provides much poorer performance as the call
@@ -4540,7 +4296,7 @@ def to_sql_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
         func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
@@ -4561,7 +4317,15 @@ def to_sql_overload(
     # Create a unique filename for uploaded chunk with quotes/backslashes escaped
     # We ensure that `parquet_path` always has a trailing slash in `connect_and_get_upload_info`
     func_text += "            chunk_name = f'file{chunk_idx}_rank{my_rank}_{bodo.io.helpers.uuid4_helper()}.parquet'\n"
-    func_text += "            chunk_path = parquet_path + chunk_name\n"
+    # Azure paths can have a query string at the end.
+    # We need to append the chunk name before the query string.
+    func_text += "            if parquet_path.startswith('abfs') and '?' in parquet_path:  # Azure\n"
+    func_text += "                container_path, query = parquet_path.split('?')\n"
+    func_text += (
+        "                chunk_path = container_path + chunk_name + '?' + query\n"
+    )
+    func_text += "            else:\n"
+    func_text += "                chunk_path = parquet_path + chunk_name\n"
     # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
     # should contain the string literals ( \\ ) and ( \\\\ ). To add these to func_text,
     # we need to write ( \\\\ ) and ( \\\\\\\\ ) here.
@@ -4608,14 +4372,10 @@ def to_sql_overload(
         "            ev_pq_write_cpp.add_attribute('chunk_path', chunk_path)\n"
         "            parquet_write_table_cpp(\n"
         "                unicode_to_utf8(chunk_path),\n"
-        "                table_chunk, col_names, 0,\n"
-        "                False,\n"  # write_index
+        "                table_chunk, col_names,\n"
         "                unicode_to_utf8('null'),\n"  # metadata
         "                unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),\n"
         "                False,\n"  # is_parallel
-        "                0,\n"  # write_rangeindex_to_metadata
-        "                0, 0, 0,\n"  # range index start, stop, step
-        "                unicode_to_utf8('null'),\n"  # idx_name
         "                unicode_to_utf8(bucket_region),\n"
         # We set the row group size equal to chunksize to force this parquet to
         # be written as one row group. Due to prior chunking, the whole parquet
@@ -4626,12 +4386,11 @@ def to_sql_overload(
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
         "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
         "                True,\n"  # Create directory
-        "                True,\n"  # Use HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
-        "                with bodo.no_warning_objmode():\n"
+        "                with bodo.ir.object_mode.no_warning_objmode():\n"
         "                    bodo.io.snowflake.do_upload_and_cleanup(\n"
         "                        cursor, chunk_idx, chunk_path, stage_name,\n"
         "                    )\n"
@@ -4654,24 +4413,14 @@ def to_sql_overload(
     func_text += (
         # This is because it seems like globals aren't passed into objmode
         "        df_data_ = df_data\n"
-        "        with bodo.no_warning_objmode():\n"
+        "        with bodo.ir.object_mode.no_warning_objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         # Creating the dict here instead of passing it in as a globall is necessary because when boxing
         # dicts we check if they contain type references in the value and throw an error, we need typerefs here
         f"                cursor, stage_name, location, {sf_schema}, dict(zip(df.columns, df_data_)),\n"
         "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
-        "                azure_stage_direct_upload, old_core_site,\n"
-        "                old_sas_token,\n"
         "            )\n"
     )
-
-    # Force reset the existing hadoop filesystem instance to avoid conflicts
-    # with any future ADLS operations in this same process. See the comment
-    # above for more information.
-    # Note that this is idempotent, so it can be called safely again during
-    # atexit without any side effects (will be a NOP).
-    func_text += "        if azure_stage_direct_upload:\n"
-    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
     func_text += "        ev.finalize()\n"
 
     # -------------------------- Default to_sql Impl --------------------------
@@ -4775,6 +4524,8 @@ def to_csv_overload(
     errors="strict",
     storage_options=None,
     _bodo_file_prefix="part-",
+    # Concatenate string output on rank 0 if set (used in spawn mode)
+    _bodo_concat_str_output=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_csv()")
     check_unsupported_args(
@@ -4831,6 +4582,75 @@ def to_csv_overload(
     # TODO: refactor when objmode() can understand global string constant
     # String output case
     if is_overload_none(path_or_buf):
+        # NOTE: using a separate path for _bodo_concat_str_output since gatherv fails
+        # for categorical arrays with non-constant categories so avoiding gatherv
+        # compilation as much as possible.
+        # See BSE-4713
+        assert is_overload_constant_bool(_bodo_concat_str_output), (
+            "to_csv: _bodo_concat_str_output should be constant bool"
+        )
+
+        if is_overload_true(_bodo_concat_str_output):
+
+            def _impl_concat_str(
+                df,
+                path_or_buf=None,
+                sep=",",
+                na_rep="",
+                float_format=None,
+                columns=None,
+                header=True,
+                index=True,
+                index_label=None,
+                mode="w",
+                encoding=None,
+                compression=None,  # this is different from pandas, default is 'infer'.
+                quoting=None,
+                quotechar='"',
+                lineterminator=None,
+                chunksize=None,
+                date_format=None,
+                doublequote=True,
+                escapechar=None,
+                decimal=".",
+                errors="strict",
+                storage_options=None,
+                _bodo_file_prefix="part-",
+                _bodo_concat_str_output=False,
+            ):  # pragma: no cover
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
+
+                with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
+                    D = df.to_csv(
+                        path_or_buf,
+                        sep=sep,
+                        na_rep=na_rep,
+                        float_format=float_format,
+                        columns=columns,
+                        header=header,
+                        index=index,
+                        index_label=index_label,
+                        mode=mode,
+                        encoding=encoding,
+                        compression=compression,
+                        quoting=quoting,
+                        quotechar=quotechar,
+                        lineterminator=lineterminator,
+                        chunksize=chunksize,
+                        date_format=date_format,
+                        doublequote=doublequote,
+                        escapechar=escapechar,
+                        decimal=decimal,
+                        errors=errors,
+                        storage_options=storage_options,
+                    )
+                return D
+
+            return _impl_concat_str
 
         def _impl(
             df,
@@ -4856,8 +4676,9 @@ def to_csv_overload(
             errors="strict",
             storage_options=None,
             _bodo_file_prefix="part-",
+            _bodo_concat_str_output=False,
         ):  # pragma: no cover
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
                     sep=sep,
@@ -4909,10 +4730,11 @@ def to_csv_overload(
         errors="strict",
         storage_options=None,
         _bodo_file_prefix="part-",
+        _bodo_concat_str_output=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_csv(
                 None,
                 sep=sep,
@@ -4937,7 +4759,7 @@ def to_csv_overload(
                 storage_options=storage_options,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix)
+        bodo.io.helpers.csv_write(path_or_buf, D, _bodo_file_prefix)
 
     return _impl
 
@@ -4963,6 +4785,8 @@ def to_json_overload(
     storage_options=None,
     mode="w",
     _bodo_file_prefix="part-",
+    # Concatenate string output on rank 0 if set (used in spawn mode)
+    _bodo_concat_str_output=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_json()")
     check_unsupported_args(
@@ -4997,8 +4821,15 @@ def to_json_overload(
             storage_options=None,
             mode="w",
             _bodo_file_prefix="part-",
+            _bodo_concat_str_output=False,
         ):  # pragma: no cover
-            with bodo.no_warning_objmode(D="unicode_type"):
+            if _bodo_concat_str_output:
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
                     orient=orient,
@@ -5034,10 +4865,11 @@ def to_json_overload(
         storage_options=None,
         mode="w",
         _bodo_file_prefix="part-",
+        _bodo_concat_str_output=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_json(
                 None,
                 orient=orient,
@@ -5076,6 +4908,7 @@ def to_json_overload(
 
 
 @overload(pd.get_dummies, inline="always", no_unliteral=True)
+@overload(bd.get_dummies, inline="always", no_unliteral=True)
 def get_dummies(
     data,
     prefix=None,
@@ -5222,15 +5055,15 @@ def overload_union_dataframes(
                 if col_typ == other_col_typ:
                     new_col_types.append(col_typ)
                 elif (
-                    col_typ == bodo.dict_str_arr_type
-                    or other_col_typ == bodo.dict_str_arr_type
+                    col_typ == bodo.types.dict_str_arr_type
+                    or other_col_typ == bodo.types.dict_str_arr_type
                 ):
                     if col_typ not in (
-                        bodo.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.string_array_type,
+                        bodo.types.null_array_type,
                     ) and other_col_typ not in (
-                        bodo.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.string_array_type,
+                        bodo.types.null_array_type,
                     ):
                         # If one column is dict encoded the other column must be a string
                         # or null array.
@@ -5238,7 +5071,7 @@ def overload_union_dataframes(
                             f"Unable to union table with columns of incompatible types. Found types {col_typ} and {other_col_typ} in column {i}."
                         )
                     # If either array is dict encoded we want the output to be dict encoded.
-                    new_col_types.append(bodo.dict_str_arr_type)
+                    new_col_types.append(bodo.types.dict_str_arr_type)
                 else:
                     col_dtype = col_typ.dtype
                     other_col_dtype = other_col_typ.dtype
@@ -5256,7 +5089,7 @@ def overload_union_dataframes(
     func_text = "def impl(df_tup, drop_duplicates, output_colnames):\n"
     glbls = {
         "bodo": bodo,
-        "py_table_typ": bodo.TableType(col_types),
+        "py_table_typ": bodo.types.TableType(col_types),
     }
     # Step 2 generate code to convert each DataFrame to C++.
     for i, df_type in enumerate(df_types):
@@ -5510,10 +5343,10 @@ def _install_dataframe_unsupported():
 
     for attr_name in dataframe_unsupported_attrs:
         full_name = "DataFrame." + attr_name
-        bodo.overload_unsupported_attribute(DataFrameType, attr_name, full_name)
+        overload_unsupported_attribute(DataFrameType, attr_name, full_name)
     for fname in dataframe_unsupported:
         full_name = "DataFrame." + fname
-        bodo.overload_unsupported_method(DataFrameType, fname, full_name)
+        overload_unsupported_method(DataFrameType, fname, full_name)
 
 
 # Run install unsupported for each module to ensure a correct error message.

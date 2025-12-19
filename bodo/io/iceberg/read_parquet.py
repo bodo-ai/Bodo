@@ -18,12 +18,14 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 
 import bodo
+from bodo import BodoWarning
 from bodo.io import arrow_cpp
 from bodo.io.iceberg.common import (
     FieldID,
     FieldIDs,
     FieldName,
     FieldNames,
+    IcebergParquetInfo,
     SchemaGroupIdentifier,
     b_ICEBERG_FIELD_ID_MD_KEY,
 )
@@ -37,10 +39,9 @@ from bodo.io.parquet_pio import (
     schema_with_dict_cols,
 )
 from bodo.mpi4py import MPI
-from bodo.utils.utils import BodoError, BodoWarning
 
 if pt.TYPE_CHECKING:  # pragma: no cover
-    from bodo_iceberg_connector import IcebergParquetInfo
+    import pyarrow.fs as pa_fs
     from pyarrow._dataset import Dataset
     from pyarrow._fs import PyFileSystem
 
@@ -505,11 +506,6 @@ class IcebergParquetDataset:
     # case, we only prune out pieces based on metadata and report
     # the row count of the entire piece.
     row_level: bool
-    # 'conn', 'database schema' & 'table_name' describe the Iceberg
-    # table we're reading.
-    conn: str
-    database_schema: str
-    table_name: str
     # This is the PyArrow schema object for the final/target schema to read
     # the table as. This is obtained from Iceberg at compile time, i.e. the
     # expected final schema. It must have Iceberg Field IDs in the metadata
@@ -524,7 +520,7 @@ class IcebergParquetDataset:
     # Snapshot id. This is used for operations like delete/merge.
     snapshot_id: int
     # Filesystem can be None when there are no files to read.
-    filesystem: PyFileSystem | pa.fs.FileSystem | None
+    filesystem: pa_fs.FileSystem | None
     # Parquet files to read ordered by the schema group
     # they belong to. We order them this way so that when
     # we split this list between ranks for the actual read,
@@ -545,7 +541,7 @@ class IcebergParquetDataset:
 
 def warn_if_non_ideal_io_parallelism(
     g_total_rgs: int, g_total_size_bytes: int, protocol: str
-):
+) -> None:
     """
     Helper function for raising warnings on rank-0 when
     the file properties are not ideal for effective
@@ -739,6 +735,8 @@ def generate_expr_filter(
     input_vars_str = ",".join([x[0] for x in filter_scalars])
     glbs = globals()
     glbs["ds"] = ds
+    glbs["pc"] = pc
+    glbs["pa"] = pa
     loc_vars = {}
     # By passing in the scalars as arguments, they will
     # get mapped correctly in the expr_filter_str.
@@ -821,7 +819,7 @@ def get_dataset_for_schema_group(
     files_rows_to_read: list[int],
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    filesystem: PyFileSystem | pa.fs.FileSystem,
+    filesystem: pa_fs.FileSystem,
     start_offset: int,
     len_all_fpaths: int,
 ) -> tuple[Dataset, pa.Schema, int]:
@@ -839,8 +837,7 @@ def get_dataset_for_schema_group(
             renaming during the read.
         str_as_dict_cols (list[str]): List of column names
             that must be read with dictionary encoding.
-        filesystem (PyFileSystem | pa.fs.FileSystem): Filesystem
-            to use for reading the files.
+        filesystem (pa.fs.FileSystem): Filesyste to use for reading the files.
         start_offset (int): The starting row offset to read from
             in the first file.
         len_all_fpaths (int): Total number of files across all schema
@@ -907,7 +904,7 @@ def get_pyarrow_datasets(
     schema_groups: list[IcebergSchemaGroup],
     avg_num_pieces: float,
     is_parallel: bool,
-    filesystem: PyFileSystem | pa.fs.FileSystem,
+    filesystem: pa_fs.FileSystem,
     str_as_dict_cols: list[str],
     start_offset: int,
     final_schema: pa.Schema,
@@ -932,8 +929,7 @@ def get_pyarrow_datasets(
             files than average, we assign it more IO threads.
         is_parallel (bool): Whether this is being called in parallel
             across all ranks.
-        filesystem (PyFileSystem | pa.fs.FileSystem): Filesystem to
-            use for reading the files.
+        filesystem (pa.fs.FileSystem): Filesystem to use for reading the files.
         str_as_dict_cols (list[str]): List of column names
             that must be read with dictionary encoding.
         start_offset (int): The starting row offset to read from
@@ -1028,7 +1024,7 @@ def get_pieces_with_exact_row_counts(
     schema_group: IcebergSchemaGroup,
     schema_group_identifier: SchemaGroupIdentifier,
     pq_infos: list[IcebergParquetInfo],
-    fs: PyFileSystem | pa.fs.FileSystem,
+    fs: PyFileSystem | pa_fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     metrics: IcebergPqDatasetMetrics,
@@ -1050,8 +1046,7 @@ def get_pieces_with_exact_row_counts(
             field names.
         pq_file_fragments (list[IcebergParquetInfo]): List of files
             to get the row counts for.
-        fs (PyFileSystem&quot; | pa.fs.FileSystem): Filesystem to
-            use for accessing the files and getting the row count
+        fs (pa.fs.FileSystem): Filesystem to use for accessing the files and getting the row count
             and metadata information.
             NOTE: This is only used when there are dict-encoded
             columns and we need to re-create the fragments from a
@@ -1099,7 +1094,7 @@ def get_pieces_with_exact_row_counts(
     pq_file_fragments: list[ds.ParquetFileFragment] = []
     for pq_info in pq_infos:
         pq_file_fragments.append(
-            pq_file_format.make_fragment(pq_info.standard_path, fs)
+            pq_file_format.make_fragment(pq_info.sanitized_path, fs)
         )
     metrics.file_frags_creation_time += int((time.monotonic() - start) * 1_000_000)
 
@@ -1141,7 +1136,7 @@ def get_pieces_with_exact_row_counts(
 def get_row_counts_for_schema_group(
     schema_group_identifier: SchemaGroupIdentifier,
     pq_infos: list[IcebergParquetInfo],
-    fs: PyFileSystem | pa.fs.FileSystem,
+    fs: PyFileSystem | pa_fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     metrics: IcebergPqDatasetMetrics,
@@ -1175,8 +1170,7 @@ def get_row_counts_for_schema_group(
             field names.
         pq_infos (list[IcebergFileInfo]): List of files
             to get the row counts for.
-        fs (PyFileSystem | pa.fs.FileSystem): Filesystem to
-             use for accessing the files and getting the row count
+        fs (pa.fs.FileSystem): Filesystem to use for accessing the files and getting the row count
              and metadata information.
              NOTE: This is only used in the row_level=True case when
              there are dict-encoded columns and we need to re-create the
@@ -1218,7 +1212,7 @@ def get_row_counts_for_schema_group(
     if bodo.check_parquet_schema:
         pq_file_format = ds.ParquetFileFormat()
         for pq_info in pq_infos:
-            frag = pq_file_format.make_fragment(pq_info.standard_path, fs)
+            frag = pq_file_format.make_fragment(pq_info.sanitized_path, fs)
             file_schema = frag.metadata.schema.to_arrow_schema()
             try:
                 # We use the original read-schema from the schema group
@@ -1228,8 +1222,9 @@ def get_row_counts_for_schema_group(
                     file_schema, schema_group.read_schema
                 )
             except Exception as e:
-                msg = f"Schema of file {pq_info.orig_path} is not compatible.\n{str(e)}"
-                raise BodoError(msg)
+                msg = f"Schema of file {pq_info.path} is not compatible.\n{str(e)}"
+                # TODO: raise BodoError in case of compiler (not dataframe library)
+                raise ValueError(msg)
 
     ## 2. Perform filtering to get row counts and construct the IcebergPieces.
     pieces: list[IcebergPiece] = []
@@ -1255,7 +1250,7 @@ def get_row_counts_for_schema_group(
         for pq_info in pq_infos:
             pieces.append(
                 IcebergPiece(
-                    pq_info.standard_path,
+                    pq_info.sanitized_path,
                     -1,
                     schema_group_identifier,
                     pq_info.row_count,

@@ -19,12 +19,12 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
     pytest_snowflake,
 )
+from bodo.tests.utils_jit import DistTestPipeline
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
 )

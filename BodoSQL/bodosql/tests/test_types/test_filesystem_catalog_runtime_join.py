@@ -7,6 +7,7 @@ import pytest
 
 import bodosql
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
@@ -17,9 +18,10 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import check_func, temp_env_override
-from bodo.utils.utils import run_rank0
 
 comm = MPI.COMM_WORLD
+
+pytestmark = pytest.mark.iceberg
 
 
 @pytest.mark.parametrize(

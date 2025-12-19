@@ -1,10 +1,13 @@
 import gc
+import sys
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 import bodo.io.snowflake
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
@@ -22,11 +25,17 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     pytest_mark_one_rank,
-    reduce_sum,
     temp_env_override,
 )
+from bodo.tests.utils_jit import reduce_sum
 
-# NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
+
 
 ##################### COMMON HELPERS #####################
 

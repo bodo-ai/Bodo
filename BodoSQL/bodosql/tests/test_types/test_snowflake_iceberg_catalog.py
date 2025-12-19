@@ -1,4 +1,5 @@
 import os
+import sys
 from io import StringIO
 
 import numpy as np
@@ -8,6 +9,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.mpi4py import MPI
+from bodo.spawn.utils import run_rank0
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -21,21 +23,16 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_snowflake,
-    run_rank0,
     temp_config_override,
-    temp_env_override,
 )
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
 
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_basic_read(memory_leak_check):
-    """
-    Test reading an entire Iceberg table from Snowflake in SQL
-    """
-    catalog = bodosql.SnowflakeCatalog(
+@pytest.fixture
+def sf_iceberg_catalog():
+    return bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
         os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
@@ -44,7 +41,13 @@ def test_basic_read(memory_leak_check):
         connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
         iceberg_volume="exvol",
     )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+
+def test_basic_read(sf_iceberg_catalog, memory_leak_check):
+    """
+    Test reading an entire Iceberg table from Snowflake in SQL
+    """
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -67,23 +70,12 @@ def test_basic_read(memory_leak_check):
     )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_column_pruning(memory_leak_check):
+def test_column_pruning(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL
     where columns are pruned and reordered
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -109,22 +101,11 @@ def test_column_pruning(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_filter_pushdown(memory_leak_check):
+def test_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake with filter pushdown
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -152,27 +133,16 @@ def test_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_filter_pushdown_col_not_read(memory_leak_check):
+def test_filter_pushdown_col_not_read(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading a Iceberg table with BodoSQL filter pushdown
     where a column used in the filter is not read in
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -199,11 +169,10 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_snowflake_catalog_iceberg_write(memory_leak_check):
     """tests that writing tables using Iceberg works"""
 
@@ -291,8 +260,7 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
             drop_snowflake_table(table_name, db, schema)
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_limit_pushdown(memory_leak_check):
+def test_limit_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg from Snowflake with limit pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -301,17 +269,7 @@ def test_limit_pushdown(memory_leak_check):
     As a result, since this is no longer order we will instead compute summary
     statistics and check that the number of rows read is identical
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -334,8 +292,7 @@ def test_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_limit_filter_pushdown(memory_leak_check):
+def test_limit_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg from Snowflake with limit + filter pushdown.
     Since the planner has access to length statistics, we need to actually
@@ -344,17 +301,7 @@ def test_limit_filter_pushdown(memory_leak_check):
     As a result, since this is no longer order we will instead compute summary
     statistics and check that the number of rows read is identical
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -377,12 +324,11 @@ def test_limit_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_multi_limit_pushdown(memory_leak_check):
+def test_multi_limit_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Verify multiple limits are still simplified even though Iceberg trees
     only support a single limit.
@@ -390,17 +336,7 @@ def test_multi_limit_pushdown(memory_leak_check):
     As a result, since this is no longer order we will instead compute summary
     statistics and check that the number of rows read is identical
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -423,8 +359,7 @@ def test_multi_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 1 rows")
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_limit_filter_limit_pushdown(memory_leak_check):
+def test_limit_filter_limit_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake with limit pushdown. We can push down
     both limits and filters in a way that meets the requirements of this query
@@ -432,17 +367,7 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
 
     This may not result in a correct result since the ordering is not defined.
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -465,29 +390,18 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_filter_limit_filter_pushdown(memory_leak_check):
+def test_filter_limit_filter_pushdown(sf_iceberg_catalog, memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake with filters after the limit
     computes a valid result (enforcing the limit and the filters). This query
     doesn't have a strict ordering since limit can return any result and we opt
     to apply the filter then limit (which is always correct but may be suboptimal).
     """
-
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "TEST_DB",
-        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-        iceberg_volume="exvol",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -510,11 +424,10 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('!=', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f1)])])",
+            "Iceberg Filter Pushed Down:\npie.And(pie.NotEqualTo('A', literal(f0)), pie.GreaterThan('B', literal(f1)))",
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_dynamic_scalar_filter_pushdown(memory_leak_check):
     """
     Test that a dynamically generated filter can be pushed down to Iceberg.
@@ -559,10 +472,13 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
             # Verify filter pushdown
             check_logger_msg(
                 stream,
-                "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
+                "Iceberg Filter Pushed Down:\npie.LessThanOrEqual('A', literal(f0))",
             )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Arrow AzureFileSystem not available for Windows"
+)
 def test_azure_basic_read(memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL with
@@ -663,23 +579,13 @@ def test_azure_basic_write(memory_leak_check):
         drop_snowflake_table(table_name, db, schema, user=3)
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
-def test_prefetch_flag(memory_leak_check):
+def test_prefetch_flag(sf_iceberg_catalog, memory_leak_check):
     """
     Test that if the prefetch flag is set, a prefetch occurs
     """
 
     with temp_config_override("prefetch_sf_iceberg", True):
-        catalog = bodosql.SnowflakeCatalog(
-            os.environ["SF_USERNAME"],
-            os.environ["SF_PASSWORD"],
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            "TEST_DB",
-            connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
-            iceberg_volume="exvol",
-        )
-        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc = bodosql.BodoSQLContext(catalog=sf_iceberg_catalog)
 
         def impl(bc, query):
             return bc.sql(query)
@@ -708,5 +614,3 @@ def test_prefetch_flag(memory_leak_check):
                 stream,
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
-            # TODO: How can we check that the table was loaded from the CachingCatalog
-            # It doesn't have logging support

@@ -513,9 +513,6 @@ def test_to_date_valid_datetime_types(
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
 
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
-
     if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
@@ -800,14 +797,14 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
-            bodo.TimestampTZ.fromUTC("2024-03-10 18:00:01", 0),
-            bodo.TimestampTZ.fromUTC("2024-03-10 19:00:01", 0),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:30:00", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 18:00:01", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 19:00:01", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:30:00", -60),
         ]
     )
 
@@ -1144,19 +1141,19 @@ def test_to_timestamptz(input_, is_scalar, tz, expected):
         pytest.param(
             "06:45:00",
             "HH24:MI:SS",
-            bodo.Time(6, 45, 0),
+            bodo.types.Time(6, 45, 0),
             id="scalar-24",
         ),
         pytest.param(
             "10:45:59 PM",
             "HH12:MI:SS PM",
-            bodo.Time(22, 45, 59),
+            bodo.types.Time(22, 45, 59),
             id="scalar-PM",
         ),
         pytest.param(
             "12:00:00 AM",
             "HH12:MI:SS AM",
-            bodo.Time(0, 0, 0),
+            bodo.types.Time(0, 0, 0),
             id="scalar-AM",
         ),
         pytest.param(
@@ -1172,10 +1169,10 @@ def test_to_timestamptz(input_, is_scalar, tz, expected):
             "HH12:MI:SS PM",
             pd.Series(
                 [
-                    bodo.Time(12, 34, 56),
-                    bodo.Time(17, 45, 23),
-                    bodo.Time(10, 15, 30),
-                    bodo.Time(19, 55, 10),
+                    bodo.types.Time(12, 34, 56),
+                    bodo.types.Time(17, 45, 23),
+                    bodo.types.Time(10, 15, 30),
+                    bodo.types.Time(19, 55, 10),
                 ]
                 * 4
             ),
@@ -1186,10 +1183,10 @@ def test_to_timestamptz(input_, is_scalar, tz, expected):
             "HH24:MI:SS",
             pd.Series(
                 [
-                    bodo.Time(8, 12, 34),
-                    bodo.Time(14, 23, 45),
-                    bodo.Time(18, 36, 59),
-                    bodo.Time(22, 48, 15),
+                    bodo.types.Time(8, 12, 34),
+                    bodo.types.Time(14, 23, 45),
+                    bodo.types.Time(18, 36, 59),
+                    bodo.types.Time(22, 48, 15),
                 ]
                 * 4
             ),
@@ -1227,22 +1224,22 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456789", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123000", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000123", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000", -60),
             None,
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
         ]
     )
     answer = np.array(
         [
-            bodo.Time(3, 4, 5, 123, 456, 789, precision=9),
-            bodo.Time(5, 5, 6, 0, 123, 0, precision=9),
-            bodo.Time(4, 6, 7, 0, 0, 123, precision=9),
+            bodo.types.Time(3, 4, 5, 123, 456, precision=9),
+            bodo.types.Time(5, 5, 6, 0, 123, precision=9),
+            bodo.types.Time(4, 6, 7, 0, 000, precision=9),
             None,
-            bodo.Time(1, 30, 0, precision=9),
-            bodo.Time(22, 30, 0, precision=9),
+            bodo.types.Time(1, 30, 0, precision=9),
+            bodo.types.Time(22, 30, 0, precision=9),
         ]
     )
 
@@ -1283,14 +1280,14 @@ def test_to_date_timestamptz(_try, memory_leak_check):
     """
     input_ = pd.Series(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
             None,
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
-            bodo.TimestampTZ.fromUTC("2024-01-01 23:00:00", 60),
-            bodo.TimestampTZ.fromUTC("2024-01-01 23:00:00", -60),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 23:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 23:00:00", -60),
         ]
     )
     answer = pd.Series(
@@ -1468,12 +1465,12 @@ def test_convert_timezone_ntz_vector(source_tz, target_tz, answer, memory_leak_c
 def test_convert_timezone_tz(target_tz, raw_answer, memory_leak_check):
     data = pd.Series(
         [
-            bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-02-06 13:15:10", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-06 13:15:10", 60),
             None,
-            bodo.TimestampTZ.fromLocal("2024-02-07 14:30:00", -240),
-            bodo.TimestampTZ.fromLocal("2024-07-04 15:45:30", 120),
-            bodo.TimestampTZ.fromLocal("2024-08-01 17:00:00", -300),
+            bodo.types.TimestampTZ.fromLocal("2024-02-07 14:30:00", -240),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 15:45:30", 120),
+            bodo.types.TimestampTZ.fromLocal("2024-08-01 17:00:00", -300),
         ]
     )
 

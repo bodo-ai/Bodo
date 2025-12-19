@@ -8,9 +8,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
-    DistTestPipeline,
     check_func,
     count_array_OneDs,
     count_array_REPs,
@@ -18,7 +16,6 @@ from bodo.tests.utils import (
     count_parfor_REPs,
     dist_IR_contains,
     gen_random_string_binary_array,
-    get_start_end,
     pytest_pandas,
 )
 
@@ -142,6 +139,8 @@ class TestHiFrames(unittest.TestCase):
         np.testing.assert_equal(df1.B.values, df2.B.values)
 
     def test_cumsum(self):
+        from bodo.tests.utils_jit import DistTestPipeline
+
         def test_impl(n):
             df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
             Ac = df.A.cumsum()
@@ -159,6 +158,8 @@ class TestHiFrames(unittest.TestCase):
         self.assertTrue(dist_IR_contains(f_ir, "accum_func"))
 
     def test_column_distribution(self):
+        from bodo.tests.utils_jit import DistTestPipeline
+
         # make sure all column calls are distributed
         def test_impl(n):
             df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
@@ -338,6 +339,9 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_str_contains_regex(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})
@@ -348,6 +352,9 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(bodo_func(), 2)
 
     def test_str_contains_noregex(self):
+        import bodo.decorators  # isort:skip # noqa
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})
@@ -374,6 +381,8 @@ class TestHiFrames(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_replace_regex_parallel(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(df):
             B = df.A.str.replace("AB*", "EE", regex=True)
             return B
@@ -456,6 +465,8 @@ class TestHiFrames(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
     def test_str_split_parallel(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(df):
             B = df.A.str.split(",")
             return B
@@ -479,6 +490,8 @@ class TestHiFrames(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_get_parallel(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(df):
             A = df.A.str.split(",")
             B = A.str.get(1)
@@ -679,6 +692,8 @@ class TestHiFrames(unittest.TestCase):
         np.testing.assert_almost_equal(bodo_func(df), test_impl(df))
 
     def test_df_input_dist1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(df):
             return df.B.sum()
 
@@ -778,6 +793,8 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_OneDs(), 1)
 
     def test_var_dist1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(A, B):
             df = pd.DataFrame({"A": A, "B": B})
             df2 = df.groupby("A", as_index=False)["B"].sum()

@@ -1,11 +1,9 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
-#include <numpy/arrayobject.h>
 
 #include "_array_hash.h"
 #include "_array_operations.h"
@@ -226,6 +224,26 @@ array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                           {left_buff, right_buff});
 }
 
+array_info* datetime_array_to_info(uint64_t n_items, char* data, int typ_enum,
+                                   char* null_bitmap, NRT_MemInfo* meminfo,
+                                   NRT_MemInfo* meminfo_bitmask,
+                                   const char* tz) {
+    std::string tz_str(tz);
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {data_buff, null_bitmap_buff}, {}, 0, 0, 0, -1, false, false,
+        false, /*offset*/ data - (char*)meminfo->data, {}, tz_str);
+}
+
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
@@ -363,11 +381,12 @@ void info_to_string_array(array_info* info, int64_t* length,
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
-                         NRT_MemInfo** meminfo) {
+                         NRT_MemInfo** meminfo, bool dict_as_int) {
     // arrow_array_to_bodo() always produces a nullable array but
     // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL) &&
+        (!dict_as_int || info->arr_type != bodo_array_type::DICT) &&
         (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
         PyErr_Format(PyExc_RuntimeError,
@@ -377,17 +396,45 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         return;
     }
 
+    bool delete_info = false;
+
+    // Treat DICT as categorical data and extract the indices.
+    // Parquet reader uses DICT arrays for categorical data.
+    if (info->arr_type == bodo_array_type::DICT) {
+        std::shared_ptr<array_info> codes_info = info->child_arrays[1];
+
+        // Convert data at NA positions to -1
+        uint8_t* bitmap =
+            reinterpret_cast<uint8_t*>(codes_info->null_bitmask());
+        int32_t* codes_data = reinterpret_cast<int32_t*>(
+            codes_info->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (uint64_t i = 0; i < codes_info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                codes_data[i] = -1;
+            }
+        }
+        info = new array_info(*codes_info);
+        delete_info = true;
+    }
+
     *n_items = info->length;
     *data = info->data1();
     NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(data_meminfo);
     *meminfo = data_meminfo;
+
+    // Delete the dict child array that was created in the DICT case above
+    if (delete_info) {
+        delete info;
+    }
 }
 
 void info_to_null_array(array_info* info, uint64_t* n_items) {
     // TODO[BSE-433]: Replace with proper null array requirements once
     // they are integrated into C++.
-    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+    // Arrow NA type is converted to arr_type STRING.
+    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL &&
+        info->arr_type != bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp:: info_to_null_array: "
                         "info_to_null_array requires nullable input");
@@ -400,13 +447,29 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             uint64_t* n_bytes, char** data, char** null_bitmap,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
-    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+    if ((info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) &&
+        (info->arr_type != bodo_array_type::NUMPY)) {
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp::info_to_nullable_array: "
                         "info_to_nullable_array requires nullable input");
         return;
     }
-    if (info->dtype == Bodo_CTypes::DATETIME) {
+
+    // Handle Numpy arrays by creating a null bitmap. Necessary since dataframe
+    // library uses Arrow schemas which are always nullable.
+    if (info->arr_type == bodo_array_type::NUMPY) {
+        // Allocate null bitmask and set all bits to 1
+        size_t n_bytes = ((info->length + 7) >> 3);
+        std::unique_ptr<BodoBuffer> buffer_bitmask =
+            AllocateBodoBuffer(n_bytes * sizeof(uint8_t));
+        memset(buffer_bitmask->mutable_data(), 0xff, n_bytes);
+        // Keep the buffer in the same array_info struct for consistent memory
+        // management (TODO: convert to nullable in upstream)
+        info->buffers.push_back(std::move(buffer_bitmask));
+    }
+
+    if (info->dtype == Bodo_CTypes::DATETIME ||
+        info->dtype == Bodo_CTypes::TIMEDELTA) {
         // Temporary fix to set invalid entries to NaT
         std::uint8_t* bitmap =
             reinterpret_cast<std::uint8_t*>(info->null_bitmask());
@@ -495,6 +558,13 @@ void info_to_timestamptz_array(array_info* info, uint64_t* n_items,
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
     std::vector<std::shared_ptr<array_info>> columns(arrs, arrs + n_arrs);
     return new table_info(columns);
+}
+
+// Raw pointers since called from Python
+void append_arr_info_list_to_cpp_table(table_info* table, array_info** arrs,
+                                       int64_t n_arrs) {
+    std::vector<std::shared_ptr<array_info>> columns(arrs, arrs + n_arrs);
+    table->columns.insert(table->columns.end(), columns.begin(), columns.end());
 }
 
 // Raw pointers since called from Python
@@ -837,83 +907,6 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
 }
 
 /**
- * @brief call PyArray_GETITEM() of Numpy C-API
- *
- * @param arr array object
- * @param p pointer in array object
- * @return PyObject* value returned by getitem
- */
-PyObject* array_getitem(PyArrayObject* arr, const char* p) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-    PyObject* s = PyArray_GETITEM(arr, p);
-    CHECK(s, "getting item in numpy array failed");
-    return s;
-#undef CHECK
-}
-
-/**
- * @brief call PySequence_GetItem() of Python C-API
- *
- * @param obj sequence object (e.g. list)
- * @param i index
- * @return PyObject* value returned by getitem
- */
-PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-    PyObject* s = PySequence_GetItem(obj, i);
-    CHECK(s, "getting item failed");
-    return s;
-#undef CHECK
-}
-
-/**
- * @brief check if obj is a list
- *
- * @param obj object to check
- * @return int 1 if a list, 0 otherwise
- */
-int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
-
-/**
- * @brief return key list of dict
- *
- * @param obj dict object
- * @return list of keys object
- */
-PyObject* dict_keys(PyObject* obj) { return PyDict_Keys(obj); }
-
-/**
- * @brief return values list of dict
- *
- * @param obj dict object
- * @return list of values object
- */
-PyObject* dict_values(PyObject* obj) { return PyDict_Values(obj); }
-
-/**
- * @brief call PyDict_MergeFromSeq2() to fill a dict
- *
- * @param dict_obj dict object
- * @param seq2 iterator of key/value pairs
- */
-void dict_merge_from_seq2(PyObject* dict_obj, PyObject* seq2) {
-    int err = PyDict_MergeFromSeq2(dict_obj, seq2, 0);
-    if (err != 0) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "PyDict_MergeFromSeq2 failed");
-    }
-}
-
-/**
  * @brief check if object is an NA value like None or np.nan
  *
  * @param s Python object to check
@@ -982,18 +975,44 @@ table_info* retrieve_table_py_entry(table_info* in_table,
     }
 }
 
+// Macro to define a Python wrapper for a memory stats functions
+// (Avoids numba JIT dependency in testing)
+#define DEFINE_NOARG_STATS_WRAPPER(py_name, func_name)                \
+    static PyObject* py_name(PyObject* self, PyObject* args) {        \
+        if (PyTuple_Size(args) != 0) {                                \
+            PyErr_SetString(PyExc_TypeError,                          \
+                            #func_name "() does not take arguments"); \
+            return nullptr;                                           \
+        }                                                             \
+        return PyLong_FromSize_t(func_name());                        \
+    }
+
+DEFINE_NOARG_STATS_WRAPPER(get_stats_alloc_py_wrapper, get_stats_alloc)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_free_py_wrapper, get_stats_free)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_mi_alloc_py_wrapper, get_stats_mi_alloc)
+DEFINE_NOARG_STATS_WRAPPER(get_stats_mi_free_py_wrapper, get_stats_mi_free)
+
+#undef DEFINE_NOARG_STATS_WRAPPER
+
+static PyMethodDef array_ext_methods[] = {
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
+    declmethod(get_stats_alloc_py_wrapper),
+    declmethod(get_stats_free_py_wrapper),
+    declmethod(get_stats_mi_alloc_py_wrapper),
+    declmethod(get_stats_mi_free_py_wrapper),
+    {nullptr},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "array_ext", "No docs", nullptr);
+    MOD_DEF(m, "array_ext", "No docs", array_ext_methods);
     if (m == nullptr) {
         return nullptr;
     }
 
     // init datetime APIs
     PyDateTime_IMPORT;
-
-    // init numpy
-    import_array();
 
     bodo_common_init();
 
@@ -1020,6 +1039,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, decimal_array_to_info);
+    SetAttrStringFromVoidPtr(m, datetime_array_to_info);
     SetAttrStringFromVoidPtr(m, time_array_to_info);
     SetAttrStringFromVoidPtr(m, info_to_string_array);
     SetAttrStringFromVoidPtr(m, info_to_array_item_array);
@@ -1033,6 +1053,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, alloc_numpy);
     SetAttrStringFromVoidPtr(m, alloc_string_array);
     SetAttrStringFromVoidPtr(m, arr_info_list_to_table);
+    SetAttrStringFromVoidPtr(m, append_arr_info_list_to_cpp_table);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, info_from_table);
     // Not covered by error handler
@@ -1068,26 +1089,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, bodo_array_from_pyarrow_py_entry);
     SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_bodo_array_py_entry);
     SetAttrStringFromVoidPtr(m, string_array_from_sequence);
-    SetAttrStringFromVoidPtr(m, array_getitem);
-    SetAttrStringFromVoidPtr(m, list_check);
-    SetAttrStringFromVoidPtr(m, dict_keys);
-    SetAttrStringFromVoidPtr(m, dict_values);
-    // This function calls PyErr_Set_String, but the function is called inside
-    // box/unbox functions in Python, where we don't yet know how best to
-    // detect and raise errors. Once we do, we should raise an error in Python
-    // if this function calls PyErr_Set_String. TODO
-    SetAttrStringFromVoidPtr(m, dict_merge_from_seq2);
-    // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise it in Python.
-    // We currently don't know the best way to detect and raise exceptions
-    // in box/unbox functions which is where this function is called.
-    // Once we do, we should handle this appropriately. TODO
-    SetAttrStringFromVoidPtr(m, seq_getitem);
     SetAttrStringFromVoidPtr(m, is_na_value);
-    SetAttrStringFromVoidPtr(m, get_stats_alloc);
-    SetAttrStringFromVoidPtr(m, get_stats_free);
-    SetAttrStringFromVoidPtr(m, get_stats_mi_alloc);
-    SetAttrStringFromVoidPtr(m, get_stats_mi_free);
     SetAttrStringFromVoidPtr(m, array_info_getitem);
     SetAttrStringFromVoidPtr(m, array_info_getdata1);
     SetAttrStringFromVoidPtr(m, array_info_unpin);

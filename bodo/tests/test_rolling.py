@@ -8,14 +8,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.tests.utils import (
     check_func,
     count_array_REPs,
     count_parfor_REPs,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -27,6 +25,9 @@ LONG_TEST = (
 
 test_funcs = ("mean", "max")
 if LONG_TEST:
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.hiframes.rolling import supported_rolling_funcs
+
     # all functions except apply, cov, corr
     test_funcs = supported_rolling_funcs[:-3]
 
@@ -54,6 +55,8 @@ def test_fixed_index(test_df, memory_leak_check):
 
 @pytest.mark.slow
 def test_rolling_cov_unsupported_args(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1(df):
         return df.rolling(2).cov(df.A)
 
@@ -78,6 +81,8 @@ def test_rolling_cov_unsupported_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_rolling_corr_unsupported_args(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl1(df):
         return df.rolling(2).corr(df.A)
 
@@ -105,6 +110,7 @@ def test_rolling_unsupported(test_df, memory_leak_check):
     """
     Test an unsupported argument for df.rolling
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.rolling(2, axis=1)
@@ -293,14 +299,13 @@ def test_nullable_int(memory_leak_check):
     check_func(impl, (S,))
 
 
-@bodo.jit(distributed=False)
-def g(a):
-    return a.sum()
-
-
 @pytest.mark.slow
 def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
+
+    @bodo.jit(distributed=False)
+    def g(a):
+        return a.sum()
 
     # test sequentially with manually created dfs
     def test_impl(df):
@@ -361,6 +366,7 @@ def test_groupby_rolling(is_slow_run):
 @pytest.mark.slow
 def test_rolling_error_checking():
     """test error checking in rolling calls"""
+    from bodo.utils.typing import BodoError
 
     # center should be boolean
     def impl1(df):
@@ -571,7 +577,7 @@ class TestRolling(unittest.TestCase):
 
     def test_fixed_parallel_apply1(self):
         def test_impl(n, w, center):
-            df = pd.DataFrame({"B": np.arange(n)})
+            df = pd.DataFrame({"B": np.arange(n, dtype=np.int64)})
             R = df.rolling(w, center=center).apply(lambda a: a.sum())
             return R.B.sum()
 
@@ -733,8 +739,12 @@ class TestRolling(unittest.TestCase):
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
             func_text = "def test_impl(n):\n"
-            func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
-            func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
+            func_text += (
+                "  df = pd.DataFrame({'B': np.arange(n, dtype=np.int64), 'time': "
+            )
+            func_text += (
+                "    pd.DatetimeIndex(np.arange(n, dtype=np.int64) * 1000000000)})\n"
+            )
             func_text += f"  res = df.rolling('{w}', on='time').{func_name}()\n"
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
@@ -756,8 +766,12 @@ class TestRolling(unittest.TestCase):
         # all functions except apply
         for w in wins:
             func_text = "def test_impl(n):\n"
-            func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
-            func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
+            func_text += (
+                "  df = pd.DataFrame({'B': np.arange(n, dtype=np.int64), 'time': "
+            )
+            func_text += (
+                "    pd.DatetimeIndex(np.arange(n, dtype=np.int64) * 1000000000)})\n"
+            )
             func_text += (
                 f"  res = df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             )

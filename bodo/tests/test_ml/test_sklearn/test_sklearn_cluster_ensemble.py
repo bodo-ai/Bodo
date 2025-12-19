@@ -57,7 +57,7 @@ def test_kmeans(memory_leak_check):
     def impl_predict0(X_, sample_weight_):
         kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
         kmeans.fit(X_, None, sample_weight_)
-        return kmeans.predict(X_, sample_weight_)
+        return kmeans.predict(X_)
 
     check_func(
         impl_predict0,
@@ -82,7 +82,7 @@ def test_kmeans(memory_leak_check):
     def impl_predict2(X_, sample_weight_):
         kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
         kmeans.fit(X_)
-        return kmeans.predict(X_, sample_weight=sample_weight_)
+        return kmeans.predict(X_)
 
     check_func(
         impl_predict2,

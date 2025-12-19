@@ -1,6 +1,9 @@
-"""Spawner-worker compilation implementation"""
+"""Spawner for spawner-worker implementation. This file should import JIT lazily to
+avoid slowing down non-JIT code paths.
+"""
 
-import atexit
+from __future__ import annotations
+
 import contextlib
 import inspect
 import itertools
@@ -15,29 +18,32 @@ import typing as pt
 from collections import deque
 
 import cloudpickle
-import numba
 import pandas as pd
 import psutil
-from numba.core import types
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
-from bodo.pandas import (
-    BodoDataFrame,
-    BodoSeries,
-    LazyArrowExtensionArray,
-    LazyMetadata,
-)
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
+    WorkerProcess,
     debug_msg,
     poll_for_barrier,
 )
-from bodo.utils.utils import is_distributable_typ
+
+if pt.TYPE_CHECKING:
+    from numba.core import types
+
+    from bodo.pandas import (
+        BodoDataFrame,
+        BodoSeries,
+        LazyArrowExtensionArray,
+        LazyMetadata,
+    )
+    from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
+    from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
 # is detected
@@ -56,6 +62,8 @@ env_var_prefix = (
     "MKL",
     "OPENBLAS",
     "NUMBA",
+    "OPENAI",
+    "PYTORCH_",
 )
 
 
@@ -84,13 +92,28 @@ def get_num_workers():
     Else, fallback to spawning as
     many workers as there are physical cores on this machine."""
     n_pes = 2
-    if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
-        n_pes = int(n_pes_env)
-    elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
-        n_pes = universe_size
-    elif cpu_count := psutil.cpu_count(logical=False):
-        n_pes = cpu_count
+    with no_stdin():
+        if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
+            n_pes = int(n_pes_env)
+        elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
+            n_pes = universe_size
+        elif cpu_count := psutil.cpu_count(logical=False):
+            n_pes = cpu_count
     return n_pes
+
+
+def _not_all_lazy_plan_args(args: tuple[pt.Any], kwargs: dict[str, pt.Any]) -> bool:
+    """Check if any arg or kwarg is not a LazyPlan
+
+    Useful for determining if we need to import the compiler on spawner/workers
+    since non-lazy plan args require bodo.typeof to determine types.
+    """
+    from bodo.pandas.plan import LazyPlan
+
+    return not all(
+        isinstance(arg, LazyPlan) or pd.api.types.is_scalar(arg)
+        for arg in itertools.chain(args, kwargs.values())
+    )
 
 
 class BodoSQLContextMetadata:
@@ -158,11 +181,16 @@ class Spawner:
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
+        # Make sure worker output is displayed in Jupyter notebooks on Windows
+        self._init_win_jupyter()
+
         # A queue of del tasks to send delete command to workers.
         # Necessary since garbage collection can be triggered at any time during
         # execution of commands, leading to invalid data being broadcast to workers.
         self._del_queue = deque()
         self._is_running = False
+        self._workers_imported_compiler = False
+        self._workers_imported_bodosql_compiler = False
 
     def _get_spawn_command_args(self) -> tuple[str, list[str]]:
         """
@@ -265,9 +293,45 @@ class Spawner:
         self.worker_intercomm.bcast(propagate_env, bcast_root)
 
     def submit_func_to_workers(
-        self, dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+        self,
+        func_to_execute: SpawnDispatcher | pt.Callable,
+        propagate_env,
+        *args,
+        **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
+        # Import compiler on workers if spawner imported the compiler to avoid
+        # inconsistency issues like different scatter implementations.
+        if "bodo.decorators" in sys.modules.keys() or _not_all_lazy_plan_args(
+            args, kwargs
+        ):
+            import bodo.decorators  # isort:skip # noqa
+
+            self.import_compiler_on_workers()
+
+        if "bodosql.compiler" in sys.modules.keys():
+            import bodosql.compiler  # isort:skip # noqa
+
+            self.import_bodosql_compiler_on_workers()
+
+        # If we get a df/series with a plan we need to execute it and get the result id
+        # so we can build the arg metadata.
+        # We do this first so nothing is already running when we execute the plan.
+        args = [
+            arg.execute_plan()
+            if isinstance(arg, BodoLazyWrapper) and arg.is_lazy_plan()
+            else arg
+            for arg in args
+        ]
+        kwargs = {
+            k: v.execute_plan()
+            if isinstance(v, BodoLazyWrapper) and v.is_lazy_plan()
+            else v
+            for k, v in kwargs.items()
+        }
+
         assert not self._is_running, "submit_func_to_workers: already running"
         self._is_running = True
 
@@ -292,11 +356,11 @@ class Spawner:
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
-            dispatcher, args, kwargs
+            func_to_execute, args, kwargs
         )
 
-        # Send dispatcher
-        pickled_func = cloudpickle.dumps(dispatcher)
+        # Send function
+        pickled_func = cloudpickle.dumps(func_to_execute)
         self.worker_intercomm.bcast(pickled_func, root=self.bcast_root)
         debug_msg(self.logger, "submit_func_to_workers - wait for results")
 
@@ -361,33 +425,57 @@ class Spawner:
         self._run_del_queue()
         return res
 
+    def import_compiler_on_workers(self):
+        if self._workers_imported_compiler:
+            return
+
+        def import_compiler():
+            import bodo.decorators  # isort:skip # noqa
+
+        self._workers_imported_compiler = True
+        self.submit_func_to_workers(lambda: import_compiler(), [])
+
+    def import_bodosql_compiler_on_workers(self):
+        if self._workers_imported_bodosql_compiler:
+            return
+
+        def import_bodosql_compiler():
+            import bodosql.compiler  # isort:skip # noqa
+
+        self._workers_imported_bodosql_compiler = True
+        self.submit_func_to_workers(lambda: import_bodosql_compiler(), [])
+
+    def lazy_manager_collect_func(self, res_id: str):
+        root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
+        # collect is sometimes triggered during receive (e.g. for unsupported types
+        # like IntervalIndex) so we may be in the middle of function execution
+        # already.
+        initial_running = self._is_running
+        if not initial_running:
+            self._is_running = True
+        self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
+        self.worker_intercomm.bcast(res_id, root=root)
+        res = bodo.gatherv(None, root=root, comm=self.worker_intercomm)
+        if not initial_running:
+            self._is_running = False
+            self._run_del_queue()
+        return res
+
+    def lazy_manager_del_func(self, res_id: str):
+        self._del_queue.append(res_id)
+        self._run_del_queue()
+
     def wrap_distributed_result(
         self,
         lazy_metadata: LazyMetadata | list | dict | tuple,
     ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
-        root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
-
-        def collect_func(res_id: str):
-            # collect is sometimes triggered during receive (e.g. for unsupported types
-            # like IntervalIndex) so we may be in the middle of function execution
-            # already.
-            initial_running = self._is_running
-            if not initial_running:
-                self._is_running = True
-            self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
-            self.worker_intercomm.bcast(res_id, root=root)
-            res = bodo.libs.distributed_api.gatherv(
-                None, root=root, comm=self.worker_intercomm
-            )
-            if not initial_running:
-                self._is_running = False
-                self._run_del_queue()
-            return res
-
-        def del_func(res_id: str):
-            self._del_queue.append(res_id)
-            self._run_del_queue()
+        from bodo.pandas import (
+            BodoDataFrame,
+            BodoSeries,
+            LazyArrowExtensionArray,
+            LazyMetadata,
+        )
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -408,13 +496,21 @@ class Spawner:
 
         if isinstance(head, pd.DataFrame):
             return BodoDataFrame.from_lazy_metadata(
-                lazy_metadata, collect_func, del_func
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
             )
         elif isinstance(head, pd.Series):
-            return BodoSeries.from_lazy_metadata(lazy_metadata, collect_func, del_func)
+            return BodoSeries.from_lazy_metadata(
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
+            )
         elif isinstance(head, ArrowExtensionArray):
             return LazyArrowExtensionArray.from_lazy_metadata(
-                lazy_metadata, collect_func, del_func
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
             )
         else:
             raise Exception(f"Got unexpected distributed result type: {type(head)}")
@@ -428,16 +524,26 @@ class Spawner:
             arg (Any): argument value
             arg_name (str): argument name
             is_replicated (bool): true if the argument is set to be replicated by user
-            dist_flags (list[str]): list of distributed arguments to update
+            dist_flags (dict[str,set[str]]): map of distribution type to
+                set of distributed arguments to update
 
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        import bodo
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
+        # Avoid importing compiler for plans unnecessarily
+        if isinstance(arg, bodo.pandas.plan.LazyPlan):
+            return None
+
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
             if arg._lazy:
+                # We can't guarantee lazy args are block distributed
+                dist_flags["distributed"].add(arg_name)
                 return ArgMetadata.LAZY
-            dist_flags.append(arg_name)
+            dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
 
         # Handle distributed data inside tuples
@@ -446,6 +552,9 @@ class Spawner:
                 self._get_arg_metadata(val, arg_name, is_replicated, dist_flags)
                 for val in arg
             )
+
+        if pd.api.types.is_scalar(arg):
+            return None
 
         # Arguments could be functions which fail in typeof.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
@@ -459,8 +568,15 @@ class Spawner:
         if data_type is None:
             return None
 
-        if is_distributable_typ(data_type):
-            dist_flags.append(arg_name)
+        # Import compiler lazily.
+        import bodo.decorators  # isort:skip # noqa
+
+        # The compiler should have already been imported on workers before this point,
+        # but just to be safe.
+        self.import_compiler_on_workers()
+
+        if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
+            dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
@@ -480,7 +596,8 @@ class Spawner:
             if len(table_metas) == 0:
                 return None
 
-            dist_flags.append(arg_name)
+            # We can't guarantee that the tables are block distributed
+            dist_flags["distributed_block"].add(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
         return None
@@ -492,32 +609,37 @@ class Spawner:
             arg: input argument
             out_arg: input argument metadata
         """
+        import bodo
+
         if isinstance(arg_meta, ArgMetadata):
-            match arg_meta:
-                case ArgMetadata.BROADCAST:
-                    bodo.libs.distributed_api.bcast(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.SCATTER:
-                    bodo.libs.distributed_api.scatterv(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.LAZY:
-                    spawner.worker_intercomm.bcast(
-                        arg._get_result_id(), root=self.bcast_root
-                    )
+            if arg_meta == ArgMetadata.BROADCAST:
+                # Import compiler lazily
+                import bodo.decorators  # isort:skip # noqa
+
+                bodo.libs.distributed_api.bcast(
+                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
+                )
+            elif arg_meta == ArgMetadata.SCATTER:
+                bodo.scatterv(arg, root=self.bcast_root, comm=spawner.worker_intercomm)
+            elif arg_meta == ArgMetadata.LAZY:
+                spawner.worker_intercomm.bcast(
+                    arg._get_result_id(), root=self.bcast_root
+                )
 
         # Send table DataFrames for BodoSQLContext
         if isinstance(arg_meta, BodoSQLContextMetadata):
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
+                    # Import compiler lazily
+                    import bodo.decorators  # isort:skip # noqa
+
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
                 elif tmeta is ArgMetadata.SCATTER:
-                    bodo.libs.distributed_api.scatterv(
+                    bodo.scatterv(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
@@ -529,7 +651,7 @@ class Spawner:
                 self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
-        self, dispatcher: "SpawnDispatcher", args, kwargs
+        self, func_to_execute: SpawnDispatcher | pt.Callable, args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -538,13 +660,24 @@ class Spawner:
         compilation on the worker.
 
         Args:
-            dispatcher (SpawnDispatcher): dispatcher to run on workers
+            func_to_execute (SpawnDispatcher | callable): function to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
-        param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
-        replicated = set(dispatcher.decorator_args.get("replicated", ()))
-        dist_flags = []
+        import numba
+
+        is_dispatcher = isinstance(func_to_execute, SpawnDispatcher)
+        param_names = list(
+            numba.core.utils.pysignature(
+                func_to_execute.py_func if is_dispatcher else func_to_execute
+            ).parameters
+        )
+        replicated = set(
+            func_to_execute.decorator_args.get("replicated", ())
+            if is_dispatcher
+            else ()
+        )
+        dist_flags = {"distributed": set(), "distributed_block": set()}
         args_meta = tuple(
             self._get_arg_metadata(
                 arg, param_names[i], param_names[i] in replicated, dist_flags
@@ -581,15 +714,104 @@ class Spawner:
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
-        dispatcher.decorator_args["distributed_block"] = (
-            dispatcher.decorator_args.get("distributed_block", []) + dist_flags
-        )
+        if is_dispatcher:
+            func_to_execute.decorator_args["distributed"] = set(
+                func_to_execute.decorator_args.get("distributed", set())
+            ).union(dist_flags["distributed"])
+            func_to_execute.decorator_args["distributed_block"] = set(
+                func_to_execute.decorator_args.get("distributed_block", set())
+            ).union(dist_flags["distributed_block"])
         # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, arg_meta in itertools.chain(
             zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())
         ):
             self._send_arg_meta(arg, arg_meta)
         return args_meta, kwargs_meta
+
+    def _init_win_jupyter(self):
+        """Make sure worker output is displayed in Jupyter notebooks on Windows.
+        Windows child processes don't inherit file descriptors from the parent,
+        so Jupyter's normal output routing doesn't work.
+        This creates a socket using ZMQ to receive output from workers and print it.
+        A separate thread is used to receive messages and print them.
+        Currently only works on single-node Windows setups.
+
+        Some relevant links:
+        https://discourse.jupyter.org/t/jupyterlab-no-longer-allows-ouput-to-be-redirected-to-stdout/11535/2
+        https://github.com/jupyterlab/jupyterlab/issues/9668
+        https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
+        https://stackoverflow.com/questions/7714868/multiprocessing-how-can-i-%ca%80%e1%b4%87%ca%9f%c9%aa%e1%b4%80%ca%99%ca%9f%ca%8f-redirect-stdout-from-a-child-process
+        https://stackoverflow.com/questions/23947281/python-multiprocessing-redirect-stdout-of-a-child-process-to-a-tkinter-text
+        """
+
+        # Skip if not in Jupyter on Windows and not Jupyter on Bodo platform
+        if (
+            not bodo.spawn.utils.is_jupyter_on_windows()
+            and not bodo.spawn.utils.is_jupyter_on_bodo_platform()
+        ):
+            self.worker_output_thread = None
+            return
+
+        import errno
+        import threading
+
+        import zmq
+
+        context = zmq.Context()
+        out_socket = context.socket(zmq.PULL)
+        max_attempts = 100
+
+        # Similar to:
+        # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/kernelapp.py#L252
+        try:
+            win_in_use = errno.WSAEADDRINUSE  # type:ignore[attr-defined]
+        except AttributeError:
+            win_in_use = None
+
+        ip_value = "0.0.0.0"
+
+        for attempt in range(max_attempts):
+            try:
+                port = out_socket.bind_to_random_port(f"tcp://{ip_value}")
+            except zmq.ZMQError as ze:
+                # Raise if we have any error not related to socket binding
+                if ze.errno != errno.EADDRINUSE and ze.errno != win_in_use:
+                    raise
+                if attempt == max_attempts - 1:
+                    raise
+
+        hostname = socket.gethostname()
+        connection_info = f"tcp://{hostname}:{port}"
+        self.worker_intercomm.bcast(connection_info, self.bcast_root)
+
+        def worker_output_thread_func():
+            """Thread that receives all worker outputs and prints them."""
+
+            # NOTE: we test this without Jupyter so _thread_to_parent_header may not
+            # exist
+            if hasattr(sys.stdout, "_thread_to_parent_header"):
+                # ipykernel redirects the output of threads to the first cell using
+                # _thread_to_parent_header. We need to remove this thread to make sure
+                # prints apprear in the correct cell.
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/ipkernel.py#L766
+                # https://github.com/ipython/ipykernel/blob/dab3b39e3f1e0258d99b189867d8f2e2d36c976e/ipykernel/iostream.py#L525
+                sys.stdout._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
+                sys.stderr._thread_to_parent_header.pop(
+                    threading.current_thread().ident, None
+                )
+
+            while True:
+                message = out_socket.recv_string()
+                is_stderr = message.startswith("1")
+                message = message[1:]
+                print(message, end="", file=sys.stderr if is_stderr else sys.stdout)
+
+        self.worker_output_thread = threading.Thread(
+            target=worker_output_thread_func, daemon=True
+        )
+        self.worker_output_thread.start()
 
     def _run_del_queue(self):
         """Run delete tasks in the queue if no other tasks are running."""
@@ -634,6 +856,97 @@ class Spawner:
         self._is_running = False
         self.destroyed = True
 
+    def scatter_data(
+        self, data: pd.DataFrame | pd.Series
+    ) -> (
+        LazyBlockManager
+        | LazySingleBlockManager
+        | LazyArrayManager
+        | LazySingleArrayManager
+    ):
+        """Scatter data to all workers and return the manager for the data."""
+        from bodo.pandas.utils import (
+            get_lazy_manager_class,
+            get_lazy_single_manager_class,
+        )
+
+        self._is_running = True
+        self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
+        bodo.scatterv(data, root=self.bcast_root, comm=self.worker_intercomm)
+        res_id = self.worker_intercomm.recv(None, source=0)
+        self._is_running = False
+        self._run_del_queue()
+        if isinstance(data, pd.DataFrame):
+            return get_lazy_manager_class()(
+                None,
+                None,
+                result_id=res_id,
+                nrows=len(data),
+                head=data._mgr,
+                collect_func=self.lazy_manager_collect_func,
+                del_func=self.lazy_manager_del_func,
+                index_data=data.index.to_frame()
+                if isinstance(data.index, pd.MultiIndex)
+                else data.index,
+                plan=None,
+            )
+        elif isinstance(data, pd.Series):
+            return get_lazy_single_manager_class()(
+                None,
+                None,
+                result_id=res_id,
+                nrows=len(data),
+                head=data._mgr,
+                collect_func=self.lazy_manager_collect_func,
+                del_func=self.lazy_manager_del_func,
+                index_data=data.index.to_frame()
+                if isinstance(data.index, pd.MultiIndex)
+                else data.index,
+                plan=None,
+            )
+        else:
+            raise TypeError(
+                f"Unsupported type for scatter_data: {type(data)}. Expected DataFrame or Series."
+            )
+
+    def spawn_process_on_nodes(
+        self,
+        command: str | list[str],
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+    ) -> WorkerProcess:
+        """Spawn a process on all workers and return a WorkerProcess object"""
+        assert not self._is_running, "spawn_process_on_nodes: already running"
+
+        # Import compiler for handle_spawn_process call on workers which depends on
+        # get_nodes_first_rank, which depends on the compiler.
+        import bodo.decorators  # isort:skip # noqa
+
+        self.import_compiler_on_workers()
+
+        self._is_running = True
+        self.worker_intercomm.bcast(
+            CommandType.SPAWN_PROCESS.value, root=self.bcast_root
+        )
+        self.worker_intercomm.bcast((command, env, cwd), root=self.bcast_root)
+        worker_process = self.worker_intercomm.recv(source=0)
+        self._is_running = False
+        self._run_del_queue()
+        return worker_process
+
+    def stop_process_on_nodes(self, worker_process: WorkerProcess) -> None:
+        """Stop a process on all workers given the corresponding WorkerProcess."""
+        assert not self._is_running, "stop_process_on_nodes: already running"
+
+        self._is_running = True
+        self.worker_intercomm.bcast(
+            CommandType.STOP_PROCESS.value, root=self.bcast_root
+        )
+        self.worker_intercomm.bcast(worker_process, root=self.bcast_root)
+        self.worker_intercomm.recv(source=0)  # Wait for confirmation
+        self._is_running = False
+        self._run_del_queue()
+
 
 spawner: Spawner | None = None
 
@@ -656,15 +969,37 @@ def destroy_spawner():
         spawner = None
 
 
-atexit.register(destroy_spawner)
-
-
 def submit_func_to_workers(
-    dispatcher: "SpawnDispatcher", propagate_env, *args, **kwargs
+    func_to_execute: SpawnDispatcher | pt.Callable,
+    propagate_env: list[str],
+    *args,
+    **kwargs,
 ):
-    """Get the global spawner and submit `func` for execution"""
+    """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()
-    return spawner.submit_func_to_workers(dispatcher, propagate_env, *args, **kwargs)
+    return spawner.submit_func_to_workers(
+        func_to_execute, propagate_env, *args, **kwargs
+    )
+
+
+def spawn_process_on_nodes(
+    command: str | list[str],
+    env: dict[str, str] | None = None,
+    cwd: str | None = None,
+) -> WorkerProcess:
+    """Get the global spawner and spawn a process on all workers and returns a WorkerProcess object"""
+
+    spawner = get_spawner()
+    return spawner.spawn_process_on_nodes(command, env, cwd)
+
+
+def stop_process_on_nodes(worker_process: WorkerProcess) -> None:
+    """Get the global spawner and stop a process on all workers given the corresponding WorkerProcess."""
+
+    spawner = get_spawner()
+    return spawner.stop_process_on_nodes(
+        worker_process,
+    )
 
 
 class SpawnDispatcher:
@@ -744,4 +1079,4 @@ if (
     "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
     and "JPY_SESSION_NAME" not in os.environ
 ):
-    raise bodo.utils.typing.BodoError(vs_code_nb_msg)
+    raise ImportError(vs_code_nb_msg)

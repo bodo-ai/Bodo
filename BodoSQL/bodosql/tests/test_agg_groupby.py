@@ -10,8 +10,8 @@ import pyarrow as pa
 import pytest
 
 import bodosql
-from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_groupby
+from bodo.types import Time
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 # Skip unless any groupby-related files were changed
@@ -37,10 +37,14 @@ def grouped_dfs():
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_agg_numeric(
-    bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
+    bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aggregation calls in queries"""
+
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs != "SUM":
+        pytest.skip("Only SUM is supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -51,7 +55,7 @@ def test_agg_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         use_duckdb=True,

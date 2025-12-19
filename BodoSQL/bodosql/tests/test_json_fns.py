@@ -24,7 +24,7 @@ def json_nested_map_data():
 @pytest.fixture
 def json_senator_data(datapath):
     """Large sample JSON dataset with an array of objects"""
-    with open(datapath("json_data/senators.txt")) as f:
+    with open(datapath("json_data/senators.txt"), encoding="utf-8") as f:
         return f.read()
 
 

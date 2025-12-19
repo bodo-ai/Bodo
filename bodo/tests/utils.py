@@ -2,12 +2,16 @@
 Utility functions for testing such as check_func() that tests a function.
 """
 
+from __future__ import annotations
+
 import datetime
+import gzip
 import io
 import os
 import platform
 import random
 import re
+import shutil
 import string
 import subprocess
 import time
@@ -22,27 +26,20 @@ from typing import TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import ir, types
-from numba.core.compiler_machinery import FunctionPass, register_pass
-from numba.core.ir_utils import build_definitions, find_callname, guard
-from numba.core.typed_passes import NopythonRewrites
-from numba.core.untyped_passes import PreserveIR
+from numba.core import ir, types  # noqa TID253
+from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa TID253
 
 import bodo
+import bodo.pandas as bodo_pd
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
-from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
-from bodo.utils.utils import (
-    is_assign,
-    is_distributable_tuple_typ,
-    is_distributable_typ,
-    is_expr,
-    run_rank0,  # noqa
-)
+from bodo.spawn.spawner import SpawnDispatcher
+from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
 
@@ -73,6 +70,7 @@ class InputDist(Enum):
 
 
 def count_array_REPs():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -80,6 +78,7 @@ def count_array_REPs():
 
 
 def count_parfor_REPs():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -87,6 +86,7 @@ def count_parfor_REPs():
 
 
 def count_parfor_OneDs():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -94,6 +94,7 @@ def count_parfor_OneDs():
 
 
 def count_array_OneDs():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -101,6 +102,7 @@ def count_array_OneDs():
 
 
 def count_parfor_OneD_Vars():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -108,6 +110,7 @@ def count_parfor_OneD_Vars():
 
 
 def count_array_OneD_Vars():
+    import bodo.decorators  # isort:skip # noqa
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -130,24 +133,25 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-@numba.njit
-def get_rank():
-    return bodo.libs.distributed_api.get_rank()
+def _is_distributable_typ(t):
+    """Wrapper for is_distributable_typ that imports the compiler."""
+    import bodo.decorators  # noqa
+    from bodo.utils.utils import is_distributable_typ
+
+    return is_distributable_typ(t)
 
 
-@numba.njit(cache=True)
-def get_start_end(n):
-    rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
-    start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
-    return start, end
+def _is_distributable_tuple_typ(t):
+    """Wrapper for is_distributable_tuple_typ that imports the compiler."""
+    import bodo.decorators  # noqa
+    from bodo.utils.utils import is_distributable_tuple_typ
+
+    return is_distributable_tuple_typ(t)
 
 
-@numba.njit
-def reduce_sum(val):
-    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
-    return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
+def import_compiler():
+    """Import bodo.decorators to ensure compiler is loaded."""
+    import bodo.decorators  # noqa
 
 
 def check_func(
@@ -228,15 +232,31 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
+    # If dataframe_library_enabled then run compiler tests as df library tests
+    # (replaces import pandas as pd with import bodo.pandas as pd)
+    # NOTE: This variable takes precedence over other variables
+    only_df_lib = bodo.test_dataframe_library_enabled
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
     # PR CI environment
-    if only_1DVar is None and not (only_seq or only_1D):
+    if only_1DVar is None and not (only_seq or only_1D or only_df_lib):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
-    run_seq, run_1D, run_1DVar, run_spawn = False, False, False, False
-    if only_seq:
+    run_seq, run_1D, run_1DVar, run_spawn, run_df_lib = (
+        False,
+        False,
+        False,
+        False,
+        False,
+    )
+    if only_df_lib:
+        if only_1D or only_1DVar or only_seq:
+            warnings.warn(
+                "Multiple select only options specified, running only df library."
+            )
+        run_df_lib = True
+    elif only_seq:
         if only_1D or only_1DVar:
             warnings.warn(
                 "Multiple select only options specified, running only sequential."
@@ -308,6 +328,34 @@ def check_func(
     # List of Output Bodo Functions
     bodo_funcs: dict[str, Callable] = {}
 
+    if run_df_lib:
+        # TODO [BSE-4787] Fix schema issues and reenable use_dict_encoded_strings case.
+        assert not use_dict_encoded_strings, (
+            "use_dict_encoded_strings flag not supported when testing Bodo DataFrames"
+        )
+        bodo_func = check_func_df_lib(
+            func,
+            args,
+            py_output,
+            copy_input,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            convert_columns_to_pandas,
+            set_columns_name_to_none,
+            reorder_columns,
+            n_pes,
+            check_categorical,
+            atol,
+            rtol,
+            check_pandas_types,
+        )
+        bodo_funcs["df_lib"] = bodo_func
+        # Return early to avoid importing compiler.
+        return bodo_funcs
+
+    import_compiler()
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
@@ -381,9 +429,9 @@ def check_func(
         if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
             py_out_typ = _typeof(py_output)
-            is_out_distributed = is_distributable_typ(
+            is_out_distributed = _is_distributable_typ(
                 py_out_typ
-            ) or is_distributable_tuple_typ(py_out_typ)
+            ) or _is_distributable_tuple_typ(py_out_typ)
 
         # skip 1D distributed and 1D distributed variable length tests
         # if no parallelism is found
@@ -393,8 +441,8 @@ def check_func(
             and not is_out_distributed  # if output is not distributable
             and not distributed  # If some inputs are required to be distributable
             and not any(
-                is_distributable_typ(_typeof(a))
-                or is_distributable_tuple_typ(_typeof(a))
+                _is_distributable_typ(_typeof(a))
+                or _is_distributable_tuple_typ(_typeof(a))
                 for a in args
             )  # if none of the inputs is distributable
         ):
@@ -482,7 +530,7 @@ def check_func(
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
-        isinstance(_typeof(a), bodo.DataFrameType) for a in args
+        isinstance(_typeof(a), bodo.types.DataFrameType) for a in args
     ):
         inner_funcs = check_func(
             func,
@@ -601,11 +649,14 @@ def _type_has_str_array(t):
         bool: True if input type 't' has a string array component
     """
     return (
-        (t == bodo.string_array_type)
-        or (isinstance(t, bodo.SeriesType) and t.data == bodo.string_array_type)
+        (t == bodo.types.string_array_type)
         or (
-            isinstance(t, bodo.DataFrameType)
-            and any(a == bodo.string_array_type for a in t.data)
+            isinstance(t, bodo.types.SeriesType)
+            and t.data == bodo.types.string_array_type
+        )
+        or (
+            isinstance(t, bodo.types.DataFrameType)
+            and any(a == bodo.types.string_array_type for a in t.data)
         )
     )
 
@@ -633,6 +684,8 @@ def check_func_seq(
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     if n_pes is None:
         n_pes = bodo.get_size()
 
@@ -715,6 +768,8 @@ def check_func_1D(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     kwargs = {}
     if distributed is None:
         kwargs["all_returns_distributed"] = is_out_distributed
@@ -800,6 +855,8 @@ def check_func_1D_var(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     kwargs = {}
     if distributed is None:
         kwargs["all_returns_distributed"] = is_out_distributed
@@ -875,9 +932,7 @@ def check_func_spawn(
     rtol,
     check_pandas_types,
 ):
-    """Check function output against Python while setting the inputs/outputs as
-    1D distributed
-    """
+    """Check function output against Python while running Jit in Spawn Mode."""
 
     # Skip spawn testing if the test requires specific data distributions which may
     # confict with spawn's defaults
@@ -915,6 +970,75 @@ def check_func_spawn(
     )
 
 
+def _convert_to_bodo_arg(arg):
+    """Convert arg to the corresponding Bodo class if possible."""
+    if isinstance(arg, pd.DataFrame):
+        return bodo_pd.from_pandas(arg)
+    elif isinstance(arg, pd.Series):
+        # convert to BodoDataFrame, then extract BodoSeries
+        ser_name = bodo_pd.utils.BODO_NONE_DUMMY if arg.name is None else arg.name
+        bodo_df_arg = bodo_pd.from_pandas(arg.to_frame(name=ser_name))
+        bodo_ser_arg = bodo_df_arg[bodo_df_arg.columns[0]]
+        bodo_ser_arg.name = arg.name
+        return bodo_ser_arg
+
+    return arg
+
+
+def check_func_df_lib(
+    func,
+    args,
+    py_output,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    convert_columns_to_pandas,
+    set_columns_name_to_none,
+    reorder_columns,
+    n_pes,
+    check_categorical,
+    atol,
+    rtol,
+    check_pandas_types,
+):
+    """Check function output against Python while running DataFrame library."""
+    assert n_pes == 1, "Dataframe library tests should only run with 1 rank"
+
+    args = tuple(_convert_to_bodo_arg(_get_arg(a, copy_input)) for a in args)
+
+    df_lib_aliases = {"pd": bodo_pd, "pandas": bodo_pd}
+
+    # copy and then restore func's globals in case it is used in another check_func call.
+    func_globals = func.__globals__.copy()
+
+    func.__globals__.update(df_lib_aliases)
+    bodo_output = func(*args)
+    func.__globals__.update(func_globals)
+
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+
+    _test_equal(
+        bodo_output,
+        py_output,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        check_categorical,
+        atol,
+        rtol,
+        # We'll get a different type from Bodo DataFrames
+        check_pandas_types=False,
+    )
+
+
 def _get_arg(a, copy=False):
     if copy and hasattr(a, "copy"):
         return a.copy()
@@ -928,6 +1052,10 @@ def _get_dist_arg(
     a: T, copy: bool = False, var_length: bool = False, check_typing_issues: bool = True
 ) -> T:
     """Get distributed chunk for 'a' on current rank (for input to test functions)"""
+    from bodo.tests.utils_jit import get_start_end
+    from bodo.utils.typing import is_bodosql_context_type
+    from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
+
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
@@ -1099,25 +1227,71 @@ def sort_dataframe_values_index(df):
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
-def _to_pa_array(py_out, bodo_arr_type):
-    """Convert object array to Arrow array with specified Bodo type"""
+def _get_arrow_type_no_dict(pa_type: pa.DataType) -> pa.DataType:
+    """Converts dictionary-encoded String arrays to the non-dictionary encoded
+    equivalent in nested types."""
+
+    if pa.types.is_large_list(pa_type):
+        return pa.large_list(_get_arrow_type_no_dict(pa_type.value_type))
+    elif pa.types.is_list(pa_type):
+        return pa.list_(_get_arrow_type_no_dict(pa_type.value_type))
+    elif pa.types.is_fixed_size_list(pa_type):
+        return pa.pa.list_(
+            _get_arrow_type_no_dict(pa_type.value_type), pa_type.list_size
+        )
+    elif pa.types.is_struct(pa_type):
+        return pa.struct(
+            [
+                pa.field(f.name, _get_arrow_type_no_dict(f.type), f.nullable)
+                for f in pa_type
+            ]
+        )
+    elif pa.types.is_map(pa_type):
+        return pa.map_(
+            _get_arrow_type_no_dict(pa_type.key_type),
+            _get_arrow_type_no_dict(pa_type.item_type),
+            pa_type.keys_sorted,
+        )
+    elif pa.types.is_dictionary(pa_type) and (
+        pa.types.is_string(pa_type.value_type)
+        or pa.types.is_large_string(pa_type.value_type)
+    ):
+        return pa_type.value_type
+    elif pa.types.is_dictionary(pa_type):
+        return pa.dictionary(
+            pa_type.index_type,
+            _get_arrow_type_no_dict(pa_type.value_type),
+            pa_type.ordered,
+        )
+    else:
+        return pa_type
+
+
+def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
+    """Converts object Array to Arrow array with specified Arrow type."""
+
     if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
         py_out = py_out.astype(object)
     if (
-        isinstance(bodo_arr_type, bodo.IntegerArrayType)
+        pa.types.is_integer(pa_type)
         and isinstance(py_out, np.ndarray)
         and np.issubdtype(py_out.dtype, np.floating)
     ):
-        # When trying to convert a numpy float array to an integer array we need to convert to a pandas nullable integer array first
-        # to avoid issues with NaN/None values
-        py_out = pd.array(py_out, str(bodo_arr_type.dtype).capitalize())
-    arrow_type = bodo.io.helpers._numba_to_pyarrow_type(
-        bodo_arr_type, use_dict_arr=True
-    )[0]
-    arrow_type_no_dict = bodo.io.helpers._numba_to_pyarrow_type(bodo_arr_type)[0]
-    py_out = pa.array(py_out, arrow_type_no_dict)
-    if arrow_type != arrow_type_no_dict:
-        py_out = bodo.libs.array.convert_arrow_arr_to_dict(py_out, arrow_type)
+        # When trying to convert a numpy float array to an integer array we need to
+        # convert to a pandas nullable integer array first to avoid issues with
+        # NaN/None values.
+        py_out = pd.array(py_out, str(pa_type).capitalize())
+
+    if pd.Series(py_out).isna().all() and len(py_out) > 0:
+        # Avoid all pd.NA inputs since pa.array() fails for them
+        py_out = np.array([None] * len(py_out))
+
+    pa_type_no_dict = _get_arrow_type_no_dict(pa_type)
+    py_out = pa.array(py_out, pa_type_no_dict)
+
+    if pa_type != pa_type_no_dict:
+        py_out = convert_arrow_arr_to_dict(py_out, pa_type)
+
     return py_out
 
 
@@ -1157,6 +1331,7 @@ def _test_equal(
                 pa.types.is_map(pa_type)
                 or pa.types.is_struct(pa_type)
                 or pa.types.is_large_list(pa_type)
+                or pa.types.is_time(pa_type)
             ):
                 py_out = pd.Series(
                     _to_pa_array(
@@ -1165,7 +1340,7 @@ def _test_equal(
                             if isinstance(a, float) and np.isnan(a)
                             else a
                         ).values,
-                        bodo.typeof(bodo_out.values),
+                        pa_type,
                     ),
                     py_out.index,
                     bodo_out.dtype,
@@ -1257,8 +1432,7 @@ def _test_equal(
         and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
-        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out))
-        py_out = pd.Series(py_out)
+        py_out = _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype).to_pandas()
         bodo_out = pd.Series(bodo_out)
         if sort_output:
             py_out = py_out.sort_values().reset_index(drop=True)
@@ -1380,7 +1554,7 @@ def _test_equal(
     elif isinstance(py_out, tuple) or (
         isinstance(py_out, list)
         and len(py_out) > 0
-        and is_distributable_typ(bodo.typeof(py_out))
+        and _is_distributable_typ(bodo.typeof(py_out))
     ):
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
@@ -1503,6 +1677,10 @@ def _gather_output(bodo_output):
 
 
 def _typeof(val):
+    import bodo.decorators  # noqa
+
+    from bodo.utils.typing import dtype_to_array_type
+
     # Pandas returns an object array for .values or to_numpy() call on Series of
     # nullable int/float, which can't be handled in typeof. Bodo returns a
     # nullable int/float array
@@ -1515,9 +1693,9 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
+        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.types.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
         isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
@@ -1535,16 +1713,16 @@ def _typeof(val):
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
         col_names = tuple(val.columns.to_list())
         index_typ = numba.typeof(val.index)
-        return bodo.DataFrameType(col_typs, index_typ, col_names)
+        return bodo.types.DataFrameType(col_typs, index_typ, col_names)
     elif isinstance(val, pd.Series) and isinstance(
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
-        return bodo.SeriesType(
+        return bodo.types.SeriesType(
             bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
-    elif isinstance(val, pytypes.FunctionType):
+    elif isinstance(val, (pytypes.FunctionType, SpawnDispatcher)):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)
@@ -1584,178 +1762,6 @@ def has_udf_call(fir):
                     return True
 
     return False
-
-
-class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
-    with an additional PreserveIR pass then bodo_pipeline
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, NopythonRewrites)
-        pipeline.finalize()
-        return [pipeline]
-
-
-class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_series_apply_df_output with an additional PreserveIR pass
-    after SeriesPass
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoSeriesPass)
-        pipeline.finalize()
-        return [pipeline]
-
-
-class ParforTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_parfor_optimizations with an additional PreserveIR pass
-    after ParforPass
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
-        pipeline.finalize()
-        return [pipeline]
-
-
-class ColumnDelTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_column_del_pass with an additional PreserveIRTypeMap pass
-    after BodoTableColumnDelPass
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoTableColumnDelPass)
-        pipeline.finalize()
-        return [pipeline]
-
-
-@register_pass(mutates_CFG=False, analysis_only=False)
-class PreserveIRTypeMap(PreserveIR):
-    """
-    Extension to PreserveIR that also saves the typemap.
-    """
-
-    _name = "preserve_ir_typemap"
-
-    def __init__(self):
-        PreserveIR.__init__(self)
-
-    def run_pass(self, state):
-        PreserveIR.run_pass(self, state)
-        state.metadata["preserved_typemap"] = state.typemap.copy()
-        state.metadata["preserved_calltypes"] = state.calltypes.copy()
-        return False
-
-
-class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in bodosql tests with an additional PreserveIR pass
-    after BodoTypeInference. This is used to monitor the code being generated.
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoTypeInference)
-        pipeline.finalize()
-        return [pipeline]
-
-
-class DistTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline with an additional PreserveIR pass
-    after DistributedPass
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoDistributedPass)
-        pipeline.finalize()
-        return [pipeline]
-
-
-class SeqTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    Bodo sequential pipeline with an additional PreserveIR pass
-    after LowerBodoIRExtSeq
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=False, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.LowerBodoIRExtSeq)
-        pipeline.finalize()
-        return [pipeline]
-
-
-@register_pass(analysis_only=False, mutates_CFG=True)
-class ArrayAnalysisPass(FunctionPass):
-    _name = "array_analysis_pass"
-
-    def __init__(self):
-        FunctionPass.__init__(self)
-
-    def run_pass(self, state):
-        array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-            state.typingctx,
-            state.func_ir,
-            state.typemap,
-            state.calltypes,
-        )
-        array_analysis.run(state.func_ir.blocks)
-        state.func_ir._definitions = numba.core.ir_utils.build_definitions(
-            state.func_ir.blocks
-        )
-        state.metadata["preserved_array_analysis"] = array_analysis
-        return False
-
-
-class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_dataframe_array_analysis()
-    additional ArrayAnalysis pass that preserves analysis object
-    """
-
-    # Avoid copy propagation so we don't delete variables used to
-    # check array analysis.
-    avoid_copy_propagation = True
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
-        pipeline.finalize()
-        return [pipeline]
 
 
 def check_timing_func(func, args):
@@ -2033,6 +2039,8 @@ def check_parallel_coherency(
     reset_index=False,
     additional_compiler_arguments=None,
 ):
+    from bodo.tests.utils_jit import reduce_sum
+
     n_pes = bodo.get_size()
 
     # Computing the output in serial mode
@@ -2485,6 +2493,8 @@ def check_caching(
     input_dist: The InputDist for the dataframe arguments. This is used
         in the flags for compiling the function.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     if py_output is no_default:
         py_output = impl(*args)
 
@@ -2576,6 +2586,8 @@ def _check_for_io_reader_filters(bodo_func, node_class):
     """make sure a Connector node has filters set, and the filtering code in the IR
     is removed
     """
+    from bodo.utils.utils import is_assign, is_expr
+
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     read_found = False
     for stmt in fir.blocks[0].body:
@@ -2666,7 +2678,7 @@ def get_rest_catalog_connection_string(
     auth_param = (
         f"credential={credential}" if credential is not None else f"token={token}"
     )
-    return f"iceberg+{rest_uri.replace('https://', 'REST://')}?{auth_param}&warehouse={warehouse}"
+    return f"iceberg+{rest_uri}?{auth_param}&warehouse={warehouse}&scope=PRINCIPAL_ROLE:ALL"
 
 
 def snowflake_cred_env_vars_present(user: int = 1) -> bool:
@@ -2761,53 +2773,6 @@ def create_snowflake_iceberg_table(
         finally:
             drop_snowflake_table(
                 iceberg_table_name, db, schema, iceberg_volume=iceberg_volume
-            )
-
-
-@contextmanager
-def create_tabular_iceberg_table(
-    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
-) -> Generator[str, None, None]:
-    """Creates a new Iceberg table in Tabular derived from the base table name
-    and using the DataFrame.
-
-    Returns the name of the table added to Tabular.
-
-    Args:
-        df (pd.DataFrame): DataFrame to insert
-        base_table_name (str): Base string for generating the table name.
-        warehouse (str): Name of the Tabular warehouse
-        schema (str): Name of the Tabular schema
-        credential (str): Credential to authenticate
-
-
-    Returns:
-        str: The final table name.
-    """
-    import bodo_iceberg_connector as bic
-
-    comm = MPI.COMM_WORLD
-    iceberg_table_name = None
-    table_written = False
-    try:
-        if bodo.get_rank() == 0:
-            iceberg_table_name = gen_unique_table_id(base_table_name)
-
-        iceberg_table_name = comm.bcast(iceberg_table_name)
-
-        @bodo.jit(distributed=["df"])
-        def write_table(df, table_name, schema, con_str):
-            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
-
-        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
-        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
-        table_written = True
-
-        yield iceberg_table_name
-    finally:
-        if table_written:
-            run_rank0(bic.delete_table)(
-                bodo.io.iceberg.format_iceberg_conn(con_str), schema, iceberg_table_name
             )
 
 
@@ -3114,20 +3079,18 @@ pytest_one_rank = [
 ]
 
 
-tabular_markers = (
-    pytest.mark.tabular,
+polaris_markers = (
+    pytest.mark.polaris,
     pytest.mark.iceberg,
-    pytest.mark.skip(
-        "Tabular's platform is deactivated, we will replace these with Polaris"
-    ),
+    pytest.mark.slow,
 )
 
 # Decorate
-pytest_mark_tabular = compose_decos(tabular_markers)
+pytest_mark_polaris = compose_decos(polaris_markers)
 
 
 # This is for using a "mark" or marking a whole file.
-pytest_tabular = list(tabular_markers)
+pytest_polaris = list(polaris_markers)
 
 
 glue_markers = (
@@ -3170,6 +3133,12 @@ pytest_mark_spawn_mode = compose_decos(spawn_mode_markers)
 
 # This is for using a "mark" or marking a whole file.
 pytest_spawn_mode = list(spawn_mode_markers)
+
+# Decorator for skipping individual tests within a file marked as DataFrame Library
+# tests.
+pytest_mark_not_df_lib = pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="Test requires compiler."
+)
 
 
 # Flag to ignore the mass slowing of tests unless specific files are changed
@@ -3355,24 +3324,10 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     9    <NA>
     dtype: Float64
     """
+    from bodo.tests.utils_jit import _nullable_float_arr_maker
+
     S = _nullable_float_arr_maker(L, to_null, to_nan)
     return S
-
-
-@bodo.jit(distributed=False)
-def _nullable_float_arr_maker(L, to_null, to_nan):
-    n = len(L)
-    data_arr = np.empty(n, np.float64)
-    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
-    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
-    for i in range(len(L)):
-        if i in to_null:
-            bodo.libs.array_kernels.setna(A, i)
-        elif i in to_nan:
-            A[i] = np.nan
-        else:
-            A[i] = L[i]
-    return A
 
 
 def cast_dt64_to_ns(df):
@@ -3457,10 +3412,13 @@ pytest_mark_oracle = compose_decos(
         pytest.mark.oracle,
         pytest.mark.slow,
         pytest.mark.skipif(
-            os.name == "posix"
-            and platform.system() == "Linux"
-            and "arm" in platform.machine().lower()
-            or "aarch64" in platform.machine().lower()
+            (
+                os.name == "posix"
+                and platform.system() == "Linux"
+                and "arm" in platform.machine().lower()
+                or "aarch64" in platform.machine().lower()
+            )
+            or platform.system() == "Windows"
         ),
     )
 )
@@ -3468,9 +3426,39 @@ pytest_oracle = [
     pytest.mark.oracle,
     pytest.mark.slow,
     pytest.mark.skipif(
-        os.name == "posix"
-        and platform.system() == "Linux"
-        and "arm" in platform.machine().lower()
-        or "aarch64" in platform.machine().lower()
+        (
+            os.name == "posix"
+            and platform.system() == "Linux"
+            and "arm" in platform.machine().lower()
+            or "aarch64" in platform.machine().lower()
+        )
+        or platform.system() == "Windows"
     ),
 ]
+
+
+def compress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [
+            f
+            for f in os.listdir(dir_name)
+            if f.endswith(".csv") and os.path.getsize(os.path.join(dir_name, f)) > 0
+        ]:
+            full_fname = os.path.join(dir_name, fname)
+            out_fname = full_fname + ".gz"
+            with open(full_fname, "rb") as f_in:
+                with gzip.open(out_fname, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()
+
+
+def uncompress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
+            full_fname = os.path.join(dir_name, fname)
+            with gzip.open(full_fname, "rb") as f_in:
+                with open(full_fname.removesuffix(".gz"), "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(full_fname)
+    bodo.barrier()

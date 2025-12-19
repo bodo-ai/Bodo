@@ -16,8 +16,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "_datetime_utils.h"
 #include "_decimal_ext.h"
 #include "_mpi.h"
+#include "_table_builder_utils.h"
 #include "vendored/hyperloglog.hpp"
 
 /**
@@ -1070,11 +1072,15 @@ std::shared_ptr<table_info> DoRetrieveTable(
     const bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
     size_t n_cols;
     if (n_cols_arg == -1) {
         n_cols = (size_t)in_table->ncols();
     } else {
         n_cols = n_cols_arg;
+    }
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(n_cols);
     }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
@@ -1083,8 +1089,12 @@ std::shared_ptr<table_info> DoRetrieveTable(
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
@@ -1112,6 +1122,10 @@ std::shared_ptr<table_info> DoRetrieveTable(
     const bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(colInds.size());
+    }
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
         out_arrs.emplace_back(RetrieveArray_SingleColumn(
@@ -1119,8 +1133,12 @@ std::shared_ptr<table_info> DoRetrieveTable(
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
@@ -1171,20 +1189,37 @@ std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> column_indices) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
+    }
     for (size_t i_col : column_indices) {
         out_arrs.emplace_back(in_table->columns[i_col]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table, size_t first_n_cols) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
-    for (size_t i = 0; i < std::min(first_n_cols, in_table->columns.size());
-         i++) {
-        out_arrs.emplace_back(in_table->columns[i]);
+    size_t n_cols = std::min(first_n_cols, in_table->columns.size());
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(n_cols);
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+
+    for (size_t i = 0; i < n_cols; i++) {
+        out_arrs.emplace_back(in_table->columns[i]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i]);
+        }
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
+                                        in_table->metadata);
 }
 
 // @brief Compare the bitmap of two arrow arrays at a given position
@@ -2525,21 +2560,19 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
                   "get_nunique_hashes_global: MPI error on MPI_Op_free:");
     }
 
-    // Cast to known MPI-compatible type since size_t is
-    // implementation defined.
-    unsigned long local_len = static_cast<unsigned long>(len);
-    unsigned long global_len = 0;
-    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG,
+    uint64_t local_len = static_cast<uint64_t>(len);
+    uint64_t global_len = 0;
+    CHECK_MPI(MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG_LONG,
                             MPI_SUM, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Allreduce:");
 
-    unsigned long est;
+    uint64_t est;
     if (my_rank == 0) {
         hll.overwrite_registers(std::move(hll_registers));
         using std::min;
-        est = min(global_len, static_cast<unsigned long>(hll.estimate()));
+        est = min(global_len, static_cast<uint64_t>(hll.estimate()));
     }
-    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD),
+    CHECK_MPI(MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD),
               "get_nunique_hashes_global: MPI error on MPI_Bcast:");
     // cast to `size_t` to avoid compilation error on Windows
     ev.add_attribute("g_global_estimate", static_cast<size_t>(est));
@@ -2619,4 +2652,84 @@ std::shared_ptr<table_info> concat_tables(
     }
 
     return table_builder.data_table;
+}
+
+std::string array_val_to_str(std::shared_ptr<array_info> arr, size_t idx) {
+    switch (arr->dtype) {
+        case Bodo_CTypes::INT8:
+            return std::to_string(arr->at<int8_t>(idx));
+        case Bodo_CTypes::UINT8:
+            return std::to_string(arr->at<uint8_t>(idx));
+        case Bodo_CTypes::INT32:
+            return std::to_string(arr->at<int32_t>(idx));
+        case Bodo_CTypes::UINT32:
+            return std::to_string(arr->at<uint32_t>(idx));
+        case Bodo_CTypes::INT64:
+            return std::to_string(arr->at<int64_t>(idx));
+        case Bodo_CTypes::UINT64:
+            return std::to_string(arr->at<uint64_t>(idx));
+        case Bodo_CTypes::FLOAT32:
+            return std::to_string(arr->at<float>(idx));
+        case Bodo_CTypes::FLOAT64:
+            return std::to_string(arr->at<double>(idx));
+        case Bodo_CTypes::INT16:
+            return std::to_string(arr->at<int16_t>(idx));
+        case Bodo_CTypes::UINT16:
+            return std::to_string(arr->at<uint16_t>(idx));
+        case Bodo_CTypes::STRING: {
+            if (arr->arr_type == bodo_array_type::DICT) {
+                // In case of dictionary encoded string array
+                // get the string value by indexing into the dictionary
+                return array_val_to_str(
+                    arr->child_arrays[0],
+                    arr->child_arrays[1]
+                        ->at<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(idx));
+            }
+            offset_t* offsets =
+                (offset_t*)arr->data2<bodo_array_type::STRING>();
+            return std::string(
+                arr->data1<bodo_array_type::STRING>() + offsets[idx],
+                offsets[idx + 1] - offsets[idx]);
+        }
+        case Bodo_CTypes::DATE: {
+            int64_t day = arr->at<int32_t>(idx);
+            int64_t year = days_to_yearsdays(&day);
+            int64_t month;
+            get_month_day(year, day, &month, &day);
+            std::string date_str;
+            date_str.reserve(10);
+            date_str += std::to_string(year) + "-";
+            if (month < 10) {
+                date_str += "0";
+            }
+            date_str += std::to_string(month) + "-";
+            if (day < 10) {
+                date_str += "0";
+            }
+            date_str += std::to_string(day);
+            return date_str;
+        }
+        case Bodo_CTypes::_BOOL:
+            bool val;
+            if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                val = GetBit(
+                    (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    idx);
+            } else {
+                val = arr->at<bool>(idx);
+            }
+            if (val) {
+                return "True";
+            } else {
+                return "False";
+            }
+        default: {
+            std::vector<char> error_msg(100);
+            snprintf(error_msg.data(), error_msg.size(),
+                     "array_val_to_str not implemented for dtype %d",
+                     arr->dtype);
+            throw std::runtime_error(error_msg.data());
+        }
+    }
 }

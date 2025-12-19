@@ -1,6 +1,15 @@
+import contextlib
+
+import pandas as pd
+import pyarrow as pa
+from pyiceberg.catalog import Catalog
+
 import bodo
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.mpi4py import MPI
-from bodo.tests.utils import _test_equal_guard, gen_unique_table_id, reduce_sum
+from bodo.spawn.utils import run_rank0
+from bodo.tests.utils import _test_equal_guard, gen_unique_table_id
+from bodo.tests.utils_jit import reduce_sum
 
 
 def gen_unique_id(name_prefix: str) -> str:
@@ -20,3 +29,15 @@ def test_equal_par(bodo_output, py_output):
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+@contextlib.contextmanager
+def create_iceberg_table(conn_str: str, table_id: str, df: pd.DataFrame):
+    catalog: Catalog = conn_str_to_catalog(conn_str)
+    run_rank0(
+        lambda: catalog.create_table(table_id, pa.Schema.from_pandas(df)).append(
+            pa.Table.from_pandas(df)
+        )
+    )()
+    yield
+    run_rank0(lambda: catalog.purge_table(table_id))()

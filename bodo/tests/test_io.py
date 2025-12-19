@@ -20,15 +20,13 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    compress_dir,
     count_array_REPs,
     count_parfor_REPs,
-    get_rank,
-    get_start_end,
     pytest_mark_one_rank,
-    reduce_sum,
+    uncompress_dir,
 )
 from bodo.utils.testing import ensure_clean
-from bodo.utils.typing import BodoError
 
 
 def compress_file(fname, dummy_extension=""):
@@ -53,24 +51,6 @@ def remove_files(file_names):
     if bodo.get_rank() == 0:
         for fname in file_names:
             os.remove(fname)
-    bodo.barrier()
-
-
-def compress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [
-            f
-            for f in os.listdir(dir_name)
-            if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0
-        ]:
-            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
-    bodo.barrier()
-
-
-def uncompress_dir(dir_name):
-    if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
-            subprocess.run(["gunzip", fname], cwd=dir_name)
     bodo.barrier()
 
 
@@ -695,6 +675,8 @@ def test_csv_fname_comp(datapath, memory_leak_check):
 
 
 def test_write_csv_parallel_unicode(memory_leak_check):
+    from bodo.tests.utils_jit import get_rank, get_start_end
+
     def test_impl(df, fname):
         df.to_csv(fname)
 
@@ -743,6 +725,8 @@ def test_np_io2(datapath, memory_leak_check):
 
 
 def test_np_io3(memory_leak_check):
+    from bodo.tests.utils_jit import get_rank
+
     def test_impl(A):
         if get_rank() == 0:
             A.tofile("np_file_3.dat")
@@ -937,6 +921,8 @@ def test_csv_header_none(datapath, memory_leak_check):
 
 def test_csv_sep_arg(datapath, memory_leak_check):
     """Test passing 'sep' argument as JIT argument in read_csv()"""
+    from bodo.utils.typing import BodoError
+
     fname = datapath("csv_data2.csv")
 
     def test_impl(fname, sep):
@@ -968,6 +954,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (2, 0),
             (2, 1),
             (2, 2),
+            (2, 3),
         ), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
@@ -1371,6 +1358,7 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
 
 def test_excel1(datapath, memory_leak_check):
     """Test pd.read_excel()"""
+    from bodo.utils.typing import BodoError
 
     def test_impl1(fname):
         return pd.read_excel(fname, parse_dates=[2])
@@ -1424,6 +1412,7 @@ def test_excel1(datapath, memory_leak_check):
         (2, 0),
         (2, 1),
         (2, 2),
+        (2, 3),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)
@@ -1446,6 +1435,8 @@ def test_csv_dtype_unicode(memory_leak_check):
 
 
 def _check_filenotfound(fname, func):
+    from bodo.utils.typing import BodoError
+
     with pytest.raises(BodoError) as excinfo:
         bodo.jit(func)(fname)
     err_track = excinfo.getrepr(style="native")
@@ -1504,6 +1495,8 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
     Test reading string arrays as dictionary-encoded in read_csv when specified by the
     user
     """
+    from bodo.utils.typing import BodoError
+
     fname = datapath("example.csv")
 
     # all string data as dict-encoded, dead column elimination
@@ -2613,6 +2606,7 @@ class TestIO(unittest.TestCase):
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(data_structure, hp_fname)
+            bodo.barrier()
             test_impl(data_structure, pd_fname)
             pd.testing.assert_frame_equal(
                 pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
@@ -2629,6 +2623,8 @@ class TestIO(unittest.TestCase):
         self.write_csv(series)
 
     def test_series_invalid_path_or_buf(self):
+        from bodo.utils.typing import BodoError
+
         n = 111
         series = pd.Series(data=np.arange(n), dtype=np.float64, name="bodo")
 
@@ -2643,6 +2639,8 @@ class TestIO(unittest.TestCase):
             bodo_func(series, 1)
 
     def write_csv_parallel(self, test_impl):
+        from bodo.tests.utils_jit import get_rank
+
         bodo_func = bodo.jit(test_impl)
         n = 111
         hp_fname = "test_write_csv1_bodo_par.csv"
@@ -2674,6 +2672,8 @@ class TestIO(unittest.TestCase):
         self.write_csv_parallel(test_impl)
 
     def test_write_csv_parallel2(self):
+        from bodo.tests.utils_jit import get_rank
+
         # 1D_Var case
         def test_impl(n, fname):
             df = pd.DataFrame({"A": np.arange(n)})
@@ -2705,6 +2705,7 @@ def check_CSV_write(
     read_impl=None,
 ):
     from bodo.mpi4py import MPI
+    from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD
 
@@ -2804,6 +2805,8 @@ def check_to_csv_string_output(df, impl):
 
 @pytest.mark.slow
 def test_csv_non_constant_filepath_error(datapath):
+    from bodo.utils.typing import BodoError
+
     f1 = datapath("csv_data_cat1.csv")
 
     @bodo.jit
@@ -2862,6 +2865,8 @@ def test_csv_non_constant_filepath_error(datapath):
 
 @pytest.mark.slow
 def test_json_non_constant_filepath_error(datapath):
+    from bodo.utils.typing import BodoError
+
     f1 = datapath("example.json")
 
     @bodo.jit
@@ -2890,11 +2895,11 @@ def test_json_non_constant_filepath_error(datapath):
     @bodo.jit(
         locals={
             "df": {
-                "one": bodo.float64[:],
-                "two": bodo.string_array_type,
-                "three": bodo.boolean_array_type,
-                "four": bodo.float64[:],
-                "five": bodo.string_array_type,
+                "one": bodo.types.float64[:],
+                "two": bodo.types.string_array_type,
+                "three": bodo.types.boolean_array_type,
+                "four": bodo.types.float64[:],
+                "five": bodo.types.string_array_type,
             }
         }
     )
@@ -2922,6 +2927,8 @@ def test_json_non_constant_filepath_error(datapath):
 
 @pytest.mark.slow
 def test_excel_non_constant_filepath_error(datapath):
+    from bodo.utils.typing import BodoError
+
     f1 = datapath("data.xlsx")
 
     @bodo.jit

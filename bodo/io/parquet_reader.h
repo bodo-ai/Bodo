@@ -1,9 +1,10 @@
-
+#pragma once
 // Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_distributed.h"
+#include "../libs/_utils.h"
 #include "arrow_reader.h"
 
 class ParquetReader : public ArrowReader {
@@ -28,6 +29,9 @@ class ParquetReader : public ArrowReader {
         if (storage_options == Py_None) {
             throw std::runtime_error("ParquetReader: storage_options is None");
         }
+        Py_INCREF(storage_options);
+        Py_INCREF(path);
+        Py_INCREF(pyarrow_schema);
     }
 
     /**
@@ -111,10 +115,13 @@ class ParquetReader : public ArrowReader {
     virtual ~ParquetReader() {
         // Remove after reader is finished or on error
         Py_XDECREF(this->reader);
+        Py_DECREF(this->storage_options);
+        Py_DECREF(this->path);
+        Py_DECREF(this->pyarrow_schema);
     }
 
     /// a piece is a single parquet file in the context of parquet
-    virtual size_t get_num_pieces() const override { return file_paths.size(); }
+    size_t get_num_pieces() const override { return file_paths.size(); }
 
     /// returns output partition columns
     std::vector<std::shared_ptr<array_info>>& get_partition_cols() {
@@ -126,35 +133,35 @@ class ParquetReader : public ArrowReader {
     }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows) override;
+    void add_piece(PyObject* piece, int64_t num_rows) override;
 
-    virtual PyObject* get_dataset() override;
+    PyObject* get_dataset() override;
 
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner_row_level()
-        override;
+    std::tuple<table_info*, bool, uint64_t> read_inner_row_level() override;
 
     std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
         throw std::runtime_error(
             "ParquetReader::read_inner_piece_level: Not supported!");
     }
 
-    virtual std::shared_ptr<table_info> get_empty_out_table() override;
+    std::shared_ptr<table_info> get_empty_out_table() override;
 
     std::shared_ptr<table_info> empty_out_table;
 
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
 
-    PyObject* expr_filters = nullptr;
-    PyObject* filesystem = nullptr;
+    PyObjectPtr expr_filters = nullptr;
+    PyObjectPtr filesystem = nullptr;
     // dataset partitioning info (regardless of whether we select partition
     // columns or not)
-    PyObject* ds_partitioning = nullptr;
+    PyObjectPtr ds_partitioning = nullptr;
 
     // Parquet files that this process has to read
     std::vector<std::string> file_paths;
 
     PyObject* path;  // path passed to pd.read_parquet() call
+    // We don't own storage options so store the raw pointer
     PyObject* storage_options;
     bool input_file_name_col;
     bool use_hive;

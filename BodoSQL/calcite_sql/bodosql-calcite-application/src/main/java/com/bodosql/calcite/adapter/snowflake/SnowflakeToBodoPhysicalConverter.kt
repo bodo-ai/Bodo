@@ -368,7 +368,7 @@ class SnowflakeToBodoPhysicalConverter(
         val onlyColumnSubsetVisitor =
             object : RelVisitor() {
                 // Initialize all columns to be in the original location.
-                var originalColumns: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+                var originalColumns: MutableList<Int> = (0 until node.getRowType().fieldCount).toMutableList()
 
                 override fun visit(
                     node: RelNode,
@@ -376,7 +376,7 @@ class SnowflakeToBodoPhysicalConverter(
                     parent: RelNode?,
                 ) {
                     if (node is SnowflakeProject) {
-                        for (i in 0..<originalColumns.size) {
+                        for (i in 0 until originalColumns.size) {
                             val project = node.projects[originalColumns[i]]
                             if (project !is RexInputRef) {
                                 throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
@@ -393,7 +393,7 @@ class SnowflakeToBodoPhysicalConverter(
                             // Note: This is enforced in canUseOptimizedReadSqlPath
                             throw RuntimeException("getOriginalColumnIndices() only support select distinct")
                         }
-                        for (i in 0..<originalColumns.size) {
+                        for (i in 0 until originalColumns.size) {
                             val index = originalColumns[i]
                             originalColumns[i] = groups[index]
                         }
@@ -403,7 +403,7 @@ class SnowflakeToBodoPhysicalConverter(
                         // for filter and limit.
                         node.childrenAccept(this)
                     } else if (node is SnowflakeTableScan) {
-                        for (i in 0..<originalColumns.size) {
+                        for (i in 0 until originalColumns.size) {
                             originalColumns[i] = node.getOriginalColumnIndex(originalColumns[i])
                         }
                     } else {

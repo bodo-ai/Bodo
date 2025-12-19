@@ -151,20 +151,20 @@ def test_coalesce_time(use_case, memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(12, 0),
-                        bodo.Time(1, 1, 3),
+                        bodo.types.Time(12, 0),
+                        bodo.types.Time(1, 1, 3),
                         None,
                         None,
-                        bodo.Time(12, 0, 31, 5, 92),
+                        bodo.types.Time(12, 0, 31, 5, 92),
                     ]
                 ),
                 "B": pd.Series(
                     [
                         None,
-                        bodo.Time(17, 12, 13, 92, 234, 193),
-                        bodo.Time(2, 18, 37),
+                        bodo.types.Time(17, 12, 13, 92, 234, 193),
+                        bodo.types.Time(2, 18, 37),
                         None,
-                        bodo.Time(15, 26, 3, 44),
+                        bodo.types.Time(15, 26, 3, 44),
                     ]
                 ),
             }
@@ -174,11 +174,11 @@ def test_coalesce_time(use_case, memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    bodo.Time(12, 0),
-                    bodo.Time(1, 1, 3),
-                    bodo.Time(2, 18, 37),
+                    bodo.types.Time(12, 0),
+                    bodo.types.Time(1, 1, 3),
+                    bodo.types.Time(2, 18, 37),
                     None,
-                    bodo.Time(12, 0, 31, 5, 92),
+                    bodo.types.Time(12, 0, 31, 5, 92),
                 ]
             )
         }
@@ -564,8 +564,8 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
             "OUTPUT": pd.Series(
                 [
                     None,
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(1, 47, 59, 290, 574, 817),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(1, 47, 59, 290, 574),
                 ]
                 * 4
             )
@@ -736,20 +736,20 @@ def test_nullif_time(memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(12, 0),
-                        bodo.Time(8, 17, 43),
-                        bodo.Time(2, 18, 37),
+                        bodo.types.Time(12, 0),
+                        bodo.types.Time(8, 17, 43),
+                        bodo.types.Time(2, 18, 37),
                         None,
-                        bodo.Time(12, 0, 31, 5, 92),
+                        bodo.types.Time(12, 0, 31, 5, 92),
                     ]
                 ),
                 "B": pd.Series(
                     [
                         None,
-                        bodo.Time(17, 12, 13, 92, 234, 193),
-                        bodo.Time(2, 18, 37),
-                        bodo.Time(22, 56, 41),
-                        bodo.Time(15, 26, 3, 44),
+                        bodo.types.Time(17, 12, 13, 92, 234, 193),
+                        bodo.types.Time(2, 18, 37),
+                        bodo.types.Time(22, 56, 41),
+                        bodo.types.Time(15, 26, 3, 44),
                     ]
                 ),
             }
@@ -759,11 +759,11 @@ def test_nullif_time(memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    bodo.Time(12, 0),
-                    bodo.Time(8, 17, 43),
+                    bodo.types.Time(12, 0),
+                    bodo.types.Time(8, 17, 43),
                     None,
                     None,
-                    bodo.Time(12, 0, 31, 5, 92),
+                    bodo.types.Time(12, 0, 31, 5, 92),
                 ]
             )
         }
@@ -1008,18 +1008,18 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         {
             "OUTPUT": pd.Series(
                 [
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(22, 7, 16),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(22, 7, 16),
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(22, 7, 16),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(8, 2, 5, 0, 1),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(22, 7, 16),
+                    bodo.types.Time(8, 2, 5, 0, 1),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(22, 7, 16),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(8, 2, 5, 0, 1),
+                    bodo.types.Time(22, 7, 16),
                 ]
             )
         }
@@ -1034,12 +1034,13 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "raw_query, expected_hashes",
     [
         pytest.param(
             "SELECT HASH(A) AS H FROM T",
-            (10 if PYVERSION == (3, 11) else 14),
+            (10 if PYVERSION in ((3, 11), (3, 13)) else 14),
             id="one_col_A",
         ),
         pytest.param(
@@ -1047,40 +1048,40 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T",
-            (17 if PYVERSION == (3, 11) else 21),
+            (17 if PYVERSION in ((3, 11), (3, 13)) else 21),
             id="star",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM S",
-            (25 if PYVERSION == (3, 11) else 37),
+            (25 if PYVERSION in ((3, 11), (3, 13)) else 37),
             id="dot_star",
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION == (3, 11) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
             id="join_star",
         ),
         pytest.param(
             "SELECT HASH(T.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (15 if PYVERSION == (3, 11) else 19),
+            (15 if PYVERSION in ((3, 11), (3, 13)) else 19),
             id="join_dot_star_A",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (18 if PYVERSION == (3, 11) else 29),
+            (18 if PYVERSION in ((3, 11), (3, 13)) else 29),
             id="join_dot_star_B",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION == (3, 11) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
             id="join_star_multiple",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(ARRAY_CONSTRUCT_COMPACT(NULLIF(NULLIF(NULLIF(A, 'A'), 'T'), 'E'), NULLIF(NULLIF(NULLIF(A, 'A'), 'C'), 'E'))) AS H FROM S",
             # There are 16 distinct values but for some reason only 14 distinct hashes are produced
-            (14 if PYVERSION == (3, 11) else 16),
+            (14 if PYVERSION in ((3, 11), (3, 13)) else 16),
             id="array",
             marks=pytest.mark.slow,
         ),

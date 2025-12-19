@@ -5,6 +5,7 @@ classification, regression and anomaly detection.
 import itertools
 import sys
 
+import numba
 import numpy as np
 import sklearn.ensemble
 from numba.extending import (
@@ -20,7 +21,6 @@ from bodo.libs.distributed_api import (
     get_num_nodes,
 )
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_predict_log_proba,
     parallel_predict_proba,
@@ -41,7 +41,7 @@ this_module = sys.modules[__name__]
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRandomForestClassifierType = install_py_obj_class(
+BodoRandomForestClassifierType, _ = install_py_obj_class(
     types_name="random_forest_classifier_type",
     python_type=sklearn.ensemble.RandomForestClassifier,
     module=this_module,
@@ -72,8 +72,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     max_samples=None,
     monotonic_cst=None,
 ):
-    check_sklearn_version()
-
     # TODO n_jobs should be left unspecified so should probably throw an error if used
 
     def _sklearn_ensemble_RandomForestClassifier_impl(
@@ -97,7 +95,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="random_forest_classifier_type"):
+        with numba.objmode(m="random_forest_classifier_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -129,21 +127,18 @@ def sklearn_ensemble_RandomForestClassifier_overload(
 
 @overload_method(BodoRandomForestClassifierType, "predict", no_unliteral=True)
 def overload_model_predict(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict. (Data parallelization)"""
     return parallel_predict(m, X)
 
 
 @overload_method(BodoRandomForestClassifierType, "predict_proba", no_unliteral=True)
 def overload_rf_predict_proba(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict_proba. (Data parallelization)"""
     return parallel_predict_proba(m, X)
 
 
 @overload_method(BodoRandomForestClassifierType, "predict_log_proba", no_unliteral=True)
 def overload_rf_predict_log_proba(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict_log_proba. (Data parallelization)"""
     return parallel_predict_log_proba(m, X)
 
@@ -167,7 +162,7 @@ def overload_model_score(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoRandomForestRegressorType = install_py_obj_class(
+BodoRandomForestRegressorType, random_forest_regressor_type = install_py_obj_class(
     types_name="random_forest_regressor_type",
     python_type=sklearn.ensemble.RandomForestRegressor,
     module=this_module,
@@ -204,8 +199,6 @@ def overload_sklearn_rf_regressor(
 
     # TODO n_jobs should be left unspecified so should probably throw an error if used
 
-    check_sklearn_version()
-
     def _sklearn_ensemble_RandomForestRegressor_impl(
         n_estimators=100,
         criterion="squared_error",
@@ -226,7 +219,7 @@ def overload_sklearn_rf_regressor(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="random_forest_regressor_type"):
+        with numba.objmode(m="random_forest_regressor_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -296,7 +289,7 @@ def random_forest_model_fit(m, X, y):
         if m.random_state is None:
             m.random_state = np.random.RandomState()
 
-        from sklearn.utils import parallel_backend
+        from joblib import parallel_backend
 
         with parallel_backend("threading"):
             m.fit(X, y)
@@ -304,7 +297,7 @@ def random_forest_model_fit(m, X, y):
 
     # Gather all trees from each first rank/node to rank 0 within subcomm. Then broadcast to all
     # Get lowest rank in each node
-    with bodo.objmode(first_rank_node="int32[:]"):
+    with numba.objmode(first_rank_node="int32[:]"):
         first_rank_node = get_nodes_first_ranks()
     # Create subcommunicator with these ranks only
     subcomm = create_subcomm_mpi4py(first_rank_node)
@@ -386,7 +379,7 @@ def overload_rf_classifier_model_fit(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
         # Get lowest rank in each node
-        with bodo.objmode(first_rank_node="int32[:]"):
+        with numba.objmode(first_rank_node="int32[:]"):
             first_rank_node = get_nodes_first_ranks()
         if _is_data_distributed:
             nnodes = len(first_rank_node)
@@ -397,7 +390,7 @@ def overload_rf_classifier_model_fit(
                 X = bodo.libs.distributed_api.bcast(X, comm_ranks=first_rank_node)
                 y = bodo.libs.distributed_api.bcast(y, comm_ranks=first_rank_node)
 
-        with bodo.objmode:
+        with numba.objmode:
             random_forest_model_fit(m, X, y)  # return value is m
 
         bodo.barrier()

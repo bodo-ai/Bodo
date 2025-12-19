@@ -23,6 +23,20 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: string
+      # Options: DF_LIB, DF_LIB_NO_JIT, SPAWN, NORMAL, NARWHALS
+      test-type:
+        type: string
+        description: The kind of tests to run e.g. spawn tests
+        required: true
+      bodo-version:
+        type: string
+        description: The version string of Bodo.
+        required: true
+      bodo-num-workers:
+        type: string
+        description: Number of workers to use for Bodo tests.
+        required: false
+        default: "2"
 
 jobs:
   run:
@@ -33,23 +47,19 @@ jobs:
     runs-on: ${{ inputs.os }}
     steps:
         # Setup
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v5
         - name: Build from Source
           uses: ./.github/actions/build-source
           with:
             build-all: true
+          env:
+            SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.bodo-version }}
         - name: Load Hadoop from Cache
           if: runner.os != 'Windows'
           uses: actions/cache/restore@v4
           with:
             path: hadoop.tar.gz
             key: hadoop-3.3.2-${{ runner.os }}
-        - name: Install SAS
-          if: runner.os != 'Windows'
-          run: |
-            # Build SAS Token Provider
-            ./buildscripts/install_azurefs_sas_token_provider.sh
-          shell: bash
         - name: Clean Cache
           run: |
             # Clean Maven and Spark Ivy Cache
@@ -63,43 +73,98 @@ jobs:
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
             role-duration-seconds: 10800
+        - name: Install Extra Test dependencies
+          run: |
+            pip install transformers
+            pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+        - name: Install Narwhals Test dependencies
+          if: ${{ inputs.test-type == 'NARWHALS' }}
+          run: |
+            pip install hypothesis polars sqlframe ibis-framework pyarrow-hotfix
 
         # Run Tests
         - name: Run Tests
           run: |
-            # Bodo Tests: Coverage is collected
-            pytest -s -v -Wignore \
-              --cov-report= --cov=bodo \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=buildscripts/github/test_dur_bodo.json \
-              -m "$PYTEST_MARKER" bodo/tests/
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              # On Windows we set HADOOP_HOME to a dummy directory.
+              # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+              export HADOOP_HOME="$(pwd)/buildscripts/local_utils/hadoop_dummy"
+              export PATH=$HADOOP_HOME/bin:$PATH
+              # Visual Studio 2010 DLLs are needed for winutils.exe
+              curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+              ./vcredist_x64.exe -passive
+            fi
 
-            # Save Exit Code for Later
-            test_exit_code=$?
+            set +eo pipefail
 
-            # BodoSQL Tests
-            cd BodoSQL
-            pytest -s -v -Wignore \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=../buildscripts/github/test_dur_bodosql.json \
-              -m "$PYTEST_MARKER" bodosql/tests/
+            if [[ "${{ inputs.test-type }}" == "NARWHALS" ]]; then
+              # Checkout narwhals fork
+              git clone https://github.com/bodo-ai/narwhals.git
+              cd narwhals
+              python -c "import bodo; print('Detected Bodo version:', bodo.__version__)"
+              pytest -s -v -Wignore -k bodo
+              exit $?
+            else
+              # Bodo Tests: Coverage is collected
+              pytest -s -v -Wignore \
+                --cov-report= --cov=bodo \
+                --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --store-durations --clean-durations \
+                --durations-path=buildscripts/github/test_dur_bodo.json \
+                -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
 
-            # Merge Exit Codes.
-            # If neither Bodo nor BodoSQL fails, the exit code will be 0
-            # If one fails, the exit code will be 1
-            # If both fail, the exit code will be 2
-            exit $((test_exit_code + $?))
+              # Save Exit Code for Later
+              python_test_exit_code=$?
+
+              # BodoSQL Tests
+              cd BodoSQL
+              pytest -s -v -Wignore \
+                --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --store-durations --clean-durations \
+                --durations-path=../buildscripts/github/test_dur_bodosql.json \
+                -m "$PYTEST_MARKER" bodosql/tests/
+              sql_test_exit_code=$?
+
+              # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
+              # so we suppress this.
+              if [ "$python_test_exit_code" -eq 5 ]; then
+                python_test_exit_code=0
+              fi
+              if [ "$sql_test_exit_code" -eq 5 ]; then
+                sql_test_exit_code=0
+              fi
+
+              # Merge Exit Codes.
+              # If neither Bodo nor BodoSQL fails, the exit code will be 0
+              # If one fails, the exit code will be 1
+              # If both fail, the exit code will be 2
+              exit $((python_test_exit_code + sql_test_exit_code))
+            fi
           shell: bash
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
-            BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
+            # Ignore streaming, caching and other tests that would
+            # normally import the compiler in spawn/df_lib modes.
+            PYTEST_IGNORE: >-
+              ${{ inputs.test-type == 'NORMAL' && ' ' || 
+                  '--ignore bodo/tests/test_streaming
+                  --ignore bodo/tests/caching_tests' }}
+            BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
+            # Disabling the DataFrame library for spawn tests since some of the tests
+            # create Pandas manager states for testing that are not fully functional.
+            BODO_DATAFRAME_LIBRARY_WARN: ${{ inputs.test-type == 'NARWHALS' && '0' || '1' }}
+            BODO_NUM_WORKERS: ${{ inputs.bodo-num-workers }}
+            BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
+            BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ startsWith(inputs.test-type, 'DF_LIB') && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
+            # BodoSQL C++ Backend
+            BODOSQL_CPP_BACKEND: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
+            BODOSQL_VERBOSE_CPP_BACKEND: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
+            BODOSQL_CPP_BACKEND_NO_FALLBACK: ${{ inputs.test-type == 'BODOSQL_CPP' && '1' || '0' }}
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
@@ -111,20 +176,23 @@ jobs:
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
             BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
             BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+            AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
 
         # Upload
         - name: Prepare Outputs
           if: inputs.collect-coverage && (success() || failure())
           run: |
             mkdir -p outputs
-            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
-            mv .coverage outputs/.coverage_${{ inputs.batch }}
-            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
+            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
+            mv .coverage outputs/.coverage_${{ inputs.batch }}_${{ inputs.test-type }}
+            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
           shell: bash
         - name: Upload Timings and Coverage
           uses: actions/upload-artifact@v4
           if: inputs.collect-coverage && (success() || failure())
           with:
-            name: output-${{ inputs.batch }}
+            name: output-${{ inputs.batch }}-${{ inputs.test-type }}
             path: outputs/
             include-hidden-files: true

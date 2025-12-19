@@ -32,14 +32,16 @@ from bodosql.libs.iceberg_merge_into import (
     do_delta_merge_with_target,
 )
 
+pytestmark = pytest.mark.iceberg
+
 small_df_len = 12
 
 base_df_int = pd.DataFrame(
     {
-        "A": pd.Series(np.arange(small_df_len)),
-        "B": pd.Series(np.arange(small_df_len) * 2),
-        "C": pd.Series(np.arange(small_df_len) * 3),
-        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+        "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
+        "B": pd.Series(np.arange(small_df_len, dtype=np.int64) * 2),
+        "C": pd.Series(np.arange(small_df_len, dtype=np.int64) * 3),
+        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
     }
 )
 # Make sure non range-index doesn't cause any problems.
@@ -58,20 +60,20 @@ delta_df_int = pd.DataFrame(
 
 delete_everything_df_int = pd.DataFrame(
     {
-        "A": pd.Series(np.arange(small_df_len)),
-        "B": pd.Series(np.arange(small_df_len) * 2),
-        "C": pd.Series(np.arange(small_df_len) * 3),
-        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+        "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
+        "B": pd.Series(np.arange(small_df_len, dtype=np.int64) * 2),
+        "C": pd.Series(np.arange(small_df_len, dtype=np.int64) * 3),
+        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
         MERGE_ACTION_ENUM_COL_NAME: [DELETE_ENUM] * small_df_len,
     }
 )
 
 delete_everything_and_insert_some_stuff_df_int = pd.DataFrame(
     {
-        "A": pd.Series(np.arange(14)),
-        "B": pd.Series(np.arange(14) * 2),
-        "C": pd.Series(np.arange(14) * 3),
-        ROW_ID_COL_NAME: pd.Series(np.arange(14) - 1),
+        "A": pd.Series(np.arange(14, dtype=np.int64)),
+        "B": pd.Series(np.arange(14, dtype=np.int64) * 2),
+        "C": pd.Series(np.arange(14, dtype=np.int64) * 3),
+        ROW_ID_COL_NAME: pd.Series(np.arange(14, dtype=np.int64) - 1),
         MERGE_ACTION_ENUM_COL_NAME: [INSERT_ENUM] + [DELETE_ENUM] * 12 + [INSERT_ENUM],
     }
 )
@@ -79,10 +81,10 @@ delete_everything_and_insert_some_stuff_df_int = pd.DataFrame(
 # Make sure everything works with string, binary, and timestamp types
 base_df_string = pd.DataFrame(
     {
-        "A": pd.Series(np.arange(small_df_len).astype(str)),
-        "B": pd.Series(np.arange(small_df_len) * 2).astype(bytes),
+        "A": pd.Series(np.arange(small_df_len, dtype=np.int64).astype(str)),
+        "B": pd.Series(np.arange(small_df_len, dtype=np.int64) * 2).astype(bytes),
         "C": pd.date_range(start="2018-07-24", end="2018-11-29", periods=small_df_len),
-        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
     }
 )
 
@@ -106,7 +108,7 @@ delete_everything_df_string = pd.DataFrame(
         "A": gen_nonascii_list(small_df_len),
         "B": gen_random_string_binary_array(small_df_len, is_binary=True),
         "C": pd.date_range(start="2018-07-24", end="2018-07-25", periods=small_df_len),
-        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+        ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
         MERGE_ACTION_ENUM_COL_NAME: [DELETE_ENUM] * small_df_len,
     }
 )
@@ -116,7 +118,7 @@ delete_everything_and_insert_some_stuff_df_string = pd.DataFrame(
         "A": gen_random_string_binary_array(14, is_binary=False),
         "B": gen_random_string_binary_array(14, is_binary=True),
         "C": pd.date_range(start="2018-07-24", end="2018-07-25", periods=14),
-        ROW_ID_COL_NAME: pd.Series(np.arange(14) - 1),
+        ROW_ID_COL_NAME: pd.Series(np.arange(14, dtype=np.int64) - 1),
         MERGE_ACTION_ENUM_COL_NAME: [INSERT_ENUM] + [DELETE_ENUM] * 12 + [INSERT_ENUM],
     }
 )
@@ -162,7 +164,7 @@ stress_test_base_df = stress_test_base_df.mask(cond, stress_test_base_df, axis=0
 cond = np.random.ranf(stress_test_delta_df.shape) < 0.5
 stress_test_delta_df = stress_test_delta_df.mask(cond, stress_test_delta_df, axis=0)
 
-base_row_ids = random.sample(list(np.arange(1000)), 100)
+base_row_ids = random.sample(list(np.arange(1000, dtype=np.int64)), 100)
 delta_row_ids = random.sample(base_row_ids, 75)
 # The row id column must be sorted for the base df
 stress_test_base_df[ROW_ID_COL_NAME] = sorted(base_row_ids)
@@ -299,13 +301,13 @@ def test_do_delta_merge_failure():
     """
     target_df = pd.DataFrame(
         {
-            "A": pd.Series(np.arange(small_df_len)),
-            ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+            "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
+            ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
         }
     )
     delta_df = pd.DataFrame(
         {
-            "A": pd.Series(np.arange(small_df_len)),
+            "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
             ROW_ID_COL_NAME: [1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
             MERGE_ACTION_ENUM_COL_NAME: [DELETE_ENUM, UPDATE_ENUM] * 6,
         }
@@ -326,13 +328,13 @@ def test_do_delta_merge_disallow_multiple_delete():
     """
     target_df = pd.DataFrame(
         {
-            "A": pd.Series(np.arange(small_df_len)),
-            ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len)),
+            "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
+            ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
         }
     )
     delta_df = pd.DataFrame(
         {
-            "A": pd.Series(np.arange(small_df_len)),
+            "A": pd.Series(np.arange(small_df_len, dtype=np.int64)),
             ROW_ID_COL_NAME: [1, 2, 3, 4, 5, 6] * 2,
             MERGE_ACTION_ENUM_COL_NAME: [DELETE_ENUM] * small_df_len,
         }
@@ -367,7 +369,9 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
         # produce a delta table
         # For now, we're just deleting columns where B = 2 using do_delta_merge_with_target
         filtered_orig_df = orig_df[orig_df.B == 2]
-        filtered_orig_df[ROW_ID_COL_NAME] = np.arange(len(filtered_orig_df))
+        filtered_orig_df[ROW_ID_COL_NAME] = np.arange(
+            len(filtered_orig_df), dtype=np.int64
+        )
 
         delta_table = filtered_orig_df
         delta_table[MERGE_ACTION_ENUM_COL_NAME] = 0

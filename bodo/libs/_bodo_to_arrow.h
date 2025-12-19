@@ -23,6 +23,13 @@
     lhs = std::move(res).ValueOrDie();
 #endif
 
+/**
+ * @brief Convert array_info to equivalent Arrow array.
+ *
+ * @return std::shared_ptr<arrow::Array> equivalent Array array
+ */
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
+
 std::shared_ptr<arrow::Array> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
     bool convert_timedelta_to_int64, const std::string &tz,
@@ -48,7 +55,8 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  * @param convert_timedelta_to_int64 : cast timedelta to int64.
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for
- * Iceberg/Snowflake, for which we specify "UTC".
+ * Iceberg/Snowflake, for which we specify "UTC". This argument overrides any
+ * timezones stored in columns.
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
@@ -67,7 +75,7 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  */
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table, std::vector<std::string> field_names,
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {},
+    const std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata = {},
     bool convert_timedelta_to_int64 = false, std::string tz = "",
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     bool downcast_time_ns_to_us = false,
@@ -99,13 +107,15 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     int64_t array_id = -1, std::shared_ptr<array_info> dicts_ref_arr = nullptr);
 
 /**
- * @brief Convert Arrow DataType to Bodo DataType, including nested types
+ * @brief Convert Arrow table to Bodo table_info with zero-copy as much as
+ * possible.
  *
- * @param arrow_type input Arrow DataType
- * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
+ * @param table input Arrow table
+ * @param src_pool Pointer to BufferPool used for allocations
+ * @return std::shared_ptr<table_info> Bodo output table
  */
-std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
-    const std::shared_ptr<arrow::DataType> arrow_type);
+std::shared_ptr<table_info> arrow_table_to_bodo(
+    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool);
 
 /**
  * @brief Convert Arrow RecordBatch to Bodo table_info with zero-copy as much as

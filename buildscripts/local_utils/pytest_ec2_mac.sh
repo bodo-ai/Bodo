@@ -1,15 +1,15 @@
 #!/bin/bash
 
 set -ex
-# Install python3.12
-brew install python@3.12 git
+# Install python3.13
+brew install python@3.13 git
 
 # Clone the repo
 export GITHUB_PAT=
 git clone https://"$GITHUB_PAT"@github.com/bodo-ai/Bodo.git
 
 # Create a virtual environment
-python3.12 -m venv venv
+python3.13 -m venv venv
 
 # Activate it
 source venv/bin/activate
@@ -17,7 +17,6 @@ source venv/bin/activate
 # Install dependencies
 brew install unzip maven hadoop awscli
 pip install pytest wheel setuptools setuptools_scm psutil pyspark boto3 scipy s3fs snowflake-connector-python sqlalchemy snowflake-sqlalchemy scikit-learn mmh3 h5py avro adlfs pytest-azurepipelines pymysql openpyxl
-(cd Bodo/azurefs-sas-token-provider && python setup.py install)
 (cd Bodo/iceberg && pip install .)
 export HADOOP_HOME="/usr/local/Cellar/hadoop/3.3.0/libexec"
 echo "export JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home" | tee -a $HADOOP_HOME/etc/hadoop/hadoop-env.sh
@@ -72,5 +71,5 @@ find . -name "bodo*312*.whl" -exec pip install {} \;
 
 # Run PR CI
 export NRANKS=2
-export PYTEST_MARKER="(not weekly) and (not slow) and (not s3) and (not snowflake)"
+export PYTEST_MARKER="(not weekly) and (not slow) and (not s3) and (not snowflake) and (not iceberg)"
 python -m bodo.runtests "BODO_MAC_PR_CI" "$NRANKS" --pyargs bodo -s -v --import-mode=append -m "$PYTEST_MARKER" || true

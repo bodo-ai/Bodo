@@ -37,10 +37,11 @@ from numba.extending import (
 )
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import (
     _no_input,
-    datetime_timedelta_array_type,
+    timedelta_array_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import (
@@ -385,7 +386,6 @@ def _get_dtype_str(dtype):
     "astype",
     inline="always",
     no_unliteral=True,
-    # jit_options={"cache": True},   # TODO: Get this working.  Right now error pickling get_rank.
 )
 def overload_dataframe_astype(
     df,
@@ -506,7 +506,7 @@ def overload_dataframe_astype(
                 for i in range(len(df.columns))
             )
     if df.is_table_format:
-        table_type = bodo.TableType(tuple(arr_typ_list))
+        table_type = bodo.types.TableType(tuple(arr_typ_list))
         extra_globals["out_table_typ"] = table_type
         data_args = "bodo.utils.table_utils.table_astype(table, out_table_typ, copy, _bodo_nan_to_str)"
 
@@ -845,7 +845,7 @@ def overload_dataframe_isna(df):
 
     if df.is_table_format:
         # isna generates a boolean array for every column
-        output_arr_typ = bodo.boolean_array_type
+        output_arr_typ = bodo.types.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -980,7 +980,7 @@ def overload_dataframe_notna(df):
     extra_globals = None
     if df.is_table_format:
         # notna generates a boolean array for every column
-        output_arr_typ = bodo.boolean_array_type
+        output_arr_typ = bodo.types.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -1064,10 +1064,10 @@ def overload_dataframe_first(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.first()")
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if not isinstance(df.index, DatetimeIndexType):
         raise BodoError("DataFrame.first(): only supports a DatetimeIndex index")
@@ -1101,10 +1101,10 @@ def overload_dataframe_last(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.last()")
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if not isinstance(df.index, DatetimeIndexType):
         raise BodoError("DataFrame.last(): only supports a DatetimeIndex index")
@@ -1176,7 +1176,7 @@ def to_string_overload(
         max_colwidth=None,
         encoding=None,
     ):  # pragma: no cover
-        with bodo.objmode(res="string"):
+        with numba.objmode(res="string"):
             res = df.to_string(
                 buf=buf,
                 columns=columns,
@@ -1232,7 +1232,7 @@ def overload_dataframe_isin(df, values):
     elif is_iterable_type(values) and not isinstance(values, SeriesType):
         # general iterable (e.g. list, set, array) case
         # TODO: handle passed in dict case (pass colname to func?)
-        other_colmap = {c: "values" for c in df.columns}
+        other_colmap = dict.fromkeys(df.columns, "values")
     else:
         raise_bodo_error(f"pd.isin(): not supported for type {values}")
 
@@ -1289,7 +1289,7 @@ def overload_dataframe_abs(df):
     for arr_typ in df.data:
         if not (
             isinstance(arr_typ.dtype, types.Number)
-            or arr_typ.dtype == bodo.timedelta64ns
+            or arr_typ.dtype == bodo.types.timedelta64ns
         ):
             raise_bodo_error(
                 f"DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype {arr_typ.dtype}"
@@ -1668,23 +1668,27 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
                 coltype,
                 (
-                    bodo.IntegerArrayType,
-                    bodo.FloatingArrayType,
-                    bodo.CategoricalArrayType,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                    bodo.types.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+            or coltype
+            in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
+        if (
+            isinstance(coltype, bodo.types.CategoricalArrayType)
+            and not coltype.dtype.ordered
+        ):
             raise BodoError("DataFrame.idxmax(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
@@ -1712,23 +1716,27 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
                 coltype,
                 (
-                    bodo.IntegerArrayType,
-                    bodo.FloatingArrayType,
-                    bodo.CategoricalArrayType,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
+                    bodo.types.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+            or coltype
+            in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
+        if (
+            isinstance(coltype, bodo.types.CategoricalArrayType)
+            and not coltype.dtype.ordered
+        ):
             raise BodoError("DataFrame.idxmin(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
@@ -2031,7 +2039,7 @@ def _is_describe_type(data):
     return (
         isinstance(data, (IntegerArrayType, FloatingArrayType))
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
-        or data.dtype == bodo.datetime64ns
+        or data.dtype == bodo.types.datetime64ns
     )
 
 
@@ -2070,7 +2078,8 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
 
     # number of datetime columns
     num_dt = sum(
-        df.data[df.column_index[c]].dtype == bodo.datetime64ns for c in numeric_cols
+        df.data[df.column_index[c]].dtype == bodo.types.datetime64ns
+        for c in numeric_cols
     )
 
     def _get_describe(col_ind):
@@ -2078,7 +2087,7 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
         columns to match Pandas.
         https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L179
         """
-        is_dt = df.data[col_ind].dtype == bodo.datetime64ns
+        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns
         if num_dt and num_dt != len(numeric_cols):
             if is_dt:
                 return f"des_{col_ind} + (np.nan,)"
@@ -2208,7 +2217,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
             isinstance(column_type, (types.Array, IntegerArrayType, FloatingArrayType))
             and (
                 isinstance(column_type.dtype, (types.Number))
-                or column_type.dtype == bodo.datetime64ns
+                or column_type.dtype == bodo.types.datetime64ns
             )
         ):
             # TODO: Link to supported Column input types.
@@ -2228,7 +2237,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     data_args = ", ".join(
         # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
         f"bodo.hiframes.series_impl.dt64_arr_sub(data_{i}, bodo.hiframes.rolling.shift(data_{i}, periods, False))"
-        if df.data[i] == types.Array(bodo.datetime64ns, 1, "C")
+        if df.data[i] == types.Array(bodo.types.datetime64ns, 1, "C")
         else f"data_{i} - bodo.hiframes.rolling.shift(data_{i}, periods, False)"
         for i in range(len(df.columns))
     )
@@ -2489,11 +2498,11 @@ def overload_dataframe_drop_duplicates(
     dict_cols = []
     if subset_idx:
         for col_idx in subset_idx:
-            if isinstance(df.data[col_idx], bodo.MapArrayType):
+            if isinstance(df.data[col_idx], bodo.types.MapArrayType):
                 dict_cols.append(df.columns[col_idx])
     else:
         for i, col_name in enumerate(df.columns):
-            if isinstance(df.data[i], bodo.MapArrayType):
+            if isinstance(df.data[i], bodo.types.MapArrayType):
                 dict_cols.append(col_name)
     if dict_cols:
         raise BodoError(
@@ -2757,7 +2766,7 @@ def _gen_init_df(
     }
     _global.update(extra_globals)
 
-    return bodo_exec(func_text, _global, {}, globals())
+    return bodo_exec(func_text, _global, {}, __name__)
 
 
 ############################ binary operators #############################
@@ -3063,7 +3072,13 @@ def overload_isna(obj):
 overload(pd.isna, inline="always")(overload_isna)
 overload(pd.isnull, inline="always")(overload_isna)
 
+# Enable Bodo's exports of Pandas
+overload(bd.isna, inline="always")(overload_isna)
+overload(bd.isnull, inline="always")(overload_isna)
 
+
+@overload(bd.isna)
+@overload(bd.isnull)
 @overload(pd.isna)
 @overload(pd.isnull)
 def overload_isna_scalar(obj):
@@ -3091,7 +3106,7 @@ def overload_isna_scalar(obj):
     # using unliteral_val() to avoid literal type in output type since we may replace
     # this call in Series pass with array_kernels.isna()
     obj = types.unliteral(obj)
-    if obj == bodo.string_type:
+    if obj == bodo.types.string_type:
         return lambda obj: unliteral_val(False)  # pragma: no cover
     if isinstance(obj, types.Integer):
         return lambda obj: unliteral_val(False)  # pragma: no cover
@@ -3148,6 +3163,9 @@ def overload_notna(obj):
 # Use function decorator to enable stacked inlining
 overload(pd.notna, inline="always", no_unliteral=True)(overload_notna)
 overload(pd.notnull, inline="always", no_unliteral=True)(overload_notna)
+
+overload(bd.notna, inline="always", no_unliteral=True)(overload_notna)
+overload(bd.notnull, inline="always", no_unliteral=True)(overload_notna)
 
 
 def _get_pd_dtype_str(t):
@@ -3444,8 +3462,15 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     )
 
 
-@overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
-@overload(pd.merge, inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "merge",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
+@overload(pd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.merge, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_dataframe_merge(
     left,
     right,
@@ -3586,14 +3611,13 @@ def overload_dataframe_merge(
     right_keys = gen_const_tup(right_keys)
 
     # generating code since typers can't find constants easily
-    func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
+    func_text = (
+        "def bodo_dataframe_merge(left, right, how='inner', on=None, left_on=None,\n"
+    )
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True, _bodo_rebalance_output_if_skewed=False):\n"
     func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, '{how}', '{suffix_x}', '{suffix_y}', False, {indicator_val}, {_bodo_na_equal_val}, {_bodo_rebalance_output_if_skewed_val}, {gen_cond!r})\n"
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _impl = loc_vars["_impl"]
-    return _impl
+    return bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
 
 def common_validate_merge_merge_asof_spec(
@@ -3615,7 +3639,7 @@ def common_validate_merge_merge_asof_spec(
         FloatingArrayType,
         DecimalArrayType,
         IntervalArrayType,
-        bodo.DatetimeArrayType,
+        bodo.types.DatetimeArrayType,
         TimeArrayType,
     )
     valid_dataframe_column_insts = {
@@ -3623,7 +3647,7 @@ def common_validate_merge_merge_asof_spec(
         dict_str_arr_type,
         binary_array_type,
         datetime_date_array_type,
-        datetime_timedelta_array_type,
+        timedelta_array_type,
         boolean_array_type,
         timestamptz_array_type,
     }
@@ -4025,112 +4049,13 @@ def validate_unicity_output_column_names(
         insertOutColumn("_merge")
 
 
-@overload(pd.merge_asof, inline="always", no_unliteral=True)
-def overload_dataframe_merge_asof(
-    left,
-    right,
-    on=None,
-    left_on=None,
-    right_on=None,
-    left_index=False,
-    right_index=False,
-    by=None,
-    left_by=None,
-    right_by=None,
-    suffixes=("_x", "_y"),
-    tolerance=None,
-    allow_exact_matches=True,
-    direction="backward",
-):
-    # [BE-3083] Disabling because asof doesn't support table format yet.
-    raise BodoError("pandas.merge_asof() not support yet")
-
-    validate_merge_asof_spec(
-        left,
-        right,
-        on,
-        left_on,
-        right_on,
-        left_index,
-        right_index,
-        by,
-        left_by,
-        right_by,
-        suffixes,
-        tolerance,
-        allow_exact_matches,
-        direction,
-    )
-
-    # TODO: support 'by' argument
-
-    # XXX copied from merge, TODO: refactor
-    # make sure left and right are dataframes
-    if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
-        raise BodoError("merge_asof() requires dataframe inputs")
-
-    # NOTE: using sorted to avoid inconsistent ordering across processors
-    comm_cols = tuple(
-        sorted(set(left.columns) & set(right.columns), key=lambda k: str(k))
-    )
-
-    if not is_overload_none(on):
-        left_on = right_on = on
-
-    if (
-        is_overload_none(on)
-        and is_overload_none(left_on)
-        and is_overload_none(right_on)
-        and is_overload_false(left_index)
-        and is_overload_false(right_index)
-    ):
-        left_keys = comm_cols
-        right_keys = comm_cols
-    else:
-        if is_overload_true(left_index):
-            left_keys = ["$_bodo_index_"]
-        else:
-            left_keys = get_overload_const_list(left_on)
-            validate_keys(left_keys, left)
-        if is_overload_true(right_index):
-            right_keys = ["$_bodo_index_"]
-        else:
-            right_keys = get_overload_const_list(right_on)
-            validate_keys(right_keys, right)
-
-    validate_merge_asof_keys_length(
-        left_on, right_on, left_index, right_index, left_keys, right_keys
-    )
-    validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys)
-    left_keys = gen_const_tup(left_keys)
-    right_keys = gen_const_tup(right_keys)
-    # The suffixes
-    if isinstance(suffixes, tuple):
-        suffixes_val = suffixes
-    if is_overload_constant_list(suffixes):
-        suffixes_val = list(get_overload_const_list(suffixes))
-    if isinstance(suffixes, types.Omitted):
-        suffixes_val = suffixes.value
-
-    suffix_x = suffixes_val[0]
-    suffix_y = suffixes_val[1]
-
-    # generating code since typers can't find constants easily
-    func_text = "def _impl(left, right, on=None, left_on=None, right_on=None,\n"
-    func_text += "    left_index=False, right_index=False, by=None, left_by=None,\n"
-    func_text += "    right_by=None, suffixes=('_x', '_y'), tolerance=None,\n"
-    func_text += "    allow_exact_matches=True, direction='backward'):\n"
-    func_text += "  suffix_x = suffixes[0]\n"
-    func_text += "  suffix_y = suffixes[1]\n"
-    func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, 'asof', '{suffix_x}', '{suffix_y}', False, False, True, False, '')\n"
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _impl = loc_vars["_impl"]
-    return _impl
-
-
-@overload_method(DataFrameType, "groupby", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "groupby",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_groupby(
     df,
     by=None,
@@ -4390,11 +4315,11 @@ def pivot_error_checking(df, index, columns, values, func_name):
         if isinstance(
             index_column,
             (
-                bodo.ArrayItemArrayType,
-                bodo.MapArrayType,
-                bodo.StructArrayType,
-                bodo.TupleArrayType,
-                bodo.IntervalArrayType,
+                bodo.types.ArrayItemArrayType,
+                bodo.types.MapArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.TupleArrayType,
+                bodo.types.IntervalArrayType,
             ),
         ):
             raise BodoError(
@@ -4402,7 +4327,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
             )
 
         # TODO: Support
-        if isinstance(index_column, bodo.CategoricalArrayType):
+        if isinstance(index_column, bodo.types.CategoricalArrayType):
             raise BodoError(
                 f"{func_name}(): 'index' DataFrame column does not support categorical data"
             )
@@ -4430,11 +4355,11 @@ def pivot_error_checking(df, index, columns, values, func_name):
     if isinstance(
         columns_column,
         (
-            bodo.ArrayItemArrayType,
-            bodo.MapArrayType,
-            bodo.StructArrayType,
-            bodo.TupleArrayType,
-            bodo.IntervalArrayType,
+            bodo.types.ArrayItemArrayType,
+            bodo.types.MapArrayType,
+            bodo.types.StructArrayType,
+            bodo.types.TupleArrayType,
+            bodo.types.IntervalArrayType,
         ),
     ):
         raise BodoError(
@@ -4443,7 +4368,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
 
     # TODO: Support and generate a DataFrame with column known at compile time if the
     # categories are known at compile time.
-    if isinstance(columns_column, bodo.CategoricalArrayType):
+    if isinstance(columns_column, bodo.types.CategoricalArrayType):
         raise BodoError(
             f"{func_name}(): 'columns' DataFrame column does not support categorical data"
         )
@@ -4456,13 +4381,13 @@ def pivot_error_checking(df, index, columns, values, func_name):
             isinstance(
                 values_column,
                 (
-                    bodo.ArrayItemArrayType,
-                    bodo.MapArrayType,
-                    bodo.StructArrayType,
-                    bodo.TupleArrayType,
+                    bodo.types.ArrayItemArrayType,
+                    bodo.types.MapArrayType,
+                    bodo.types.StructArrayType,
+                    bodo.types.TupleArrayType,
                 ),
             )
-            or values_column == bodo.binary_array_type
+            or values_column == bodo.types.binary_array_type
         ):
             raise BodoError(
                 f"{func_name}(): 'values' DataFrame column must have scalar rows"
@@ -4478,6 +4403,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
 
 
 @overload(pd.pivot, inline="always", no_unliteral=True)
+@overload(bd.pivot, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot", inline="always", no_unliteral=True)
 def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     """
@@ -4560,6 +4486,7 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
 
 
 @overload(pd.pivot_table, inline="always", no_unliteral=True)
+@overload(bd.pivot_table, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot_table", inline="always", no_unliteral=True)
 def overload_dataframe_pivot_table(
     data,
@@ -4726,6 +4653,7 @@ def overload_dataframe_pivot_table(
 
 
 @overload(pd.melt, inline="always", no_unliteral=True)
+@overload(bd.melt, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "melt", inline="always", no_unliteral=True)
 def overload_dataframe_melt(
     frame,
@@ -4901,6 +4829,7 @@ def overload_dataframe_melt(
 
 
 @overload(pd.crosstab, inline="always", no_unliteral=True)
+@overload(bd.crosstab, inline="always", no_unliteral=True)
 def crosstab_overload(
     index,
     columns,
@@ -4976,7 +4905,13 @@ def crosstab_overload(
     return _impl
 
 
-@overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
+@overload_method(
+    DataFrameType,
+    "sort_values",
+    inline="always",
+    no_unliteral=True,
+    jit_options={"cache": True},
+)
 def overload_dataframe_sort_values(
     df,
     by,
@@ -5322,7 +5257,7 @@ def overload_dataframe_fillna(
     func_text = "def bodo_dataframe_fillna(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"
     if is_overload_true(inplace):
         func_text += "  " + "  \n".join(data_args) + "\n"
-        return bodo_exec(func_text, {}, {}, globals())
+        return bodo_exec(func_text, {}, {}, __name__)
     else:
         return _gen_init_df(
             func_text, df.columns, ", ".join(d + ".values" for d in data_args)
@@ -5743,9 +5678,9 @@ def overload_dataframe_info(
             func_text += f"    non_null_count[{i}] = str(bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})))\n"
             # Get type of column and rename Categorical and nullable int to match Pandas
             dtype_name = f"{df.data[i].dtype}"
-            if isinstance(df.data[i], bodo.CategoricalArrayType):
+            if isinstance(df.data[i], bodo.types.CategoricalArrayType):
                 dtype_name = "category"
-            elif isinstance(df.data[i], bodo.IntegerArrayType):
+            elif isinstance(df.data[i], bodo.types.IntegerArrayType):
                 int_typ_name = bodo.libs.int_arr_ext.IntDtype(df.data[i].dtype).name
                 dtype_name = int_typ_name[:-7]  # remove trailing "Dtype()"
             elif isinstance(df.data[i], FloatingArrayType):
@@ -5856,6 +5791,7 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
 
 
 @overload(pd.read_excel, no_unliteral=True)
+@overload(bd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,
     sheet_name=0,
@@ -5934,7 +5870,7 @@ def impl(
     storage_options=None,
     _bodo_df_type=None,
 ):
-    with bodo.no_warning_objmode(df="{t_name}"):
+    with bodo.ir.object_mode.no_warning_objmode(df="{t_name}"):
         df = pd.read_excel(
             io=io,
             sheet_name=sheet_name,
@@ -6069,7 +6005,7 @@ def is_df_values_numpy_supported_dftyp(df_typ):
         if not (
             isinstance(col_typ, (IntegerArrayType, FloatingArrayType))
             or isinstance(col_typ.dtype, types.Number)
-            or col_typ.dtype in (bodo.datetime64ns, bodo.timedelta64ns)
+            or col_typ.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns)
         ):
             return False
     return True
@@ -6085,7 +6021,7 @@ def typeref_to_type(v):
 
 def _install_typer_for_type(type_name, typ):
     """install typer for a bodo type call to be used inside jit
-    e.g. bodo.DataFrameType()
+    e.g. bodo.types.DataFrameType()
     """
 
     @type_callable(typ)
@@ -6097,7 +6033,7 @@ def _install_typer_for_type(type_name, typ):
 
         return typer
 
-    no_side_effect_call_tuples.add((type_name, bodo))
+    no_side_effect_call_tuples.add((type_name, "types", bodo))
     no_side_effect_call_tuples.add((typ,))
     # TODO(ehsan): make lower_builtin work in case the type calls is not removed by
     # dead code elimination for some reason
@@ -6106,10 +6042,10 @@ def _install_typer_for_type(type_name, typ):
 
 def _install_type_call_typers():
     """install typers for all bodo type calls to be used inside jit
-    e.g. bodo.DataFrameType()
+    e.g. bodo.types.DataFrameType()
     """
     for type_name in bodo_types_with_params:
-        typ = getattr(bodo, type_name)
+        typ = getattr(bodo.types, type_name)
         _install_typer_for_type(type_name, typ)
 
 
@@ -6151,7 +6087,7 @@ class SetDfColInfer(AbstractTemplate):
                 val = dtype_to_array_type(val.dtype)
             if is_overload_constant_str(val) or val == types.unicode_type:
                 # String scalars are coerced to dictionary encoded arrays.
-                val = bodo.dict_str_arr_type
+                val = bodo.types.dict_str_arr_type
             elif not is_array_typ(val):
                 val = dtype_to_array_type(val)
             if ind in target.columns:

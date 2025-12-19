@@ -192,6 +192,7 @@ unless support is explicitly mentioned.
 - [`pd.Series.dt.is_quarter_end`][pdseriesdtis_quarter_end]              
 - [`pd.Series.dt.is_year_start`][pdseriesdtis_year_start]                
 - [`pd.Series.dt.is_year_end`][pdseriesdtis_year_end]                    
+- [`pd.Series.dt.is_leap_year`][pdseriesdtis_leap_year]                    
 - [`pd.Series.dt.daysinmonth`][pdseriesdtdaysinmonth]                    
 - [`pd.Series.dt.days_in_month`][pdseriesdtdays_in_month]                
 
@@ -247,7 +248,8 @@ unless support is explicitly mentioned.
 - [`pd.Series.str.isupper`][pdseriesstrisupper]                          
 - [`pd.Series.str.istitle`][pdseriesstristitle]                          
 - [`pd.Series.str.isnumeric`][pdseriesstrisnumeric]                      
-- [`pd.Series.str.isdecimal`][pdseriesstrisdecimal]                      
+- [`pd.Series.str.isdecimal`][pdseriesstrisdecimal]   
+- [`pd.Series.str.encode`][pdseriesstrencode]                   
 
 ### Categorical accessor
 

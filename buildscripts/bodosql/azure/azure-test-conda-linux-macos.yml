@@ -8,22 +8,22 @@ parameters:
 - name: pool_name
   type: string
   default: 'ScalingVMSet'
-- name: CACHE_TEST
-  type: boolean
-  default: false
-- name: SPAWN_MODE_TEST
-  type: boolean
-  default: false
-- name: use_bodo_arrow_fork
-  type: number
-  default: 1
+- name: test_type
+  type: string
+  default: NORMAL
+  values:
+    - NORMAL
+    - SPAWN
+    - CACHE
+    - DF_LIB
 
 jobs:
 - job: ${{ parameters.name }}
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
-    - group: TabularCredentials
+    - group: AzureCredentials
+    - group: Azure Iceberg
   timeoutInMinutes: 360
   pool: ${{ parameters.pool_name }}
   strategy:
@@ -55,22 +55,7 @@ jobs:
       USE_BODO_ARROW_FORK: ${{ parameters.use_bodo_arrow_fork }}  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
-  - bash: |
-      set -exo pipefail
-      eval "$(pixi shell-hook --shell bash -e azure)"
-
-      if [ "$(uname -m)" = "aarch64" ]; then
-        ARM_EXTENSION="-aarch64"
-      fi
-
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.4.0${ARM_EXTENSION}.tar.gz" | sudo tar -xzf - -C /opt
-      cd azurefs-sas-token-provider
-      pip install --no-deps --no-build-isolation -ve .
-    displayName: "Setup Snowflake ADLS Testing (only Linux)"
-    retryCountOnTaskFailure: 5
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
-
-  - bash: |
+  - script: |
       pixi list
       pixi run pip list
     continueOnError: true
@@ -78,9 +63,23 @@ jobs:
 
   - bash: |
       set -exo pipefail
+      sudo apt-get update
+      sudo apt-get install -y docker.io
+      sudo service docker start
+      sudo chmod 666 /var/run/docker.sock
+      sudo usermod -aG docker $USER
+    displayName: Install Docker
+    retryCountOnTaskFailure: 5
+
+  - script: |
+      set -exo pipefail
 
       pixi run -e azure python -c "import bodo; print(bodo.__version__)"
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
+
+      pixi run -e azure pip install transformers
+      # This isn't published on pypi so no good way to list it as a dependency
+      pixi run -e azure pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -96,6 +95,14 @@ jobs:
         export HADOOP_OPTIONAL_TOOLS=hadoop-azure
         export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      elif [[ "$(Agent.OS)" == "Windows_NT" ]]; then
+        # On Windows we set HADOOP_HOME to a dummy directory.
+        # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+        export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
+        export PATH=$HADOOP_HOME/bin:$PATH
+        # Visual Studio 2010 DLLs are needed for winutils.exe
+        curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+        ./vcredist_x64.exe -passive
       else
         echo "Skipping hadoop/arrow env var setup"
       fi
@@ -104,9 +111,9 @@ jobs:
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
-      if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
+      if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
         pixi run -e azure python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
-      elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
+      elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
@@ -118,9 +125,10 @@ jobs:
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
-      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
       AZURE_STORAGE_ACCOUNT_NAME: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
-      AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       AWS_REGION: us-east-1

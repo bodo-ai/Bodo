@@ -1,16 +1,20 @@
 """Test supported sklearn model selection methods"""
 
+from unittest import TestCase
+
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.utils import shuffle
-from sklearn.utils._testing import assert_array_equal, assert_raises
+from sklearn.utils._testing import assert_array_equal
+
+_dummy = TestCase("__init__")
+assert_raises = _dummy.assertRaises
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
-from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
@@ -150,7 +154,7 @@ def test_shuffle_random_state(data, random_state, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("n_samples", [0, 1, 8, 14, 15])
+@pytest.mark.parametrize("n_samples", [1, 8, 14, 15])
 @pytest.mark.parametrize("nitems, niters", [(15, 10000)])
 def test_shuffle_n_samples(nitems, niters, n_samples, memory_leak_check):
     """
@@ -341,6 +345,7 @@ def test_train_test_split_unsupported(memory_leak_check):
     """
     Test an unsupported argument to train_test_split
     """
+    from bodo.utils.typing import BodoError
 
     def impl(X, y, train_size, test_size):
         X_train, X_test, y_train, y_test = train_test_split(

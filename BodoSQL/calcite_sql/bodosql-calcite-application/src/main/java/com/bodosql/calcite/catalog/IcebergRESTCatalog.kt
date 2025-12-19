@@ -2,7 +2,6 @@ package com.bodosql.calcite.catalog
 
 import com.bodosql.calcite.adapter.bodo.StreamingOptions
 import com.bodosql.calcite.application.BodoCodeGenVisitor
-import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ir.Expr
@@ -21,9 +20,10 @@ open class IcebergRESTCatalog(
     warehouse: String,
     token: String? = null,
     credential: String? = null,
+    val scope: String? = null,
     val defaultSchema: String? = null,
 ) : IcebergCatalog<RESTCatalog>(
-        createRestCatalog(uri, warehouse, token, credential),
+        createRestCatalog(uri, warehouse, token, credential, scope),
     ) {
     /**
      * Returns a set of all table names with the given schema name.
@@ -62,7 +62,8 @@ open class IcebergRESTCatalog(
      */
     override fun getSchemaNames(schemaPath: ImmutableList<String>): MutableSet<String> {
         val ns = schemaPathToNamespace(schemaPath)
-        return getIcebergConnection().listNamespaces(ns).map { it.level(it.length() - 1) }.toMutableSet()
+        val schemas = getIcebergConnection().listNamespaces(ns).map { it.level(it.length() - 1) }.toMutableSet()
+        return schemas
     }
 
     /**
@@ -74,19 +75,13 @@ open class IcebergRESTCatalog(
      * @param depth The depth at which to find the default.
      * @return List of default Schema for this catalog.
      */
-    override fun getDefaultSchema(depth: Int): List<String> {
-        if (depth == 0 && defaultSchema != null) {
-            return listOf(defaultSchema)
-        }
-        return listOf()
-    }
+    override fun getDefaultSchema(depth: Int): List<String> = defaultSchema?.split(".")?.toList()?.subList(0, depth + 1) ?: listOf()
 
     /**
      * Return the number of levels at which a default schema may be found.
-     * Tabular catalogs don't have subSchemas, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int = 1
+    override fun numDefaultSchemaLevels(): Int = defaultSchema?.split(".")?.size ?: 0
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
@@ -167,7 +162,7 @@ open class IcebergRESTCatalog(
 
     /**
      * Returns if a schema with the given depth is allowed to contain tables.
-     * Since Tabular catalogs don't have subSchemas, this method always returns true.
+     * Since REST catalogs don't have subSchemas, this method always returns true.
      *
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return True
@@ -176,7 +171,7 @@ open class IcebergRESTCatalog(
 
     /**
      * Returns if a schema with the given depth is allowed to contain subSchemas.
-     * Tabular catalogs do not support subSchemas, so this method always returns false for non-zero values.
+     * REST catalogs do not support subSchemas, so this method always returns false for non-zero values.
      *
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return false.
@@ -197,14 +192,19 @@ open class IcebergRESTCatalog(
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         val props = getIcebergConnection().properties()
         val warehouse = props[CatalogProperties.WAREHOUSE_LOCATION]!!
-        val uri = props[CatalogProperties.URI]!!.replace(Regex("https?://"), "")
-        val token =
-            if (RelationalAlgebraGenerator.hideCredentials) {
-                "********"
+        val uri = props[CatalogProperties.URI]!!
+        return Expr.Call(
+            "bodosql.get_REST_connection",
+            Expr.StringLiteral(uri),
+            Expr.StringLiteral(warehouse),
+            if (scope !=
+                null
+            ) {
+                Expr.StringLiteral(scope)
             } else {
-                props["token"]
-            }
-        return Expr.StringLiteral("REST://%s?token=%s&warehouse=%s".format(uri, token, warehouse))
+                Expr.None
+            },
+        )
     }
 
     /**
@@ -233,12 +233,6 @@ open class IcebergRESTCatalog(
             generatePythonConnStr(schema),
         )
 
-    /**
-     * Return the catalog's token.
-     * @return The catalog's token.
-     */
-    fun getToken(): String? = getIcebergConnection().properties()["token"]
-
     companion object {
         /**
          * Create a RESTCatalog object from the given connection string.
@@ -251,17 +245,22 @@ open class IcebergRESTCatalog(
             warehouse: String,
             token: String?,
             credential: String?,
+            scope: String?,
         ): RESTCatalog {
             val params: MutableMap<String, String> = HashMap()
 
             // Catalog URI (without parameters)
             params[CatalogProperties.URI] = uri
             params[CatalogProperties.WAREHOUSE_LOCATION] = warehouse
+            if (scope != null) {
+                params["scope"] = scope
+            }
             if (token != null) {
                 params["token"] = token
-            }
-            if (credential != null) {
+            } else if (credential != null) {
                 params["credential"] = credential
+            } else {
+                throw IllegalArgumentException("Either token or credential must be provided.")
             }
 
             val conf = Configuration()

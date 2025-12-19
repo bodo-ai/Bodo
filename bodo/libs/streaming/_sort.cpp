@@ -1520,11 +1520,11 @@ SortLimits StreamSortLimitOffsetState::ComputeLocalLimit(
     size_t limit = this->sortlimit.limit;
     size_t offset = this->sortlimit.offset;
     std::vector<size_t> nrows_collect(n_pes);
-    CHECK_MPI(
-        MPI_Allgather(&local_nrows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
-                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD),
-        "StreamSortLimitOffsetState::ComputeLocalLimit: MPI error on "
-        "MPI_Allgather:");
+    CHECK_MPI(MPI_Allgather(&local_nrows, 1, MPI_UNSIGNED_LONG_LONG,
+                            nrows_collect.data(), 1, MPI_UNSIGNED_LONG_LONG,
+                            MPI_COMM_WORLD),
+              "StreamSortLimitOffsetState::ComputeLocalLimit: MPI error on "
+              "MPI_Allgather:");
     size_t total_rows_before = 0;
     for (int64_t i = 0; i < myrank; i++) {
         total_rows_before += nrows_collect[i];
@@ -1556,29 +1556,6 @@ void StreamSortState::GlobalSort_NonParallel(
 
     for (const auto& chunk : out_chunks) {
         output_chunks.push_back(std::move(chunk.table));
-    }
-}
-
-/**
- * @brief Get the max allowed MPI tag value.
- * Ref:
- * https://stackoverflow.com/questions/61662466/can-the-tag-of-mpi-send-be-a-long-int,
- * https://www.intel.com/content/www/us/en/developer/articles/technical/large-mpi-tags-with-the-intel-mpi.html
- *
- * @return int
- */
-static int get_max_allowed_tag_value() {
-    int flag = 0;
-    void* tag_ub;
-    CHECK_MPI(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
-              "[get_max_allowed_tag_value] MPI Error in MPI_Comm_get_attr:");
-    if (flag) {
-        // This value is typically in the 10s or 100s of millions.
-        return *(int*)tag_ub;
-    } else {
-        // If we cannot get it from MPI, use the value guaranteed by the MPI
-        // standard.
-        return 32767;
     }
 }
 
@@ -1647,21 +1624,8 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
     // details.
     std::vector<std::unordered_set<int>> ranks_to_inflight_tags(n_pes);
 
-    // 10000 should be more than enough tags for a single send.
-    // TODO Use std::max(10000, req_tags) based on the table schema for full
-    // robustness.
-    constexpr int TAG_OFFSET = 10000;
-    // Even the MPI standard guaranteed value (32767) is sufficient for posting
-    // 2 messages at once with our 10000 offset.
-    const int MAX_TAG = get_max_allowed_tag_value();
     auto GetNextTagForRank = [&](int rank) {
-        for (int tag = (SHUFFLE_METADATA_MSG_TAG + 1);
-             tag < (MAX_TAG - TAG_OFFSET); tag += TAG_OFFSET) {
-            if (!ranks_to_inflight_tags[rank].contains(tag)) {
-                return tag;
-            }
-        }
-        return -1;
+        return get_next_available_tag(ranks_to_inflight_tags[rank]);
     };
 
     auto HaveChunksToSendToRankWithFreeTag = [&]() {

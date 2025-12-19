@@ -2,11 +2,17 @@
 Defines decorators of Bodo. Currently just @jit.
 """
 
+from __future__ import annotations
+
 import hashlib
 import inspect
 import os
 import types as pytypes
 import warnings
+
+# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
+# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
+import bodo.numba_compat  # isort:skip
 
 import numba
 from numba.core import cgutils, cpu, serialize, types
@@ -16,6 +22,8 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
+import bodo.compiler  # noqa # side effect: initialize JIT compiler
+from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
@@ -323,11 +331,20 @@ def is_jit_execution_overload():
     return lambda: True  # pragma: no cover
 
 
+bodo.is_jit_execution = is_jit_execution
+bodo.jitclass = bodo.numba_compat.jitclass
+
+
 def jit(signature_or_function=None, pipeline_class=None, **options):
     # Use spawn mode if specified in decorator or enabled globally (decorator takes
     # precedence)
     disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
     dist_mode = options.get("distributed", True) is not False
+
+    py_func = None
+    if isinstance(signature_or_function, pytypes.FunctionType):
+        py_func = signature_or_function
+
     if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
         from bodo.spawn.spawner import SpawnDispatcher
         from bodo.spawn.worker_state import is_worker
@@ -346,18 +363,27 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             submit_jit_args["pipeline_class"] = pipeline_class
             return SpawnDispatcher(py_func, submit_jit_args)
 
-        if isinstance(signature_or_function, pytypes.FunctionType):
-            py_func = signature_or_function
+        if py_func is not None:
             return return_wrapped_fn(py_func)
 
-        return return_wrapped_fn
-
+        bodo_jit = return_wrapped_fn
     elif "propagate_env" in options:
         raise bodo.utils.typing.BodoError(
             "spawn=False while propagate_env is set. No worker to propagate env vars."
         )
+    else:
+        bodo_jit = _jit(signature_or_function, pipeline_class, **options)
 
-    return _jit(signature_or_function, pipeline_class, **options)
+    # Return jit decorator that can be used in Pandas UDF function. See definition of
+    # bodo_pandas_udf_execution_engine for more details.
+    if py_func is None:
+        bodo_jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
+
+    return bodo_jit
+
+
+jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
+bodo.jit = jit
 
 
 def _jit(signature_or_function=None, pipeline_class=None, **options):
@@ -396,6 +422,39 @@ def _jit(signature_or_function=None, pipeline_class=None, **options):
         signature_or_function, pipeline_class=pipeline_class, **options
     )
     return numba_jit
+
+
+def _cfunc(signature_or_function=None, pipeline_class=None, **options):
+    """Internal wrapper for Cfunc for UDFs in DataFrame Library."""
+    _init_extensions()
+
+    # set nopython by default
+    if "nopython" not in options:
+        options["nopython"] = True
+
+    # options['parallel'] = True
+    options["parallel"] = {
+        "comprehension": True,
+        "setitem": False,  # FIXME: support parallel setitem
+        # setting the new inplace_binop option to False until it is tested and handled
+        # TODO: evaluate and enable
+        "inplace_binop": False,
+        "reduction": True,
+        "numpy": True,
+        # parallelizing stencils is not supported yet
+        "stencil": False,
+        "fusion": True,
+    }
+
+    pipeline_class = (
+        bodo.compiler.BodoCompilerSeq if pipeline_class is None else pipeline_class
+    )
+
+    numba_cfunc = numba.cfunc(
+        signature_or_function, pipeline_class=pipeline_class, **options
+    )
+
+    return numba_cfunc
 
 
 def _init_extensions():
@@ -504,8 +563,8 @@ def _check_return_type(return_type):
     if isinstance(return_type, types.abstract._TypeMetaclass):
         raise BodoError(
             f"wrap_python requires full data types, not just data type "
-            f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
-            f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+            f"classes. For example, 'bodo.types.DataFrameType((bodo.types.float64[::1],), "
+            f"bodo.types.RangeIndexType(), ('A',))' is a valid data type but 'bodo.types.DataFrameType' is not.\n"
             f"Return type is type class {return_type}."
         )
     if not isinstance(return_type, types.Type):
@@ -534,6 +593,9 @@ def wrap_python(return_type: str | types.Type):
         return WrapPythonDispatcher(func, return_type)
 
     return wrapper
+
+
+bodo.wrap_python = wrap_python
 
 
 class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):
@@ -670,3 +732,30 @@ def _load_wrap_python_function(pyapi, py_func):
 
     callee = builder.load(gv)
     return callee
+
+
+_already_checked_rts = False
+
+
+def _check_numba_rtsys():
+    """Check if Numba RTS is already initialized, which indicates that Numba JIT
+    compilation has already happened before Bodo JIT is imported.
+    This can cause issues in memory management, leading to crashes (see BSE-5112).
+    """
+    global _already_checked_rts
+    if _already_checked_rts:
+        return
+    _already_checked_rts = True
+
+    from numba.core.runtime import rtsys
+
+    if rtsys._init:  # pragma: no cover
+        # Avoid spawner errors in finalization
+        bodo.spawn.spawner.spawner = None
+        raise RuntimeError(
+            "Bodo JIT must be imported before any Numba JIT compilation if Bodo is used later in the program. "
+            "Please add 'import bodo.decorators' before Numba JIT uses."
+        )
+
+
+_check_numba_rtsys()

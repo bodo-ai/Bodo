@@ -8,93 +8,30 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_filter_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_filter_numeric(bodosql_numeric_types, memory_leak_check):
     """test filter queries"""
 
-    check_query(
+    queries = [
         "select A,C from table1 where C = 2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A = C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,B from table1 where B <> 1.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A <> C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,B from table1 where B < 2.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A < C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,B from table1 where B <= 2.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A <= C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,B from table1 where B > 2.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A > C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,B from table1 where B >= 2.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A >= C",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A >= C and B >= 2.2 and A >=1",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
-    check_query(
         "select A,C from table1 where A >= C or B >= 2.2",
-        bodosql_numeric_types,
-        spark_info,
-        check_dtype=False,
-    )
+    ]
+    for query in queries:
+        check_query(
+            query, bodosql_numeric_types, None, check_dtype=False, use_duckdb=True
+        )
 
 
 @pytest.mark.slow

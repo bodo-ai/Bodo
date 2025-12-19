@@ -1,19 +1,20 @@
-[project]
+[workspace]
 name = "bodo"
 channels = ["bodo.ai", "conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "linux-aarch64", "win-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "312" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "312" }
+default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-linux =      { features = ["local-mpi"], no-default-feature = true,   solve-group = "pip" }
-pip-cpp-macos =      { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true,   solve-group = "pip" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+
 
 # Build Commands
 [tasks.build-bodo]
@@ -27,10 +28,10 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-san]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
@@ -66,26 +67,27 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.12.*"
+python = "3.13.*"
 pip = "*"
 # Core Python Deps
-numba = "==0.61.0"
-numpy = ">=1.24,<2.2"
-pandas = ">=2.2,<2.3"
-pyarrow = { version = "==18.1.0", channel = "conda-forge" }
+numba = ">=0.62,<0.64.0"
+numpy = ">=1.24"
+pandas = ">=2.2"
+pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
-cloudpickle = ">=3.0,<4.0"
+cloudpickle = ">=3.0"
 psutil = "*"
 # Core Java Deps
-openjdk = "=11"
-py4j = "==0.10.9.7"
+openjdk = "=17"
+py4j = "==0.10.9.9"
 # HDFS
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = "1.4.*"
-matplotlib = "<=3.8.2"
+# sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
+scikit-learn = ">=1.4,<1.8"
+matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -93,7 +95,8 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-gcsfs = ">=2022.1"
+pyiceberg = ">=0.10"
+mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
 # Databases
@@ -106,27 +109,23 @@ snowflake-connector-python = "*"
 xlrd = "*"
 xlsxwriter = "*"
 openpyxl = "*"
+cx_oracle = "*"
+pyzmq = "*"
 
 [target.linux-64.dependencies]
-cx_oracle = "*"
-pyarrow = { version = "==18.1.0", channel = "bodo.ai" }
-libarrow = { version = "==18.1.0", channel = "bodo.ai" }
-[target.osx-64.dependencies]
-cx_oracle = "*"
+pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-libcurl = "~=8.0"
-zstd = "<=1.5.6"
-boost-cpp = "1.85.*"
-aws-sdk-cpp = "<=1.11.485"
+zstd = "*"
+boost-cpp = "*"
+aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-
 [feature.rcpp.target.linux.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
-
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
 
@@ -134,11 +133,14 @@ hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
 # Build Python
 setuptools = ">=64"
 setuptools_scm = ">=8"
-cython = ">=3.0,<3.1"
+cython = ">=3.0"
 scikit-build-core = "*"
+# Copied into bodo/mpi4py (pip only)
+mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
-cmake = "*"
+# Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
+cmake = "<4.0,>=3.23"
 ninja = "*"
 make = "*"
 ccache = "*"
@@ -147,13 +149,17 @@ sccache = "*"
 # BodoSQL & Iceberg Testing
 maven = "*"
 sqlglot = "*"
-duckdb = "*"
+# Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
+duckdb = "!=1.2.1"
 
-# Note: PySpark 3.5 is necessary for Python 3.12
-pyspark = "3.5.*"
+pyspark = "4.*"
+matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
+# Polaris (installed via pip) requires boto3/botocore <1.39
+# TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
+boto3 = "*"
 
 # Documentation Testing
 beautifulsoup4 = "*"
@@ -163,15 +169,19 @@ snowflake-sqlalchemy = "*"
 
 # S3 Testing
 minio-server = "*"
+# GCS testing
+gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-pytest = "*"
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
 pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
 flaky = "*"
+testcontainers = "*"
 
 # Other Deps
 pyyaml = "*"
@@ -179,7 +189,12 @@ pyyaml = "*"
 # Developer Tools
 ruff = "*"
 pre-commit = "*"
-ipython = "==8.16.1"
+ipython = "*"
+
+# Generation/Embedding Tests
+openai = "*"
+
+pytorch = ">=2.0"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
@@ -198,39 +213,31 @@ ipython = "==8.16.1"
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
-# Copied into bodo/mpi4py
-mpi4py = "~=3.1"
 
 [feature.dev.target.linux-aarch64.dependencies]
 gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
-mpi4py = "~=3.1"
 
 [feature.dev.target.osx-64.dependencies]
+# Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 clang-tools = "=19"
-mpi4py = "~=3.1"
 
 [feature.dev.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
-mpi4py = "~=3.1"
-
-[feature.dev.target.win.dependencies]
-mpi4py = "~=4.0"
 
 [feature.platform]
 platforms = ["linux-64"]
-
+channels = ["conda-forge"]
 [feature.platform.target.linux-64.dependencies]
 ipython = "==8.16.1"
 ipykernel = "==6.29.3"
 ipywidgets = "==8.1.1"
 nbconvert = "6.5.*"
-bodo-azurefs-sas-token-provider = "1.0.*"
-_openmp_mutex = { version = "*", build = "*gnu*" }
 jupyter_client = "==8.6.1"
 uvicorn = "*"
 fastapi = "*"
@@ -238,14 +245,11 @@ httpie = "*"
 
 # MPI Handling
 # Restricted to match Intel MPI. Upgrade with IMPI.
+# Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-# Using h* to avoid the "external_*" kind
-mpich = { version = "4.1.*", build = "h*" }
-
+mpich = { version = "4.1.*" }
 [feature.local-mpi.target.linux.dependencies]
-# Using h* to avoid the "external_*" kind
-mpich = { version = "4.1.*", build = "h*" }
-
+mpich = { version = "4.1.*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
@@ -254,10 +258,12 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "=4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
+# Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 

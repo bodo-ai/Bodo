@@ -3,11 +3,11 @@ import math
 import os
 import shutil
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core import ir
+from numba.core import ir  # noqa TID253
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -16,13 +16,10 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    ColumnDelTestPipeline,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
-    reduce_sum,
 )
-from bodo.utils.utils import is_expr
 
 pytestmark = pytest.mark.slow
 
@@ -44,6 +41,8 @@ def _check_column_dels(bodo_func, col_del_lists):
     within a block to simplify testing as some changes that could occur
     would be insignificant.
     """
+    from bodo.utils.utils import is_expr
+
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
     # Ensure every input list is sorted
@@ -85,6 +84,8 @@ def test_table_len(file_type, datapath, memory_leak_check):
     and doesn't use any particular column still computes
     a correct result.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -115,6 +116,7 @@ def test_table_filter_dead_columns(datapath, memory_leak_check):
     """
     Test table filter with no used column (just length)
     """
+
     filename = datapath("many_columns.parquet")
 
     def impl(idx):
@@ -149,6 +151,8 @@ def test_table_len_with_idx_col(datapath, memory_leak_check):
 
     Manually verified that the index col is dead/removed
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.csv")
 
     def impl():
@@ -174,6 +178,8 @@ def test_table_shape(file_type, datapath, memory_leak_check):
     and doesn't use any particular column still computes
     a correct result.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -205,6 +211,8 @@ def test_table_del_single_block(file_type, datapath, memory_leak_check):
     Test dead column elimination that loads a subset of
     columns with a single block.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -231,6 +239,8 @@ def test_table_del_back(file_type, datapath, memory_leak_check):
     columns and can remove some after the first
     basic block.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -270,6 +280,8 @@ def test_table_del_front(file_type, datapath, memory_leak_check):
     columns and can remove a column at the start
     of some successors.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -309,6 +321,8 @@ def test_table_del_front_back(file_type, datapath, memory_leak_check):
     can be removed at the end of basic blocks but
     others must be removed at the start of basic blocks
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -350,6 +364,8 @@ def test_table_useall_later_block(file_type, datapath, memory_leak_check):
     Check that an operation that requires using all
     columns eventually doesn't eliminate any columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -360,7 +376,7 @@ def test_table_useall_later_block(file_type, datapath, memory_leak_check):
         else:
             w = 100
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         return n + w"""
 
@@ -385,12 +401,14 @@ def test_table_useall_early_block(file_type, datapath, memory_leak_check):
     Check that an operation that requires using all
     columns early doesn't eliminate any columns later.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
         df = pd.read_{file_type}({filename!r})
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         size = df["Column0"].sum()
         if size < 1000:
@@ -420,6 +438,8 @@ def test_table_del_usecols(file_type, datapath, memory_leak_check):
     Test dead column elimination where a user has
     provided usecols as well
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
     columns = [0, 1, 2, 3, 4, 5, 6, 9, 10, 37, 38, 52, 59, 67, 95, 96, 97, 98]
     if file_type == "csv":
@@ -469,6 +489,8 @@ def test_table_set_table_columns(file_type, datapath, memory_leak_check):
     """
     Tests setting a table can still run dead column elimination.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -513,6 +535,8 @@ def test_table_extra_column(file_type, datapath, memory_leak_check):
 
     # TODO: Add code to ensure 0 columns were loaded
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -536,6 +560,8 @@ def test_table_dead_var(file_type, datapath, memory_leak_check):
     Tests removing columns when a variable is dead in certain parts of
     control flow.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -565,6 +591,8 @@ def test_table_for_loop(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -593,6 +621,8 @@ def test_table_while_loop(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -622,6 +652,8 @@ def test_table_for_loop_branch(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop inside a branch.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -653,6 +685,8 @@ def test_table_while_loop_branch(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop inside a branch.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -685,6 +719,8 @@ def test_table_loop_unroll(file_type, datapath, memory_leak_check):
     Tests removing columns with a loop that
     requires unrolling.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
     func_text = f"""def impl():
         df = pd.read_{file_type}({filename!r})
@@ -713,6 +749,8 @@ def test_table_return(file_type, datapath, memory_leak_check):
     """
     Tests that returning a table avoids dead column elimination.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -747,6 +785,8 @@ def test_table_len_alias(file_type, datapath, memory_leak_check):
     Check that len only loads a single column when there is
     an alias
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -779,6 +819,8 @@ def test_table_shape_alias(file_type, datapath, memory_leak_check):
     Check that shape only loads a single column when there is
     an alias
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -811,6 +853,8 @@ def test_table_del_single_block_alias(file_type, datapath, memory_leak_check):
     Test dead column elimination that loads a subset of
     columns with a single block and an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -842,6 +886,8 @@ def test_table_del_back_alias(file_type, datapath, memory_leak_check):
     columns and can remove some after the first
     basic block.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -882,6 +928,8 @@ def test_table_del_front_alias(file_type, datapath, memory_leak_check):
     loads a subset of columns and can remove a column
     at the start of some successors.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -923,6 +971,8 @@ def test_table_del_front_back_alias(file_type, datapath, memory_leak_check):
     blocks but others must be removed at the start of
     basic blocks
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -984,6 +1034,8 @@ def test_table_useall_later_block_alias(file_type, datapath, memory_leak_check):
     Check that an operation with an alias that requires
     using all columns eventually doesn't eliminate any columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -995,7 +1047,7 @@ def test_table_useall_later_block_alias(file_type, datapath, memory_leak_check):
         else:
             w = 100
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         return n + w"""
 
@@ -1021,13 +1073,15 @@ def test_table_useall_early_block_alias(file_type, datapath, memory_leak_check):
     requires using all columns early doesn't
     eliminate any columns later.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
         df = pd.read_{file_type}({filename!r})
         df["Column99"] = np.arange(1000)
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         size = df["Column0"].sum()
         if size < 1000:
@@ -1057,6 +1111,8 @@ def test_table_del_usecols_alias(file_type, datapath, memory_leak_check):
     Test dead column elimination where a user has
     provided usecols as well + an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     columns = [0, 1, 2, 3, 4, 5, 6, 9, 10, 37, 38, 52, 59, 67, 95, 96, 97, 98]
@@ -1128,6 +1184,8 @@ def test_table_dead_var_alias(file_type, datapath, memory_leak_check):
     Tests removing columns when a variable is dead in certain parts of
     control flow with an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -1158,6 +1216,8 @@ def test_table_for_loop_alias(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop with an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -1187,6 +1247,8 @@ def test_table_while_loop_alias(file_type, datapath, memory_leak_check):
     Tests removing columns when using a column
     repeatedly in a for loop with an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -1218,6 +1280,8 @@ def test_table_for_loop_branch_alias(file_type, datapath, memory_leak_check):
     repeatedly in a for loop inside a branch
     with an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -1251,6 +1315,8 @@ def test_table_while_loop_branch_alias(file_type, datapath, memory_leak_check):
     repeatedly in a for loop inside a branch with
     an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl(n):
@@ -1284,6 +1350,8 @@ def test_table_loop_unroll_alias(file_type, datapath, memory_leak_check):
     Tests removing columns with a loop that
     requires unrolling with an alias.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath(f"many_columns.{file_type}")
 
     func_text = f"""def impl():
@@ -1316,6 +1384,8 @@ def test_table_del_single_block_pq_index(datapath, memory_leak_check):
     loads an index from parquet.
     TODO: add automatic check to ensure that the index is loaded
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl():
@@ -1342,6 +1412,8 @@ def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
     loads an index from parquet with an alias.
     TODO: add automatic check to ensure that the index is loaded
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl():
@@ -1368,6 +1440,8 @@ def test_table_dead_pq_index(datapath, memory_leak_check):
     Test dead code elimination still works for unused indices.
     TODO: add automatic check to ensure that the index is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl(n):
@@ -1392,6 +1466,8 @@ def test_table_dead_pq_index_alias(datapath, memory_leak_check):
     Test dead code elimination still works for unused indices with an alias.
     TODO: add automatic check to ensure that the index is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl(n):
@@ -1418,6 +1494,8 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
     repeatedly in a for loop with an alias.
     TODO: add automatic check to ensure that the index is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.csv")
 
     def impl(n):
@@ -1444,6 +1522,8 @@ def test_table_dead_pq_table(datapath, memory_leak_check):
     Test dead code elimination still works on a table with a used index.
     TODO: add automatic check to ensure that the table is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl():
@@ -1463,6 +1543,8 @@ def test_table_dead_pq_table_alias(datapath, memory_leak_check):
     and an alias.
     TODO: add automatic check to ensure that the table is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns_index.parquet")
 
     def impl():
@@ -1482,6 +1564,8 @@ def test_table_dead_csv(datapath, memory_leak_check):
     I've manually confirmed that the table variable is correctly marked as dead.
     TODO: add automatic check to ensure that the table is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.csv")
 
     def impl():
@@ -1496,6 +1580,8 @@ def test_table_dead_csv(datapath, memory_leak_check):
 
 def test_many_cols_to_parquet(datapath, memory_leak_check):
     """Tests df.to_parquet with many columns."""
+    from bodo.tests.utils_jit import reduce_sum
+
     filename = datapath("many_columns.csv")
     try:
 
@@ -1535,6 +1621,8 @@ def test_table_dead_csv(datapath, memory_leak_check):
     I've manually confirmed that the table variable is correctly marked as dead.
     TODO: add automatic check to ensure that the table is marked as dead
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.csv")
 
     def impl():
@@ -1553,6 +1641,7 @@ def test_table_column_del_past_setitem(memory_leak_check, datapath, file_type):
     Tests that dead setitems on tables are correctly converted to set_table_column_null, which
     allows for column pruning at the IO node.
     """
+
     filename = datapath(f"many_columns.{file_type}")
     num_layers = 10
 
@@ -1581,6 +1670,7 @@ def test_table_column_filter_past_setitem(memory_leak_check, datapath, num_layer
     Tests that dead setitems on tables are correctly converted to set_table_column_null, which
     allows for column pruning and filtering at the IO node.
     """
+
     filename = datapath("many_columns.parquet")
 
     func_text = ""
@@ -1615,6 +1705,8 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     This case checks that the setitem is converted even when using functions that have no side
     effects.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1642,6 +1734,7 @@ def test_table_del_astype(datapath, memory_leak_check):
     Test dead column elimination works with an astype
     cast.
     """
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1665,6 +1758,8 @@ def test_table_nbytes_del_cols(datapath, memory_leak_check):
     every column that isn't used later once the operation
     finishes.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1703,6 +1798,8 @@ def test_table_nbytes_ret_df(datapath, memory_leak_check):
     when the source of a table is a DataFrame that we do
     not prune columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1734,6 +1831,8 @@ def test_table_concat_del_cols(datapath, memory_leak_check):
     pruning any columns it needs that isn't used later
     once the operation finishes.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1775,6 +1874,8 @@ def test_table_concat_ret_df(datapath, memory_leak_check):
     when the source of a table is a DataFrame that we do
     not prune columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1806,6 +1907,7 @@ def test_table_set_data_reflection(memory_leak_check):
     Tests that set_table_data works properly reflects columns
     back to the parent and won't attempt to delete columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
 
     def impl(df):
         df["G"] = np.arange(len(df))
@@ -1830,7 +1932,7 @@ def test_table_set_data_reflection(memory_leak_check):
     n = bodo_func(df)
     # Verify the output + reflection
     assert n == 120, "Incorrect sum computed"
-    pd.testing.assert_frame_equal(df, df2, check_column_type=False)
+    pd.testing.assert_frame_equal(df, df2, check_column_type=False, check_dtype=False)
     # Since the source is a DF, no columns should be deleted.
     _check_column_dels(bodo_func, [])
 
@@ -1841,6 +1943,8 @@ def test_table_astype_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1885,6 +1989,8 @@ def test_table_astype_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1923,6 +2029,8 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1961,8 +2069,8 @@ def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
     """
     Test table_astype properly handles the case where we're casting two
     columns of of the same type, to a different type.
-
     """
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -1976,6 +2084,9 @@ def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
 
 def test_concat_tables_used_cols(datapath, memory_leak_check):
     """Make sure used_cols in concat_tables() is set properly"""
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+    from bodo.utils.utils import is_expr
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2020,6 +2131,8 @@ def test_filter_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2064,6 +2177,8 @@ def test_filter_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2102,6 +2217,8 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2142,6 +2259,8 @@ def test_table_mappable_del_cols(datapath, memory_leak_check):
     calls inside the IR and that calling table prunes
     its columns as well.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2186,6 +2305,8 @@ def test_table_mappable_ret_df_input(datapath, memory_leak_check):
     calls inside the IR if we return a DataFrame with the
     input table.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2224,6 +2345,8 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
     calls inside the IR if we return the result DataFrame.
     However, the del_column should still be created for the input.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2262,6 +2385,8 @@ def test_sort_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Sort nodes
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2284,6 +2409,8 @@ def test_groupby_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Aggregate nodes
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2308,6 +2435,8 @@ def test_groupby_table_dels_as_index_false(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for Aggregate nodes when as_index=False
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2338,6 +2467,8 @@ def test_two_column_dels(datapath, memory_leak_check):
     Test that when deleting a large number of columns we
     delete columns in batches.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
 
     def impl():
@@ -2369,6 +2500,8 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
     BodoSQL generated code may select a large subset of columns, even
     if uncommon in user generated code.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2403,6 +2536,8 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
 
     This is used to ensure used_cols is properly updated at each step
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2447,6 +2582,8 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
     BodoSQL generated code may select a large subset of columns, even
     if uncommon in user generated code.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2482,6 +2619,8 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
 
     This is used to ensure used_cols is properly updated at each step
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2529,6 +2668,8 @@ def test_table_column_subset_level1(datapath, memory_leak_check):
     BodoSQL generated code may select a large subset of columns, even
     if uncommon in user generated code.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2562,6 +2703,8 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
 
     This is used to ensure used_cols is properly updated at each step
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     # Load enough columns to ensure we get table format. We divide
     # by 2 to check for duplicate support.
@@ -2596,6 +2739,8 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
 
 
 def test_merge_del_columns(datapath, memory_leak_check):
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     # Verify that column pruning from the source and dead
     # column insertion works with Join.
     filename = datapath("many_columns.parquet")
@@ -2631,6 +2776,8 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
     Tests executing pd.merge with DataFrames that don't have table
     format still enable optimizations, such as removing columns.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 10:
         # Only test this with tuple format.
         return
@@ -2729,6 +2876,8 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
 
 
 def test_parquet_tail(datapath, memory_leak_check):
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     def impl():
         df = pd.read_parquet(filename)
         return len(df.tail(10000))
@@ -2754,6 +2903,8 @@ def test_streaming_read_sql(memory_leak_check):
     necessary operation, so this example is smaller functional test
     without the proper control flow.
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "l_orderkey",

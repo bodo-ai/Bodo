@@ -32,7 +32,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 from numba.typed.typedobjectutils import _cast
 
 import bodo
-from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
     is_na_value,
@@ -57,7 +56,7 @@ class StructArrayType(types.ArrayCompatible):
     data: tuple[types.ArrayCompatible, ...]
     names: tuple[str, ...]
 
-    def __init__(self, data, names=None):
+    def __init__(self, data: tuple[types.ArrayCompatible, ...], names=None):
         # data is tuple of Array types
         # names is a tuple of field names
         assert isinstance(data, tuple) and all(
@@ -84,7 +83,7 @@ class StructArrayType(types.ArrayCompatible):
     def dtype(self):
         # TODO: consider enabling dict return if possible
         # if types.is_homogeneous(*self.data):
-        #     return types.DictType(bodo.string_type, self.data[0].dtype)
+        #     return types.DictType(bodo.types.string_type, self.data[0].dtype)
 
         # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
         # DatetimeArrayType and null_array_type which have different dtype objects.
@@ -905,7 +904,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ):
     # TODO: consider enabling dict return if possible
     # # return a regular dictionary if values have the same type, otherwise struct
     # if types.is_homogeneous(*struct_arr_typ.data):
-    #     out_typ = types.DictType(bodo.string_type, data_types[0])
+    #     out_typ = types.DictType(bodo.types.string_type, data_types[0])
     # else:
     #     out_typ = StructType(data_types, struct_arr_typ.names)
     out_typ = StructType(data_types, struct_arr_typ.names)

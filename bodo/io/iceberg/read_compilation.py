@@ -1,11 +1,13 @@
 """
 Operations to get basic metadata about an Iceberg table
-needed for compilation. For example, the table schema, dictionary encoding
+needed for compilation. For example, the table schema & dictionary encoding
 """
 
 from __future__ import annotations
 
 import random
+import sys
+import typing as pt
 
 import numpy as np
 import pyarrow as pa
@@ -14,77 +16,34 @@ from numba.core import types
 
 import bodo
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
-from bodo.io.iceberg.common import b_ICEBERG_FIELD_ID_MD_KEY, get_iceberg_fs
-from bodo.io.iceberg.read_metadata import get_iceberg_file_list_parallel
-from bodo.io.parquet_pio import (
-    get_fpath_without_protocol_prefix,
-    parse_fpath,
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.io.iceberg.common import (
+    _fs_from_file_path,
+    b_ICEBERG_FIELD_ID_MD_KEY,
+    verify_pyiceberg_installed,
 )
+from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.mpi4py import MPI
-from bodo.utils.utils import BodoError, run_rank0
+from bodo.spawn.utils import run_rank0
+from bodo.utils.py_objs import install_py_obj_class
+from bodo.utils.utils import BodoError
+
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.table import Table
 
 
-def get_iceberg_type_info(
-    table_name: str,
-    con: str,
-    database_schema: str,
-    is_merge_into_cow: bool = False,
-):
-    """
-    Helper function to fetch Bodo types for an Iceberg table with the given
-    connection info. Will include an additional Row ID column for MERGE INTO
-    COW operations.
+EMPTY_LIST: pt.Final = []
 
-    Returns:
-        - List of column names
-        - List of column Bodo types
-        - PyArrow Schema Object
-    """
-    import bodo_iceberg_connector
 
-    # In the case that we encounter an error, we store the exception in col_names_or_err
-    col_names_or_err = None
-    col_types = None
-    pyarrow_schema = None
-
-    # Only runs on rank 0, so we add no cover to avoid coverage warning
-    if bodo.get_rank() == 0:  # pragma: no cover
-        try:
-            (
-                col_names_or_err,
-                col_types,
-                pyarrow_schema,
-            ) = bodo_iceberg_connector.get_iceberg_typing_schema(
-                con, database_schema, table_name
-            )
-
-            if pyarrow_schema is None:
-                raise BodoError("No such Iceberg table found")
-
-        except bodo_iceberg_connector.IcebergError as e:
-            col_names_or_err = BodoError(
-                f"Failed to Get Typing Info from Iceberg Table: {e.message}"
-            )
-
-    comm = MPI.COMM_WORLD
-    col_names_or_err = comm.bcast(col_names_or_err)
-    if isinstance(col_names_or_err, Exception):
-        raise col_names_or_err
-
-    col_names = col_names_or_err
-    col_types = comm.bcast(col_types)
-    pyarrow_schema = comm.bcast(pyarrow_schema)
-
-    bodo_types = [
-        _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types
-    ]
-
-    # Special MERGE INTO COW Handling for Row ID Column
-    if is_merge_into_cow:
-        col_names.append("_BODO_ROW_ID")
-        bodo_types.append(types.Array(types.int64, 1, "C"))
-
-    return (col_names, bodo_types, pyarrow_schema)
+# Class for a PyObject that is a list.
+this_module = sys.modules[__name__]
+install_py_obj_class(
+    types_name="pyobject_of_list_type",
+    python_type=None,
+    module=this_module,
+    class_name="PyObjectOfListType",
+    model_name="PyObjectOfListModel",
+)
 
 
 def is_snowflake_managed_iceberg_wh(con: str) -> bool:
@@ -98,18 +57,52 @@ def is_snowflake_managed_iceberg_wh(con: str) -> bool:
     Returns:
         bool: Whether it's a Snowflake-managed Iceberg catalog.
     """
-    import bodo_iceberg_connector
-
-    catalog_type, _ = run_rank0(bodo_iceberg_connector.parse_iceberg_conn_str)(con)
-    return catalog_type == "snowflake"
+    return con.startswith("iceberg+snowflake://")
 
 
-def determine_str_as_dict_columns(
-    conn: str,
-    database_schema: str,
-    table_name: str,
+@run_rank0
+def _get_table_schema(
+    table: Table,
+    is_merge_into_cow: bool = False,
+    snapshot_id: int = -1,
+) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
+    from pyiceberg.io.pyarrow import schema_to_pyarrow
+
+    table_schema = table.schema()
+
+    # Get the schema for the snapshot we're reading if it's not the latest
+    snapshot = table.snapshot_by_id(snapshot_id) if snapshot_id != -1 else None
+    if snapshot is not None:
+        assert snapshot.schema_id is not None, (
+            "_get_table_schema: Snapshot schema ID is None"
+        )
+        table_schema = table.schemas()[snapshot.schema_id]
+
+    # Base PyArrow Schema for the snapshot we're reading
+    pa_schema: pa.Schema = schema_to_pyarrow(table_schema)
+
+    # Column Names to Scan
+    col_names = pa_schema.names.copy()
+
+    # Convert to Bodo Schema
+    bodo_types = [
+        _get_numba_typ_from_pa_typ(pa_schema.field(col_name), False, True, None)[0]
+        for col_name in col_names
+    ]
+
+    # Special MERGE INTO COW Handling for Row ID Column
+    if is_merge_into_cow:
+        col_names.append("_BODO_ROW_ID")
+        bodo_types.append(types.Array(types.int64, 1, "C"))
+
+    return (col_names, bodo_types, pa_schema)
+
+
+def _determine_str_as_dict_columns(
+    table: Table,
     str_col_names_to_check: list[str],
     final_schema: pa.Schema,
+    snapshot_id: int = -1,
 ) -> set[str]:
     """
     Determine the set of string columns in an Iceberg table
@@ -123,50 +116,44 @@ def determine_str_as_dict_columns(
     time.
 
     Args:
-        conn (str): Iceberg connection string.
-        database_schema (str): Iceberg database that the table
-            is in.
-        table_name (str): Table name to read.
-        str_col_names_to_check (list[str]): List of column
-            names to check.
+        table: PyIceberg table object to scan
+        str_col_names_to_check (list[str]): List of column names to check.
         final_schema (pa.Schema): The target/final Arrow
             schema of the Iceberg table.
+        snapshot_id (int): Snapshot ID to use for the scan.
 
     Returns:
         set[str]: Set of column names that should be dict-encoded
             (subset of str_col_names_to_check).
     """
+
     comm = MPI.COMM_WORLD
     if len(str_col_names_to_check) == 0:
         return set()  # No string as dict columns
 
-    # Get list of files. No filters are know at this time, so
+    # Get a small list of files. No filters are know at this time, so
     # no file pruning can be done.
-    # XXX We should push down some type of file limit to the
-    # Iceberg Java Library to avoid retrieving millions of files
-    # for no reason.
-    all_pq_infos = get_iceberg_file_list_parallel(
-        conn, database_schema, table_name, filters=None
-    )[0]
+    # XXX We should push down some type of file limit to the scanner
+    #     to avoid retrieving millions of files for no reason
+    all_file_tasks = list(
+        table.scan(
+            selected_fields=tuple(str_col_names_to_check),
+            snapshot_id=snapshot_id if snapshot_id != -1 else None,
+        ).plan_files()
+    )
+
     # Take a sample of N files where N is the number of ranks. Each rank looks at
     # the metadata of a different random file
-    if len(all_pq_infos) > bodo.get_size():
+    if len(all_file_tasks) > bodo.get_size():
         # Create a new instance of Random so that the global state is not
         # affected.
         my_random = random.Random(37)
-        pq_infos = my_random.sample(all_pq_infos, bodo.get_size())
+        sample_files = my_random.sample(all_file_tasks, bodo.get_size())
     else:
-        pq_infos = all_pq_infos
-    pq_abs_path_file_list = [pq_info.standard_path for pq_info in pq_infos]
+        sample_files = all_file_tasks
 
-    pq_abs_path_file_list, parse_result, protocol = parse_fpath(pq_abs_path_file_list)
-
-    fs = get_iceberg_fs(
-        protocol, conn, database_schema, table_name, pq_abs_path_file_list
-    )
-    pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
-        pq_abs_path_file_list, protocol, parse_result
-    )
+    # Get a PyArrow FS to use to read the files
+    fs = _fs_from_file_path(sample_files[0].file.file_path, table.io)
 
     # Get the list of field IDs corresponding to the string columns
     str_col_names_to_check_set: set[str] = set(str_col_names_to_check)
@@ -196,10 +183,11 @@ def determine_str_as_dict_columns(
     total_uncompressed_sizes_recv = np.zeros(
         len(str_col_names_to_check), dtype=np.int64
     )
-    if bodo.get_rank() < len(pq_abs_path_file_list):
-        fpath = pq_abs_path_file_list[bodo.get_rank()]
+    if bodo.get_rank() < len(sample_files):
+        fpath = sample_files[bodo.get_rank()]
         try:
-            pq_file = pq.ParquetFile(fpath, filesystem=fs)
+            sanitized_path = fpath_without_protocol_prefix(fpath.file.file_path)
+            pq_file = pq.ParquetFile(sanitized_path, filesystem=fs)
             metadata = pq_file.metadata
             for idx, field in enumerate(pq_file.schema_arrow):
                 if (
@@ -236,3 +224,157 @@ def determine_str_as_dict_columns(
         if metric < bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD:
             str_as_dict.add(str_col_names_to_check[i])
     return str_as_dict
+
+
+def get_iceberg_orig_schema(
+    conn_str: str,
+    table_id: str,
+    is_merge_into_cow: bool = False,
+) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
+    """
+    Helper function to fetch Bodo types for an Iceberg table with the given
+    connection info. Will include an additional Row ID column for MERGE INTO
+    COW operations.
+
+    Returns:
+        - List of column names
+        - List of column Bodo types
+        - PyArrow Schema Object
+    """
+    _ = verify_pyiceberg_installed()
+
+    # Get the pyarrow schema from Iceberg
+    catalog = conn_str_to_catalog(conn_str)
+    table = catalog.load_table(table_id)
+    return _get_table_schema(table, is_merge_into_cow)
+
+
+def get_orig_and_runtime_schema(
+    conn_str: str,
+    table_id: str,
+    selected_cols: list[str] | None = None,
+    read_as_dict_cols: list[str] = EMPTY_LIST,
+    detect_dict_cols: bool = False,
+    is_merge_into_cow: bool = False,
+    snapshot_id: int = -1,
+) -> tuple[
+    # Original Schemas
+    list[str],
+    list[types.ArrayCompatible],
+    pa.Schema,
+    # Runtime Schema
+    list[str],
+    list[types.ArrayCompatible],
+]:
+    _ = verify_pyiceberg_installed()
+
+    import pyiceberg.exceptions
+
+    try:
+        catalog = conn_str_to_catalog(conn_str)
+        table = catalog.load_table(table_id)
+    except pyiceberg.exceptions.NoSuchTableError as e:
+        raise BodoError("No such Iceberg table found") from e
+
+    orig_col_names, orig_col_types, pa_schema = _get_table_schema(
+        table, is_merge_into_cow, snapshot_id=snapshot_id
+    )
+
+    orig_col_name_to_type = dict(zip(orig_col_names, orig_col_types))
+    col_names = orig_col_names if selected_cols is None else selected_cols
+    col_types = (
+        orig_col_types
+        if selected_cols is None
+        else [orig_col_name_to_type[c] for c in col_names]
+    )
+
+    # ----------- Get dictionary-encoded string columns ----------- #
+
+    # 1) Check user-provided dict-encoded columns for errors
+    for c in read_as_dict_cols:
+        if c not in orig_col_name_to_type:
+            raise BodoError(
+                f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
+            )
+        if orig_col_name_to_type[c] != bodo.types.string_array_type:
+            raise BodoError(
+                f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
+            )
+
+    all_dict_str_cols = set(read_as_dict_cols)
+    if detect_dict_cols:
+        # Estimate which string columns should be dict-encoded using existing Parquet
+        # infrastructure.
+        str_columns: list[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+            pa_schema
+        )
+        # remove user provided dict-encoded columns
+        str_columns = list(
+            set(str_columns).intersection(col_names) - set(read_as_dict_cols)
+        )
+        # Sort the columns to ensure same order on all ranks
+        str_columns = sorted(str_columns)
+
+        dict_str_cols = _determine_str_as_dict_columns(
+            table,
+            str_columns,
+            pa_schema,
+            snapshot_id=snapshot_id,
+        )
+        all_dict_str_cols.update(dict_str_cols)
+
+    # Change string array types to dict-encoded
+    col_name_to_idx = {c: i for i, c in enumerate(col_names)}
+    for c in all_dict_str_cols:
+        col_types[col_name_to_idx[c]] = bodo.types.dict_str_arr_type
+
+    return orig_col_names, orig_col_types, pa_schema, col_names, col_types
+
+
+def resolve_snapshot_id(
+    con_str: str, table_id: str, snapshot_id: int = -1, snapshot_timestamp_ms: int = -1
+) -> int:
+    """
+    Resolve the snapshot ID of an Iceberg table.
+    If `snapshot_id` is -1, and snapshot_timestamp_ms is -1, -1 is returned.
+    If `snapshot_id` is -1 and snapshot_timestamp_ms is not -1, the snapshot ID corresponding to the
+    given timestamp is returned.
+    If `snapshot_id` is not -1, it is validated and returned.
+
+    Args:
+        con_str (str): Iceberg connection string
+        table_id (str): Iceberg table ID
+        snapshot_id (int): Snapshot ID to resolve. Default is -1.
+        snapshot_timestamp_ms (int): Snapshot timestamp in milliseconds to resolve. Default is -1.
+
+    Returns:
+        int: Snapshot ID to use
+    """
+    _ = verify_pyiceberg_installed()
+
+    import pyiceberg.exceptions
+
+    try:
+        catalog = conn_str_to_catalog(con_str)
+        table = catalog.load_table(table_id)
+    except pyiceberg.exceptions.NoSuchTableError as e:
+        raise BodoError("No such Iceberg table found") from e
+    if snapshot_id != -1 and snapshot_timestamp_ms != -1:
+        raise BodoError(
+            "resolve_snapshot_id: Cannot specify both snapshot_id and snapshot_timestamp_ms"
+        )
+    snapshot = None
+    if snapshot_timestamp_ms != -1:
+        snapshot = table.snapshot_as_of_timestamp(snapshot_timestamp_ms)
+        if snapshot is None:
+            raise BodoError(
+                f"Snapshot with timestamp {snapshot_timestamp_ms} not found in table {table_id}"
+            )
+    elif snapshot_id != -1:
+        snapshot = table.snapshot_by_id(snapshot_id)
+        if snapshot is None:
+            raise BodoError(
+                f"Snapshot with ID {snapshot_id} not found in table {table_id}"
+            )
+    snapshot_id = snapshot.snapshot_id if snapshot is not None else -1
+    return snapshot_id

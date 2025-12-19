@@ -1,8 +1,9 @@
-
 // Functions to write Bodo arrays to parquet
 
+#include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/filesystem.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <regex>
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
@@ -18,6 +19,8 @@
 #include <parquet/arrow/schema.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/file_writer.h>
+
+#include "arrow_compat.h"
 
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
@@ -170,26 +173,30 @@ static arrow::Status WriteTable(
 }
 // ----------------------------------------------------------------------------
 
+void pq_write_create_dir(const char *_path_name) {
+    int myrank, num_ranks;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    std::string orig_path(_path_name);
+    std::string path_name;
+    std::string dirname;
+    std::string fname;
+    std::shared_ptr<::arrow::io::OutputStream> out_stream;
+    Bodo_Fs::FsEnum fs_option;
+    bool is_parallel = true;
+    const char *prefix = "";
+
+    extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
+                        num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                        &path_name);
+
+    create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
+                        "parquet");
+}
+
 void pq_write_create_dir_py_entry(const char *_path_name) {
     try {
-        int myrank, num_ranks;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-        std::string orig_path(_path_name);
-        std::string path_name;
-        std::string dirname;
-        std::string fname;
-        std::shared_ptr<::arrow::io::OutputStream> out_stream;
-        Bodo_Fs::FsEnum fs_option;
-        bool is_parallel = true;
-        const char *prefix = "";
-
-        extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
-                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                            &path_name);
-
-        create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
-                            "parquet");
+        pq_write_create_dir(_path_name);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -202,7 +209,7 @@ int64_t pq_write(const char *_path_name,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
                  bool create_dir, std::string filename,
-                 arrow::fs::FileSystem *arrow_fs, bool force_hdfs) {
+                 arrow::fs::FileSystem *arrow_fs) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_compression", compression);
@@ -230,9 +237,53 @@ int64_t pq_write(const char *_path_name,
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     Bodo_Fs::FsEnum fs_option;
 
+    // Filesystem object to use if arrow_fs not provided.
+    // Needs to be declared here so that it is not destroyed before
+    // write is done.
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+
     extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                        &path_name, force_hdfs);
+                        &path_name);
+    std::filesystem::path out_path(dirname);
+    out_path /= fname;  // append file name to output path
+
+    // Create the fs
+    if (arrow_fs == nullptr) {
+        std::smatch match;
+        // Ensure the path contains the "sv" and "sig" query parameters
+        // since we only need to do this special path
+        // if there's a SAS token.
+        // This is ugly and should be moved to python, abfs_get_fs
+        // when we upgrade to Arrow 20.
+        std::regex r(".*[?&]sv=.*&sig=.*");
+        regex_search(orig_path, match, r);
+        if (fs_option == Bodo_Fs::abfs && match.size() != 0) {
+#ifndef _WIN32
+            arrow::fs::AzureOptions options;
+            std::string updated_out_path;
+            auto opt_res =
+                arrow::fs::AzureOptions::FromUri(orig_path, &updated_out_path);
+            out_path = std::filesystem::path(updated_out_path);
+            CHECK_ARROW_AND_ASSIGN(opt_res, "AzureOptions::FromUri", options);
+            auto fs_res = arrow::fs::AzureFileSystem::Make(options);
+            CHECK_ARROW_AND_ASSIGN(fs_res, "AzureFileSystem::Make", fs);
+            arrow_fs = fs.get();
+#else
+            throw std::runtime_error(
+                "to_parquet: AzureFileSystem not supported on Windows.");
+#endif
+        } else {
+            fs = get_fs_for_path(_path_name, is_parallel);
+            arrow_fs = fs.get();
+        }
+    }
+
+    // Avoid "\" generated on Windows for remote object storage
+    // Get filesystem object if not provided
+    std::string out_path_str = arrow_fs->type_name() == "local"
+                                   ? out_path.string()
+                                   : out_path.generic_string();
 
     // If filename is provided, use that instead of the generic one.
     // Currently this is used for Iceberg.
@@ -254,17 +305,9 @@ int64_t pq_write(const char *_path_name,
         return 0;
     }
 
-    // If we already have a filesystem, use it
-    if (arrow_fs != nullptr) {
-        std::filesystem::path out_path(dirname);
-        out_path /= fname;  // append file name to output path
-        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-            arrow_fs->OpenOutputStream(out_path.string());
-        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
-    } else {
-        open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
-                       orig_path, &out_stream, bucket_region);
-    }
+    arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+        arrow_fs->OpenOutputStream(out_path_str);
+    CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
 
     auto pool = bodo::BufferPool::DefaultPtr();
 
@@ -321,6 +364,8 @@ int64_t pq_write(const char *_path_name,
             // 'element' as their `name`. This is important for reading Iceberg
             // datasets written by Bodo, but also for standardization.
             ->enable_compliant_nested_types()
+            // Required for copying TIME data to Snowflake
+            ->set_time_adjusted_to_utc(true)
             ->build();
 
     if (has_dictionary_columns) {
@@ -372,39 +417,16 @@ int64_t pq_write(const char *_path_name,
 }
 
 /**
- * @brief Generate the metadata for the parquet schema based on the
- * string metadata provided from Python. Optionally this may extend
- * the metadata with RangeIndex information.
+ * @brief Convert the metadata string to a KeyValueMetadata object
+ * to include in the Parquet schema footer.
  *
  * @param metadata The string metadata provided from Python.
- * @param idx_name The name of the index column.
- * @param ri_start The start value of the RangeIndex.
- * @param ri_stop The stop value of the RangeIndex.
- * @param ri_step The step value of the RangeIndex.
- * @param write_rangeindex_to_metadata Whether to write the RangeIndex to the
- * metadata.
  *
  * @return std::shared_ptr<arrow::KeyValueMetadata>
  */
-std::shared_ptr<arrow::KeyValueMetadata> compute_parquet_schema_metadata(
-    const char *metadata, const char *idx_name, int ri_start, int ri_stop,
-    int ri_step, bool write_rangeindex_to_metadata) {
-    int check;
-    std::vector<char> new_metadata;
-    if (write_rangeindex_to_metadata) {
-        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
-                         idx_name, ri_start, ri_stop, ri_step);
-    } else {
-        new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
-        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
-                         idx_name, idx_name, idx_name, idx_name);
-    }
-    if (size_t(check + 1) > new_metadata.size()) {
-        throw std::runtime_error(
-            "Fatal error: number of written char for metadata is greater "
-            "than new_metadata size");
-    }
+std::shared_ptr<arrow::KeyValueMetadata> convert_parquet_schema_metadata(
+    const char *metadata) {
+    std::string_view new_metadata(metadata);
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
     if (new_metadata.size() > 0 && new_metadata[0] != 0) {
         std::unordered_map<std::string, std::string> new_metadata_map = {
@@ -415,22 +437,15 @@ std::shared_ptr<arrow::KeyValueMetadata> compute_parquet_schema_metadata(
 }
 
 int64_t pq_write_py_entry(const char *_path_name, table_info *table,
-                          array_info *col_names_arr, array_info *index,
-                          bool write_index, const char *metadata,
+                          array_info *col_names_arr, const char *metadata,
                           const char *compression, bool is_parallel,
-                          bool write_rangeindex_to_metadata, const int ri_start,
-                          const int ri_stop, const int ri_step,
-                          const char *idx_name, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us, bool create_dir,
-                          bool force_hdfs) {
+                          const char *bucket_region, int64_t row_group_size,
+                          const char *prefix, bool convert_timedelta_to_int64,
+                          const char *tz, bool downcast_time_ns_to_us,
+                          bool create_dir) {
     try {
         tracing::Event ev("pq_write_py_entry", is_parallel);
         ev.add_attribute("g_metadata", metadata);
-        ev.add_attribute("g_write_index", write_index);
-        ev.add_attribute("g_write_rangeindex_to_metadata",
-                         write_rangeindex_to_metadata);
 
         std::shared_ptr<table_info> table_ptr =
             std::shared_ptr<table_info>(table);
@@ -438,21 +453,11 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
             std::shared_ptr<array_info>(col_names_arr);
         std::vector<std::string> col_names =
             array_to_string_vector(col_names_arr_ptr);
-        // Append the index to the table for simpler conversion.
-        std::shared_ptr<array_info> index_ptr =
-            std::shared_ptr<array_info>(index);
-        if (write_index) {
-            table->columns.push_back(index_ptr);
-            const char *used_name =
-                strcmp(idx_name, "null") != 0 ? idx_name : "__index_level_0__";
-            col_names.emplace_back(used_name);
-        }
+
         // Generate the metadata for the arrow table, including any index
         // metadata.
         std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
-            compute_parquet_schema_metadata(metadata, idx_name, ri_start,
-                                            ri_stop, ri_step,
-                                            write_rangeindex_to_metadata);
+            convert_parquet_schema_metadata(metadata);
         std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
             table_ptr, col_names, schema_metadata, convert_timedelta_to_int64,
             tz, arrow::TimeUnit::NANO, downcast_time_ns_to_us);
@@ -460,10 +465,9 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
         for (auto col : table_ptr->columns) {
             bodo_array_types.emplace_back(col->arr_type);
         }
-        int64_t file_size =
-            pq_write(_path_name, arrow_table, compression, is_parallel,
-                     bucket_region, row_group_size, prefix, bodo_array_types,
-                     create_dir, "", nullptr, force_hdfs);
+        int64_t file_size = pq_write(
+            _path_name, arrow_table, compression, is_parallel, bucket_region,
+            row_group_size, prefix, bodo_array_types, create_dir, "", nullptr);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -485,7 +489,7 @@ void pq_write_partitioned_py_entry(
     // - write index
     // - write metadata?
     // - convert values to strings for other dtypes like datetime, decimal, etc
-    // (see array_info::val_to_str)
+    // (see array_val_to_str)
 
     try {
         if (!is_parallel) {
@@ -566,8 +570,8 @@ void pq_write_partitioned_py_entry(
                     if (part_col->arr_type == bodo_array_type::CATEGORICAL) {
                         int64_t code = part_col->get_code_as_int64(i);
                         // TODO can code be -1 (NA) for partition columns?
-                        value_str = categories_table->columns[cat_col_idx++]
-                                        ->val_to_str(code);
+                        value_str = array_val_to_str(
+                            categories_table->columns[cat_col_idx++], code);
                     } else if (part_col->arr_type == bodo_array_type::DICT) {
                         // check nullable bitmask and set string to empty
                         // if nan. Since we called
@@ -612,7 +616,7 @@ void pq_write_partitioned_py_entry(
                             value_str = val;
                         }
                     } else {
-                        value_str = part_col->val_to_str(i);
+                        value_str = array_val_to_str(part_col, i);
                     }
                     p.fpath += part_col_names[j] + "=" + value_str + "/";
                 }

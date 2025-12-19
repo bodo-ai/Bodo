@@ -1,7 +1,9 @@
 #include "_groupby_col_set.h"
 
 #include <iostream>
+#include <memory>
 #include <numeric>
+#include <stdexcept>
 #include <utility>
 
 #include <fmt/format.h>
@@ -15,6 +17,7 @@
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
+#include "_groupby_udf.h"
 #include "_groupby_update.h"
 
 /**
@@ -44,11 +47,12 @@ void BasicColSet::alloc_running_value_columns(
     bodo_array_type::arr_type_enum arr_type = in_col->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
     int64_t num_categories = in_col->num_categories;
+    std::string timezone = in_col->timezone;
     std::tie(arr_type, dtype) =
         get_groupby_output_dtype(ftype, arr_type, dtype);
     out_cols.push_back(alloc_array_top_level(
         num_groups, 1, 1, arr_type, dtype, -1, 0, num_categories, false, false,
-        false, pool, std::move(mm)));
+        false, pool, std::move(mm), timezone));
 }
 
 void BasicColSet::update(const std::vector<grouping_info>& grp_infos,
@@ -1576,6 +1580,84 @@ void GeneralUdfColSet::fill_in_columns(
     }
 }
 
+// ############################## StreamingUDF ##############################
+StreamingUDFColSet::StreamingUDFColSet(std::shared_ptr<array_info> in_col,
+                                       std::shared_ptr<table_info> out_table,
+                                       stream_udf_t* func, bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::stream_udf, false, use_sql_rules),
+      out_table(std::move(out_table)),
+      func(func) {}
+
+StreamingUDFColSet::~StreamingUDFColSet() = default;
+
+std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
+    return out_table->schema();
+}
+
+void StreamingUDFColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Allocate a dummy array column, actual column will be filled in by update
+    auto update_col = alloc_array_like(out_table->columns[0]);
+    out_cols.push_back(std::move(update_col));
+}
+
+void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
+                                bodo::IBufferPool* const pool,
+                                std::shared_ptr<::arrow::MemoryManager> mm) {
+    const grouping_info& grp_info = grp_infos[0];
+    std::shared_ptr<array_info> in_col = this->in_col;
+    bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups, pool);
+
+    if (!in_table->nrows()) {
+        return;
+    }
+
+    // get the rows in each group
+    for (size_t i = 0; i < in_table->nrows(); i++) {
+        int64_t i_grp = grp_info.row_to_group[i];
+        group_rows[i_grp].push_back(i);
+    }
+
+    // TODO: make out_arrs a bodo::vector for large number of groups case
+    std::vector<std::shared_ptr<array_info>> out_arrs(grp_info.num_groups);
+    for (size_t i = 0; i < grp_info.num_groups; i++) {
+        bodo::vector<int64_t> row_idxs = group_rows[i];
+        std::shared_ptr<table_info> in_group_table =
+            RetrieveTable(in_table, row_idxs);
+        // func is responsible for deleting in_table_arg
+        table_info* in_table_arg = new table_info(*in_group_table);
+        array_info* out_arr_result = func(in_table_arg);
+
+        if (!out_arr_result) {
+            throw std::runtime_error(
+                "Groupby.agg() | Groupby.apply(): An error occured while "
+                "executing user defined "
+                "function.");
+        }
+        std::shared_ptr<array_info> out_arr(out_arr_result);
+
+        out_arrs[i] = out_arr;
+    }
+
+    std::shared_ptr<array_info> real_out_col = concat_arrays(out_arrs);
+
+    // Replace the dummy update column.
+    std::shared_ptr<array_info> out_col = this->update_cols[0];
+    *out_col = std::move(*real_out_col);
+}
+
+void StreamingUDFColSet::setInCol(
+    std::vector<std::shared_ptr<array_info>> in_cols) {
+    this->in_table = std::make_shared<table_info>(in_cols);
+}
+
+void StreamingUDFColSet::clear() {
+    BasicColSet::clear();
+    this->in_table.reset();
+}
+
 // ############################## Percentile ##############################
 
 PercentileColSet::PercentileColSet(std::shared_ptr<array_info> in_col,
@@ -2109,8 +2191,8 @@ std::unique_ptr<BasicColSet> makeColSet(
     int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
     int udf_table_idx, std::shared_ptr<table_info> nunique_table,
     bool use_sql_rules,
-    std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
-        in_arr_types_vec) {
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec,
+    stream_udf_t* udf_cfunc) {
     BasicColSet* colset;
 
     if (ftype != Bodo_FTypes::size && ftype != Bodo_FTypes::window &&
@@ -2126,11 +2208,13 @@ std::unique_ptr<BasicColSet> makeColSet(
          ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc &&
-         ftype != Bodo_FTypes::object_agg) &&
+         ftype != Bodo_FTypes::object_agg &&
+         ftype != Bodo_FTypes::stream_udf) &&
         in_cols.size() > 1) {
         throw std::runtime_error(
             "Only listagg, array_agg, percentile_cont, percentile_disc, "
-            "object_agg, window functions and min_row_number_filter can have "
+            "object_agg, stream_udfs, window functions and "
+            "min_row_number_filter can have "
             "multiple input columns.");
     }
     switch (ftype) {
@@ -2142,6 +2226,10 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::gen_udf:
             colset = new GeneralUdfColSet(in_cols[0], std::move(udf_table),
                                           udf_table_idx, use_sql_rules);
+            break;
+        case Bodo_FTypes::stream_udf:
+            colset = new StreamingUDFColSet(in_cols[0], std::move(udf_table),
+                                            udf_cfunc, use_sql_rules);
             break;
         case Bodo_FTypes::percentile_disc:
         case Bodo_FTypes::percentile_cont:

@@ -20,11 +20,11 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    TypeInferenceTestPipeline,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
 )
+from bodo.tests.utils_jit import TypeInferenceTestPipeline
 from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 
@@ -102,6 +102,7 @@ def test_table_path_pq_constructor(reorder_io, memory_leak_check):
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 @pytest.mark.slow
 @pytest.mark.parquet
+@pytest.mark.bodosql_cpp
 def test_table_path_pq_bodosqlContext_python(
     reorder_io, parquet_filepaths, memory_leak_check
 ):
@@ -411,7 +412,7 @@ def test_parquet_statistics_file(datapath, memory_leak_check):
     works as expected.
     """
 
-    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    f1 = datapath("tpch-test-data/parquet/orders.pq")
     stats_file = datapath("tpch-test-data/stats_orders.json")
     table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
     bc = bodosql.BodoSQLContext({"ORDERS": table})
@@ -454,7 +455,7 @@ def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
     orig_sql_plan_cache_loc = bodo.sql_plan_cache_loc
     bodo.sql_plan_cache_loc = str(tmp_path_rank0)
 
-    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    f1 = datapath("tpch-test-data/parquet/orders.pq")
     stats_file = datapath("tpch-test-data/stats_orders.json")
     table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
     bc = bodosql.BodoSQLContext({"ORDERS": table})

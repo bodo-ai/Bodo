@@ -1,13 +1,12 @@
 import math
 import mmap
-import os
 import re
 import sys
 from pathlib import Path
 from uuid import uuid4
 
-import adlfs
 import boto3
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -32,7 +31,6 @@ from bodo.tests.memory_tester import (
     get_arrow_memory_pool_wrapper_for_buffer_pool,
 )
 from bodo.tests.utils import temp_env_override
-from bodo.utils.typing import BodoWarning
 
 # Python doesn't always raise exceptions, particularly
 # when raised inside of `del` statements and sometimes
@@ -59,32 +57,6 @@ def tmp_s3_path():
     folder_name = str(uuid4())
     yield f"s3://engine-unit-tests-tmp-bucket/{folder_name}/"
     bucket.objects.filter(Prefix=folder_name).delete()
-
-
-@pytest.fixture(scope="session")
-def abfs_fs():
-    """
-    Create an Azure Blob FileSystem instance for testing.
-    """
-
-    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
-    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
-
-
-@pytest.fixture
-def tmp_abfs_path(abfs_fs):
-    """
-    Create a temporary ABFS path for testing.
-    """
-
-    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    folder_name = str(uuid4())
-    abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
-    # Need to include account name in path for C++ filesystem code
-    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
-    if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
-        abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
 
 
 def test_default_buffer_pool_options():
@@ -5489,13 +5461,22 @@ def test_array_unpinned():
     Test that arrays can be unpinned and are indicated so in
     the BufferPool
     """
+    from numba.core import types
+
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.libs.array import array_info_type
+    from bodo.utils.typing import BodoWarning
+
+    _array_info_unpin = types.ExternalFunction(
+        "array_info_unpin", types.void(array_info_type)
+    )
 
     @bodo.jit(returns_maybe_distributed=False)
     def impl():
         # Get initial statistics
         initial_allocated = 0
         initial_pinned = 0
-        with bodo.objmode(initial_allocated="int64", initial_pinned="int64"):
+        with numba.objmode(initial_allocated="int64", initial_pinned="int64"):
             initial_allocated = default_buffer_pool_bytes_allocated()
             initial_pinned = default_buffer_pool_bytes_pinned()
 
@@ -5505,7 +5486,7 @@ def test_array_unpinned():
 
         # Check Metrics before Unpinning
         passed_checks = True
-        with bodo.objmode(passed_checks="boolean"):
+        with numba.objmode(passed_checks="boolean"):
             bytes_allocated = default_buffer_pool_bytes_allocated()
             bytes_pinned = default_buffer_pool_bytes_pinned()
             passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (
@@ -5517,10 +5498,10 @@ def test_array_unpinned():
         arr_info = bodo.libs.array.array_to_info(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
         )
-        bodo.libs.array._array_info_unpin(arr_info)
+        _array_info_unpin(arr_info)
 
         # Check Metrics after Unpinning
-        with bodo.objmode(passed_checks="boolean"):
+        with numba.objmode(passed_checks="boolean"):
             bytes_allocated = default_buffer_pool_bytes_allocated()
             bytes_pinned = default_buffer_pool_bytes_pinned()
             passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (

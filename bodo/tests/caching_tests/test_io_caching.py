@@ -1,14 +1,18 @@
+import numpy as np
 import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
 import bodo
+import bodo.decorators  # noqa
+from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
     sql_user_pass_and_hostname,
 )
+from bodo.utils.testing import ensure_clean2
 
 
 @bodo.jit
@@ -124,6 +128,27 @@ def test_read_parquet_cache_fname_arg_list_files(
     py_output_part2 = pd.read_parquet(fpaths[1])
     py_out = pd.concat([py_output_part1, py_output_part2])
     check_caching(impl, (fpaths,), is_cached, fn_distribution, py_output=py_out)
+
+
+@pytest.mark.smoke
+@pytest.mark.parquet
+def test_write_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_check):
+    fname = "out.pq"
+    df = pd.DataFrame({"a": np.arange(20)})
+
+    def impl(df):
+        df.to_parquet(fname)
+
+    @run_rank0
+    def check_output():
+        res = pd.read_parquet(fname)
+        pd.testing.assert_frame_equal(res, df)
+
+    with ensure_clean2(fname):
+        check_caching(
+            impl, (df,), is_cached, fn_distribution, is_out_dist=False, py_output=None
+        )
+        check_output()
 
 
 def test_read_csv_cache_fname_arg(

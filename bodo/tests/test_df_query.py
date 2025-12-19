@@ -6,7 +6,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func, no_default, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -110,6 +109,7 @@ def test_df_query_inplace_false(memory_leak_check):
     """
     Test df.query(): 'inplace' is not supported, false only
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("a > b", inplace=True)
@@ -140,6 +140,7 @@ def test_df_query_expr_str(memory_leak_check):
     """
     Test df.query(): 'expr' is of type string
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query(1)
@@ -167,6 +168,7 @@ def test_df_query_expr_non_empty_str(memory_leak_check):
     """
     Test df.query(): 'expr' is not an empty string
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("")
@@ -186,6 +188,7 @@ def test_df_query_multiline_expr(memory_leak_check):
     """
     Test df.query(): 'expr' cannot be multilined
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("a\nb")
@@ -205,6 +208,7 @@ def test_df_query_str_column(memory_leak_check):
     """
     Test df.query(): column.str.*, column must exist in dataframe
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("C.str.contains('1')")
@@ -224,6 +228,7 @@ def test_df_query_expr_bool(memory_leak_check):
     """
     Test df.query(): expression should evaluate to a 1D boolean array
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("C")
@@ -251,6 +256,7 @@ def test_df_query_undef_var(memory_leak_check):
     """
     Test df.query(): error when there is undefined variable
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.query("A > @a")
@@ -278,6 +284,7 @@ def test_df_query_index_name(memory_leak_check):
     """
     Test df.query(): Refering to named index by name is not supported
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df2):
         return df2.query("index_name<3")

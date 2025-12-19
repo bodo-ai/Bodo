@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -90,8 +91,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name,
-                         bool force_hdfs) {
+                         std::string *orig_path, std::string *path_name) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
@@ -99,7 +99,16 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
         *path_name = std::string(_path_name + 5);  // remove s3://
     } else if ((strncmp(_path_name, "abfs://", 7) == 0 ||
                 strncmp(_path_name, "abfss://", 8) == 0)) {
-        *fs_option = force_hdfs ? Bodo_Fs::hdfs : Bodo_Fs::abfs;
+        *fs_option = Bodo_Fs::abfs;
+#ifndef _WIN32
+        auto parsed_opt =
+            arrow::fs::AzureOptions::FromUri(_path_name, path_name);
+        CHECK_ARROW(parsed_opt.status(), "FromUri failed for Azure File System",
+                    "abfs");  // Check if parsing the URI was successful
+#else
+        throw std::runtime_error(
+            "extract_fs_dir_path: Azure File System not supported on Windows.");
+#endif
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
@@ -110,6 +119,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     } else if ((strncmp(_path_name, "gcs://", 6) == 0) ||
                (strncmp(_path_name, "gs://", 5) == 0)) {
         *fs_option = Bodo_Fs::gcs;
+        // remove gcs:// or gs://
+        int chars_to_remove = (strncmp(_path_name, "gcs://", 6) == 0) ? 6 : 5;
+        *path_name = std::string(_path_name + chars_to_remove);
     } else {  // posix
         *fs_option = Bodo_Fs::posix;
         *path_name = *orig_path;
@@ -388,8 +400,11 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
-                open_file_outstream(fs_option, file_type, out_path.string(),
-                                    s3_fs, nullptr, out_stream);
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
+                open_file_outstream(fs_option, file_type, out_path_str, s3_fs,
+                                    nullptr, out_stream);
             } else {
                 open_file_outstream(fs_option, file_type, fname, s3_fs, nullptr,
                                     out_stream);
@@ -484,8 +499,11 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;
-                open_file_outstream_gcs(fs_option, file_type, out_path.string(),
-                                        fs, out_stream);
+                // Using generic_string() to avoid "\" generated on Windows for
+                // remote object storage
+                std::string out_path_str = out_path.generic_string();
+                open_file_outstream_gcs(fs_option, file_type, out_path_str, fs,
+                                        out_stream);
             } else {
                 open_file_outstream_gcs(fs_option, file_type, fname, fs,
                                         out_stream);
@@ -643,4 +661,25 @@ void parallel_in_order_write(
     }
     CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
               "parallel_in_order_write: MPI error on MPI_Barrier:");
+}
+
+std::shared_ptr<::arrow::fs::FileSystem> get_fs_for_path(const char *_path_name,
+                                                         bool is_parallel) {
+    ensure_pa_wrappers_imported();
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    // scheme = bodo.io.fs_io(_path_name)
+    // fs = bodo.io.fs_io.getfs(_path_name, scheme, None, is_parallel,
+    // force_hdfs)
+    PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+    PyObject *scheme =
+        PyObject_CallMethod(fs_io_mod, "get_uri_scheme", "s", _path_name);
+    PyObject *fs_obj =
+        PyObject_CallMethod(fs_io_mod, "getfs", "sOOO", _path_name, scheme,
+                            Py_None, is_parallel ? Py_True : Py_False);
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_obj),
+                           "arrow::py::unwrap_filesystem", fs, "");
+    Py_DECREF(fs_io_mod);
+    Py_DECREF(scheme);
+    Py_DECREF(fs_obj);
+    return fs;
 }

@@ -4,6 +4,8 @@ for example: "Series.str.decode\n read_csv\n"
     usage: python -m bodo.utils.search_templates <path_to_apis>
 """
 
+from __future__ import annotations
+
 import sys
 import typing as pt
 import warnings
@@ -36,23 +38,25 @@ from bodo.utils.typing import BodoError
 unsupported_overload_exception_msg = "not supported yet"
 
 # Define list of bodo types and how they relate to pandas
-int_arr_typ = bodo.IntegerArrayType(bodo.int64)
+int_arr_typ = bodo.types.IntegerArrayType(bodo.types.int64)
 
 series_types = [
-    bodo.SeriesType(int_arr_typ),
-    bodo.SeriesType(bodo.string_array_type),
-    bodo.SeriesType(types.NPDatetime("ns")),
-    bodo.SeriesType(types.NPTimedelta("ns")),
-    bodo.SeriesType(bodo.StructArrayType((int_arr_typ,))),
-    bodo.SeriesType(bodo.PDCategoricalDtype(None, None, None, data=int_arr_typ)),
+    bodo.types.SeriesType(int_arr_typ),
+    bodo.types.SeriesType(bodo.types.string_array_type),
+    bodo.types.SeriesType(types.NPDatetime("ns")),
+    bodo.types.SeriesType(types.NPTimedelta("ns")),
+    bodo.types.SeriesType(bodo.types.StructArrayType((int_arr_typ,))),
+    bodo.types.SeriesType(
+        bodo.types.PDCategoricalDtype(None, None, None, data=int_arr_typ)
+    ),
 ]
 
-dataframe_types = [bodo.DataFrameType(data=(int_arr_typ,), columns=("A",))]
+dataframe_types = [bodo.types.DataFrameType(data=(int_arr_typ,), columns=("A",))]
 
 index_types = [
-    bodo.NumericIndexType(bodo.int64),
-    bodo.StringIndexType(),
-    bodo.BinaryIndexType(),
+    bodo.types.NumericIndexType(bodo.types.int64),
+    bodo.types.StringIndexType(),
+    bodo.types.BinaryIndexType(),
 ]
 
 # Only keeping track of Pandas types for now.
@@ -61,24 +65,26 @@ bodo_pd_types_dict = {
     "DataFrame": dataframe_types,
     # Index types
     "Index": index_types,
-    "RangeIndex": [bodo.RangeIndexType()],
+    "RangeIndex": [bodo.types.RangeIndexType()],
     "IntervalIndex": [
-        bodo.IntervalIndexType(bodo.IntervalArrayType(int_arr_typ)),
+        bodo.types.IntervalIndexType(bodo.types.IntervalArrayType(int_arr_typ)),
     ],
     "CategoricalIndex": [
-        bodo.CategoricalIndexType(bodo.CategoricalArrayType(bodo.int64)),
+        bodo.types.CategoricalIndexType(
+            bodo.types.CategoricalArrayType(bodo.types.int64)
+        ),
     ],
     "MultiIndex": [MultiIndexType([int_arr_typ])],
     "DatetimeIndex": [
-        bodo.DatetimeIndexType(),
+        bodo.types.DatetimeIndexType(),
     ],
-    "TimedeltaIndex": [bodo.TimedeltaIndexType()],
+    "TimedeltaIndex": [bodo.types.TimedeltaIndexType()],
     "PeriodIndex": [
-        bodo.PeriodIndexType(1),
+        bodo.types.PeriodIndexType(1),
     ],
     # scalar/array types
-    "Timestamp": [bodo.PandasTimestampType(1)],
-    "Timedelta": [bodo.pd_timedelta_type],
+    "Timestamp": [bodo.types.PandasTimestampType(1)],
+    "Timedelta": [bodo.types.pd_timedelta_type],
     # dateoffset, dates
     "DateOffset": [DateOffsetType()],
     "MonthEnd": [MonthEndType()],
@@ -155,7 +161,7 @@ def lookup_template(typing_ctx: Context, typ: pt.Any, path: list[str]) -> bool |
     Example:
         To look up whether `Series.str.decode` was supported:
         ```
-        ser_typ = bodo.SeriesType(bodo.string_array_type)
+        ser_typ = bodo.types.SeriesType(bodo.types.string_array_type)
         result = lookup_template(ser_typ, ["str", "decode"])
         ```
 

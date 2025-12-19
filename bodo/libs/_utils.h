@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Python.h>
 #include <chrono>
 #include <optional>
 #include <string>
@@ -54,3 +55,22 @@ uint64_t get_physically_installed_memory();
     } while (0)
 
 #define ASSERT(x) ASSERT_WITH_ERR_MSG(x, "")
+
+/// @brief Class to manage PyObject pointers with automatic reference counting.
+class PyObjectPtr : public std::unique_ptr<PyObject, void (*)(PyObject*)> {
+   public:
+    static void decref_check_none(PyObject* obj) {
+        // Python 3.12 allows Py_XDECREF to be used on nullptr and all decrefs
+        // have no effect on immortals (None becomes an immortal in 3.12).
+        // Once python 3.12 is our min version we can just use Py_XDECREF
+        // and remove this function.
+        if (obj != nullptr && obj != Py_None) {
+            Py_DECREF(obj);
+        }
+    }
+
+    PyObjectPtr(PyObject* obj)
+        : std::unique_ptr<PyObject, void (*)(PyObject*)>(
+              obj, &(this->decref_check_none)) {}
+    operator PyObject*() const { return get(); }
+};

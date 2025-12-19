@@ -7,6 +7,7 @@ and processing their metadata for later steps.
 from __future__ import annotations
 
 import itertools
+import json
 import os
 import time
 import typing as pt
@@ -18,6 +19,7 @@ import bodo.utils.tracing as tracing
 from bodo.io.iceberg.common import (
     FieldIDs,
     FieldNames,
+    IcebergParquetInfo,
     SchemaGroupIdentifier,
     flatten_tuple,
 )
@@ -25,94 +27,149 @@ from bodo.io.iceberg.read_parquet import (
     IcebergPqDatasetMetrics,
     get_schema_group_identifier_from_pa_schema,
 )
-from bodo.mpi4py import MPI
-from bodo.utils.utils import BodoError
+from bodo.io.parquet_pio import fpath_without_protocol_prefix
+from bodo.spawn.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
-    from bodo_iceberg_connector import IcebergParquetInfo
+    from pyiceberg.catalog import Catalog
+    from pyiceberg.expressions import BooleanExpression
+    from pyiceberg.io import FileIO
+    from pyiceberg.table import DataScan, FileScanTask, ManifestFile, Table
 
 
-def get_iceberg_file_list(
-    table_name: str, conn: str, database_schema: str, filters: str | None
-) -> tuple[list[IcebergParquetInfo], dict[int, pa.Schema], int]:
+def _construct_parquet_infos(
+    table: Table, table_scan: DataScan
+) -> tuple[list[IcebergParquetInfo], int]:
     """
-    Gets the list of parquet data files that need to be read from an Iceberg table.
-
-    We also pass filters, which is in DNF format and the output of filter
-    pushdown to Iceberg. Iceberg will use this information to
-    prune any files that it can from just metadata, so this
-    is an "inclusive" projection.
-    NOTE: This must only be called on rank 0.
-
-    Returns:
-        - List of file paths from Iceberg sanitized to be used by Bodo
-            - Convert S3A paths to S3 paths
-            - Convert relative paths to absolute paths
-        - List of original file paths directly from Iceberg
+    Construct IcebergParquetInfo objects for each file
+    from the Iceberg table scanner. This includes performing additional
+    operations to get the schema ID and sanitized path for each file.
     """
-    import bodo_iceberg_connector as bic
-
-    assert bodo.get_rank() == 0, (
-        "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    from pyiceberg.manifest import (
+        DEFAULT_READ_VERSION,
+        MANIFEST_ENTRY_SCHEMAS,
+        AvroFile,
+        DataFile,
+        DataFileContent,
+        FileFormat,
+        ManifestEntry,
+        ManifestEntryStatus,
     )
+    from pyiceberg.typedef import KeyDefaultDict
 
-    try:
-        return bic.get_bodo_parquet_info(conn, database_schema, table_name, filters)
-    except bic.IcebergError as e:
-        raise BodoError(
-            f"Failed to Get List of Parquet Data Files from Iceberg Table: {e.message}"
-        )
+    file_path_to_schema_id = {}
+    tasks: pt.Iterable[FileScanTask] = table_scan.plan_files()
 
+    s = time.monotonic_ns()
+    # Construct a mapping from file path to schema ID
+    snap = table.current_snapshot()
+    assert snap is not None
 
-def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str) -> int:
-    """
-    Fetch the current snapshot id for an Iceberg table.
-
-    Args:
-        table_name (str): Iceberg Table Name
-        conn (str): Iceberg connection string
-        database_schema (str): Iceberg schema.
-
-    Returns:
-        int: Snapshot Id for the current version of the Iceberg table.
-    """
-    import bodo_iceberg_connector
-
-    assert bodo.get_rank() == 0, (
-        "get_iceberg_snapshot_id should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+    # Filter manifest files based on partition summaries, similar to:
+    # https://github.com/apache/iceberg-python/blob/59dc8d13ad4e1500fff12946f1bfaddb5484f90e/pyiceberg/table/__init__.py#L1942
+    manifest_evaluators: dict[int, pt.Callable[[ManifestFile], bool]] = KeyDefaultDict(
+        table_scan._build_manifest_evaluator
     )
+    manifests = [
+        manifest_file
+        for manifest_file in snap.manifests(table.io)
+        if manifest_evaluators[manifest_file.partition_spec_id](manifest_file)
+    ]
 
-    try:
-        return bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
-            conn,
-            database_schema,
-            table_name,
+    for manifest_file in manifests:
+        # Similar to PyIceberg's fetch_manifest_entry here:
+        # https://github.com/apache/iceberg-python/blob/38ebb19a39407f52fe439289af8be81268932b0b/pyiceberg/manifest.py#L696
+        input_file = table.io.new_input(manifest_file.manifest_path)
+        with AvroFile[ManifestEntry](
+            input_file,
+            MANIFEST_ENTRY_SCHEMAS[DEFAULT_READ_VERSION],
+            read_types={-1: ManifestEntry, 2: DataFile},
+            read_enums={0: ManifestEntryStatus, 101: FileFormat, 134: DataFileContent},
+        ) as reader:
+            schema_id = int(json.loads(reader.header.meta["schema"])["schema-id"])
+            for entry in reader:
+                file_path = entry.data_file.file_path
+                file_path_to_schema_id[file_path] = schema_id
+
+    get_file_to_schema_us = time.monotonic_ns() - s
+
+    # Construct the list of Parquet file info
+    return [
+        IcebergParquetInfo(
+            file_task=task,
+            schema_id=file_path_to_schema_id[task.file.file_path],
+            sanitized_path=fpath_without_protocol_prefix(task.file.file_path),
         )
-    except bodo_iceberg_connector.IcebergError as e:
-        raise BodoError(
-            f"Failed to Get the Snapshot ID from an Iceberg Table: {e.message}"
-        )
+        for task in tasks
+    ], get_file_to_schema_us // 1000
 
 
+def _get_total_num_pq_files_in_table(table: Table) -> int:
+    """
+    Returns the total number of Parquet files in the given Iceberg table
+    at the current snapshot. Used for logging the # of filtered files.
+    Expected to only run on 1 rank
+    """
+    from pyiceberg.manifest import ManifestContent
+
+    snap = table.current_snapshot()
+    assert snap is not None
+
+    # First, check if we can get the information from the summary
+    if (summ := snap.summary) and (count := summ["total-data-files"]):
+        return int(count)
+
+    # If it doesn't exist in the summary, check the manifestList
+    # TODO: is this doable? I can get the manifestList location, but I don't see a way
+    # to get any metadata from this list.
+    # A manifest list includes summary metadata that can be used to avoid scanning all of the
+    # manifests
+    # in a snapshot when planning a table scan. This includes the number of added, existing, and
+    # deleted files,
+    # and a summary of values for each field of the partition spec used to write the manifest.
+
+    # If it doesn't exist in the manifestList, calculate it by iterating over each manifest file
+    total_files = 0
+    for manifest_file in snap.manifests(table.io):
+        if manifest_file.content != ManifestContent.DATA:
+            continue
+        existing_files = manifest_file.existing_files_count
+        added_files = manifest_file.added_files_count
+        deleted_files = manifest_file.deleted_files_count
+
+        if existing_files is None or added_files is None or deleted_files is None:
+            # If any of the option fields are None, we have to manually read the file
+            manifest_contents = manifest_file.fetch_manifest_entry(
+                table.io, discard_deleted=True
+            )
+            total_files += len(manifest_contents)
+        else:
+            total_files += existing_files + added_files - deleted_files
+
+    return total_files
+
+
+@run_rank0
 def get_iceberg_file_list_parallel(
-    conn: str,
-    database_schema: str,
-    table_name: str,
-    filters: str | None = None,
-) -> tuple[list[IcebergParquetInfo], int, dict[int, pa.Schema], int]:
+    catalog: Catalog,
+    table_id: str,
+    filters: BooleanExpression,
+    snapshot_id: int = -1,
+    limit: int = -1,
+) -> tuple[list[IcebergParquetInfo], dict, int, FileIO, int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
     on rank 0 and handles all the required error
-    synchronization and broadcasts the outputs
-    to all ranks.
+    synchronization and broadcasts the outputs to all ranks.
     NOTE: This function must be called in parallel
     on all ranks.
 
     Args:
         conn (str): Iceberg connection string
-        database_schema (str): Iceberg database.
-        table_name (str): Iceberg table's name
+        table_id (str): Iceberg table identifier
         filters (optional): Filters for file pruning. Defaults to None.
+        snapshot_id (int, optional): Snapshot ID to read from. Defaults to -1.
+        limit (int, optional): Limit on the number of rows to read. Defaults to -1.
 
     Returns:
         tuple[IcebergParquetInfo, int, dict[int, pa.Schema]]:
@@ -122,119 +179,67 @@ def get_iceberg_file_list_parallel(
         - Snapshot ID that these files were taken from.
         - Schema group identifier to schema mapping
     """
-    comm = MPI.COMM_WORLD
-    exc = None
-    pq_infos = None
-    snapshot_id_or_e = None
-    all_schemas = None
-    get_file_to_schema_us = None
-    # Get the list on just one rank to reduce JVM overheads
-    # and general traffic to table for when there are
-    # catalogs in the future.
 
-    # Always get the list on rank 0 to avoid the need
-    # to initialize a full JVM + gateway server on every rank.
-    # Only runs on rank 0, so we add no cover to avoid coverage warning
-    if bodo.get_rank() == 0:  # pragma: no cover
-        ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
+    ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
+    if tracing.is_tracing():  # pragma: no cover
+        ev_iceberg_fl.add_attribute("g_filters", filters)
+    try:
+        table = catalog.load_table(table_id)
+        table_scan = table.scan(
+            filters,
+            snapshot_id=snapshot_id if snapshot_id > -1 else None,
+            limit=limit if limit > -1 else None,
+        )
+        pq_infos, get_file_to_schema_us = _construct_parquet_infos(table, table_scan)
+
         if tracing.is_tracing():  # pragma: no cover
-            ev_iceberg_fl.add_attribute("g_filters", filters)
-        try:
-            (
-                pq_infos,
-                all_schemas,
-                get_file_to_schema_us,
-            ) = get_iceberg_file_list(table_name, conn, database_schema, filters)
-            if tracing.is_tracing():  # pragma: no cover
-                ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
-                    os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
-                )
-                ev_iceberg_fl.add_attribute("num_files", len(pq_infos))
-                ev_iceberg_fl.add_attribute(
-                    f"first_{ICEBERG_TRACING_NUM_FILES_TO_LOG}_files",
-                    ", ".join(
-                        x.orig_path for x in pq_infos[:ICEBERG_TRACING_NUM_FILES_TO_LOG]
-                    ),
-                )
-        except Exception as e:  # pragma: no cover
-            exc = e
-
-        ev_iceberg_fl.finalize()
-        ev_iceberg_snapshot = tracing.Event("get_snapshot_id", is_parallel=False)
-        try:
-            snapshot_id_or_e = get_iceberg_snapshot_id(
-                table_name, conn, database_schema
+            ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
+                os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
             )
-        except Exception as e:  # pragma: no cover
-            snapshot_id_or_e = e
-        ev_iceberg_snapshot.finalize()
-
-        if bodo.user_logging.get_verbose_level() >= 1 and isinstance(pq_infos, list):
-            import bodo_iceberg_connector as bic
-
-            # This should never fail given that pq_infos is not None, but just to be safe.
-            try:
-                total_num_files = bic.bodo_connector_get_total_num_pq_files_in_table(
-                    conn, database_schema, table_name
-                )
-            except bic.errors.IcebergJavaError as e:
-                total_num_files = (
-                    "unknown (error getting total number of files: " + str(e) + ")"
-                )
-
-            num_files_read = len(pq_infos)
-
-            if bodo.user_logging.get_verbose_level() >= 2:
-                # Constant to limit the number of files to list in the log message
-                # May want to increase this for higher verbosity levels
-                num_files_to_list = 10
-
-                file_list = ", ".join(x.orig_path for x in pq_infos[:num_files_to_list])
-                log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
-
-                if num_files_read > num_files_to_list:
-                    log_msg += f", ... and {num_files_read - num_files_to_list} more."
-            else:
-                log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files."
-
-            bodo.user_logging.log_message(
-                "Iceberg File Pruning:",
-                log_msg,
+            ev_iceberg_fl.add_attribute("num_files", len(pq_infos))
+            ev_iceberg_fl.add_attribute(
+                f"first_{ICEBERG_TRACING_NUM_FILES_TO_LOG}_files",
+                ", ".join(x.path for x in pq_infos[:ICEBERG_TRACING_NUM_FILES_TO_LOG]),
             )
-
-    # Send list to all ranks
-    (
-        exc,
-        pq_infos,
-        snapshot_id_or_e,
-        all_schemas,
-        get_file_to_schema_us,
-    ) = comm.bcast(
-        (
-            exc,
-            pq_infos,
-            snapshot_id_or_e,
-            all_schemas,
-            get_file_to_schema_us,
-        )
-    )
-
-    # Raise error on all processors if found (not just rank 0 which would cause hangs)
-    if isinstance(exc, Exception):
-        raise BodoError(
+    except Exception as exc:  # pragma: no cover
+        # TODO: raise BodoError in case of compiler (not dataframe library)
+        raise ValueError(
             f"Error reading Iceberg Table: {type(exc).__name__}: {str(exc)}\n"
-        )
-    if isinstance(snapshot_id_or_e, Exception):
-        error = snapshot_id_or_e
-        raise BodoError(
-            f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
-        )
+        ) from exc
+    finally:
+        ev_iceberg_fl.finalize()
 
-    snapshot_id: int = snapshot_id_or_e
+    if bodo.user_logging.get_verbose_level() >= 1:
+        try:
+            total_num_files = str(_get_total_num_pq_files_in_table(table))
+        except Exception as e:
+            total_num_files = (
+                "unknown (error getting total number of files: " + str(e) + ")"
+            )
+
+        num_files_read = len(pq_infos)
+        if bodo.user_logging.get_verbose_level() >= 2:
+            # Constant to limit the number of files to list in the log message
+            # May want to increase this for higher verbosity levels
+            num_files_to_list = 10
+
+            file_list = ", ".join(x.path for x in pq_infos[:num_files_to_list])
+            log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
+
+            if num_files_read > num_files_to_list:
+                log_msg += f", ... and {num_files_read - num_files_to_list} more."
+        else:
+            log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files."
+
+        bodo.user_logging.log_message("Iceberg File Pruning:", log_msg)
+
+    from pyiceberg.io.pyarrow import schema_to_pyarrow
+
     return (
         pq_infos,
-        snapshot_id,
-        all_schemas,
+        {i: schema_to_pyarrow(s) for i, s in table.schemas().items()},
+        snapshot_id if snapshot_id > -1 else table.current_snapshot().snapshot_id,
+        table.io,
         get_file_to_schema_us,
     )
 
@@ -282,11 +287,12 @@ def group_file_frags_by_schema_group_identifier(
             )
         except Exception as e:
             msg = (
-                f"Encountered an error while generating the schema group identifier for file {pq_info.orig_path}. "
+                f"Encountered an error while generating the schema group identifier for file {pq_info.path}. "
                 "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
                 f"{str(e)}"
             )
-            raise BodoError(msg)
+            # TODO: raise BodoError in case of compiler (not dataframe library)
+            raise ValueError(msg)
         iceberg_field_ids.append(schema_group_identifier[0])
         pq_field_names.append(schema_group_identifier[1])
     metrics.get_sg_id_time += int((time.monotonic() - start) * 1_000_000)
@@ -313,3 +319,67 @@ def group_file_frags_by_schema_group_identifier(
     metrics.nunique_sgs_seen += len(schema_group_id_to_frags)
 
     return schema_group_id_to_frags
+
+
+def get_table_length(table, snapshot_id: int = -1) -> int:
+    """
+    Get the total number of rows in the Iceberg table.
+    If a snapshot ID is provided, it will return the number of rows
+    in that snapshot. Otherwise, it will return the number of rows
+    in the current snapshot.
+
+    Args:
+        table (Table): The Iceberg table to get the length of.
+        snapshot_id (int, optional): The snapshot ID to get the length of. Defaults to -1.
+
+    Returns:
+        int: The total number of rows in the Iceberg table.
+    """
+    from pyiceberg.manifest import ManifestContent, ManifestEntryStatus
+
+    table_len = 0
+    snapshot = (
+        table.current_snapshot()
+        if snapshot_id == -1
+        else table.snapshot_by_id(snapshot_id)
+    )
+    assert snapshot is not None
+    # If the snapshot has a summary with total-records, use that.
+    if (
+        hasattr(snapshot, "summary")
+        and snapshot.summary is not None
+        and "total-records" in snapshot.summary
+    ):
+        table_len = int(snapshot.summary["total-records"])
+    # If the snapshot has manifests with existing_rows_count and added_rows_count,
+    # use those to get the table length.
+    elif all(
+        hasattr(manifest, "existing_rows_count")
+        and manifest.existing_rows_count is not None
+        and hasattr(manifest, "added_rows_count")
+        and manifest.added_rows_count is not None
+        for manifest in snapshot.manifests(table.io)
+    ):
+        table_len = sum(
+            [
+                manifest.existing_rows_count + manifest.added_rows_count
+                if manifest.content == ManifestContent.DATA
+                else 0
+                for manifest in snapshot.manifests(table.io)
+            ]
+        )
+    # Otherwise we need to go through the manifest entries to estimate the table length.
+    else:
+        for manifest in snapshot.manifests(table.io):
+            manifest_entries = manifest.fetch_manifest_entry(table.io)
+            for entry in manifest_entries:
+                if (
+                    entry.status == ManifestEntryStatus.DELETED
+                    or manifest.content != ManifestContent.DATA
+                ):
+                    continue
+                datafile = entry.data_file
+                if datafile is not None and datafile.record_count is not None:
+                    table_len += datafile.record_count
+
+    return table_len

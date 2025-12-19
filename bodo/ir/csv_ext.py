@@ -18,7 +18,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.table import Table, TableType  # noqa
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
@@ -653,7 +653,7 @@ def _get_pd_dtype_str(t):
         return "str"
 
     # NOTE: this is just a placeholder since strings are not handled with astype()
-    if t == string_array_type or t == bodo.dict_str_arr_type:
+    if t == string_array_type or t == bodo.types.dict_str_arr_type:
         return "str"
 
     # nullable int array
@@ -683,7 +683,7 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
-@numba.njit
+@numba.njit(cache=True)
 def check_nrows_skiprows_value(nrows, skiprows):
     """Check at runtime that nrows and skiprows values are >= 0"""
     # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.
@@ -925,9 +925,9 @@ def _gen_read_csv_objmode(
 
     if idx_col_index != None:
         # idx_array_typ is added to the globals at a higher level
-        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.ir.object_mode.no_warning_objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
     else:
-        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.ir.object_mode.no_warning_objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
     # create typemap for `df.astype` in runtime
     func_text += "    typemap = {}\n"
     for i, t_str in enumerate(typ_map.keys()):

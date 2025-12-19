@@ -1,5 +1,7 @@
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ..."""
 
+from __future__ import annotations
+
 import io
 import os
 import random
@@ -7,7 +9,7 @@ import string
 import unittest
 from decimal import Decimal
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -22,7 +24,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
     _gather_output,
     _get_dist_arg,
     _test_equal,
@@ -32,7 +33,6 @@ from bodo.tests.utils import (
     gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
-    get_start_end,
     pytest_mark_pandas,
     temp_env_override,
 )
@@ -416,6 +416,8 @@ def test_merge_join_datetime(memory_leak_check):
     check_func(test_impl, (df1_date, df2), sort_output=True, reset_index=True)
 
 
+# TODO [BSE-4789]: DataFrame Lib: Fix Decimal from_pandas
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_decimal(memory_leak_check):
     def f(df1, df2):
@@ -444,6 +446,7 @@ def test_merge_empty_suffix_keys(memory_leak_check):
     """
     Test merge(): merging on keys and having an empty suffix.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, left_on="A", right_on="C", suffixes=("", "_t"))
@@ -506,6 +509,8 @@ def test_merge_empty_suffix_keys(memory_leak_check):
         assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
+# TODO [BSE-4820]: DataFrame Lib: Merge on index
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_left_right_index(memory_leak_check):
     """
@@ -538,6 +543,7 @@ def test_merge_left_index_dce(memory_leak_check):
     Test merge(): merging on left_index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_on=["A"])
@@ -605,6 +611,7 @@ def test_merge_right_index_dce(memory_leak_check):
     Test merge(): merging on right_index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, right_index=True, left_on=["A"])
@@ -672,6 +679,7 @@ def test_merge_left_right_index_dce(memory_leak_check):
     Test merge(): merging on index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_index=True)
@@ -716,6 +724,7 @@ def test_merge_left_right_only_index(memory_leak_check):
     Test merge(): merging on index and only returning
     the output index.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_index=True)
@@ -810,6 +819,7 @@ def test_list_string_array_type_specific(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_list_string_array_type_random(memory_leak_check):
     def test_impl(df1, df2):
@@ -872,6 +882,7 @@ def test_merge_empty_suffix_underscore(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 @pytest.mark.parametrize(
     "df1",
@@ -909,12 +920,7 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
         df3 = df1.merge(df2)
         return df3
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
-        impl(df1, df2).sort_values("A").reset_index(drop=True),
-        check_column_type=False,
-    )
+    check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest_mark_pandas
@@ -1183,22 +1189,31 @@ def test_interval_join_detection(memory_leak_check):
         ),
         pytest.param(
             (
-                pd.DataFrame(
+                lambda: pd.DataFrame(
                     {
-                        "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
+                        "P": [
+                            bodo.types.Time(x, 0, 0, x, precision=9) for x in range(8)
+                        ]
                         + [None, None],
                         "E": (
-                            [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)]
+                            [
+                                bodo.types.Time(4 * x, 0, 0, precision=9)
+                                for x in range(4)
+                            ]
                             + [None]
                         )
                         * 2,
                     }
                 ),
-                pd.DataFrame(
+                lambda: pd.DataFrame(
                     {
-                        "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
+                        "A": [bodo.types.Time(x, 0, 0, precision=9) for x in range(4)]
+                        * 5,
                         "B": [None, None]
-                        + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
+                        + [
+                            bodo.types.Time(x % 24, 0, 0, precision=9)
+                            for x in range(18)
+                        ],
                         "D": [1.1, 2.2, 3.3, 4.4] * 5,
                     }
                 ),
@@ -1282,7 +1297,12 @@ def test_interval_join_detection(memory_leak_check):
     ],
 )
 def interval_join_test_tables(request):
+    # Import compiler for Time type.
+    import bodo.decorators  # noqa
+
     ldf, rdf = request.param
+    ldf = ldf() if callable(ldf) else ldf
+    rdf = rdf() if callable(rdf) else rdf
     cross_df = ldf.merge(rdf, how="cross")
     return (ldf, rdf, cross_df)
 
@@ -1482,6 +1502,7 @@ def test_interval_overlap_join(
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_suffix_included(memory_leak_check):
     """
@@ -1517,6 +1538,7 @@ def test_merge_suffix_included(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_suffix_collision(memory_leak_check):
     """
@@ -1578,6 +1600,7 @@ def test_merge_disjoint_keys2(memory_leak_check):
 
 
 @pytest.mark.smoke
+@pytest.mark.df_lib
 def test_merge_inner(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
@@ -1664,6 +1687,7 @@ def test_merge_outer(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_overlap(memory_leak_check):
     """
@@ -1679,6 +1703,7 @@ def test_merge_overlap(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 @pytest.mark.parametrize("n", [11, 11111])
 def test_merge_int_key(n, memory_leak_check):
@@ -1751,6 +1776,7 @@ def test_merge_nullable_int_bool(n1, n2, len_siz, memory_leak_check):
     check_func(test_impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_multi_int_key(memory_leak_check):
     """
@@ -1948,6 +1974,7 @@ def test_merge_str_key(memory_leak_check):
     assert set(bodo_func(df1, df2)) == set(test_impl(df1, df2))
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_str_nan1(memory_leak_check):
     """
@@ -1974,6 +2001,7 @@ def test_merge_str_nan1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_str_nan2(memory_leak_check):
     """
@@ -1993,6 +2021,7 @@ def test_merge_str_nan2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_binary_key(memory_leak_check):
     """
@@ -2011,6 +2040,7 @@ def test_merge_binary_key(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_binary_nan1(memory_leak_check):
     """
@@ -2037,6 +2067,7 @@ def test_merge_binary_nan1(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_binary_nan2(memory_leak_check):
     """
@@ -2054,6 +2085,7 @@ def test_merge_binary_nan2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_bool_nan(memory_leak_check):
     """
@@ -2104,6 +2136,7 @@ def test_merge_nontrivial_index(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_out_str_na(memory_leak_check):
     """
@@ -2142,6 +2175,7 @@ def test_merge_out_str_na(memory_leak_check):
     check_func(test_impl2, (df1, df2), check_typing_issues=False)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_out_binary_na(memory_leak_check):
     """
@@ -2198,6 +2232,7 @@ def test_merge_datetime_parallel(memory_leak_check):
     Test merge(): merge on key column of type DatetimeIndex
     ensure parallelism
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = pd.merge(df1, df2, on="time")
@@ -2433,6 +2468,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     test merge(): indicator=True where the indicator column can be optimized out
     as a dead column.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def test_impl(df1, df2):
         merged_df = df1.merge(df2, how="outer", on="join_keys", indicator=True)
@@ -2470,6 +2506,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_all_nan_cols(memory_leak_check):
     """
@@ -3533,6 +3570,8 @@ def test_merge_general_bool_columns(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types(memory_leak_check):
     """
@@ -3561,6 +3600,8 @@ def test_merge_match_key_types(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types2(memory_leak_check):
     """
@@ -3588,6 +3629,8 @@ def test_merge_match_key_types2(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
+# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types_nullable(memory_leak_check):
     """
@@ -3774,6 +3817,7 @@ def test_merge_left_parallel(memory_leak_check):
     Test merge(): merge with only left dataframe columns distributed
     ensure parallelism
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on=["A", "B"])
@@ -3791,6 +3835,7 @@ def test_merge_left_parallel(memory_leak_check):
     assert test_impl(df1, df2) == bodo_func(df1.iloc[start:end], df2)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     """
@@ -3804,9 +3849,10 @@ def test_join_rm_dead_data_name_overlap1(memory_leak_check):
 
     df1 = pd.DataFrame({"id": [3, 4], "user_id": [5, 6]})
     df2 = pd.DataFrame({"id": [3, 4], "user_id": [5, 6]})
-    assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
+    check_func(test_impl, (df1, df2))
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     """
@@ -3828,6 +3874,7 @@ def test_join_deadcode_cleanup(memory_leak_check):
     Test join dead code elimination when a merged dataframe is never used,
     merge() is not executed
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def test_impl(df1, df2):  # pragma: no cover
         df1.merge(df2, on=["A"])
@@ -4190,6 +4237,7 @@ def test_merge_partial_distributed(memory_leak_check):
     However, in case of having say left table replicated and how='left',
     we need to handle how the rows of the left table are matched.
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A", how="outer")
@@ -4655,6 +4703,7 @@ def test_merge_repeat_key(memory_leak_check):
     check_func(impl8, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_repeat_key_same_frame(memory_leak_check):
     """tests pd.merge when the same key is repeated twice and keys

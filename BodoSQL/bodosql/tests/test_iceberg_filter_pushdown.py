@@ -12,6 +12,7 @@ import pytest
 
 import bodo
 import bodosql
+from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
@@ -21,7 +22,7 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, run_rank0
+from bodo.tests.utils import check_func
 
 pytestmark = pytest.mark.iceberg
 
@@ -52,7 +53,7 @@ def test_filter_pushdown_in(iceberg_database):
         )
 
     setup()
-    db_schema, warehouse_loc = iceberg_database()
+    db_schema, _ = iceberg_database()
     # TODO: Fix the FileSystemCatalog so that it can take in a full connection string
     # and not just a hardcoded path.
     catalog = bodosql.FileSystemCatalog(".")
@@ -225,7 +226,7 @@ def test_filter_pushdown_in_large_amount_of_date_scalars(iceberg_database):
         )
 
     setup()
-    db_schema, warehouse_loc = iceberg_database()
+    db_schema, _ = iceberg_database()
     # TODO: Fix the FileSystemCatalog so that it can take in a full connection string
     # and not just a hardcoded path.
     catalog = bodosql.FileSystemCatalog(".")

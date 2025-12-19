@@ -7,18 +7,59 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.errors import TypingError
+from numba.core.errors import TypingError  # noqa TID253
 
 import bodo
-from bodo.tests.utils import check_func, pytest_spawn_mode, temp_env_override
+from bodo.tests.utils import check_func, pytest_mark_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.typing import BodoError
 
-pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
+pytestmark = [pytest.mark.test_docs]
 
 
-def test_quickstart_local_python():
-    """Runs example equivalent to code from top-level README.md
+@pytest.mark.df_lib
+@pytest.mark.skipif(
+    os.getenv("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") == "0",
+    reason="BODO_ENABLE_TEST_DATAFRAME_LIBRARY is not set, this is required for df_lib tests",
+)
+def test_quickstart_local_python_df():
+    """Runs example equivalent to Bodo DF Library code from top-level README.md
+    and docs/quick_start/quickstart_local_python.md and ensures
+    that it is consistent with pandas.
+    """
+    # Generate sample data
+    NUM_GROUPS = 30
+    NUM_ROWS = 2_000
+    output_path = "my_data.pq"
+
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
+    pandas_df = df.groupby("A", as_index=False)["B"].max()
+
+    with ensure_clean2(output_path):
+        pandas_df.to_parquet(output_path)
+        pandas_out = pd.read_parquet(output_path)
+
+    def bodo_groupby_write():
+        import bodo.pandas as pd
+
+        df = pd.DataFrame(
+            {"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)}
+        )
+        df2 = df.groupby("A", as_index=False)["B"].max()
+        df2.to_parquet(output_path)
+
+    with ensure_clean2(output_path):
+        bodo_groupby_write()
+        bodo_out = pd.read_parquet(output_path)
+
+    pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
+    bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(bodo_out, pandas_out, check_dtype=False)
+
+
+@pytest_mark_spawn_mode
+def test_quickstart_local_python_jit():
+    """Runs example equivalent to Bodo jit code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
     that it is consistent with pandas.
     """
@@ -28,37 +69,52 @@ def test_quickstart_local_python():
 
     df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 
-    input_df_path = "my_data.pq"
-    output_df_path = "out.pq"
+    output_df_path = "my_data.pq"
 
-    with ensure_clean2(input_df_path):
-        df.to_parquet(input_df_path)
+    def computation(df):
+        return df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
 
-        def computation(input_df_path):
-            df = pd.read_parquet(input_df_path)
-            df2 = pd.DataFrame(
-                {"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)}
-            )
-            df2.to_parquet(output_df_path)
+    with ensure_clean2(output_df_path):
+        S = bodo.jit(cache=True, spawn=True)(computation)(df)
+        pd.DataFrame({"C": S}).to_parquet(output_df_path)
+        bodo_out = pd.read_parquet(output_df_path)
 
-        with ensure_clean2(output_df_path):
-            bodo.jit(cache=True, spawn=True)(computation)(input_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+    with ensure_clean2(output_df_path):
+        S = computation(df)
+        pd.DataFrame({"C": S}).to_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path)
 
-        with ensure_clean2(output_df_path):
-            computation(input_df_path)
-            pandas_out = pd.read_parquet(output_df_path)
-
-        pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    pd.testing.assert_frame_equal(bodo_out, pandas_out)
 
 
 @pytest.mark.iceberg
-def test_quickstart_local_iceberg():
-    """Test that the example in docs/quick_start/quickstart_local_iceberg.md"""
+@pytest.mark.df_lib
+@pytest.mark.skipif(
+    os.getenv("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") == "0",
+    reason="BODO_ENABLE_TEST_DATAFRAME_LIBRARY is not set, this is required for df_lib tests",
+)
+def test_quickstart_local_iceberg_df():
+    """Test the Bodo DF Library example in docs/quick_start/quickstart_local_iceberg.md"""
+    import bodo.pandas as pd
+
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
-    db_name = "MY_DATABASE"
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
+    df.to_iceberg("test_table", location="./iceberg_warehouse")
+
+    out_df = pd.read_iceberg("test_table", location="./iceberg_warehouse")
+    pd.testing.assert_frame_equal(out_df, df)
+
+
+@pytest.mark.iceberg
+@pytest_mark_spawn_mode
+def test_quickstart_local_iceberg_jit():
+    """Test the Bodo jit example in docs/quick_start/quickstart_local_iceberg.md"""
+    NUM_GROUPS = 30
+    NUM_ROWS = 2_000
+
+    db_name = "/tmp/MY_DATABASE"
     input_df = pd.DataFrame(
         {"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)}
     )
@@ -106,6 +162,7 @@ def devguide_df_path():
         os.remove(out_path)
 
 
+@pytest_mark_spawn_mode
 def test_devguide_transform(devguide_df_path):
     """Test transform example from docs/quick_start/devguide.md and
     ensures behavior is consistent with pandas.
@@ -136,6 +193,7 @@ def test_devguide_transform(devguide_df_path):
     )
 
 
+@pytest_mark_spawn_mode
 def test_devguide_parallel1(devguide_df_path):
     def load_data_bodo(devguide_df_path):
         df = pd.read_parquet(devguide_df_path)
@@ -149,6 +207,7 @@ def test_devguide_parallel1(devguide_df_path):
     pd.testing.assert_frame_equal(bodo_out, pandas_out)
 
 
+@pytest_mark_spawn_mode
 def test_devguide_parallel2(devguide_df_path):
     output_df_path = "output_df.pq"
 
@@ -175,18 +234,10 @@ def test_devguide_parallel2(devguide_df_path):
     )
 
 
-def test_devguide_unsupported():
-    @bodo.jit(spawn=True)
-    def df_unsupported():
-        df = pd.DataFrame({"A": [1, 2, 3]})
-        df2 = df.transpose()
-        return df2
-
-    with pytest.raises(BodoError, match=r"DataFrame.transpose\(\) not supported yet."):
-        df_unsupported()
-
-
+@pytest_mark_spawn_mode
 def test_devguide_type_error(devguide_df_path):
+    from bodo.utils.typing import BodoError
+
     @bodo.jit(spawn=True)
     def groupby_keys(devguide_df_path, extra_keys):
         df = pd.read_parquet(devguide_df_path)
@@ -203,6 +254,7 @@ def test_devguide_type_error(devguide_df_path):
         groupby_keys(devguide_df_path, False)
 
 
+@pytest_mark_spawn_mode
 def test_devguide_groupby_keys_append(devguide_df_path):
     @bodo.jit(distributed=False)
     def get_keys(df_columns, extra_keys):
@@ -222,6 +274,7 @@ def test_devguide_groupby_keys_append(devguide_df_path):
     )
 
 
+@pytest_mark_spawn_mode
 def test_devguide_list_typing_error():
     @bodo.jit(spawn=True)
     def create_list():
@@ -236,6 +289,7 @@ def test_devguide_list_typing_error():
         create_list()
 
 
+@pytest_mark_spawn_mode
 def test_devguide_tuple_typing():
     def create_list():
         out = []

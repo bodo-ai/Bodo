@@ -2,27 +2,40 @@
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """
 
+from __future__ import annotations
+
+import datetime
 import io
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyiceberg.expressions as pie
 import pytest
+from pyiceberg.expressions.literals import TimeLiteral
 
 import bodo
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
 )
-from bodo.tests.test_iceberg.test_stream_iceberg_write import _write_iceberg_table
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 pytestmark = pytest.mark.iceberg
+
+
+def _write_iceberg_table(input_df: pd.DataFrame, warehouse: str, table_id: str):
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+
+    catalog = DirCatalog("write_catalog", warehouse=warehouse)
+    table = catalog.create_table(table_id, pa.Schema.from_pandas(input_df))
+    table.append(pa.table(input_df))
 
 
 @pytest_mark_one_rank
@@ -31,35 +44,31 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
     Test that directly calls the filter pushdown functions to work around the time comparison
     issue (see test_filter_pushdown_time)
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     table_name = "filter_pushdown_time_table"
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     input_df = pd.DataFrame(
         {
             "ID": np.arange(10),
-            "time_col": [bodo.Time(i, i, precision=9) for i in range(10)],
+            "time_col": [
+                pa.scalar(datetime.time(i, i), type=pa.time64("us")) for i in range(10)
+            ],
         }
     )
+
+    table_id = f"{db_schema}.{table_name}"
+    _write_iceberg_table(input_df, warehouse_loc, table_id)
+    filter_expr = pie.NotEqualTo(
+        "time_col", TimeLiteral((10 * 60 + 10) * 60 * 1_000_000)
+    )
+
     from bodo.io.iceberg import get_iceberg_file_list_parallel
 
-    # Based on the documentation here: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
-    # Spark SQL does not support time data type, so for now, we just handle the write with Bodo itself.
-    # This also causes issues because we can't do partitioning with the bodo write, so we can't
-    # do any sort of correctness testing. Snowflake also can't write the partition spec at this time,
-    # so we can't do the workaround that way either.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
+    catalog = conn_str_to_catalog(conn)
 
-    from bodo_iceberg_connector.filter_to_java import ColumnRef, FilterExpr, Scalar
-
-    from bodo.io.iceberg import format_iceberg_conn
-
-    filter_expr = FilterExpr(
-        "!=", [ColumnRef("time_col"), Scalar(bodo.Time(10, 10, precision=9))]
-    )
-
-    get_iceberg_file_list_parallel(
-        format_iceberg_conn(conn), db_schema, table_name, filter_expr
-    )
+    get_iceberg_file_list_parallel(catalog, table_id, filter_expr)
 
 
 @pytest.mark.skip(
@@ -68,7 +77,7 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
 def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
     table_name = "filter_pushdown_time_table_2"
     input_df = pd.DataFrame(
-        {"ID": np.arange(10), "time_col": [bodo.Time(10, 10, precision=9)] * 10}
+        {"ID": np.arange(10), "time_col": [bodo.types.Time(10, 10, precision=9)] * 10}
     )
 
     db_schema, warehouse_loc = iceberg_database()
@@ -76,11 +85,11 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 
     # Based on the documentation here: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
     # Spark SQL does not support time data type, so for now, we just handle the write with Bodo itself.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
+    _write_iceberg_table(input_df, table_name, conn, db_schema)
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
-        df = df[df.time_col == bodo.Time(10, 10, precision=6)]
+        df = df[df.time_col == bodo.types.Time(10, 10, precision=6)]
         return df
 
     check_func(
@@ -102,6 +111,8 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 def test_filter_pushdown_binary(iceberg_database, iceberg_table_conn):
     """Simple test that with a filter that selects all of the data, which is stored in
     a single file"""
+    from bodo.spawn.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table"
     input_df = pd.DataFrame({"ID": np.arange(10), "bytes_col": [b"todo"] * 10})
 
@@ -144,6 +155,8 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
     More complex test with two filters that test row filtering, and file level
     filtering respectively.
     """
+    from bodo.spawn.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table_2"
     input_df = pd.DataFrame(
         {
@@ -202,6 +215,7 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
 
 def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
     """Simple test to make sure that the logged messages for iceberg filter pushdown are correct"""
+    from bodo.spawn.utils import run_rank0
 
     ten_partition_table_name = "ten_partition_table"
     many_partition_table_name = "many_partition_table"

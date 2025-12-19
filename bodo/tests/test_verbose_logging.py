@@ -244,7 +244,7 @@ def test_pq_dict_arrays(memory_leak_check):
         with set_logging_stream(logger, 1):
             test_impl(fname)
             check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
-
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             os.remove(fname)

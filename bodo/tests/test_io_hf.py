@@ -11,7 +11,7 @@ def test_read_csv_hf(datapath, memory_leak_check):
     """Test read_csv from Hugging Face"""
 
     def test_impl():
-        return pd.read_csv("hf://datasets/fka/awesome-chatgpt-prompts/prompts.csv")
+        return pd.read_csv("hf://datasets/domenicrosati/TruthfulQA/train.csv")
 
     check_func(test_impl, ())
 
@@ -22,7 +22,7 @@ def test_read_json_hf(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_json(
-            "hf://datasets/HuggingFaceH4/MATH-500/test.jsonl", lines=True
+            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl", lines=True
         )
 
     check_func(test_impl, ())

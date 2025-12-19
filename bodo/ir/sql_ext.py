@@ -4,6 +4,8 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+from __future__ import annotations
+
 import datetime
 import sys
 from collections.abc import Iterable
@@ -12,7 +14,6 @@ from typing import (
     Any,
     NamedTuple,
 )
-from urllib.parse import urlparse
 
 import llvmlite.binding as ll
 import numba
@@ -260,39 +261,6 @@ class SqlReader(Connector):
             return Distribution.OneD
 
 
-def parse_dbtype(con_str) -> tuple[str, str]:
-    """
-    Converts a constant string used for db_type to a standard representation
-    for each database.
-    """
-    parseresult = urlparse(con_str)
-    db_type = parseresult.scheme
-    con_paswd = parseresult.password
-    # urlparse skips oracle since its handle has _
-    # which is not in `scheme_chars`
-    # oracle+cx_oracle
-    if con_str.startswith("oracle+cx_oracle://"):
-        return "oracle", con_paswd
-    if db_type == "mysql+pymysql":
-        # Standardize mysql to always use "mysql"
-        return "mysql", con_paswd
-
-    # NOTE: if you're updating supported schemes here, don't forget
-    # to update the associated error message in _run_call_read_sql_table
-
-    if con_str.startswith("iceberg+glue") or parseresult.scheme in (
-        "iceberg",
-        "iceberg+file",
-        "iceberg+s3",
-        "iceberg+thrift",
-        "iceberg+http",
-        "iceberg+https",
-    ):
-        # Standardize iceberg to always use "iceberg"
-        return "iceberg", con_paswd
-    return db_type, con_paswd
-
-
 def remove_iceberg_prefix(con: str) -> str:
     import sys
 
@@ -393,73 +361,73 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
         return '\\"' + col_name + '\\"'
 
     def visit_op(self, op: bif.Op) -> str:
-        match op.op:
-            case "ALWAYS_TRUE":
-                # Special operator for True
-                return "(TRUE)"
-            case "ALWAYS_FALSE":
-                # Special operators for False.
-                return "(FALSE)"
-            case "ALWAYS_NULL":
-                # Special operators for NULL.
-                return "(NULL)"
+        if op.op == "ALWAYS_TRUE":
+            # Special operator for True
+            return "(TRUE)"
+        elif op.op == "ALWAYS_FALSE":
+            # Special operators for False.
+            return "(FALSE)"
+        elif op.op == "ALWAYS_NULL":
+            # Special operators for NULL.
+            return "(NULL)"
 
-            case "AND":
-                return " AND ".join(self.visit(c) for c in op.args)
-            case "OR":
-                return " OR ".join(self.visit(c) for c in op.args)
-            case "NOT":
-                return f"(NOT {self.visit(op.args[0])})"
+        elif op.op == "AND":
+            return " AND ".join(self.visit(c) for c in op.args)
+        elif op.op == "OR":
+            return " OR ".join(self.visit(c) for c in op.args)
+        elif op.op == "NOT":
+            return f"(NOT {self.visit(op.args[0])})"
 
-            case "IS_NULL":
-                return f"({self.visit(op.args[0])} IS NULL)"
-            case "IS_NOT_NULL":
-                return f"({self.visit(op.args[0])} IS NOT NULL)"
+        elif op.op == "IS_NULL":
+            return f"({self.visit(op.args[0])} IS NULL)"
+        elif op.op == "IS_NOT_NULL":
+            return f"({self.visit(op.args[0])} IS NOT NULL)"
 
-            case "case_insensitive_equality":
-                # Equality is just =, not a function
-                return f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
-            case (
-                "case_insensitive_startswith"
-                | "case_insensitive_endswith"
-                | "case_insensitive_contains"
-            ):
-                op_name = op.op[len("case_insensitive_") :]
-                return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
-            case "like" | "ilike":
-                # You can't pass the empty string to escape. As a result we
-                # must confirm its not the empty string
-                escape_arg = op.args[2]
-                assert isinstance(escape_arg, bif.Scalar)
-                has_escape = True
-                escape_typ = self.typemap[escape_arg.val.name]
-                if is_overload_constant_str(escape_typ):
-                    escape_val = get_overload_const_str(escape_typ)
-                    has_escape = escape_val != ""
-                escape_section = (
-                    f"escape {self.visit(escape_arg)}" if has_escape else ""
+        elif op.op == "case_insensitive_equality":
+            # Equality is just =, not a function
+            return (
+                f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
+            )
+        elif op.op in (
+            "case_insensitive_startswith",
+            "case_insensitive_endswith",
+            "case_insensitive_contains",
+        ):
+            op_name = op.op[len("case_insensitive_") :]
+            return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
+        elif op.op in ("like", "ilike"):
+            # You can't pass the empty string to escape. As a result we
+            # must confirm its not the empty string
+            escape_arg = op.args[2]
+            assert isinstance(escape_arg, bif.Scalar)
+            has_escape = True
+            escape_typ = self.typemap[escape_arg.val.name]
+            if is_overload_constant_str(escape_typ):
+                escape_val = get_overload_const_str(escape_typ)
+                has_escape = escape_val != ""
+            escape_section = f"escape {self.visit(escape_arg)}" if has_escape else ""
+
+            return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])} {escape_section})"
+
+        # Infix Operators
+        elif op.op in ("=", "==", "!=", "<>", "<", "<=", ">", ">=", "IN"):
+            return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])})"
+
+        # Handles all functions in general, including previous special cases like
+        # REGEXP_LIKE
+        else:
+            func = op.op
+            if func not in supported_funcs_map:
+                raise NotImplementedError(
+                    f"Snowflake Filter pushdown not implemented for {func} function"
                 )
-
-                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])} {escape_section})"
-
-            # Infix Operators
-            case "=" | "==" | "!=" | "<>" | "<" | "<=" | ">" | ">=" | "IN":
-                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])})"
-
-            # Handles all functions in general, including previous special cases like
-            # REGEXP_LIKE
-            case func:
-                if func not in supported_funcs_map:
-                    raise NotImplementedError(
-                        f"Snowflake Filter pushdown not implemented for {func} function"
-                    )
-                sql_func = supported_funcs_map[func]
-                return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
+            sql_func = supported_funcs_map[func]
+            return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
 
 
 # Class for a the RTJF min/max/unique stored values
 this_module = sys.modules[__name__]
-install_py_obj_class(
+RtjfValueType, _ = install_py_obj_class(
     types_name="rtjf_value_type",
     python_type=None,
     module=this_module,
@@ -614,7 +582,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
     42 -> '42'
     "foo bar" -> "'foo bar'"
     datetime.date(2024, 3, 14) -> "DATE '2024-03-14'"
-    bodo.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
+    bodo.types.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
     pd.Timestamp("2024-07-04 12:30:01.025601") -> "TIMESTAMP_FROM_PARTS(2024, 7, 4, 12, 30, 1, 25601000)"
     """
     if isinstance(pyobj, str):
@@ -630,7 +598,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
         return f"TIMESTAMP{suffix}_FROM_PARTS({pyobj.year}, {pyobj.month}, {pyobj.day}, {pyobj.hour}, {pyobj.minute}, {pyobj.second}, {pyobj.value % 1_000_000_000})"
     elif isinstance(pyobj, datetime.date):
         return f"DATE '{pyobj.year:04}-{pyobj.month:02}-{pyobj.day:02}'"
-    elif isinstance(pyobj, bodo.Time):
+    elif isinstance(pyobj, bodo.types.Time):
         return f"TIME_FROM_PARTS(0, 0, 0, {pyobj.value})"
     else:
         return str(pyobj)
@@ -672,7 +640,9 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i)
                     )
                     # Use object mode to convert to a string representation of the containment check
-                    with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
+                    with bodo.ir.object_mode.no_warning_objmode(
+                        unique_as_strings="list_str_type"
+                    ):
                         unique_as_strings = []
                         for elem in unique_values:
                             unique_as_strings.append(
@@ -695,7 +665,7 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i), False, precisions[i]
                     )
                     # Use object mode to convert to a string representation of the bounds check
-                    with bodo.no_warning_objmode(
+                    with bodo.ir.object_mode.no_warning_objmode(
                         min_result="unicode_type", max_result="unicode_type"
                     ):
                         min_result = max_result = ""
@@ -743,7 +713,7 @@ def overload_gen_runtime_join_filter_interval_cond(
             max_val = get_runtime_join_filter_min_max(
                 state_var, build_col, False, precisions[i]
             )
-            with bodo.no_warning_objmode(result="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(result="unicode_type"):
                 result = ""
                 if op in (">", ">=") and min_val is not None:
                     result = f"(${probe_col + 1} {op} {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
@@ -812,10 +782,10 @@ def get_rtjf_cols_extra_info(column_types, desired_indices):
     precisions = []
     time_zones = []
     for col_idx in desired_indices:
-        if isinstance(column_types[col_idx], bodo.TimeArrayType):
+        if isinstance(column_types[col_idx], bodo.types.TimeArrayType):
             precisions.append(column_types[col_idx].precision)
             time_zones.append(None)
-        elif isinstance(column_types[col_idx], bodo.DatetimeArrayType):
+        elif isinstance(column_types[col_idx], bodo.types.DatetimeArrayType):
             precisions.append(-1)
             time_zones.append(column_types[col_idx].tz)
         else:
@@ -1227,7 +1197,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
-    elif isinstance(filter_type, bodo.PandasTimestampType):
+    elif isinstance(filter_type, bodo.types.PandasTimestampType):
         if filter_type.tz is None:
             tz_str = "TIMESTAMP_NTZ"
         else:
@@ -1249,14 +1219,14 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'::{tz_str}"  # pragma: no cover
 
         return impl
-    elif filter_type == bodo.datetime_date_type:
+    elif filter_type == bodo.types.datetime_date_type:
         # datetime.date needs to be converted to a date literal
         # Just return the string wrapped in quotes.
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
-    elif filter_type == bodo.datetime64ns:
+    elif filter_type == bodo.types.datetime64ns:
         # datetime64 needs to be a Timestamp literal
         return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
             pd.Timestamp(filter_value)
@@ -1276,12 +1246,12 @@ def _get_snowflake_sql_literal(filter_value):
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
     """
-    scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
+    scalar_isinstance = (types.Integer, types.Float, bodo.types.PandasTimestampType)
     scalar_equals = (
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         types.unicode_type,
         types.bool_,
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
         types.none,
     )
     filter_type = types.unliteral(filter_value)
@@ -1291,17 +1261,17 @@ def _get_snowflake_sql_literal(filter_value):
             (
                 types.List,
                 types.Array,
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or filter_type
         in (
-            bodo.string_array_type,
-            bodo.dict_str_arr_type,
-            bodo.boolean_array_type,
-            bodo.datetime_date_array_type,
+            bodo.types.string_array_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.boolean_array_type,
+            bodo.types.datetime_date_array_type,
         )
     ) and (
         isinstance(filter_type.dtype, scalar_isinstance)
@@ -1380,7 +1350,7 @@ compiled_funcs = []
 
 @numba.njit
 def sqlalchemy_check():  # pragma: no cover
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         sqlalchemy_check_()
 
 
@@ -1399,7 +1369,7 @@ def sqlalchemy_check_():  # pragma: no cover
 @numba.njit
 def pymysql_check():
     """MySQL Check that user has pymysql installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         pymysql_check_()
 
 
@@ -1419,7 +1389,7 @@ def pymysql_check_():  # pragma: no cover
 @numba.njit
 def cx_oracle_check():
     """Oracle Check that user has cx_oracle installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         cx_oracle_check_()
 
 
@@ -1439,7 +1409,7 @@ def cx_oracle_check_():  # pragma: no cover
 @numba.njit
 def psycopg2_check():  # pragma: no cover
     """PostgreSQL Check that user has psycopg2 installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         psycopg2_check_()
 
 
@@ -1815,7 +1785,9 @@ def _gen_sql_reader_py(
             if limit is not None:
                 func_text += f"  nb_row = {limit}\n"
             else:
-                func_text += '  with bodo.no_warning_objmode(nb_row="int64"):\n'
+                func_text += (
+                    '  with bodo.ir.object_mode.no_warning_objmode(nb_row="int64"):\n'
+                )
                 func_text += f"     if rank == {DEFAULT_ROOT}:\n"
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
@@ -1823,7 +1795,7 @@ def _gen_sql_reader_py(
                 func_text += "     else:\n"
                 func_text += "         nb_row = 0\n"
                 func_text += "  nb_row = bcast_scalar(nb_row)\n"
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
             if db_type == "oracle":
@@ -1836,7 +1808,7 @@ def _gen_sql_reader_py(
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             )
         else:
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
             func_text += (
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
@@ -1896,9 +1868,9 @@ def _gen_sql_reader_py(
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,
                 "psycopg2_check": psycopg2_check,
-                "df_typeref": bodo.DataFrameType(
+                "df_typeref": bodo.types.DataFrameType(
                     tuple(used_col_types),
-                    bodo.RangeIndexType(None),
+                    bodo.types.RangeIndexType(None),
                     tuple(used_col_names),
                 ),
                 "Table": Table,
@@ -1965,7 +1937,7 @@ def snowflake_reader_init_py_entry(
         "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
     )
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [

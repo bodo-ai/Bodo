@@ -83,7 +83,6 @@ static int64_t dist_get_start(int64_t total, int num_pes,
 static int64_t dist_get_end(int64_t total, int num_pes, int node_id) __UNUSED__;
 static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                      int node_id) __UNUSED__;
-static double dist_get_time() __UNUSED__;
 static double get_time() __UNUSED__;
 static int barrier() __UNUSED__;
 
@@ -132,11 +131,6 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
 static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
                     int64_t comm_ptr) __UNUSED__;
 
-static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
-                        int* recv_counts, int* send_disp, int* recv_disp,
-                        int typ_enum) __UNUSED__;
-static void c_alltoall(void* send_data, void* recv_data, int count,
-                       int typ_enum) __UNUSED__;
 static void c_comm_create(const int* comm_ranks, int n,
                           MPI_Comm* comm) __UNUSED__;
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
@@ -290,14 +284,6 @@ static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
     } else {
         return res + (index - crit_index) / blk_size;
     }
-}
-
-static double dist_get_time() {
-    double wtime;
-    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
-              "dist_get_time: MPI error on MPI_Barrier:");
-    wtime = MPI_Wtime();
-    return wtime;
 }
 
 static double get_time() {
@@ -966,26 +952,6 @@ static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
               "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
 }
 
-static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
-                        int* recv_counts, int* send_disp, int* recv_disp,
-                        int typ_enum) {
-    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
-              "_distributed.h::c_alltoallv: MPI error on MPI_Errhandler_set:");
-    CHECK_MPI(
-        MPI_Alltoallv(send_data, send_counts, send_disp, mpi_typ, recv_data,
-                      recv_counts, recv_disp, mpi_typ, MPI_COMM_WORLD),
-        "_distributed.h::c_alltoallv: MPI error on MPI_Alltoallv:");
-}
-
-static void c_alltoall(void* send_data, void* recv_data, int count,
-                       int typ_enum) {
-    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    CHECK_MPI(MPI_Alltoall(send_data, count, mpi_typ, recv_data, count, mpi_typ,
-                           MPI_COMM_WORLD),
-              "_distributed.h::c_alltoall: MPI error on MPI_Alltoall:");
-}
-
 static int finalize() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
@@ -1436,8 +1402,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
     }
 }
 
-template <class T>
-static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
+template <class T1, class T2>
+static void calc_disp(std::vector<T1>& disps, std::vector<T2> const& counts) {
     size_t n = counts.size();
     disps[0] = 0;
     for (size_t i = 1; i < n; i++) {

@@ -5,6 +5,11 @@
 
 #include "_theta_sketches.h"
 
+// Use libzstd to decompress a blob string.
+// It is in this file for now because we don't have enough zstd functionality
+// to give it its own file.
+std::string decode_zstd(std::string blob);
+
 /**
  * Class used to describe one of the blocks of metadata in the footer of the
  * Puffin file corresponding to one of the blobs.

@@ -9,30 +9,19 @@ from __future__ import annotations
 from numba.extending import overload
 
 import bodo
-from bodo.io.iceberg.common import format_iceberg_conn
-from bodo.mpi4py import MPI
-from bodo.utils.utils import BodoError
+from bodo.spawn.utils import run_rank0
 
 
-def prefetch_sf_tables(
-    conn_str: str, table_paths: list[str], verbose_level: int
-) -> None:
+@run_rank0
+def prefetch_sf_tables(conn_str: str, table_paths: list[str]):
     "Helper function for the Python contents of prefetch_sf_tables_njit."
-    import bodo_iceberg_connector as bic
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.io.iceberg.catalog.snowflake import SnowflakeCatalog
 
-    comm = MPI.COMM_WORLD
-    exc = None
-    conn_str = format_iceberg_conn(conn_str)
-    if bodo.get_rank() == 0:
-        try:
-            bic.prefetch_sf_tables(conn_str, table_paths, verbose_level)
-        except bic.IcebergError as e:
-            exc = BodoError(
-                f"Failed to prefetch Snowflake-managed Iceberg table paths: {e.message}"
-            )
-    exc = comm.bcast(exc)
-    if exc is not None:
-        raise exc
+    sf_catalog = conn_str_to_catalog(conn_str)
+    assert isinstance(sf_catalog, SnowflakeCatalog)
+
+    sf_catalog.prefetch_metadata_paths(table_paths)
 
 
 def prefetch_sf_tables_njit(
@@ -51,9 +40,9 @@ def prefetch_sf_tables_njit(
 
 
 @overload(prefetch_sf_tables_njit)
-def overload_prefetch_sf_tables_njit(conn_str, table_paths, verbose_level):
-    def impl(conn_str, table_paths, verbose_level):
-        with bodo.no_warning_objmode():
-            prefetch_sf_tables(conn_str, table_paths, verbose_level)
+def overload_prefetch_sf_tables_njit(conn_str, table_paths):
+    def impl(conn_str, table_paths):
+        with bodo.ir.object_mode.no_warning_objmode():
+            prefetch_sf_tables(conn_str, table_paths)
 
     return impl

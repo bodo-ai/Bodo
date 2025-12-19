@@ -1,8 +1,12 @@
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
+
+import bodo.decorators  # isort:skip # noqa
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     get_op_pool_bytes_allocated,
@@ -15,6 +19,14 @@ from bodo.libs.streaming.groupby import (
 from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
 from bodo.utils.typing import ColNamesMetaType, MetaType
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
+    ),
+    pytest.mark.slow,
+]
+
 
 ##################### COMMON HELPERS #####################
 

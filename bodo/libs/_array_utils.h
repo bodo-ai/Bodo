@@ -59,6 +59,42 @@ DTYPE_TO_C_TYPE(__int128_t, Bodo_CTypes::INT128)
 DTYPE_TO_C_TYPE(std::complex<double>, Bodo_CTypes::COMPLEX128)
 DTYPE_TO_C_TYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
 
+template <typename T>
+struct _type_to_dtype {
+    static constexpr Bodo_CTypes::CTypeEnum dtype =
+        Bodo_CTypes::CTypeEnum::INT8;
+};
+
+#ifndef C_TYPE_TO_DTYPE
+#define C_TYPE_TO_DTYPE(Id, Type)                             \
+    template <>                                               \
+    struct _type_to_dtype<Id> {                               \
+        static constexpr Bodo_CTypes::CTypeEnum dtype = Type; \
+    };
+#endif
+
+C_TYPE_TO_DTYPE(int8_t, Bodo_CTypes::INT8)
+C_TYPE_TO_DTYPE(int16_t, Bodo_CTypes::INT16)
+C_TYPE_TO_DTYPE(int32_t, Bodo_CTypes::INT32)
+C_TYPE_TO_DTYPE(int64_t, Bodo_CTypes::INT64)
+C_TYPE_TO_DTYPE(uint8_t, Bodo_CTypes::UINT8)
+C_TYPE_TO_DTYPE(uint16_t, Bodo_CTypes::UINT16)
+C_TYPE_TO_DTYPE(uint32_t, Bodo_CTypes::UINT32)
+C_TYPE_TO_DTYPE(uint64_t, Bodo_CTypes::UINT64)
+C_TYPE_TO_DTYPE(float, Bodo_CTypes::FLOAT32)
+C_TYPE_TO_DTYPE(double, Bodo_CTypes::FLOAT64)
+C_TYPE_TO_DTYPE(bool, Bodo_CTypes::_BOOL)
+
+C_TYPE_TO_DTYPE(char*, Bodo_CTypes::STRING)
+C_TYPE_TO_DTYPE(__int128_t, Bodo_CTypes::INT128)
+C_TYPE_TO_DTYPE(std::complex<double>, Bodo_CTypes::COMPLEX128)
+C_TYPE_TO_DTYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
+
+template <typename T>
+inline Bodo_CTypes::CTypeEnum typeToDtype(T val) {
+    return _type_to_dtype<T>::dtype;
+}
+
 // convert a C type to the 64-bit version using a trait class, similar to:
 // https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
 template <typename T>
@@ -926,7 +962,8 @@ constexpr inline bool isnan_alltype(T const& val) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_int(const char* ptr1, const char* ptr2,
+                          bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     if (*ptr1_T > *ptr2_T) {
@@ -947,7 +984,7 @@ int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  * used)
  * @return 1 if *ptr1 < *ptr2
  */
-inline int NumericComparison_decimal(char* ptr1, char* ptr2,
+inline int NumericComparison_decimal(const char* ptr1, const char* ptr2,
                                      bool const& na_position) {
     __int128_t* ptr1_dec = (__int128_t*)ptr1;
     __int128_t* ptr2_dec = (__int128_t*)ptr2;
@@ -972,7 +1009,8 @@ inline int NumericComparison_decimal(char* ptr1, char* ptr2,
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_float(const char* ptr1, const char* ptr2,
+                            bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -1011,7 +1049,8 @@ int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_date(const char* ptr1, const char* ptr2,
+                           bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -1043,6 +1082,50 @@ int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
 }
 
 /**
+ * Gets the function used to compute the result for NumericComparison.
+ *
+ * @param dtype: the type to get the function for
+ */
+inline std::function<int(const char*, const char*, bool const&)>
+getNumericComparisonFunc(Bodo_CTypes::CTypeEnum const& dtype) {
+    if (dtype == Bodo_CTypes::_BOOL)
+        return NumericComparison_int<bool>;
+    if (dtype == Bodo_CTypes::INT8)
+        return NumericComparison_int<int8_t>;
+    if (dtype == Bodo_CTypes::UINT8)
+        return NumericComparison_int<uint8_t>;
+    if (dtype == Bodo_CTypes::INT16)
+        return NumericComparison_int<int16_t>;
+    if (dtype == Bodo_CTypes::UINT16)
+        return NumericComparison_int<uint16_t>;
+    if (dtype == Bodo_CTypes::INT32 || dtype == Bodo_CTypes::DATE)
+        return NumericComparison_int<int32_t>;
+    if (dtype == Bodo_CTypes::UINT32)
+        return NumericComparison_int<uint32_t>;
+    // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
+    // TODO: [BE-4106] Split Time into Time32 and Time64
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::TIME)
+        return NumericComparison_int<int64_t>;
+    if (dtype == Bodo_CTypes::UINT64)
+        return NumericComparison_int<uint64_t>;
+    // For DATETIME/TIMESTAMPTZ/TIMEDELTA the NA is done via the
+    // std::numeric_limits<int64_t>::min()
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
+        dtype == Bodo_CTypes::TIMESTAMPTZ)
+        return NumericComparison_date<int64_t>;
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return NumericComparison_float<float>;
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return NumericComparison_float<double>;
+    if (dtype == Bodo_CTypes::DECIMAL)
+        return NumericComparison_decimal;
+    throw std::runtime_error(
+        "_array_utils.h::getNumericComparisonFunc: Invalid dtype put on input "
+        "to "
+        "getNumericComparisonFunc.");
+}
+
+/**
  * The comparison function for integer/floating point
  * If na_position = True then the NaN are considered larger than any other.
  *
@@ -1051,42 +1134,10 @@ int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
  * @param na_position: true for NaN being last, false for NaN being first
  * @return 1 if *ptr1 < *ptr2, 0 if equal and -1 if >
  */
-inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
-                             char* ptr2, bool const& na_position) {
-    if (dtype == Bodo_CTypes::_BOOL)
-        return NumericComparison_int<bool>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT8)
-        return NumericComparison_int<int8_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT8)
-        return NumericComparison_int<uint8_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT16)
-        return NumericComparison_int<int16_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT16)
-        return NumericComparison_int<uint16_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT32 || dtype == Bodo_CTypes::DATE)
-        return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT32)
-        return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
-    // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
-    // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::TIME)
-        return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::UINT64)
-        return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
-    // For DATETIME/TIMESTAMPTZ/TIMEDELTA the NA is done via the
-    // std::numeric_limits<int64_t>::min()
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
-        dtype == Bodo_CTypes::TIMESTAMPTZ)
-        return NumericComparison_date<int64_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::FLOAT32)
-        return NumericComparison_float<float>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::FLOAT64)
-        return NumericComparison_float<double>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::DECIMAL)
-        return NumericComparison_decimal(ptr1, ptr2, na_position);
-    throw std::runtime_error(
-        "_array_utils.h::NumericComparison: Invalid dtype put on input to "
-        "NumericComparison.");
+inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype,
+                             const char* ptr1, const char* ptr2,
+                             bool const& na_position) {
+    return getNumericComparisonFunc(dtype)(ptr1, ptr2, na_position);
 }
 
 /**
@@ -1821,3 +1872,8 @@ inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo(reinterpret_cast<uint8_t*>(arr.data1<ArrType>()), idx,
              static_cast<bool>(val));
 }
+
+/**
+ * Return string representation of value in position `idx` of this array.
+ */
+std::string array_val_to_str(std::shared_ptr<array_info> arr, size_t idx);

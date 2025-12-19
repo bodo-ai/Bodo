@@ -4,7 +4,6 @@ import datetime
 import operator
 from collections import namedtuple
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -28,9 +27,13 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.libs import hdatetime_ext
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
@@ -43,13 +46,6 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_str,
-)
-
-ll.add_symbol(
-    "box_datetime_timedelta_array", hdatetime_ext.box_datetime_timedelta_array
-)
-ll.add_symbol(
-    "unbox_datetime_timedelta_array", hdatetime_ext.unbox_datetime_timedelta_array
 )
 
 
@@ -150,6 +146,7 @@ def lower_constant_pd_timedelta(context, builder, ty, pyval):
 
 # 6. Implement the constructor
 @overload(pd.Timedelta, no_unliteral=True)
+@overload(bd.Timedelta, no_unliteral=True)
 def pd_timedelta(
     value=_no_input,
     unit="ns",
@@ -186,7 +183,7 @@ def pd_timedelta(
         return impl_timedelta_kw
 
     # parse string input
-    if value == bodo.string_type or is_overload_constant_str(value):
+    if value == bodo.types.string_type or is_overload_constant_str(value):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         def impl_str(
@@ -200,7 +197,7 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-            with bodo.objmode(res="pd_timedelta_type"):
+            with numba.objmode(res="pd_timedelta_type"):
                 res = pd.Timedelta(value)
             return res
 
@@ -602,13 +599,13 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
         return impl
 
     # datetime_timedelta_array - timedelta
-    if lhs == datetime_timedelta_array_type and rhs == datetime_timedelta_type:
+    if lhs == timedelta_array_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             in_arr = lhs
             numba.parfors.parfor.init_prange()
             n = len(in_arr)
-            A = alloc_datetime_timedelta_array(n)
+            A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = in_arr[i] - rhs
             return A
@@ -735,13 +732,13 @@ def pd_create_cmp_op_overload(op):
             return impl
 
         # Timedelta/td64
-        if lhs == pd_timedelta_type and rhs == bodo.timedelta64ns:
+        if lhs == pd_timedelta_type and rhs == bodo.types.timedelta64ns:
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(lhs.value), rhs
             )  # pragma: no cover
 
         # td64/Timedelta
-        if lhs == bodo.timedelta64ns and rhs == pd_timedelta_type:
+        if lhs == bodo.types.timedelta64ns and rhs == pd_timedelta_type:
             return lambda lhs, rhs: op(
                 lhs, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(rhs.value)
             )  # pragma: no cover
@@ -1136,12 +1133,23 @@ def timedelta_to_bool(timedelta):
     return impl
 
 
+@overload(bool, no_unliteral=True)
+def pd_timedelta_to_bool(timedelta):
+    if timedelta != pd_timedelta_type:  # pragma: no cover
+        return
+
+    def impl(timedelta):  # pragma: no cover
+        return timedelta.value != 0
+
+    return impl
+
+
 ##################### Array of datetime.timedelta objects ##########################
 
 
-class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
+class TimeDeltaArrayType(types.ArrayCompatible):
     def __init__(self):
-        super().__init__(name="DatetimeTimeDeltaArrayType()")
+        super().__init__(name="TimeDeltaArrayType()")
 
     @property
     def as_array(self):
@@ -1149,243 +1157,124 @@ class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        return datetime_timedelta_type
+        return pd_timedelta_type
 
     def copy(self):
-        return DatetimeTimeDeltaArrayType()
+        return TimeDeltaArrayType()
 
 
-datetime_timedelta_array_type = DatetimeTimeDeltaArrayType()
-types.datetime_timedelta_array_type = datetime_timedelta_array_type
+timedelta_array_type = TimeDeltaArrayType()
+types.timedelta_array_type = timedelta_array_type
 
-days_data_type = types.Array(types.int64, 1, "C")
-seconds_data_type = types.Array(types.int64, 1, "C")
-microseconds_data_type = types.Array(types.int64, 1, "C")
+data_array_type = types.Array(types.NPTimedelta("ns"), 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
 
 # datetime.timedelta has three arrays of integers to store data
-@register_model(DatetimeTimeDeltaArrayType)
+@register_model(TimeDeltaArrayType)
 class DatetimeTimeDeltaArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("days_data", days_data_type),
-            ("seconds_data", seconds_data_type),
-            ("microseconds_data", microseconds_data_type),
+            ("data", data_array_type),
             ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "days_data", "_days_data")
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "seconds_data", "_seconds_data")
-make_attribute_wrapper(
-    DatetimeTimeDeltaArrayType, "microseconds_data", "_microseconds_data"
-)
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "null_bitmap", "_null_bitmap")
+make_attribute_wrapper(TimeDeltaArrayType, "data", "_data")
+make_attribute_wrapper(TimeDeltaArrayType, "null_bitmap", "_null_bitmap")
 
 
-@overload_method(DatetimeTimeDeltaArrayType, "copy", no_unliteral=True)
+@overload_method(TimeDeltaArrayType, "copy", no_unliteral=True)
 def overload_datetime_timedelta_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-        A._days_data.copy(),
-        A._seconds_data.copy(),
-        A._microseconds_data.copy(),
-        A._null_bitmap.copy(),
+        A._data.copy(), A._null_bitmap.copy()
     )  # pragma: no cover
 
 
-@unbox(DatetimeTimeDeltaArrayType)
-def unbox_datetime_timedelta_array(typ, val, c):
-    n = bodo.utils.utils.object_length(c, val)
-    arr_type = types.Array(types.intp, 1, "C")
-    days_data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_type, [n])
-    seconds_data_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, arr_type, [n]
-    )
-    microseconds_data_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, arr_type, [n]
-    )
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
+@typeof_impl.register(pd.arrays.TimedeltaArray)
+def typeof_pd_timedelta_array(val, c):
+    if val.unit != "ns":
+        raise BodoError("Timedelta array data requires 'ns' unit")
 
-    # function signature of unbox_datetime_timedelta_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="unbox_datetime_timedelta_array"
-    )
-    c.builder.call(
-        fn,
-        [
-            val,
-            n,
-            days_data_arr.data,
-            seconds_data_arr.data,
-            microseconds_data_arr.data,
-            bitmap_arr.data,
-        ],
-    )
-    out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    out_dt_date_arr.days_data = days_data_arr._getvalue()
-    out_dt_date_arr.seconds_data = seconds_data_arr._getvalue()
-    out_dt_date_arr.microseconds_data = microseconds_data_arr._getvalue()
-    out_dt_date_arr.null_bitmap = bitmap_arr._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(out_dt_date_arr._getvalue(), is_error=is_error)
+    return timedelta_array_type
 
 
-@box(DatetimeTimeDeltaArrayType)
-def box_datetime_timedelta_array(typ, val, c):
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+@unbox(TimeDeltaArrayType)
+def unbox_pd_timedelta_array(typ, val, c):
+    """
+    Unbox a timedelta array using Arrow.
+    """
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
-    days_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.days_data
-    )
-    seconds_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.seconds_data
-    ).data
-    microseconds_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.microseconds_data
-    ).data
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
 
-    n = c.builder.extract_value(days_data_arr.shape, 0)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_datetime_timedelta_array"
-    )
-    obj_arr = c.builder.call(
-        fn_get,
-        [
-            n,
-            days_data_arr.data,
-            seconds_data_arr,
-            microseconds_data_arr,
-            bitmap_arr_data,
-        ],
-    )
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+@box(TimeDeltaArrayType)
+def box_pd_timedelta_array(typ, val, c):
+    """
+    Box a timedelta into an Arrow array.
+    """
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic
-def init_datetime_timedelta_array(
-    typingctx, days_data, seconds_data, microseconds_data, nulls=None
-):
-    """Create a DatetimeTimeDeltaArrayType with provided data values."""
-    assert days_data == types.Array(types.int64, 1, "C")
-    assert seconds_data == types.Array(types.int64, 1, "C")
-    assert microseconds_data == types.Array(types.int64, 1, "C")
-    assert nulls == types.Array(types.uint8, 1, "C")
+def init_datetime_timedelta_array(typingctx, data, nulls):
+    """Create a TimeDeltaArrayType with provided data values."""
+    assert data == data_array_type
+    assert nulls == nulls_type
 
     def codegen(context, builder, signature, args):
-        (days_data_val, seconds_data_val, microseconds_data_val, bitmap_val) = args
+        (data_val, bitmap_val) = args
         # create arr struct and store values
         dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(
             context, builder
         )
-        dt_date_arr.days_data = days_data_val
-        dt_date_arr.seconds_data = seconds_data_val
-        dt_date_arr.microseconds_data = microseconds_data_val
+        dt_date_arr.data = data_val
         dt_date_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[0], days_data_val)
-        context.nrt.incref(builder, signature.args[1], seconds_data_val)
-        context.nrt.incref(builder, signature.args[2], microseconds_data_val)
-        context.nrt.incref(builder, signature.args[3], bitmap_val)
-
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], bitmap_val)
         return dt_date_arr._getvalue()
 
-    sig = datetime_timedelta_array_type(
-        days_data, seconds_data, microseconds_data, nulls
-    )
+    sig = timedelta_array_type(data, nulls)
     return sig, codegen
 
 
-@lower_constant(DatetimeTimeDeltaArrayType)
+@lower_constant(TimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
     n = len(pyval)
-    days_data_arr = np.empty(n, np.int64)
-    seconds_data_arr = np.empty(n, np.int64)
-    microseconds_data_arr = np.empty(n, np.int64)
-
+    data_arr = np.empty(n, np.dtype("timedelta64[ns]"))
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
 
     for i, s in enumerate(pyval):
         is_na = pd.isna(s)
         bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
         if not is_na:
-            days_data_arr[i] = s.days
-            seconds_data_arr[i] = s.seconds
-            microseconds_data_arr[i] = s.microseconds
+            data_arr[i] = s
 
-    days_data_const_arr = context.get_constant_generic(
-        builder, days_data_type, days_data_arr
-    )
-    seconds_data_const_arr = context.get_constant_generic(
-        builder, seconds_data_type, seconds_data_arr
-    )
-    microseconds_data_const_arr = context.get_constant_generic(
-        builder, microseconds_data_type, microseconds_data_arr
-    )
+    data_const_arr = context.get_constant_generic(builder, data_array_type, data_arr)
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
 
     return lir.Constant.literal_struct(
         [
-            days_data_const_arr,
-            seconds_data_const_arr,
-            microseconds_data_const_arr,
+            data_const_arr,
             nulls_const_arr,
         ]
     )
 
 
 @numba.njit(no_cpython_wrapper=True)
-def alloc_datetime_timedelta_array(n):  # pragma: no cover
-    days_data_arr = np.empty(n, dtype=np.int64)
-    seconds_data_arr = np.empty(n, dtype=np.int64)
-    microseconds_data_arr = np.empty(n, dtype=np.int64)
+def alloc_timedelta_array(n):  # pragma: no cover
+    data_arr = np.empty(n, dtype=bodo.types.timedelta64ns)
     # XXX: set all bits to not null since datetime.timedelta array operations do not support
     # NA yet. TODO: use 'empty' when all operations support NA
     # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     nulls = np.full((n + 7) >> 3, 255, np.uint8)
-    return init_datetime_timedelta_array(
-        days_data_arr, seconds_data_arr, microseconds_data_arr, nulls
-    )
+    return init_datetime_timedelta_array(data_arr, nulls)
 
 
-def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_datetime_timedelta_array() passed to Numba's array
+def alloc_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for alloc_timedelta_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
@@ -1393,12 +1282,12 @@ def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws)
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_datetime_timedelta_array = alloc_datetime_timedelta_array_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_timedelta_array = alloc_timedelta_array_equiv
 
 
 @overload(operator.getitem, no_unliteral=True)
 def dt_timedelta_arr_getitem(A, ind):
-    if A != datetime_timedelta_array_type:
+    if A != timedelta_array_type:
         return
 
     if isinstance(ind, types.Integer):
@@ -1407,11 +1296,7 @@ def dt_timedelta_arr_getitem(A, ind):
             # TODO: Eventually support handle case where value is marked as
             # NA/None. But for now we will mark this as a github issue and fix
             # implementation later.
-            return datetime.timedelta(
-                days=A._days_data[ind],
-                seconds=A._seconds_data[ind],
-                microseconds=A._microseconds_data[ind],
-            )
+            return init_pd_timedelta(A._data[ind])
 
         return impl_int
 
@@ -1423,14 +1308,10 @@ def dt_timedelta_arr_getitem(A, ind):
             # Just replaces calls for new data with all 3 arrays
             ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
-            new_days_data = A._days_data[ind_t]
-            new_seconds_data = A._seconds_data[ind_t]
-            new_microseconds_data = A._microseconds_data[ind_t]
-            n = len(new_days_data)
+            new_data = A._data[ind_t]
+            n = len(new_data)
             new_mask = get_new_null_mask_bool_index(old_mask, ind_t, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl_bool
 
@@ -1442,14 +1323,10 @@ def dt_timedelta_arr_getitem(A, ind):
             # Just replaces calls for new data with all 3 arrays
             ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
-            new_days_data = A._days_data[ind_t]
-            new_seconds_data = A._seconds_data[ind_t]
-            new_microseconds_data = A._microseconds_data[ind_t]
-            n = len(new_days_data)
+            new_data = A._data[ind_t]
+            n = len(new_data)
             new_mask = get_new_null_mask_int_index(old_mask, ind_t, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl
 
@@ -1459,15 +1336,11 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl_slice(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_slice_index.
             # Just replaces calls for new data with all 3 arrays
-            n = len(A._days_data)
+            n = len(A._data)
             old_mask = A._null_bitmap
-            new_days_data = np.ascontiguousarray(A._days_data[ind])
-            new_seconds_data = np.ascontiguousarray(A._seconds_data[ind])
-            new_microseconds_data = np.ascontiguousarray(A._microseconds_data[ind])
+            new_data = np.ascontiguousarray(A._data[ind])
             new_mask = get_new_null_mask_slice_index(old_mask, ind, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl_slice
 
@@ -1480,7 +1353,7 @@ def dt_timedelta_arr_getitem(A, ind):
 
 @overload(operator.setitem, no_unliteral=True)
 def dt_timedelta_arr_setitem(A, ind, val):
-    if A != datetime_timedelta_array_type:
+    if A != timedelta_array_type:
         return
 
     if val == types.none or isinstance(val, types.optional):  # pragma: no cover
@@ -1494,20 +1367,36 @@ def dt_timedelta_arr_setitem(A, ind, val):
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl(A, ind, val):  # pragma: no cover
-                A._days_data[ind] = val._days
-                A._seconds_data[ind] = val._seconds
-                A._microseconds_data[ind] = val._microseconds
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
+                A._data[ind] = td64
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind, 1)
 
             # TODO: Confirm the coverage and if its missing add it to the test cases
             return impl
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl(A, ind, val):  # pragma: no cover
+                td64_val = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                    val.value
+                )
+                A._data[ind] = td64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(td64_val) else 1
+                )
+
+            return impl
         else:
             raise BodoError(typ_err_msg)
 
     if not (
-        (is_iterable_type(val) and val.dtype == bodo.datetime_timedelta_type)
-        or types.unliteral(val) == datetime_timedelta_type
+        (
+            is_iterable_type(val)
+            and val.dtype in (datetime_timedelta_type, pd_timedelta_type)
+        )
+        or types.unliteral(val) in (datetime_timedelta_type, pd_timedelta_type)
     ):
         raise BodoError(typ_err_msg)
 
@@ -1517,13 +1406,25 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
                 n = len(A)
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 for i in range(n):
-                    A._days_data[ind[i]] = val._days
-                    A._seconds_data[ind[i]] = val._seconds
-                    A._microseconds_data[ind[i]] = val._microseconds
+                    A._data[ind[i]] = td64
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
 
             # TODO: Confirm the coverage and if its missing add it to the test cases
+            return impl_arr_ind_scalar
+
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
+                n = len(A)
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                for i in range(n):
+                    A._data[ind[i]] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
+
             return impl_arr_ind_scalar
 
         else:
@@ -1534,11 +1435,9 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 val = bodo.utils.conversion.coerce_to_array(
                     val, use_nullable_array=True
                 )
-                n = len(val._days_data)
+                n = len(val._data)
                 for i in range(n):
-                    A._days_data[ind[i]] = val._days_data[i]
-                    A._seconds_data[ind[i]] = val._seconds_data[i]
-                    A._microseconds_data[ind[i]] = val._microseconds_data[i]
+                    A._data[ind[i]] = val._data[i]
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
 
@@ -1552,16 +1451,28 @@ def dt_timedelta_arr_setitem(A, ind, val):
             def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
                 # Heavily influenced by array_setitem_bool_index.
                 # Just replaces calls for new data with all 3 arrays
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 n = len(ind)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
-                        A._days_data[i] = val._days
-                        A._seconds_data[i] = val._seconds
-                        A._microseconds_data[i] = val._microseconds
+                        A._data[i] = td64
                         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_bool_ind_mask_scalar
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                n = len(ind)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._data[i] = td64
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_bool_ind_mask_scalar
         else:
 
             def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
@@ -1574,9 +1485,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 val_ind = 0
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
-                        A._days_data[i] = val._days_data[val_ind]
-                        A._seconds_data[i] = val._seconds_data[val_ind]
-                        A._microseconds_data[i] = val._microseconds_data[val_ind]
+                        A._data[i] = val._data[val_ind]
                         bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
                             val._null_bitmap, val_ind
                         )
@@ -1590,15 +1499,26 @@ def dt_timedelta_arr_setitem(A, ind, val):
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    A._days_data[i] = val._days
-                    A._seconds_data[i] = val._seconds
-                    A._microseconds_data[i] = val._microseconds
+                    A._data[i] = td64
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_slice_scalar
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
         else:
 
             def impl_slice_mask(A, ind, val):  # pragma: no cover
@@ -1608,12 +1528,10 @@ def dt_timedelta_arr_setitem(A, ind, val):
                     val,
                     use_nullable_array=True,
                 )
-                n = len(A._days_data)
+                n = len(A._data)
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
-                A._days_data[ind] = val._days_data
-                A._seconds_data[ind] = val._seconds_data
-                A._microseconds_data[ind] = val._microseconds_data
+                A._data[ind] = val._data
                 # XXX: conservative copy of bitmap in case there is overlap
                 # TODO: check for overlap and copy only if necessary
                 src_bitmap = val._null_bitmap.copy()
@@ -1630,34 +1548,29 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
 @overload(len, no_unliteral=True)
 def overload_len_datetime_timedelta_arr(A):
-    if A == datetime_timedelta_array_type:
-        return lambda A: len(A._days_data)
+    if A == timedelta_array_type:
+        return lambda A: len(A._data)
 
 
-@overload_attribute(DatetimeTimeDeltaArrayType, "shape")
+@overload_attribute(TimeDeltaArrayType, "shape")
 def overload_datetime_timedelta_arr_shape(A):
-    return lambda A: (len(A._days_data),)  # pragma: no cover
+    return lambda A: (len(A._data),)  # pragma: no cover
 
 
-@overload_attribute(DatetimeTimeDeltaArrayType, "nbytes")
+@overload_attribute(TimeDeltaArrayType, "nbytes")
 def timedelta_arr_nbytes_overload(A):
-    return (
-        lambda A: A._days_data.nbytes
-        + A._seconds_data.nbytes
-        + A._microseconds_data.nbytes
-        + A._null_bitmap.nbytes
-    )  # pragma: no cover
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
 
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
     # datetime_timedelta_array - timedelta
-    if arg1 == datetime_timedelta_array_type and arg2 == datetime_timedelta_type:
+    if arg1 == timedelta_array_type and arg2 == datetime_timedelta_type:
 
         def impl(arg1, arg2):  # pragma: no cover
             in_arr = arg1
             numba.parfors.parfor.init_prange()
             n = len(in_arr)
-            A = alloc_datetime_timedelta_array(n)
+            A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = in_arr[i] - arg2
             return A
@@ -1673,11 +1586,8 @@ def create_cmp_op_overload_arr(op):
             default_value = True
         else:
             default_value = False
-        # both datetime_timedelta_array_type
-        if (
-            lhs == datetime_timedelta_array_type
-            and rhs == datetime_timedelta_array_type
-        ):
+        # both timedelta_array_type
+        if lhs == timedelta_array_type and rhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1695,7 +1605,7 @@ def create_cmp_op_overload_arr(op):
 
             return impl
         # 1st arg is array
-        elif lhs == datetime_timedelta_array_type:
+        elif lhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1712,7 +1622,7 @@ def create_cmp_op_overload_arr(op):
 
             return impl
         # 2nd arg is array
-        elif rhs == datetime_timedelta_array_type:
+        elif rhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1752,10 +1662,10 @@ timedelta_unsupported_methods = [
 def _install_pd_timedelta_unsupported():
     for attr_name in timedelta_unsupported_attrs:
         full_name = "pandas.Timedelta." + attr_name
-        bodo.overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
+        overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
     for fname in timedelta_unsupported_methods:
         full_name = "pandas.Timedelta." + fname
-        bodo.overload_unsupported_method(PDTimeDeltaType, fname, full_name)
+        overload_unsupported_method(PDTimeDeltaType, fname, full_name)
 
 
 _install_pd_timedelta_unsupported()

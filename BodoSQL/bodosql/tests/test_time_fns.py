@@ -36,9 +36,9 @@ def test_time_array_box_unbox(precision, memory_leak_check):
     query = "select * from table1"
     df = pd.DataFrame(
         {
-            "A": [bodo.Time(0, i, 0, precision=precision) for i in range(15)],
-            "B": [bodo.Time(1, i, 1, precision=precision) for i in range(15)],
-            "C": [bodo.Time(2, i, 2, precision=precision) for i in range(15)],
+            "A": [bodo.types.Time(0, i, 0, precision=precision) for i in range(15)],
+            "B": [bodo.types.Time(1, i, 1, precision=precision) for i in range(15)],
+            "C": [bodo.types.Time(2, i, 2, precision=precision) for i in range(15)],
         },
     )
     ctx = {"TABLE1": df}
@@ -59,9 +59,9 @@ def test_time_box_array_unbox(precision, memory_leak_check):
     query = "select B from table1"
     df = pd.DataFrame(
         {
-            "A": [bodo.Time(0, i, 0, precision=precision) for i in range(15)],
-            "B": [bodo.Time(1, i, 1, precision=precision) for i in range(15)],
-            "C": [bodo.Time(2, i, 2, precision=precision) for i in range(15)],
+            "A": [bodo.types.Time(0, i, 0, precision=precision) for i in range(15)],
+            "B": [bodo.types.Time(1, i, 1, precision=precision) for i in range(15)],
+            "C": [bodo.types.Time(2, i, 2, precision=precision) for i in range(15)],
         },
     )
     ctx = {"TABLE1": df}
@@ -193,11 +193,11 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             {
                 "T": pd.Series(
                     [
-                        bodo.Time(12, 30, 15, precision=0),
-                        bodo.Time(1, 2, 3, 4, precision=3),
-                        bodo.Time(9, 59, 0, 100, 250, precision=6),
-                        bodo.Time(20, 45, 1, 123, 456, 789, precision=9),
-                        bodo.Time(23, 50, 59, 500, 0, 999, precision=9),
+                        bodo.types.Time(12, 30, 15, precision=9),
+                        bodo.types.Time(1, 2, 3, 4, precision=9),
+                        bodo.types.Time(9, 59, 0, 100, 250, precision=9),
+                        bodo.types.Time(20, 45, 1, 123, 456, 789, precision=9),
+                        bodo.types.Time(23, 50, 59, 500, 0, 999, precision=9),
                     ]
                 )
             }
@@ -221,11 +221,11 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             "SELECT DATE_ADD(TI, TD) FROM table1",
             pd.Series(
                 [
-                    bodo.Time(13, 30, 0),
+                    bodo.types.Time(13, 30, 0),
                     None,
-                    bodo.Time(21, 40, 13),
-                    bodo.Time(2, 3, 2, microsecond=1),
-                    bodo.Time(5, 45, 3, nanosecond=625999250),
+                    bodo.types.Time(21, 40, 13),
+                    bodo.types.Time(2, 3, 2, microsecond=1),
+                    bodo.types.Time(5, 45, 3, nanosecond=625999250),
                 ]
             ),
             id="date_add-timedelta_array",
@@ -234,11 +234,11 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             "SELECT DATE_SUB(TI, Interval '30' minutes) FROM table1",
             pd.Series(
                 [
-                    bodo.Time(12, 0, 0),
+                    bodo.types.Time(12, 0, 0),
                     None,
-                    bodo.Time(0, 30, 13),
-                    bodo.Time(21, 30, 0),
-                    bodo.Time(5, 15, 0, nanosecond=125999250),
+                    bodo.types.Time(0, 30, 13),
+                    bodo.types.Time(21, 30, 0),
+                    bodo.types.Time(5, 15, 0, nanosecond=125999250),
                 ]
             ),
             id="date_sub-interval_scalar",
@@ -248,11 +248,11 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             "SELECT TI + Interval '3' hours FROM table1",
             pd.Series(
                 [
-                    bodo.Time(15, 30, 0),
+                    bodo.types.Time(15, 30, 0),
                     None,
-                    bodo.Time(4, 0, 13),
-                    bodo.Time(1, 0, 0),
-                    bodo.Time(8, 45, 0, nanosecond=125999250),
+                    bodo.types.Time(4, 0, 13),
+                    bodo.types.Time(1, 0, 0),
+                    bodo.types.Time(8, 45, 0, nanosecond=125999250),
                 ]
             ),
             id="addition-interval_scalar",
@@ -261,11 +261,11 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             "SELECT TI - TD FROM table1",
             pd.Series(
                 [
-                    bodo.Time(11, 30, 0),
+                    bodo.types.Time(11, 30, 0),
                     None,
-                    bodo.Time(4, 20, 13),
-                    bodo.Time(17, 56, 57, microsecond=999999),
-                    bodo.Time(5, 44, 56, nanosecond=625999250),
+                    bodo.types.Time(4, 20, 13),
+                    bodo.types.Time(17, 56, 57, microsecond=999999),
+                    bodo.types.Time(5, 44, 56, nanosecond=625999250),
                 ]
             ),
             id="subtraction-timedelta_array",
@@ -287,11 +287,11 @@ def test_time_plus_minus_intervals(query, answer, memory_leak_check):
     Example: TIME + (25 hours) is allowed"""
     TI = pd.Series(
         [
-            bodo.Time(12, 30, 0),
+            bodo.types.Time(12, 30, 0),
             None,
-            bodo.Time(1, 0, 13),
-            bodo.Time(22, 0, 0),
-            bodo.Time(5, 45, 0, nanosecond=125999250),
+            bodo.types.Time(1, 0, 13),
+            bodo.types.Time(22, 0, 0),
+            bodo.types.Time(5, 45, 0, nanosecond=125999250),
         ]
     )
     TD = pd.Series(
@@ -447,7 +447,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
 @pytest.mark.slow
 def test_datediff_time_literals(query, expected_output, basic_df, memory_leak_check):
     """
-    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on bodo.Time literals behaves as expected.
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on bodo.types.Time literals behaves as expected.
     Tests all possible datetime parts except for time units.
     """
 
@@ -541,7 +541,7 @@ def test_max_time_types(time_df, memory_leak_check):
         time_df,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({"A": [bodo.Time(22, 13, 57)]}),
+        expected_output=pd.DataFrame({"A": [bodo.types.Time(22, 13, 57)]}),
         is_out_distributed=False,
     )
 
@@ -556,6 +556,6 @@ def test_min_time_types(time_df, memory_leak_check):
         time_df,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({"A": [bodo.Time()]}),
+        expected_output=pd.DataFrame({"A": [bodo.types.Time()]}),
         is_out_distributed=False,
     )

@@ -13,8 +13,8 @@ from bodo.tests.utils import (
     check_func,
     find_nested_dispatcher_and_args,
     pytest_slow_unless_codegen,
-    reduce_sum,
 )
+from bodo.tests.utils_jit import reduce_sum
 from bodo.utils.typing import BodoError
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -37,8 +37,8 @@ def verify_dict_encoded_in_impl(impl, args):
     # Note: infrastructure doesn't handle defaults, so we need to manually add this to
     # the signature
     used_sig = used_sig + (
-        bodo.none,
-        bodo.bool_,
+        bodo.types.none,
+        bodo.types.bool_,
     )
     # Find the is_in_util dispatcher in the IR
     dispatcher, used_sig = find_nested_dispatcher_and_args(

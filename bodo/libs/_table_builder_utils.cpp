@@ -7,7 +7,7 @@
 std::unique_ptr<array_info> alloc_empty_array(
     const std::unique_ptr<bodo::DataType>& datatype,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm,
-    std::shared_ptr<DictionaryBuilder> dict_builder = nullptr) {
+    std::shared_ptr<DictionaryBuilder> dict_builder) {
     if (datatype->is_array()) {
         auto array_type = static_cast<bodo::ArrayType*>(datatype.get());
         auto inner_arr = alloc_empty_array(
@@ -55,6 +55,7 @@ std::unique_ptr<array_info> alloc_empty_array(
             false, false, pool, mm);
         array_out->precision = datatype->precision;
         array_out->scale = datatype->scale;
+        array_out->timezone = datatype->timezone;
         if (dict_builder) {
             assert(datatype->array_type == bodo_array_type::DICT);
             array_out->child_arrays[0] = dict_builder->dict_buff->data_array;
@@ -76,7 +77,8 @@ std::shared_ptr<table_info> alloc_table(
             dict_builders == nullptr ? nullptr : (*dict_builders)[i]));
     }
 
-    return std::make_shared<table_info>(arrays);
+    return std::make_shared<table_info>(arrays, 0, schema->column_names,
+                                        schema->metadata);
 }
 
 std::shared_ptr<table_info> alloc_table_like(
@@ -87,5 +89,29 @@ std::shared_ptr<table_info> alloc_table_like(
     for (auto& in_arr : table->columns) {
         arrays.push_back(alloc_array_like(in_arr, true, pool, mm));
     }
-    return std::make_shared<table_info>(arrays);
+    return std::make_shared<table_info>(arrays, table->nrows(),
+                                        table->column_names, table->metadata);
+}
+
+std::shared_ptr<table_info> unify_dictionary_arrays_helper(
+    const std::shared_ptr<table_info>& in_table,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    uint64_t n_keys, bool only_transpose_existing_on_key_cols) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        if (dict_builders[i] == nullptr) {
+            out_arr = in_arr;
+        } else {
+            if (only_transpose_existing_on_key_cols && (i < n_keys)) {
+                out_arr = dict_builders[i]->TransposeExisting(in_arr);
+            } else {
+                out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+            }
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+    return std::make_shared<table_info>(out_arrs);
 }
