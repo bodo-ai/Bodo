@@ -330,7 +330,7 @@ class JoinFilterColStats {
     struct col_stats_collector {
         int64_t build_key_col;
         JoinState *join_state;
-        col_min_max_t collect_min_max() {
+        col_min_max_t collect_min_max() const {
             std::unique_ptr<bodo::DataType> dt =
                 join_state->build_table_schema->column_types[build_key_col]
                     ->copy();
@@ -372,4 +372,14 @@ class JoinFilterColStats {
         }
     }
     JoinFilterColStats() = default;
+
+    std::unordered_map<int, std::vector<col_min_max_t>> collect_all() {
+        std::unordered_map<int, std::vector<col_min_max_t>> result;
+        for (const auto &[join_id, collectors] : join_col_stats_map) {
+            for (const auto &collector : collectors) {
+                result[join_id].push_back(collector.collect_min_max());
+            }
+        }
+        return result;
+    }
 };
