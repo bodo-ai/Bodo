@@ -39,9 +39,7 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, JoinState *>>
-            join_filter_states,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
-            join_pipelines) = 0;
+            join_filter_states) = 0;
 
     // This allows pushing runtime join filter state from the optimizer to the
     // physical read operators which can generate filters from join key
@@ -97,9 +95,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, JoinState *>>
-            join_filter_states,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
-            join_pipelines) override;
+            join_filter_states) override;
 
     // Parquet dataset path
     PyObject *path;
@@ -147,9 +143,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, JoinState *>>
-            join_filter_states,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
-            join_pipelines) override;
+            join_filter_states) override;
 
     PyObject *df;
     const std::shared_ptr<arrow::Schema> arrow_schema;
@@ -177,9 +171,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, JoinState *>>
-            join_filter_states,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
-            join_pipelines) override;
+            join_filter_states) override;
     std::string result_id;
     const std::shared_ptr<arrow::Schema> arrow_schema;
 };
@@ -236,9 +228,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, JoinState *>>
-            join_filter_states,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
-            join_pipelines) override;
+            join_filter_states) override;
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;
