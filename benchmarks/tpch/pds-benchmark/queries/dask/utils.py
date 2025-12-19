@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import dask.config
 import dask.dataframe as dd
 from dask.distributed import Client
 from queries.common_utils import (
@@ -17,6 +18,9 @@ if TYPE_CHECKING:
     from dask.dataframe import DataFrame
 
 settings = Settings()
+dask.config.set({"distributed.workers.memory.spill": 0.95})
+dask.config.set({"distributed.workers.memory.target": 0.85})
+dask.config.set({"distributed.workers.memory.terminate": 0.98})
 
 
 def read_ds(table_name: str) -> DataFrame:
