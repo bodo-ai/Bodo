@@ -104,8 +104,8 @@ stages:
             PYTEST_MARKER: "df_lib and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
 
 
-- stage: Test_BodoSQL
-  displayName: 'Test BodoSQL'
+- stage: Test_BodoSQL_ARM
+  displayName: 'Test BodoSQL Linux Arm'
   dependsOn: []
   jobs:
 
