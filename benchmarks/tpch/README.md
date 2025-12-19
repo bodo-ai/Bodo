@@ -66,11 +66,10 @@ This section describes how to reproduce benchmark results for both single node a
 <!-- TODO: Daft -->
 <!-- TODO: Modin -->
 
-You can install the required libraries with the correct versions using the provided `env.yml` file:
+You can install the required libraries with the correct versions using the provided `requirements.txt` file:
 
 ``` shell
-conda env create -n tpch_bodo --file env.yml
-conda activate tpch_bodo
+pip install -r requirements.txt
 ```
 
 ### Single Node

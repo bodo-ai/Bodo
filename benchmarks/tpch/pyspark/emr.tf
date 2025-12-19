@@ -82,18 +82,24 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
   log_uri = "s3://${aws_s3_bucket.emr_bucket.id}/logs/"
 
-  step {
-    name              = "Run Python Script"
-    action_on_failure = "TERMINATE_CLUSTER"
-    hadoop_jar_step {
-      jar  = "command-runner.jar"
-      args = concat([
-      "spark-submit",
-      "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pandas_on_spark_queries.py",
-      "--folder", "${var.data_folder}",
-      "--scale_factor", tostring(var.scale_factor),
-      "--queries"
-      ], [for q in var.queries : tostring(q)])
+  dynamic "step" {
+    for_each = var.queries
+
+    content {
+      name              = "Run TPCH Query ${step.value}"
+      action_on_failure = "CONTINUE"
+
+      hadoop_jar_step {
+        jar = "command-runner.jar"
+
+        args = [
+          "spark-submit",
+          "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pandas_on_spark_queries.py",
+          "--folder", var.data_folder,
+          "--scale_factor", tostring(var.scale_factor),
+          "--queries", tostring(step.value)
+        ]
+      }
     }
   }
   auto_termination_policy {

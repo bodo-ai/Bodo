@@ -111,8 +111,7 @@ def run_query_generic(
 ) -> None:
     """Execute a query."""
     # execute the query once to ensure we are getting a hot run
-    with CodeTimer(name=f"Warmup run {library_name} query {query_number}", unit="s"):
-        query()
+    query()
     for _ in range(settings.run.iterations):
         with CodeTimer(
             name=f"Run {library_name} query {query_number}", unit="s"

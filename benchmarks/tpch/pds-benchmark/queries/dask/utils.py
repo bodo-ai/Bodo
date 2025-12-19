@@ -79,7 +79,7 @@ def get_part_supp_ds() -> DataFrame:
 
 
 def run_query(query_number: int, query: Callable[..., Any]) -> None:
-    # Use default LocalCluster settings
-    Client()
-
-    run_query_generic(query, query_number, "dask", query_checker=check_query_result_pd)
+    with Client():  # Use default LocalCluster settings
+        run_query_generic(
+            query, query_number, "dask", query_checker=check_query_result_pd
+        )
