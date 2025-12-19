@@ -62,9 +62,14 @@ BodoParquetScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    JoinFilterColStats join_filter_col_stats;
+    if (this->rtjf_state_map.has_value()) {
+        join_filter_col_stats = JoinFilterColStats(
+            *join_filter_states, this->rtjf_state_map.value());
+    }
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
-        limit_val);
+        limit_val, join_filter_col_stats);
 }
 
 std::shared_ptr<PhysicalSource>
@@ -77,11 +82,8 @@ BodoIcebergScanFunctionData::CreatePhysicalOperator(
         join_filter_col_stats = JoinFilterColStats(
             *join_filter_states, this->rtjf_state_map.value());
     }
-    std::shared_ptr<PhysicalReadIceberg> read_op =
-        std::make_shared<PhysicalReadIceberg>(
-            this->catalog, this->table_id, this->iceberg_filter,
-            this->iceberg_schema, this->arrow_schema, this->snapshot_id,
-            selected_columns, filter_exprs, limit_val, join_filter_col_stats);
-
-    return std::move(read_op);
+    return std::make_shared<PhysicalReadIceberg>(
+        this->catalog, this->table_id, this->iceberg_filter,
+        this->iceberg_schema, this->arrow_schema, this->snapshot_id,
+        selected_columns, filter_exprs, limit_val, join_filter_col_stats);
 }

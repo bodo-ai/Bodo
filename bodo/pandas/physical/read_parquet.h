@@ -31,7 +31,8 @@ class PhysicalReadParquet : public PhysicalSource {
         PyObject *py_path, PyObject *pyarrow_schema, PyObject *storage_options,
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+        JoinFilterColStats join_filter_col_stats) {
         time_pt start_init = start_timer();
         // ----------------------------------------------------------
         // Handle columns.
