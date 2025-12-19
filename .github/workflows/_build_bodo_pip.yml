@@ -82,7 +82,7 @@ jobs:
           echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
-        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel --print-build-identifiers
+        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
