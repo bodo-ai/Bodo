@@ -60,7 +60,6 @@ stages:
       name: Bodo_Tests
       test_type: COMPILER
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
@@ -76,7 +75,6 @@ stages:
       name: Cache_tests
       test_type: CACHE
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         TEST_2P:
           NP: 2
@@ -87,7 +85,6 @@ stages:
       name: Bodo_Spawn_mode_tests
       test_type: SPAWN
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         TEST_1P:
           NP: 1
@@ -125,7 +122,6 @@ stages:
       name: BodoSQL_Streaming_Tests
       test_type: NORMAL
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
@@ -143,7 +139,6 @@ stages:
       name: BodoSQL_Streaming_Caching_Tests
       test_type: CACHE
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         TEST_2P:
           NP: 2
@@ -156,7 +151,6 @@ stages:
       name: BodoSQL_Streaming_Spawn_mode_tests
       test_type: SPAWN
       pool_name: ${{ parameters.AGENT_POOL }}
-      use_bodo_arrow_fork: ${{ eq(parameters.AGENT_POOL, 'ScalingVMSet') }}
       matrix:
         TEST_1P:
           NP: 1
@@ -164,4 +158,5 @@ stages:
         TEST_2P:
           NP: 2
           PYTEST_MARKER: "spawn_mode"
+
 
