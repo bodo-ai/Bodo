@@ -18,7 +18,7 @@ def q() -> None:
         supplier = utils.get_supplier_ds()
         nation = utils.get_nation_ds()
         part = utils.get_part_ds()
-        partsupp = utils.get_partsupp_ds()
+        partsupp = utils.get_part_supp_ds()
         shipdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
         shipdate_to = datetime.strptime("1995-01-01", "%Y-%m-%d")
 
