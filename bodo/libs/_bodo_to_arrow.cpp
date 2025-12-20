@@ -1550,12 +1550,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     }
 }
 
-#include <iostream>
 std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(table->num_columns());
-    std::cout << "arrow_table_to_bodo " << table->num_columns() << std::endl;
     for (int64_t i = 0; i < table->num_columns(); i++) {
         if (table->column(i)->num_chunks() != 1) {
             throw std::runtime_error(

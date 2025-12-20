@@ -2170,8 +2170,7 @@ def cpp_table_to_cudf(cpp_table_ptr):
     from bodo.pandas.utils import cpp_table_to_df
 
     bodo_df = cpp_table_to_df(cpp_table_ptr, use_arrow_dtypes=True, delete_input=False)
-    print("cpp_table_to_cudf", cpp_table_ptr, hex(cpp_table_ptr), bodo_df.columns)
-    return cudf.DataFrame.from_pandas(bodo_df)
+    return cudf.DataFrame(bodo_df)
 
 
 def cudf_probe_join_with_build(
@@ -2192,16 +2191,12 @@ def cudf_probe_join_with_build(
 
     from bodo.pandas.utils import df_to_cpp_table
 
-    print("cudf_probe_join_with_build", probe_cpp_table, hex(probe_cpp_table))
     probe_gdf = cpp_table_to_cudf(probe_cpp_table)
-    print("after cpp_table_to_cudf", len(probe_gdf), nkeys)
 
     # Extract column names from indices
     build_cols = [build_gdf.columns[i] for i in range(nkeys)]
-    print("after build_cols")
     probe_cols = [probe_gdf.columns[i] for i in range(nkeys)]
 
-    print("build", build_cols, "probe", probe_cols)
     result_gdf = probe_gdf.merge(
         build_gdf,
         left_on=probe_cols,
@@ -2209,12 +2204,9 @@ def cudf_probe_join_with_build(
         how=join_kind,
     )
 
-    print("build_kept", build_kept_cols)
-    print("probe_kept", probe_kept_cols)
     keep_col_list = probe_kept_cols + [
         x + len(probe_kept_cols) for x in build_kept_cols
     ]
-    print("result_gdf size", len(result_gdf))
     result_gdf = result_gdf.iloc[:, keep_col_list]
 
     result_df = result_gdf.to_pandas()

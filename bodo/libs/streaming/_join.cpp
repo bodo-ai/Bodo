@@ -2018,7 +2018,6 @@ std::shared_ptr<arrow::Table> MakeZeroTable() {
 }
 
 void HashJoinState::FinalizeBuild() {
-    std::cout << "FinalizeBuild" << std::endl;
     time_pt start_finalize = start_timer();
     // Free build shuffle buffer, etc.
     this->build_shuffle_state.Finalize();
@@ -2166,14 +2165,9 @@ void HashJoinState::FinalizeBuild() {
     this->metrics.build_finalize_time += end_timer(start_finalize);
 
 #ifdef USE_CUDF
-    std::cout << "cudf build " << use_cudf << std::endl;
     if (!local_empty_build && use_cudf) {
-        std::cout << "cudf before cpp_table_to_cudf_cpp " << std::endl;
         auto dt = this->partitions[0]->build_table_buffer->data_table;
-
         std::shared_ptr<table_info> ti = std::make_shared<table_info>(*dt);
-        //        std::cout << "ti " << ti->ncols() << " " << std::hex <<
-        //        ti.get() << std::endl;
         cudf_build_table =
             cpp_table_to_cudf_cpp(reinterpret_cast<int64_t>(ti.get()));
         Py_INCREF(cudf_build_table);
@@ -3769,26 +3763,17 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     time_pt start_produce_probe = start_timer();
 
 #ifdef USE_CUDF
-    std::cout << "cudf probe " << join_state->use_cudf << " "
-              << in_table->nrows() << std::endl;
     std::shared_ptr<table_info> spti;
     if (join_state->use_cudf) {
         start_produce_probe = start_timer();
         table_info* ti = new table_info(*in_table);
-        // DEBUG_PrintTable(std::cout, in_table, true);
         int64_t join_res = cudf_join_with_prebuilt_build_cpp(
             join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
             join_state->n_keys, build_kept_cols, probe_kept_cols, "inner");
         table_info* tires = reinterpret_cast<table_info*>(join_res);
-        // DEBUG_PrintTable(std::cout, tires, true);
         spti = std::shared_ptr<table_info>(tires);
         auto ctbschema = join_state->output_buffer->active_chunk->schema();
-        std::cout << "output buffer size " << spti->nrows() << " "
-                  << join_state->output_buffer->active_chunk->nrows()
-                  << std::endl;
-        // std::cout << ctbschema->ToString(true) << std::endl;
         did_gpu_offload = true;
-        std::cout << "gpu offload done" << std::endl;
         join_state->metrics.produce_probe_out_idxs_time +=
             end_timer(start_produce_probe) - append_time;
     }
@@ -4042,9 +4027,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         local_is_last && join_state->probe_shuffle_state.SendRecvEmpty(),
         join_state);
 
-    std::cout << "is_last " << is_last << " " << build_table_outer << std::endl;
     if constexpr (!build_table_outer) {
-        std::cout << "making global_probe_reduce_done true" << std::endl;
         join_state->global_probe_reduce_done = true;
     }
 
@@ -4106,7 +4089,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     join_state->probe_iter++;
 
     bool fully_done = is_last && join_state->global_probe_reduce_done;
-    std::cout << "fully_done " << fully_done << std::endl;
 
     if (fully_done) {
         // TODO Free the shuffle state here to free the memory early.
