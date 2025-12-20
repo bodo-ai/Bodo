@@ -2194,9 +2194,11 @@ def cudf_probe_join_with_build(
 
     print("cudf_probe_join_with_build", probe_cpp_table, hex(probe_cpp_table))
     probe_gdf = cpp_table_to_cudf(probe_cpp_table)
+    print("after cpp_table_to_cudf", len(probe_gdf), nkeys)
 
     # Extract column names from indices
     build_cols = [build_gdf.columns[i] for i in range(nkeys)]
+    print("after build_cols")
     probe_cols = [probe_gdf.columns[i] for i in range(nkeys)]
 
     print("build", build_cols, "probe", probe_cols)
@@ -2212,6 +2214,7 @@ def cudf_probe_join_with_build(
     keep_col_list = probe_kept_cols + [
         x + len(probe_kept_cols) for x in build_kept_cols
     ]
+    print("result_gdf size", len(result_gdf))
     result_gdf = result_gdf.iloc[:, keep_col_list]
 
     result_df = result_gdf.to_pandas()

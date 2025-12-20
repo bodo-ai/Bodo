@@ -1023,9 +1023,7 @@ void JoinPartition::ActivatePartition() {
 }
 
 void JoinPartition::pin() {
-    std::cout << "JoinPartition pin " << this << std::endl;
     if (!this->pinned_) {
-        std::cout << "JoinPartition is unpinned" << std::endl;
         this->build_table_buffer->pin();
         this->build_table_join_hashes_guard.emplace(
             this->build_table_join_hashes);
@@ -1051,9 +1049,7 @@ void JoinPartition::pin() {
 }
 
 void JoinPartition::unpin() {
-    std::cout << "JoinPartition unpin " << this << std::endl;
     if (this->pinned_) {
-        std::cout << "JoinPartition is pinned" << std::endl;
         this->build_table_buffer->unpin();
         this->build_table_join_hashes_guard.reset();
         this->build_hash_table_guard.reset();
@@ -3773,23 +3769,24 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     time_pt start_produce_probe = start_timer();
 
 #ifdef USE_CUDF
-    std::cout << "cudf probe " << join_state->use_cudf << std::endl;
+    std::cout << "cudf probe " << join_state->use_cudf << " "
+              << in_table->nrows() << std::endl;
     std::shared_ptr<table_info> spti;
     if (join_state->use_cudf) {
         start_produce_probe = start_timer();
         table_info* ti = new table_info(*in_table);
-        DEBUG_PrintTable(std::cout, in_table, true);
+        // DEBUG_PrintTable(std::cout, in_table, true);
         int64_t join_res = cudf_join_with_prebuilt_build_cpp(
             join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
             join_state->n_keys, build_kept_cols, probe_kept_cols, "inner");
         table_info* tires = reinterpret_cast<table_info*>(join_res);
-        DEBUG_PrintTable(std::cout, tires, true);
+        // DEBUG_PrintTable(std::cout, tires, true);
         spti = std::shared_ptr<table_info>(tires);
         auto ctbschema = join_state->output_buffer->active_chunk->schema();
-        std::cout << "ob size "
+        std::cout << "output buffer size " << spti->nrows() << " "
                   << join_state->output_buffer->active_chunk->nrows()
                   << std::endl;
-        std::cout << ctbschema->ToString(true) << std::endl;
+        // std::cout << ctbschema->ToString(true) << std::endl;
         did_gpu_offload = true;
         std::cout << "gpu offload done" << std::endl;
         join_state->metrics.produce_probe_out_idxs_time +=
@@ -5017,6 +5014,7 @@ int64_t cudf_join_with_prebuilt_build_cpp(
 
     PyObject* args = PyTuple_New(6);
 
+    Py_INCREF(py_build_gdf);
     PyTuple_SET_ITEM(args, 0, py_build_gdf);
     PyTuple_SET_ITEM(args, 1, intPtr);
     PyTuple_SET_ITEM(args, 2, nkeysPtr);

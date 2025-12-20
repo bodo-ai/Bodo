@@ -1808,13 +1808,9 @@ int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
 
 PyObject *cpp_table_to_pyarrow(int64_t cpp_table, bool delete_cpp_table) {
     table_info *table = reinterpret_cast<table_info *>(cpp_table);
-    std::cout << "cpp_table_to_pyarrow " << table << " " << table->ncols()
-              << std::endl;
-    DEBUG_PrintTable(std::cout, table);
     std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
         std::shared_ptr<table_info>(new table_info(*table)));
     if (delete_cpp_table) {
-        std::cout << "cpp_table_to_pyarrow delete_cpp_table" << std::endl;
         delete table;
     }
     return arrow::py::wrap_table(arrow_table);
