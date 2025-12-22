@@ -970,10 +970,10 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
 
 
 cdef class LogicalGetPandasReadParallel(LogicalOperator):
-    cdef int nrows
+    cdef int64_t nrows
 
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, int nrows, object result_id):
+    def __cinit__(self, object out_schema, int64_t nrows, object result_id):
         # result_id could be a string or LazyPlanDistributedArg if we are constructing the
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
