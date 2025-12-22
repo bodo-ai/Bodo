@@ -8,7 +8,7 @@
 #include "_pipeline.h"
 #include "duckdb/planner/logical_operator.hpp"
 
-// #ifdef DEBUG_PIPELINE
+#ifdef DEBUG_PIPELINE
 #define DEBUG_PIPELINE_CONTENTS(rank, pipeliens)                     \
     do {                                                             \
         std::cout << "Rank " << rank << " ExecutePipelines with "    \
