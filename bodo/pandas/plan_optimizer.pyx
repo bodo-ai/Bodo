@@ -916,17 +916,21 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
+        self.nrows = -1
+        cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        if self.nrows == -1:
+            self.nrows = self._get_nrows(exact=True)
         return self.nrows
 
-    def _get_nrows(self):
+    def _get_nrows(self, exact=True):
+        import pyarrow.parquet as pq
         from bodo.io.fs_io import (
             expand_path_globs,
             getfs,
@@ -945,7 +949,24 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
-        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+        dataset = pq.ParquetDataset(
+            fpath_noprefix,
+            filesystem=fs
+        )
+
+        selected_files = dataset.files
+        n_files = len(selected_files)
+        if not exact:
+            # Sample files to get an approximate row count
+            n_sampled_files = min(n_files, max(0.001 * n_files, 3))
+            selected_files = selected_files[:n_sampled_files]
+        else:
+            n_sampled_files = n_files
+
+        nrows_sample = pq.read_table(selected_files, filesystem=fs, columns=[]).num_rows
+        nrows = int(nrows_sample * (n_files / n_sampled_files))
+        print(nrows_sample, nrows)
+        return nrows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
