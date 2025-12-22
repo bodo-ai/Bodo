@@ -2164,7 +2164,7 @@ void HashJoinState::FinalizeBuild() {
     this->metrics.final_partitioning_state = this->GetPartitionStateString();
     this->metrics.build_finalize_time += end_timer(start_finalize);
 
-#ifdef USE_CUDF
+// #ifdef USE_CUDF
     if (!local_empty_build && use_cudf) {
         auto dt = this->partitions[0]->build_table_buffer->data_table;
         std::shared_ptr<table_info> ti = std::make_shared<table_info>(*dt);
@@ -2172,7 +2172,7 @@ void HashJoinState::FinalizeBuild() {
             cpp_table_to_cudf_cpp(reinterpret_cast<int64_t>(ti.get()));
         Py_INCREF(cudf_build_table);
     }
-#endif
+// #endif
 
     JoinState::FinalizeBuild();
 }
@@ -3762,7 +3762,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     HashJoinMetrics::time_t append_time = 0;
     time_pt start_produce_probe = start_timer();
 
-#ifdef USE_CUDF
+// #ifdef USE_CUDF
     std::shared_ptr<table_info> spti;
     if (join_state->use_cudf) {
         start_produce_probe = start_timer();
@@ -3778,7 +3778,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             end_timer(start_produce_probe) - append_time;
     }
 
-#endif  // USE_CUDF
+// #endif  // USE_CUDF
 
     if (!did_gpu_offload) {
         start_produce_probe = start_timer();

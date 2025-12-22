@@ -181,11 +181,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
-option(USE_CUDF "Enable CUDF mode" OFF)
-if(USE_CUDF)
-    add_compile_definitions(USE_CUDF=1)
-endif()
-
 # ----------------------- Apply Compiler Flags -----------------------
 message(STATUS "\n*** Apply Compiler Flags for Targets")
 
@@ -858,18 +853,6 @@ else()
     target_compile_definitions(ext PRIVATE "H5_BUILT_AS_DYNAMIC_LIB=1")
   endif()
   target_link_libraries(ext PRIVATE hdf5)
-endif()
-
-option(USE_LIBCUDF "Enable libcudf integration" OFF)
-
-if(USE_LIBCUDF)
-  find_package(CUDAToolkit REQUIRED)
-  find_package(cudf REQUIRED CONFIG)
-  find_package(Arrow REQUIRED CONFIG)
-  target_link_libraries(ext PRIVATE cudf::cudf CUDA::cudart)
-  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS})
-  find_package(Arrow REQUIRED CONFIG)
-  target_link_libraries(ext PRIVATE arrow_cuda)
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
