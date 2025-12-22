@@ -956,7 +956,6 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         files = []
 
-        print("listing files...")
         for path in fpath_noprefix:
             info = fs.get_file_info(path)
 
@@ -985,7 +984,6 @@ cdef class LogicalGetParquetRead(LogicalOperator):
             n_sampled = max(3, int(0.001 * n_files))
             sampled = files[:min(n_sampled, n_files)]
 
-        print("Gathering row counts...")
         rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
 
         return int(rows * (n_files / len(sampled)))
