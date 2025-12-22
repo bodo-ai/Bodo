@@ -91,7 +91,7 @@ jobs:
             # Global Tools
             pixi global install sccache ninja
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel
+            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel libpsm2
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
