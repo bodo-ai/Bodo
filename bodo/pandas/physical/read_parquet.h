@@ -2,11 +2,13 @@
 
 #include <Python.h>
 #include <arrow/util/key_value_metadata.h>
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include "../_util.h"
 #include "../io/parquet_reader.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
 
@@ -32,7 +34,7 @@ class PhysicalReadParquet : public PhysicalSource {
     PyObject *storage_options;
     PyObject *schema_fields;
     std::vector<int> selected_columns;
-    duckdb::TableFilterSet filter_exprs;
+    duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
 
    public:
@@ -47,7 +49,8 @@ class PhysicalReadParquet : public PhysicalSource {
           py_path(py_path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options),
-          selected_columns(std::move(selected_columns)) {
+          selected_columns(selected_columns),
+          filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
         Py_INCREF(py_path);
@@ -182,15 +185,40 @@ class PhysicalReadParquet : public PhysicalSource {
         // Handle columns.
         // ----------------------------------------------------------
         std::vector<bool> is_nullable(selected_columns.size(), true);
+
+        for (const auto &[col_idx, min_max_vec] :
+             this->join_filter_col_stats.collect_all()) {
+            // Find the position of col_idx in selected_columns
+            auto it = std::ranges::find(selected_columns, col_idx);
+            if (it != selected_columns.end()) {
+                for (const auto &[min, max] : min_max_vec) {
+                    duckdb::unique_ptr<duckdb::TableFilter> min_filter =
+                        duckdb::make_uniq<duckdb::ConstantFilter>(
+                            duckdb::ExpressionType::
+                                COMPARE_GREATERTHANOREQUALTO,
+                            ArrowScalarToDuckDBValue(min));
+                    duckdb::unique_ptr<duckdb::TableFilter> max_filter =
+                        duckdb::make_uniq<duckdb::ConstantFilter>(
+                            duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+                            ArrowScalarToDuckDBValue(max));
+                    filter_exprs->PushFilter(duckdb::ColumnIndex(col_idx),
+                                             std::move(min_filter));
+                    filter_exprs->PushFilter(duckdb::ColumnIndex(col_idx),
+                                             std::move(max_filter));
+                }
+            }
+        }
+
         // ----------------------------------------------------------
         // Handle filter expressions.
         // ----------------------------------------------------------
         PyObject *arrowFilterExpr =
-            tableFilterSetToArrowCompute(filter_exprs, schema_fields);
+            tableFilterSetToArrowCompute(*filter_exprs, this->schema_fields);
+
         // ----------------------------------------------------------
         // Configure internal parquet reader.
         // ----------------------------------------------------------
-        internal_reader = std::make_shared<ParquetReader>(
+        this->internal_reader = std::make_shared<ParquetReader>(
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema,
             total_rows_to_read, selected_columns, is_nullable, false,
             get_streaming_batch_size());

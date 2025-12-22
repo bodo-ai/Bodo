@@ -187,6 +187,114 @@ expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
     }
 }
 
+duckdb::Value ArrowScalarToDuckDBValue(
+    const std::shared_ptr<arrow::Scalar> &scalar) {
+    // 1. Handle Nulls
+    if (!scalar || !scalar->is_valid) {
+        return duckdb::Value(duckdb::LogicalTypeId::SQLNULL);
+    }
+
+    // 2. Switch on Arrow Type
+    switch (scalar->type->id()) {
+        case arrow::Type::INT8:
+            return duckdb::Value::TINYINT(
+                std::static_pointer_cast<arrow::Int8Scalar>(scalar)->value);
+        case arrow::Type::INT16:
+            return duckdb::Value::SMALLINT(
+                std::static_pointer_cast<arrow::Int16Scalar>(scalar)->value);
+        case arrow::Type::INT32:
+            return duckdb::Value::INTEGER(
+                std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value);
+        case arrow::Type::INT64:
+            return duckdb::Value::BIGINT(
+                std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value);
+        case arrow::Type::UINT8:
+            return duckdb::Value::UTINYINT(
+                std::static_pointer_cast<arrow::UInt8Scalar>(scalar)->value);
+        case arrow::Type::UINT16:
+            return duckdb::Value::USMALLINT(
+                std::static_pointer_cast<arrow::UInt16Scalar>(scalar)->value);
+        case arrow::Type::UINT32:
+            return duckdb::Value::UINTEGER(
+                std::static_pointer_cast<arrow::UInt32Scalar>(scalar)->value);
+        case arrow::Type::UINT64:
+            return duckdb::Value::UBIGINT(
+                std::static_pointer_cast<arrow::UInt64Scalar>(scalar)->value);
+        case arrow::Type::FLOAT:
+            return duckdb::Value::FLOAT(
+                std::static_pointer_cast<arrow::FloatScalar>(scalar)->value);
+        case arrow::Type::DOUBLE:
+            return duckdb::Value::DOUBLE(
+                std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::BOOL:
+            return duckdb::Value::BOOLEAN(
+                std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value);
+        case arrow::Type::STRING:
+        case arrow::Type::LARGE_STRING:
+            return duckdb::Value(
+                std::static_pointer_cast<arrow::StringScalar>(scalar)
+                    ->value->ToString());
+
+        case arrow::Type::DATE32: {
+            // DuckDB expects days since epoch for DATE
+            auto date_scalar =
+                std::static_pointer_cast<arrow::Date32Scalar>(scalar);
+            return duckdb::Value::DATE(duckdb::date_t(date_scalar->value));
+        }
+
+        case arrow::Type::TIMESTAMP: {
+            auto ts_scalar =
+                std::static_pointer_cast<arrow::TimestampScalar>(scalar);
+            auto ts_type =
+                std::static_pointer_cast<arrow::TimestampType>(scalar->type);
+
+            // Handle Timezones (Map to TIMESTAMP_TZ)
+            if (!ts_type->timezone().empty()) {
+                // DuckDB TIMESTAMP_TZ uses microseconds. If Arrow is not micro,
+                // we must scale.
+                int64_t val = ts_scalar->value;
+                switch (ts_type->unit()) {
+                    case arrow::TimeUnit::SECOND:
+                        val *= 1000000;
+                        break;
+                    case arrow::TimeUnit::MILLI:
+                        val *= 1000;
+                        break;
+                    case arrow::TimeUnit::MICRO:
+                        break;  // No change
+                    case arrow::TimeUnit::NANO:
+                        val /= 1000;
+                        break;
+                }
+                return duckdb::Value::TIMESTAMPTZ(duckdb::timestamp_tz_t(val));
+            }
+
+            // Handle No-Timezone (Map to specific precision types)
+            switch (ts_type->unit()) {
+                case arrow::TimeUnit::MICRO:
+                    return duckdb::Value::TIMESTAMP(
+                        duckdb::timestamp_t(ts_scalar->value));
+                case arrow::TimeUnit::MILLI:
+                    return duckdb::Value::TIMESTAMPMS(
+                        duckdb::timestamp_ms_t(ts_scalar->value));
+                case arrow::TimeUnit::SECOND:
+                    return duckdb::Value::TIMESTAMPSEC(
+                        duckdb::timestamp_sec_t(ts_scalar->value));
+                case arrow::TimeUnit::NANO:
+                    return duckdb::Value::TIMESTAMPNS(
+                        duckdb::timestamp_ns_t(ts_scalar->value));
+            }
+            break;
+        }
+
+        default:
+            throw std::runtime_error(
+                "ArrowScalarToDuckDBValue unhandled type: " +
+                scalar->type->ToString());
+    }
+    return duckdb::Value();
+}
+
 arrow::compute::Expression tableFilterToArrowExpr(
     duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter> &tf,
     PyObject *schema_fields) {
