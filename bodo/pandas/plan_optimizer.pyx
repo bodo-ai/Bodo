@@ -908,7 +908,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """
     cdef readonly object path
     cdef readonly object storage_options
-    cdef readonly int nrows
+    cdef readonly int64_t nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         from bodo.ext import hdist
