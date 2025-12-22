@@ -3762,20 +3762,26 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     HashJoinMetrics::time_t append_time = 0;
     time_pt start_produce_probe = start_timer();
 
+    static const char* join_kind_table[2][2] = {{"inner", "left"},
+                                                {"right", "outer"}};
+
 #ifdef USE_CUDF
     std::shared_ptr<table_info> spti;
     if (join_state->use_cudf) {
-        start_produce_probe = start_timer();
-        table_info* ti = new table_info(*in_table);
-        int64_t join_res = cudf_join_with_prebuilt_build_cpp(
-            join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
-            join_state->n_keys, build_kept_cols, probe_kept_cols, "inner");
-        table_info* tires = reinterpret_cast<table_info*>(join_res);
-        spti = std::shared_ptr<table_info>(tires);
-        auto ctbschema = join_state->output_buffer->active_chunk->schema();
+        if (in_table->nrows() > 0) {
+            start_produce_probe = start_timer();
+            table_info* ti = new table_info(*in_table);
+            int64_t join_res = cudf_join_with_prebuilt_build_cpp(
+                join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
+                join_state->n_keys, build_kept_cols, probe_kept_cols,
+                join_kind_table[build_table_outer][probe_table_outer]);
+            table_info* tires = reinterpret_cast<table_info*>(join_res);
+            spti = std::shared_ptr<table_info>(tires);
+            auto ctbschema = join_state->output_buffer->active_chunk->schema();
+            join_state->metrics.produce_probe_out_idxs_time +=
+                end_timer(start_produce_probe) - append_time;
+        }
         did_gpu_offload = true;
-        join_state->metrics.produce_probe_out_idxs_time +=
-            end_timer(start_produce_probe) - append_time;
     }
 
 #endif  // USE_CUDF
@@ -3835,7 +3841,9 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
     // Insert output rows into the output buffer:
     if (did_gpu_offload) {
-        join_state->output_buffer->AppendBatch(spti);
+        if (spti != nullptr) {
+            join_state->output_buffer->AppendBatch(spti);
+        }
     } else {
         join_state->output_buffer->AppendJoinOutput(
             active_partition->build_table_buffer->data_table,
@@ -4076,11 +4084,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             join_state->metrics.build_outer_output_idx_time +=
                 end_timer(start_build_outer);
 
-            // Use the dummy probe table since all indices are -1
-            join_state->output_buffer->AppendJoinOutput(
-                active_partition->build_table_buffer->data_table,
-                join_state->dummy_probe_table, build_idxs, probe_idxs,
-                build_kept_cols, probe_kept_cols, join_state->is_mark_join);
+            if (!did_gpu_offload) {
+                // Use the dummy probe table since all indices are -1
+                join_state->output_buffer->AppendJoinOutput(
+                    active_partition->build_table_buffer->data_table,
+                    join_state->dummy_probe_table, build_idxs, probe_idxs,
+                    build_kept_cols, probe_kept_cols, join_state->is_mark_join);
+            }
             build_idxs.clear();
             probe_idxs.clear();
         }

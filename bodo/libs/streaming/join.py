@@ -2204,11 +2204,16 @@ def cudf_probe_join_with_build(
         how=join_kind,
     )
 
-    keep_col_list = probe_kept_cols + [
-        x + len(probe_kept_cols) for x in build_kept_cols
-    ]
+    if join_kind == "right":
+        keep_col_list = [
+            x + len(build_gdf.columns) for x in probe_kept_cols
+        ] + build_kept_cols
+    else:
+        keep_col_list = probe_kept_cols + [
+            x + len(probe_gdf.columns) for x in build_kept_cols
+        ]
     result_gdf = result_gdf.iloc[:, keep_col_list]
 
-    result_df = result_gdf.to_pandas()
+    result_df = result_gdf.to_arrow().to_pandas()
     out_ptr, _ = df_to_cpp_table(result_df)
     return out_ptr
