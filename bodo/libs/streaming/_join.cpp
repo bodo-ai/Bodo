@@ -1915,108 +1915,6 @@ void HashJoinState::ReportBuildStageMetrics(
     JoinState::ReportBuildStageMetrics(metrics_out);
 }
 
-#include <arrow/api.h>
-#include <arrow/buffer.h>
-#include <arrow/table.h>
-#include <stdexcept>
-
-std::shared_ptr<arrow::Table> MakeZeroTable() {
-    const std::vector<int32_t> a = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    const std::vector<double> b = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-
-    auto schema = arrow::schema({arrow::field("a", arrow::int32()),
-                                 arrow::field("b", arrow::int32()),
-                                 arrow::field("c", arrow::float64()),
-                                 arrow::field("d", arrow::float64())});
-
-    auto metadata = std::make_shared<arrow::KeyValueMetadata>();
-    schema = schema->WithMetadata(metadata);
-
-    // ---- Build column a ----
-    arrow::Int32Builder aBuilder;
-    {
-        arrow::Status st = aBuilder.AppendValues(a);
-        if (!st.ok()) {
-            throw std::runtime_error("AppendValues(a) failed: " +
-                                     st.ToString());
-        }
-    }
-
-    // ---- Build column b ----
-    arrow::Int32Builder bBuilder;
-    {
-        arrow::Status st = bBuilder.AppendValues(a);
-        if (!st.ok()) {
-            throw std::runtime_error("AppendValues(b) failed: " +
-                                     st.ToString());
-        }
-    }
-
-    // ---- Build column c ----
-    arrow::DoubleBuilder cBuilder;
-    {
-        arrow::Status st = cBuilder.AppendValues(b);
-        if (!st.ok()) {
-            throw std::runtime_error("AppendValues(c) failed: " +
-                                     st.ToString());
-        }
-    }
-
-    // ---- Build column d ----
-    arrow::DoubleBuilder dBuilder;
-    {
-        arrow::Status st = dBuilder.AppendValues(b);
-        if (!st.ok()) {
-            throw std::runtime_error("AppendValues(d) failed: " +
-                                     st.ToString());
-        }
-    }
-
-    // ---- Finish arrays ----
-    std::shared_ptr<arrow::Array> array_a;
-    {
-        auto res = aBuilder.Finish();
-        if (!res.ok()) {
-            throw std::runtime_error("Finish(a) failed: " +
-                                     res.status().ToString());
-        }
-        array_a = *res;
-    }
-
-    std::shared_ptr<arrow::Array> array_b;
-    {
-        auto res = bBuilder.Finish();
-        if (!res.ok()) {
-            throw std::runtime_error("Finish(b) failed: " +
-                                     res.status().ToString());
-        }
-        array_b = *res;
-    }
-
-    std::shared_ptr<arrow::Array> array_c;
-    {
-        auto res = cBuilder.Finish();
-        if (!res.ok()) {
-            throw std::runtime_error("Finish(c) failed: " +
-                                     res.status().ToString());
-        }
-        array_c = *res;
-    }
-
-    std::shared_ptr<arrow::Array> array_d;
-    {
-        auto res = dBuilder.Finish();
-        if (!res.ok()) {
-            throw std::runtime_error("Finish(d) failed: " +
-                                     res.status().ToString());
-        }
-        array_d = *res;
-    }
-
-    // ---- Build table ----
-    return arrow::Table::Make(schema, {array_a, array_b, array_c, array_d});
-}
-
 void HashJoinState::FinalizeBuild() {
     time_pt start_finalize = start_timer();
     // Free build shuffle buffer, etc.
@@ -4926,11 +4824,10 @@ void import_compiler() {
 PyObject* cpp_table_to_cudf_cpp(int64_t py_cpp_table_ptr) {
     import_compiler();
 
-    PyObject* bodo_module = PyImport_ImportModule("bodo.libs.streaming.join");
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
     if (!bodo_module) {
         PyErr_Print();
-        throw std::runtime_error(
-            "Failed to import bodo.libs.streaming.join module");
+        throw std::runtime_error("Failed to import bodo.pandas.utils module");
     }
 
     PyObject* pyFunc = PyObject_GetAttrString(bodo_module, "cpp_table_to_cudf");
@@ -4984,11 +4881,10 @@ int64_t cudf_join_with_prebuilt_build_cpp(
     int64_t py_probe_cpp_table,  // C++ table pointer wrapped as PyObject*
     int64_t nkeys, const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, const std::string& how) {
-    PyObject* bodo_module = PyImport_ImportModule("bodo.libs.streaming.join");
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
     if (!bodo_module) {
         PyErr_Print();
-        throw std::runtime_error(
-            "Failed to import bodo.libs.streaming.join module");
+        throw std::runtime_error("Failed to import bodo.pandas.utils module");
     }
 
     PyObject* pyFunc =

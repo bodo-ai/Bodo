@@ -1636,3 +1636,62 @@ def scalarOutputNACheck(out, dtype):
             # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
             return np.nan
     return out
+
+
+def cpp_table_to_cudf(cpp_table_ptr):
+    """
+    cpp_table_ptr: pointer to C++ table_info (or equivalent)
+    Returns: cuDF DataFrame
+    """
+    import cudf
+
+    from bodo.pandas.utils import cpp_table_to_df
+
+    bodo_df = cpp_table_to_df(cpp_table_ptr, use_arrow_dtypes=True, delete_input=False)
+    return cudf.DataFrame(bodo_df)
+
+
+def cudf_probe_join_with_build(
+    build_gdf,
+    probe_cpp_table,
+    nkeys,
+    build_kept_cols,
+    probe_kept_cols,
+    join_kind="inner",
+):
+    """
+    build_df: pandas DataFrame (build side)
+    probe_df: pandas DataFrame (probe side)
+    nkeys: number of join keys.  both input have to have keys in
+        the same order at the beginning of the columns
+    how: join type ("inner", "left", "right", "outer")
+    """
+
+    from bodo.pandas.utils import df_to_cpp_table
+
+    probe_gdf = cpp_table_to_cudf(probe_cpp_table)
+
+    # Extract column names from indices
+    build_cols = [build_gdf.columns[i] for i in range(nkeys)]
+    probe_cols = [probe_gdf.columns[i] for i in range(nkeys)]
+
+    result_gdf = probe_gdf.merge(
+        build_gdf,
+        left_on=probe_cols,
+        right_on=build_cols,
+        how=join_kind,
+    )
+
+    if join_kind == "right":
+        keep_col_list = [
+            x + len(build_gdf.columns) for x in probe_kept_cols
+        ] + build_kept_cols
+    else:
+        keep_col_list = probe_kept_cols + [
+            x + len(probe_gdf.columns) for x in build_kept_cols
+        ]
+    result_gdf = result_gdf.iloc[:, keep_col_list]
+
+    result_df = result_gdf.to_arrow().to_pandas()
+    out_ptr, _ = df_to_cpp_table(result_df)
+    return out_ptr
