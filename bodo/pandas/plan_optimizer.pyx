@@ -1032,7 +1032,7 @@ cdef class LogicalIcebergWrite(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source,
             str table_loc,
             str bucket_region,
-            int max_pq_chunksize,
+            int64_t max_pq_chunksize,
             str compression,
             object partition_tuples,
             object sort_tuples,
