@@ -951,6 +951,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
+        print("creating the parquet dataset for path: ", fpath_noprefix)
         dataset = pq.ParquetDataset(
             fpath_noprefix,
             filesystem=fs
@@ -965,6 +966,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         else:
             n_sampled_files = n_files
 
+        print("reading selected files: ", n_sampled_files, " out of ", n_files)
         nrows_sample = pq.read_table(selected_files, filesystem=fs, columns=[]).num_rows
         nrows = int(nrows_sample * (n_files / n_sampled_files))
         return nrows
