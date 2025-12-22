@@ -925,8 +925,10 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        from bodo.ext import hdist
+
         if self.nrows == -1:
-            self.nrows = self._get_nrows(exact=True)
+            self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=True) if bodo.get_rank() == 0 else 0)
         return self.nrows
 
     def _get_nrows(self, exact=True):
@@ -965,7 +967,6 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         nrows_sample = pq.read_table(selected_files, filesystem=fs, columns=[]).num_rows
         nrows = int(nrows_sample * (n_files / n_sampled_files))
-        print(nrows_sample, nrows)
         return nrows
 
 
