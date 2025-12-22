@@ -353,6 +353,9 @@ class JoinFilterColStats {
     std::unordered_map<int, std::vector<col_stats_collector>>
         join_col_stats_map;
 
+    std::optional<std::unordered_map<int, std::vector<col_min_max_t>>> result =
+        std::nullopt;
+
    public:
     JoinFilterColStats(std::unordered_map<int, JoinState *> join_state_map,
                        JoinFilterProgramState rtjf_state_map) {
@@ -374,12 +377,15 @@ class JoinFilterColStats {
     JoinFilterColStats() = default;
 
     std::unordered_map<int, std::vector<col_min_max_t>> collect_all() {
-        std::unordered_map<int, std::vector<col_min_max_t>> result;
+        if (result.has_value()) {
+            return result.value();
+        }
+
         for (const auto &[join_id, collectors] : join_col_stats_map) {
             for (const auto &collector : collectors) {
-                result[join_id].push_back(collector.collect_min_max());
+                result.value()[join_id].push_back(collector.collect_min_max());
             }
         }
-        return result;
+        return result.value();
     }
 };
