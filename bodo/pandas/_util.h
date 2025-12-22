@@ -4,8 +4,8 @@
 #include <arrow/api.h>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <variant>
-#include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_join.h"
 #include "duckdb/common/types/value.hpp"
@@ -35,6 +35,15 @@ std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
 extractValue(const duckdb::Value &value);
+
+/**
+ * @brief Convert Arrow scalar to duckdb value.
+ *
+ * @param scalar - the arrow scalar to convert
+ * @return the converted duckdb value
+ */
+duckdb::Value ArrowScalarToDuckDBValue(
+    const std::shared_ptr<arrow::Scalar> &scalar);
 
 /**
  * @brief Convert duckdb value to null var of right type.
@@ -330,13 +339,15 @@ class JoinFilterColStats {
     struct col_stats_collector {
         int64_t build_key_col;
         JoinState *join_state;
-        col_min_max_t collect_min_max() const {
+        std::optional<col_min_max_t> collect_min_max() const {
             std::unique_ptr<bodo::DataType> dt =
                 join_state->build_table_schema->column_types[build_key_col]
                     ->copy();
             const auto &col_min_max = join_state->min_max_values[build_key_col];
             arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-            assert(col_min_max.has_value());
+            if (!col_min_max.has_value()) {
+                return std::nullopt;
+            }
             std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
                 bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
                 dt->timezone, time_unit, false,
@@ -346,10 +357,12 @@ class JoinFilterColStats {
                 arrow_array->GetScalar(0).ValueOrDie();
             std::shared_ptr<arrow::Scalar> max_scalar =
                 arrow_array->GetScalar(1).ValueOrDie();
-            return {min_scalar, max_scalar};
+            return std::make_optional<col_min_max_t>(min_scalar, max_scalar);
         }
     };
 
+    const std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map;
+    const JoinFilterProgramState join_filter_program_state;
     std::unordered_map<int, std::vector<col_stats_collector>>
         join_col_stats_map;
 
@@ -357,11 +370,23 @@ class JoinFilterColStats {
         std::nullopt;
 
    public:
-    JoinFilterColStats(std::unordered_map<int, JoinState *> join_state_map,
-                       JoinFilterProgramState rtjf_state_map) {
-        for (const auto &[join_id, col_info] : rtjf_state_map) {
-            auto join_state_it = join_state_map.find(join_id);
-            if (join_state_it == join_state_map.end()) {
+    JoinFilterColStats(
+        std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map,
+        JoinFilterProgramState rtjf_state_map)
+        : join_state_map(std::move(join_state_map)),
+          join_filter_program_state(std::move(rtjf_state_map)) {}
+    JoinFilterColStats() = default;
+
+    std::unordered_map<int, std::vector<col_min_max_t>> collect_all() {
+        if (result.has_value()) {
+            return result.value();
+        }
+        result = std::unordered_map<int, std::vector<col_min_max_t>>{};
+
+        for (const auto &[join_id, col_info] :
+             this->join_filter_program_state) {
+            auto join_state_it = join_state_map->find(join_id);
+            if (join_state_it == join_state_map->end()) {
                 throw std::runtime_error(
                     "JoinFilterColStats: join state not found for join id " +
                     std::to_string(join_id));
@@ -369,21 +394,19 @@ class JoinFilterColStats {
             JoinState *join_state = join_state_it->second;
             for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
                 int64_t orig_build_key = col_info.orig_build_key_cols[i];
-                join_col_stats_map[join_id].push_back(col_stats_collector{
-                    .build_key_col = orig_build_key, .join_state = join_state});
+                join_col_stats_map[col_info.filter_columns[i]].push_back(
+                    col_stats_collector{.build_key_col = orig_build_key,
+                                        .join_state = join_state});
             }
         }
-    }
-    JoinFilterColStats() = default;
 
-    std::unordered_map<int, std::vector<col_min_max_t>> collect_all() {
-        if (result.has_value()) {
-            return result.value();
-        }
-
-        for (const auto &[join_id, collectors] : join_col_stats_map) {
+        for (const auto &[filter_col, collectors] : join_col_stats_map) {
             for (const auto &collector : collectors) {
-                result.value()[join_id].push_back(collector.collect_min_max());
+                std::optional<col_min_max_t> col_min_max =
+                    collector.collect_min_max();
+                if (col_min_max.has_value()) {
+                    result.value()[filter_col].push_back(col_min_max.value());
+                }
             }
         }
         return result.value();
