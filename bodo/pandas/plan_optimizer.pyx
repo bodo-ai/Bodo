@@ -932,6 +932,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return self.nrows
 
     def _get_nrows(self, exact=True):
+        import pyarrow as pa
         import pyarrow.parquet as pq
         from bodo.io.fs_io import (
             expand_path_globs,
@@ -945,31 +946,49 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         # Since we are supplying the filesystem to pq.read_table,
         # Any prefixes e.g. s3:// should be removed.
-        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
             fpath, protocol, parsed_url
         )
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+        if isinstance(fpath_noprefix, str):
+            fpath_noprefix = [fpath_noprefix]
 
-        print("creating the parquet dataset for path: ", fpath_noprefix)
-        dataset = pq.ParquetDataset(
-            fpath_noprefix,
-            filesystem=fs
-        )
+        files = []
 
-        selected_files = dataset.files
-        n_files = len(selected_files)
-        if not exact:
-            # Sample files to get an approximate row count
-            n_sampled_files = min(n_files, max(0.001 * n_files, 3))
-            selected_files = selected_files[:n_sampled_files]
+        print("listing files...")
+        for path in fpath_noprefix:
+            info = fs.get_file_info(path)
+
+            if info.type == pa.fs.FileType.File:
+                if path.endswith(".parquet") or path.endswith(".pq"):
+                    files.append(path)
+
+            elif info.type == pa.fs.FileType.Directory:
+                selector = pa.fs.FileSelector(path, recursive=True)
+                infos = fs.get_file_info(selector)
+                files.extend(
+                    i.path for i in infos
+                    if i.type == pa.fs.FileType.File
+                    and (
+                        i.path.endswith(".parquet") or i.path.endswith(".pq")
+                    )
+                )
+
+        n_files = len(files)
+        if n_files == 0:
+            return 0
+
+        if exact:
+            sampled = files
         else:
-            n_sampled_files = n_files
+            n_sampled = max(3, int(0.001 * n_files))
+            sampled = files[:min(n_sampled, n_files)]
 
-        print("reading selected files: ", n_sampled_files, " out of ", n_files)
-        nrows_sample = pq.read_table(selected_files, filesystem=fs, columns=[]).num_rows
-        nrows = int(nrows_sample * (n_files / n_sampled_files))
-        return nrows
+        print("Gathering row counts...")
+        rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
+
+        return int(rows * (n_files / len(sampled)))
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
