@@ -1,5 +1,7 @@
 #include "_pipeline.h"
+#include <mpi_proto.h>
 #include <iostream>
+#include "../libs/_distributed.h"
 
 #include "physical/result_collector.h"
 
@@ -200,6 +202,10 @@ bool Pipeline::midPipelineExecute(unsigned idx,
                 op->ProcessBatch(batch, prev_op_result);
             prev_op_result = result.second;
 
+            CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+                      "_pipeline.cpp::midPipelineExecute: MPI "
+                      "error on MPI_Barrier:");
+
             DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result);
 
             // Execute subsequent operators and if any of them said that
@@ -232,17 +238,20 @@ uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
-    std::cout << "Source: " << this->source->ToString() << std::endl;
-    for (auto& op : between_ops) {
-        std::cout << "Op: " << op->ToString() << std::endl;
-    }
-    std::cout << "Sink: " << this->sink->ToString() << std::endl;
-
     uint64_t batches_processed = 0;
     bool finished = false;
     std::shared_ptr<table_info> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (rank == 0) {
+        std::cout << "Source: " << this->source->ToString() << std::endl;
+        for (auto& op : between_ops) {
+            std::cout << "Op: " << op->ToString() << std::endl;
+        }
+        std::cout << "Sink: " << this->sink->ToString() << std::endl;
+    }
+
     while (!finished) {
         batches_processed++;
 
