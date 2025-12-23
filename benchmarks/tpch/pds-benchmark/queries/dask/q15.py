@@ -9,7 +9,7 @@ from queries.dask import utils
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-Q_NUM = 16
+Q_NUM = 15
 
 
 def q() -> None:

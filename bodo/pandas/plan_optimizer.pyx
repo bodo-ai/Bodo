@@ -908,7 +908,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """
     cdef readonly object path
     cdef readonly object storage_options
-    cdef readonly int nrows
+    cdef readonly int64_t nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         from bodo.ext import hdist
@@ -970,10 +970,10 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
 
 
 cdef class LogicalGetPandasReadParallel(LogicalOperator):
-    cdef int nrows
+    cdef int64_t nrows
 
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, int nrows, object result_id):
+    def __cinit__(self, object out_schema, int64_t nrows, object result_id):
         # result_id could be a string or LazyPlanDistributedArg if we are constructing the
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
@@ -1032,7 +1032,7 @@ cdef class LogicalIcebergWrite(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source,
             str table_loc,
             str bucket_region,
-            int max_pq_chunksize,
+            int64_t max_pq_chunksize,
             str compression,
             object partition_tuples,
             object sort_tuples,

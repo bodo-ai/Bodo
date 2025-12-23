@@ -1,6 +1,7 @@
 import argparse
 import time
 import warnings
+from collections.abc import Callable
 
 import pandas as pd
 import pyspark.pandas as ps
@@ -632,21 +633,28 @@ def tpch_q20(data_folder: str, scale_factor: float = 1.0):
     return result_df
 
 
+def run_query_single(query_func: Callable, data_folder: str, scale_factor: float = 1.0):
+    res = query_func(data_folder, scale_factor)
+    if not isinstance(res, pd.DataFrame):
+        res = res.to_pandas()
+    return res
+
+
 def run_queries(data_folder: str, queries: list[int], scale_factor: float = 1.0):
     t1 = time.time()
 
     for query in queries:
-        t2 = time.time()
         query_func = globals().get(f"tpch_q{query:02}")
 
         if query_func is None:
             print(f"Query {query:02} not implemented yet.")
             continue
 
-        res = query_func(data_folder, scale_factor)
-        if not isinstance(res, pd.DataFrame):
-            res = res.to_pandas()
+        # Warm up run
+        run_query_single(query_func, data_folder, scale_factor)
 
+        t2 = time.time()
+        run_query_single(query_func, data_folder, scale_factor)
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
 
     print(f"Total time: {time.time() - t1:.2f} seconds")

@@ -50,7 +50,7 @@ EOF
 
 resource "aws_emr_cluster" "emr_cluster" {
   name          = "EMR-Cluster"
-  release_label = "emr-7.5.0"
+  release_label = "emr-7.9.0"
   applications  = ["Hadoop", "Spark"]
 
   ec2_attributes {
@@ -61,12 +61,12 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
 
   master_instance_group {
-    instance_type = "r6i.8xlarge"
+    instance_type = "c6i.16xlarge"
   }
 
   core_instance_group {
-    instance_type  = "r6i.8xlarge"
-    instance_count = 2
+    instance_type  = "c6i.16xlarge"
+    instance_count = 3
 
     ebs_config {
       size                 = "40"
@@ -82,18 +82,24 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
   log_uri = "s3://${aws_s3_bucket.emr_bucket.id}/logs/"
 
-  step {
-    name              = "Run Python Script"
-    action_on_failure = "TERMINATE_CLUSTER"
-    hadoop_jar_step {
-      jar  = "command-runner.jar"
-      args = concat([
-      "spark-submit",
-      "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pandas_on_spark_queries.py",
-      "--folder", "${var.data_folder}",
-      "--scale_factor", tostring(var.scale_factor),
-      "--queries"
-      ], [for q in var.queries : tostring(q)])
+  dynamic "step" {
+    for_each = var.queries
+
+    content {
+      name              = "Run TPCH Query ${step.value}"
+      action_on_failure = "CONTINUE"
+
+      hadoop_jar_step {
+        jar = "command-runner.jar"
+
+        args = [
+          "spark-submit",
+          "s3://${aws_s3_bucket.emr_bucket.id}/scripts/pandas_on_spark_queries.py",
+          "--folder", var.data_folder,
+          "--scale_factor", tostring(var.scale_factor),
+          "--queries", tostring(step.value)
+        ]
+      }
     }
   }
   auto_termination_policy {

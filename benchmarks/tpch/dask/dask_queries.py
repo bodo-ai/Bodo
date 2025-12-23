@@ -5,8 +5,8 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-import dask
 import dask.dataframe as dd
+from dask.distributed import Client
 
 # Cloud provider config
 env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
@@ -15,9 +15,9 @@ ec2_config = {
     # NOTE: Setting security = False to avoid large config size
     # https://github.com/dask/dask-cloudprovider/issues/249
     "security": False,
-    "n_workers": 3,
+    "n_workers": 4,
     "scheduler_instance_type": "c6i.xlarge",
-    "worker_instance_type": "r6i.8xlarge",
+    "worker_instance_type": "c6i.16xlarge",
     "docker_image": "daskdev/dask:latest",
     # Profile with AmazonS3FullAccess
     "iam_instance_profile": {"Name": "dask-benchmark"},
@@ -1320,21 +1320,25 @@ def get_query_func(q_num: int) -> Callable:
 
 def run_single_query(query_func, dataset_path, scale_factor) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
+    # Warm up run
+    query_func(dataset_path, scale_factor, ext=".pq").compute()
+
     start = time.time()
     query_func(dataset_path, scale_factor, ext=".pq").compute()
     return time.time() - start
 
 
 def run_queries(query_nums, dataset_path, scale_factor) -> None:
-    total_start = time.time()
+    with Client():  # Use default LocalCluster settings
+        total_start = time.time()
 
-    for i in query_nums:
-        query_func = get_query_func(i)
-        query_time = run_single_query(query_func, dataset_path, scale_factor)
-        print(f"Query {i} execution time: {query_time:.2f} seconds")
+        for i in query_nums:
+            query_func = get_query_func(i)
+            query_time = run_single_query(query_func, dataset_path, scale_factor)
+            print(f"Query {i} execution time: {query_time:.2f} seconds")
 
-    total_time = time.time() - total_start
-    print(f"Total execution time: {total_time:.4f} seconds")
+        total_time = time.time() - total_start
+        print(f"Total execution time: {total_time:.4f} seconds")
 
 
 def main():
@@ -1369,10 +1373,6 @@ def main():
     dataset_path = args.folder
     scale_factor = args.scale_factor
     use_cloudprovider = args.use_cloudprovider
-
-    # Configure Scheduler
-    if not use_cloudprovider:
-        dask.config.set(scheduler="threads")
 
     queries = list(range(1, 23))
     if args.queries is not None:
