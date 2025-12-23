@@ -924,3 +924,61 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
                 type->ToString());
     }
 }
+
+std::optional<JoinFilterColStats::col_min_max_t>
+JoinFilterColStats::col_stats_collector::collect_min_max() const {
+    std::unique_ptr<bodo::DataType> dt =
+        join_state->build_table_schema->column_types[build_key_col]->copy();
+    const auto &col_min_max = join_state->min_max_values[build_key_col];
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    if (!col_min_max.has_value()) {
+        return std::nullopt;
+    }
+    std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
+        bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
+        dt->timezone, time_unit, false, bodo::default_buffer_memory_manager());
+
+    std::shared_ptr<arrow::Scalar> min_scalar =
+        arrow_array->GetScalar(0).ValueOrDie();
+    std::shared_ptr<arrow::Scalar> max_scalar =
+        arrow_array->GetScalar(1).ValueOrDie();
+    return std::make_optional<col_min_max_t>(min_scalar, max_scalar);
+}
+
+std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
+JoinFilterColStats::collect_all() {
+    if (result.has_value()) {
+        return result.value();
+    }
+    result = std::unordered_map<int, std::vector<col_min_max_t>>{};
+
+    for (const auto &[join_id, col_info] : this->join_filter_program_state) {
+        auto join_state_it = join_state_map->find(join_id);
+        if (join_state_it == join_state_map->end()) {
+            throw std::runtime_error(
+                "JoinFilterColStats: join state not found for join id " +
+                std::to_string(join_id));
+        }
+        JoinState *join_state = join_state_it->second;
+        for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
+            if (col_info.filter_columns[i] < 0) {
+                continue;
+            }
+            const int64_t orig_build_key = col_info.orig_build_key_cols[i];
+            join_col_stats_map[col_info.filter_columns[i]].push_back(
+                col_stats_collector{.build_key_col = orig_build_key,
+                                    .join_state = join_state});
+        }
+    }
+
+    for (const auto &[filter_col, collectors] : join_col_stats_map) {
+        for (const auto &collector : collectors) {
+            std::optional<col_min_max_t> col_min_max =
+                collector.collect_min_max();
+            if (col_min_max.has_value()) {
+                result.value()[filter_col].push_back(col_min_max.value());
+            }
+        }
+    }
+    return result.value();
+}
