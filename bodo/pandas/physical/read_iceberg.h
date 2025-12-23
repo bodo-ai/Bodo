@@ -24,7 +24,16 @@ struct PhysicalReadIcebergMetrics {
 /// @brief Physical node for reading Parquet files in pipelines.
 class PhysicalReadIceberg : public PhysicalSource {
    private:
+    PyObject *catalog;
+    const std::string table_id;
+    PyObject *iceberg_filter;
+    PyObject *iceberg_schema;
+    const int64_t snapshot_id;
+    duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     const std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::vector<int> selected_columns;
+    int64_t total_rows_to_read = -1;  // Default to read everything.
+
     const std::shared_ptr<arrow::Schema> out_arrow_schema;
     std::unique_ptr<IcebergParquetReader> internal_reader;
     JoinFilterColStats join_filter_col_stats;
@@ -34,13 +43,7 @@ class PhysicalReadIceberg : public PhysicalSource {
         const std::vector<int> &selected_columns,
         const std::shared_ptr<arrow::Schema> schema);
 
-    static std::unique_ptr<IcebergParquetReader> create_internal_reader(
-        PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-        PyObject *iceberg_schema, int64_t snapshot_id,
-        duckdb::TableFilterSet &filter_exprs,
-        std::shared_ptr<arrow::Schema> arrow_schema,
-        std::vector<int> &selected_columns,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val, int64_t op_id);
+    std::unique_ptr<IcebergParquetReader> create_internal_reader();
 
     static std::shared_ptr<arrow::Schema> create_out_arrow_schema(
         std::shared_ptr<arrow::Schema> arrow_schema,
@@ -49,12 +52,17 @@ class PhysicalReadIceberg : public PhysicalSource {
    public:
     explicit PhysicalReadIceberg(
         PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-        PyObject *iceberg_schema, std::shared_ptr<arrow::Schema> arrow_schema,
-        int64_t snapshot_id, std::vector<int> &selected_columns,
+        PyObject *iceberg_schema,
+        const std::shared_ptr<arrow::Schema> arrow_schema,
+        const int64_t snapshot_id, const std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         JoinFilterColStats join_filter_col_stats);
-    virtual ~PhysicalReadIceberg() = default;
+    virtual ~PhysicalReadIceberg() {
+        Py_XDECREF(this->catalog);
+        Py_XDECREF(this->iceberg_filter);
+        Py_XDECREF(this->iceberg_schema);
+    }
 
     void FinalizeSource() override;
 

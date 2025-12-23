@@ -33,7 +33,7 @@ class PhysicalReadParquet : public PhysicalSource {
     PyObject *pyarrow_schema;
     PyObject *storage_options;
     PyObject *schema_fields;
-    std::vector<int> selected_columns;
+    const std::vector<int> selected_columns;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
 
@@ -53,9 +53,9 @@ class PhysicalReadParquet : public PhysicalSource {
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
-        Py_INCREF(py_path);
-        Py_INCREF(pyarrow_schema);
-        Py_INCREF(storage_options);
+        Py_INCREF(this->py_path);
+        Py_INCREF(this->pyarrow_schema);
+        Py_INCREF(this->storage_options);
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
         // of dataframe later)
@@ -67,8 +67,8 @@ class PhysicalReadParquet : public PhysicalSource {
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
 
-        schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
-        if (!schema_fields || !PyList_Check(schema_fields)) {
+        this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
+        if (!this->schema_fields || !PyList_Check(this->schema_fields)) {
             throw std::runtime_error(
                 "PhysicalReadParquet(): failed to get schema fields from "
                 "pyarrow schema");
@@ -88,7 +88,7 @@ class PhysicalReadParquet : public PhysicalSource {
         }
 
         // Extract column names from pyarrow schema using selected columns
-        int num_fields = PyList_Size(schema_fields);
+        int num_fields = PyList_Size(this->schema_fields);
         out_column_names.reserve(selected_columns.size());
 
         for (int col_idx : selected_columns) {
@@ -98,7 +98,7 @@ class PhysicalReadParquet : public PhysicalSource {
                     std::to_string(col_idx) + " for schema with " +
                     std::to_string(num_fields) + " fields");
             }
-            PyObject *name = PyList_GetItem(schema_fields, col_idx);
+            PyObject *name = PyList_GetItem(this->schema_fields, col_idx);
             if (name && PyUnicode_Check(name)) {
                 out_column_names.emplace_back(PyUnicode_AsUTF8(name));
             } else {
@@ -109,10 +109,10 @@ class PhysicalReadParquet : public PhysicalSource {
         this->metrics.init_time += end_timer(start_init);
     }
     virtual ~PhysicalReadParquet() {
-        Py_DECREF(py_path);
-        Py_DECREF(pyarrow_schema);
-        Py_DECREF(storage_options);
-        Py_DECREF(schema_fields);
+        Py_XDECREF(this->py_path);
+        Py_XDECREF(this->pyarrow_schema);
+        Py_XDECREF(this->storage_options);
+        Py_XDECREF(this->schema_fields);
     }
 
     void FinalizeSource() override {
