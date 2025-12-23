@@ -1,4 +1,5 @@
 #include "_pipeline.h"
+#include <iostream>
 
 #include "physical/result_collector.h"
 
@@ -230,6 +231,12 @@ bool Pipeline::midPipelineExecute(unsigned idx,
 uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
+
+    std::cout << "Source: " << this->source->ToString() << std::endl;
+    for (auto& op : between_ops) {
+        std::cout << "Op: " << op->ToString() << std::endl;
+    }
+    std::cout << "Sink: " << this->sink->ToString() << std::endl;
 
     uint64_t batches_processed = 0;
     bool finished = false;
