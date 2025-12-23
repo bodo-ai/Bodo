@@ -956,7 +956,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
             fpath_noprefix = [fpath_noprefix]
 
         def is_parquet_file(info: pa.fs.FileInfo):
-            return info.extension in [".parquet", ".pq"]
+            return info.extension in ["parquet", "pq"]
 
         files = []
 
