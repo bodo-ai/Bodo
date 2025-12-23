@@ -139,12 +139,16 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     virtual ~PhysicalSort() = default;
 
     void FinalizeSink() override {
+        std::cout << "FinalizeSink called on PhysicalSort operator."
+                  << std::endl;
         time_pt start_finalize_build = start_timer();
         stream_sorter->FinalizeBuild();
         this->metrics.consume_time += end_timer(start_finalize_build);
     }
 
     void FinalizeSource() override {
+        std::cout << "FinalizeSource called on PhysicalSort operator."
+                  << std::endl;
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -168,6 +172,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        std::cout << "ConsumeBatch called on PhysicalSort operator."
+                  << std::endl;
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
@@ -189,6 +195,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        std::cout << "ProduceBatch called on PhysicalSort operator."
+                  << std::endl;
         time_pt start_produce = start_timer();
         auto sorted_res = stream_sorter->GetOutput();
 
