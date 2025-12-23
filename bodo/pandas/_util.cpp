@@ -931,9 +931,11 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
         join_state->build_table_schema->column_types[build_key_col]->copy();
     const auto &col_min_max = join_state->min_max_values[build_key_col];
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+
     if (!col_min_max.has_value()) {
         return std::nullopt;
     }
+
     std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
         bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
         dt->timezone, time_unit, false, bodo::default_buffer_memory_manager());
@@ -942,16 +944,23 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
         arrow_array->GetScalar(0).ValueOrDie();
     std::shared_ptr<arrow::Scalar> max_scalar =
         arrow_array->GetScalar(1).ValueOrDie();
+
     return std::make_optional<col_min_max_t>(min_scalar, max_scalar);
 }
 
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
+    // Cache the collection
     if (result.has_value()) {
         return result.value();
     }
-    result = std::unordered_map<int, std::vector<col_min_max_t>>{};
 
+    result = std::unordered_map<int, std::vector<col_min_max_t>>{};
+    std::unordered_map<int64_t, std::vector<col_stats_collector>>
+        join_col_stats_map;
+
+    // Create col_stats_collectors for every filter column in the
+    // join_filter_program_state
     for (const auto &[join_id, col_info] : this->join_filter_program_state) {
         auto join_state_it = join_state_map->find(join_id);
         if (join_state_it == join_state_map->end()) {
@@ -959,18 +968,22 @@ JoinFilterColStats::collect_all() {
                 "JoinFilterColStats: join state not found for join id " +
                 std::to_string(join_id));
         }
+
         JoinState *join_state = join_state_it->second;
         for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
             if (col_info.filter_columns[i] < 0) {
                 continue;
             }
+
             const int64_t orig_build_key = col_info.orig_build_key_cols[i];
-            join_col_stats_map[col_info.filter_columns[i]].push_back(
-                col_stats_collector{.build_key_col = orig_build_key,
-                                    .join_state = join_state});
+            const int64_t filter_col = col_info.filter_columns[i];
+            join_col_stats_map[filter_col].push_back(col_stats_collector{
+                .build_key_col = orig_build_key, .join_state = join_state});
         }
     }
 
+    // Collect min/max for each filter column using the collectors
+    // and populate the result map
     for (const auto &[filter_col, collectors] : join_col_stats_map) {
         for (const auto &collector : collectors) {
             std::optional<col_min_max_t> col_min_max =
@@ -987,16 +1000,17 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     duckdb::unique_ptr<duckdb::TableFilterSet> filters,
     const std::vector<int> column_projection) {
     for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
-        // Find the position of col_idx in selected_columns
         for (const auto &[min, max] : min_max_vec) {
             duckdb::unique_ptr<duckdb::TableFilter> min_filter =
                 duckdb::make_uniq<duckdb::ConstantFilter>(
                     duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
                     ArrowScalarToDuckDBValue(min));
+
             duckdb::unique_ptr<duckdb::TableFilter> max_filter =
                 duckdb::make_uniq<duckdb::ConstantFilter>(
                     duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
                     ArrowScalarToDuckDBValue(max));
+
             filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
                                 std::move(min_filter));
             filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),

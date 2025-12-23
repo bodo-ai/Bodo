@@ -333,23 +333,34 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
+/**
+ * @brief Collect min/max statistics from join build tables for join filter
+ * columns.
+ *
+ */
 class JoinFilterColStats {
     using col_min_max_t = std::pair<std::shared_ptr<arrow::Scalar>,
                                     std::shared_ptr<arrow::Scalar>>;
+
+    // Helper struct to collect min/max for a specific join filter column
     struct col_stats_collector {
         int64_t build_key_col;
         JoinState *join_state;
         std::optional<col_min_max_t> collect_min_max() const;
     };
 
+    // Map of join IDs to their corresponding JoinState pointers
     const std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map;
-    const JoinFilterProgramState join_filter_program_state;
-    std::unordered_map<int, std::vector<col_stats_collector>>
-        join_col_stats_map;
 
+    // Runtime join filter program state to know what columns to collect stats
+    // for and the associated join id
+    const JoinFilterProgramState join_filter_program_state;
+
+    // Cached result of collected min/max statistics
     std::optional<std::unordered_map<int, std::vector<col_min_max_t>>> result =
         std::nullopt;
-
+    // Collect min/max statistics for all join filter columns in
+    // join_col_stats_map
     std::unordered_map<int, std::vector<col_min_max_t>> collect_all();
 
    public:
@@ -360,6 +371,14 @@ class JoinFilterColStats {
           join_filter_program_state(std::move(rtjf_state_map)) {}
     JoinFilterColStats() = default;
 
+    /**
+     * @brief Insert collected min/max statistics as table filters into the
+     * provided duckdb TableFilterSet for the specified column projection.
+     *
+     * @param filters Existing duckdb TableFilterSet to insert filters into
+     * @param column_projection Column projection mapping to align filters with
+     * @return duckdb::unique_ptr<duckdb::TableFilterSet> Updated TableFilterSet
+     */
     duckdb::unique_ptr<duckdb::TableFilterSet> insert_filters(
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
