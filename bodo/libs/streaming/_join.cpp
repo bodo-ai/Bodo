@@ -3107,6 +3107,7 @@ bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state) {
             return false;
         } else {
             int flag = 0;
+            std::cout << "[DEBUG] Testing is_last barrier..." << std::endl;
             CHECK_MPI(MPI_Test(&join_state->is_last_request, &flag,
                                MPI_STATUS_IGNORE),
                       "stream_join_sync_is_last: MPI error on MPI_Test:");

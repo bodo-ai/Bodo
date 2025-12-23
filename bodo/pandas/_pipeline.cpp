@@ -201,10 +201,6 @@ bool Pipeline::midPipelineExecute(unsigned idx,
                 op->ProcessBatch(batch, prev_op_result);
             prev_op_result = result.second;
 
-            CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
-                      "_pipeline.cpp::midPipelineExecute: MPI "
-                      "error on MPI_Barrier:");
-
             DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result);
 
             // Execute subsequent operators and if any of them said that
