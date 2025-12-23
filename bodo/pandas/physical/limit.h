@@ -43,6 +43,8 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
              it != collected_rows->builder->end(); ++it) {
             cur_rows += (*it)->nrows();
         }
+        std::cout << "PhysicalLimit: Rank " << myrank << " collected "
+                  << cur_rows << " rows." << std::endl;
         CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
                                 row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
                                 MPI_COMM_WORLD),
