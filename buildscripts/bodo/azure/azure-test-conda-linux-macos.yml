@@ -16,6 +16,9 @@ parameters:
 - name: pool_name
   type: string
   default: 'ScalingVMSet'
+- name: use_bodo_arrow_fork
+  type: number
+  default: 1
 
 jobs:
 - job: ${{ parameters.name }}
@@ -47,8 +50,13 @@ jobs:
       which unzip
 
       if [[ "$(uname)" == 'Linux' ]]; then
-        wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
-        sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+        if [[ "$(uname -m)" == "x86_64" ]]; then
+          wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux-arm64-21.5.0.0.0dbru.zip
+          sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+        else
+          wget https://download.oracle.com/otn_software/linux/instantclient/1925000/instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip
+          sudo $(which unzip) instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip -d /usr/local/lib
+        fi
       else
         wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
         sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
@@ -101,7 +109,7 @@ jobs:
 
       if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
-        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_HOME=/opt/hadoop-3.4.0
         export HADOOP_INSTALL=$HADOOP_HOME
         export HADOOP_MAPRED_HOME=$HADOOP_HOME
         export HADOOP_COMMON_HOME=$HADOOP_HOME

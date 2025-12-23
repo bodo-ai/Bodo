@@ -8,6 +8,7 @@ import datetime
 import gzip
 import io
 import os
+import platform
 import random
 import re
 import shutil
@@ -3326,11 +3327,6 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     from bodo.tests.utils_jit import _nullable_float_arr_maker
 
     S = _nullable_float_arr_maker(L, to_null, to_nan)
-    # Remove the bodo metadata. It improperly assigns
-    # 1D_Var to the series which interferes with the test
-    # functionality. Deleting the metadata sets it back to
-    # the default of REP distribution.
-    del S._bodo_meta
     return S
 
 
@@ -3409,6 +3405,36 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
+
+
+pytest_mark_oracle = compose_decos(
+    (
+        pytest.mark.oracle,
+        pytest.mark.slow,
+        pytest.mark.skipif(
+            (
+                os.name == "posix"
+                and platform.system() == "Linux"
+                and "arm" in platform.machine().lower()
+                or "aarch64" in platform.machine().lower()
+            )
+            or platform.system() == "Windows"
+        ),
+    )
+)
+pytest_oracle = [
+    pytest.mark.oracle,
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        (
+            os.name == "posix"
+            and platform.system() == "Linux"
+            and "arm" in platform.machine().lower()
+            or "aarch64" in platform.machine().lower()
+        )
+        or platform.system() == "Windows"
+    ),
+]
 
 
 def compress_dir(dir_name):

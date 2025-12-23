@@ -1,7 +1,6 @@
 import io
 import re
 import string
-import sys
 import traceback
 
 import numpy as np
@@ -19,6 +18,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     oracle_user_pass_and_hostname,
+    pytest_mark_oracle,
     sql_user_pass_and_hostname,
 )
 from bodo.utils.testing import ensure_clean_mysql_psql_table
@@ -349,10 +349,8 @@ def test_read_sql_column_function(memory_leak_check):
 # https://www.oracle.com/news/connect/run-sql-data-queries-with-pandas.html
 
 
+@pytest_mark_oracle
 @pytest.mark.slow
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
 def test_oracle_read_sql_basic(memory_leak_check):
     """Test simple SQL query with Oracle DB"""
 
@@ -382,10 +380,8 @@ def test_oracle_read_sql_basic(memory_leak_check):
     check_func(impl3, (), check_dtype=False)
 
 
+@pytest_mark_oracle
 @pytest.mark.slow
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
 def test_oracle_read_sql_count(memory_leak_check):
     """Test SQL query count(*) and a single column Oracle DB"""
 
@@ -412,10 +408,8 @@ def test_oracle_read_sql_count(memory_leak_check):
     check_func(test_impl, (conn,), check_dtype=False)
 
 
+@pytest_mark_oracle
 @pytest.mark.slow
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
 def test_oracle_read_sql_join(memory_leak_check):
     """Test SQL query join Oracle DB"""
 
@@ -437,10 +431,8 @@ def test_oracle_read_sql_join(memory_leak_check):
     check_func(impl, ())
 
 
+@pytest_mark_oracle
 @pytest.mark.slow
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
 def test_oracle_read_sql_gb(memory_leak_check):
     """Test SQL query group by, column alias, and round Oracle DB"""
 
@@ -459,10 +451,8 @@ def test_oracle_read_sql_gb(memory_leak_check):
     check_func(impl, ())
 
 
+@pytest_mark_oracle
 @pytest.mark.slow
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_write_sql_oracle(is_distributed, memory_leak_check):
     """Test to_sql with Oracle database
@@ -826,6 +816,7 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
 
 
 @pytest.mark.skip
+@pytest_mark_oracle
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_oracle(is_distributed, memory_leak_check):
     """Test to_sql with Oracle database

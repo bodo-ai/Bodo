@@ -2,7 +2,6 @@
 # TODO: Move error checking tests from test_sql to here.
 
 import re
-import sys
 
 import numpy as np
 import pandas as pd
@@ -11,6 +10,7 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     oracle_user_pass_and_hostname,
+    pytest_mark_oracle,
     sql_user_pass_and_hostname,
 )
 
@@ -56,9 +56,7 @@ def test_unsupported_query():
         bodo.jit(impl)(conn)
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Need to install Oracle client on Windows"
-)
+@pytest_mark_oracle
 def test_to_sql_oracle():
     """This test that runtime error message for Oracle with string > 4000
     is displayed"""
