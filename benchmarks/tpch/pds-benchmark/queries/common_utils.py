@@ -24,6 +24,8 @@ def get_table_path(table_name: str) -> str:
     ext = settings.run.io_type if settings.run.include_io else "parquet"
     # Bodo Change: Parquet path
     multi_part_tables = {"lineitem", "orders", "customer", "part", "partsupp"}
+    if settings.scale_factor > 100:
+        multi_part_tables.add("supplier")
     glob_str = "/*" if ext == "parquet" and table_name in multi_part_tables else ""
     ext = "pq" if ext == "parquet" else ext
     return f"{settings.dataset_base_dir}/{table_name}.{ext}{glob_str}"
