@@ -15,8 +15,8 @@ def q(lineitem, orders, customer, nation, pd=bodo.pandas):
     forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
     flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
     jn1 = flineitem.merge(forders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
-    jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
-    jn3 = jn2.merge(nation, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
+    jn3 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
+    # jn3 = jn2.merge(nation, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
     jn3["REVENUE"] = jn3.L_EXTENDEDPRICE * (1.0 - jn3.L_DISCOUNT)
     agg = jn3.groupby(
         [
@@ -24,7 +24,7 @@ def q(lineitem, orders, customer, nation, pd=bodo.pandas):
             "C_NAME",
             "C_ACCTBAL",
             "C_PHONE",
-            "N_NAME",
+            # "N_NAME",
             "C_ADDRESS",
             "C_COMMENT",
         ],

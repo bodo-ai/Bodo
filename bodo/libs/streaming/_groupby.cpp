@@ -4060,6 +4060,10 @@ bool GroupbyState::MaxPartitionExceedsThreshold(size_t num_bits,
 }
 
 void GroupbyState::FinalizeBuild() {
+    std::cout
+        << "[DEBUG] GroupbyState::FinalizeBuild: Finalizing build phase with "
+           " "
+        << this->partitions.size() << " partitions." << std::endl;
     time_pt start_finalize = start_timer();
     // Clear the shuffle state since it is longer required.
     this->shuffle_state->Finalize();
