@@ -276,7 +276,7 @@ set -exo pipefail
 BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
-LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libibverbs|libpsm2|libefa|libmlx5|libnl-3|libnl-route|libnuma|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
+LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libibverbs|libpsm2|libefa|libmlx5|libnl-3|libnl-route|libnuma|librdmacm|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
 LIBS_DIR="$(pip show bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo.libs" && \
 for file in "$LIBS_DIR"/*; do
     if [[ ! $(basename "$file") =~ $LIB_WHITELIST ]]; then
