@@ -931,9 +931,10 @@ cdef class LogicalGetParquetRead(LogicalOperator):
             self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=True) if bodo.get_rank() == 0 else 0)
         return self.nrows
 
-    def _get_nrows(self, exact=True):
-        import pyarrow as pa
-        import pyarrow.parquet as pq
+    def _get_nrows(self, exact : bool = True):
+        """ Get the number of rows in the Parquet dataset.
+        If exact is False, estimate the number of rows by sampling files.
+        """
         from bodo.io.fs_io import (
             expand_path_globs,
             getfs,
@@ -954,13 +955,16 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         if isinstance(fpath_noprefix, str):
             fpath_noprefix = [fpath_noprefix]
 
+        def is_parquet_file(info: pa.fs.FileInfo):
+            return info.extension in [".parquet", ".pq"]
+
         files = []
 
         for path in fpath_noprefix:
             info = fs.get_file_info(path)
 
             if info.type == pa.fs.FileType.File:
-                if path.endswith(".parquet") or path.endswith(".pq"):
+                if is_parquet_file(info):
                     files.append(path)
 
             elif info.type == pa.fs.FileType.Directory:
@@ -969,9 +973,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
                 files.extend(
                     i.path for i in infos
                     if i.type == pa.fs.FileType.File
-                    and (
-                        i.path.endswith(".parquet") or i.path.endswith(".pq")
-                    )
+                    and is_parquet_file(i)
                 )
 
         n_files = len(files)
