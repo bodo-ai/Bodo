@@ -250,6 +250,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        std::cout << "ConsumeBatch called on PhysicalAggregate operator."
+                  << std::endl;
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool request_input = true;
@@ -269,6 +271,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        std::cout << "Agg produce" << std::endl;
         time_pt start_produce = start_timer();
         bool out_is_last = false;
         std::shared_ptr<table_info> next_batch;
