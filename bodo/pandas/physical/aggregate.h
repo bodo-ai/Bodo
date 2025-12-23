@@ -250,8 +250,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        // std::cout << "ConsumeBatch called on PhysicalAggregate operator."
-        //           << std::endl;
+        std::cout << "ConsumeBatch called on PhysicalAggregate operator."
+                  << std::endl;
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool request_input = true;

@@ -695,7 +695,7 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     // Reduce MPI call overheads by communicating only every 10 iterations
-    if (!(is_last || (true))) {
+    if (!(is_last || ((this->curr_iter % 10) == 0))) {
         return std::nullopt;
     }
 
