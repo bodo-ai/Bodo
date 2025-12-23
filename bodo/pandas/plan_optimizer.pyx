@@ -322,7 +322,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id) except +
-    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations) except +
+    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols) except +
     cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
@@ -1082,8 +1082,9 @@ cdef class LogicalJoinFilter(LogicalOperator):
             vector[int] join_filter_ids,
             vector[vector[int64_t]] equality_filter_columns,
             vector[vector[c_bool]] equality_is_first_locations):
+        cdef vector[vector[int64_t]] orig_build_key_cols
 
-        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations)
+        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_join_filter.release())
 
     def __str__(self):

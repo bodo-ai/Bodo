@@ -393,7 +393,10 @@ class JoinFilterColStats {
             }
             JoinState *join_state = join_state_it->second;
             for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
-                int64_t orig_build_key = col_info.orig_build_key_cols[i];
+                if (col_info.filter_columns[i] < 0) {
+                    continue;
+                }
+                const int64_t orig_build_key = col_info.orig_build_key_cols[i];
                 join_col_stats_map[col_info.filter_columns[i]].push_back(
                     col_stats_collector{.build_key_col = orig_build_key,
                                         .join_state = join_state});

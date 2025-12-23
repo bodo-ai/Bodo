@@ -189,23 +189,21 @@ class PhysicalReadParquet : public PhysicalSource {
         for (const auto &[col_idx, min_max_vec] :
              this->join_filter_col_stats.collect_all()) {
             // Find the position of col_idx in selected_columns
-            auto it = std::ranges::find(selected_columns, col_idx);
-            if (it != selected_columns.end()) {
-                for (const auto &[min, max] : min_max_vec) {
-                    duckdb::unique_ptr<duckdb::TableFilter> min_filter =
-                        duckdb::make_uniq<duckdb::ConstantFilter>(
-                            duckdb::ExpressionType::
-                                COMPARE_GREATERTHANOREQUALTO,
-                            ArrowScalarToDuckDBValue(min));
-                    duckdb::unique_ptr<duckdb::TableFilter> max_filter =
-                        duckdb::make_uniq<duckdb::ConstantFilter>(
-                            duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
-                            ArrowScalarToDuckDBValue(max));
-                    filter_exprs->PushFilter(duckdb::ColumnIndex(col_idx),
-                                             std::move(min_filter));
-                    filter_exprs->PushFilter(duckdb::ColumnIndex(col_idx),
-                                             std::move(max_filter));
-                }
+            for (const auto &[min, max] : min_max_vec) {
+                duckdb::unique_ptr<duckdb::TableFilter> min_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(min));
+                duckdb::unique_ptr<duckdb::TableFilter> max_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(max));
+                filter_exprs->PushFilter(
+                    duckdb::ColumnIndex(selected_columns[col_idx]),
+                    std::move(min_filter));
+                filter_exprs->PushFilter(
+                    duckdb::ColumnIndex(selected_columns[col_idx]),
+                    std::move(max_filter));
             }
         }
 
