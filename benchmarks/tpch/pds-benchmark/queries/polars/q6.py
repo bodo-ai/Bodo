@@ -14,10 +14,10 @@ def q(
     if lineitem is None:
         lineitem = utils.get_line_item_ds()
 
-    var1 = date(1994, 1, 1)
-    var2 = date(1995, 1, 1)
-    var3 = 0.05
-    var4 = 0.07
+    var1 = date(1996, 1, 1)
+    var2 = date(1997, 1, 1)
+    var3 = 0.08
+    var4 = 0.1
     var5 = 24
 
     return (
