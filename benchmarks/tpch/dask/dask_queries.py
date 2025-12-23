@@ -17,7 +17,7 @@ ec2_config = {
     "security": False,
     "n_workers": 4,
     "scheduler_instance_type": "c6i.xlarge",
-    "worker_instance_type": "c6i.16xlarge",
+    "worker_instance_type": "r6i.16xlarge",
     "docker_image": "daskdev/dask:latest",
     # Profile with AmazonS3FullAccess
     "iam_instance_profile": {"Name": "dask-benchmark"},

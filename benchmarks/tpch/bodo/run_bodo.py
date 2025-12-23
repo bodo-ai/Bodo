@@ -19,8 +19,8 @@ import argparse
 
 from bodosdk import BodoWorkspaceClient
 
-NUM_WORKERS = 2
-WORKER_INSTANCE = "r6i.8xlarge"
+NUM_WORKERS = 4
+WORKER_INSTANCE = "r6i.16xlarge"
 
 
 def run_bodo_benchmark(folder, queries, scale_factor):
