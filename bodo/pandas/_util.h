@@ -350,6 +350,8 @@ class JoinFilterColStats {
     std::optional<std::unordered_map<int, std::vector<col_min_max_t>>> result =
         std::nullopt;
 
+    std::unordered_map<int, std::vector<col_min_max_t>> collect_all();
+
    public:
     JoinFilterColStats(
         std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map,
@@ -358,9 +360,7 @@ class JoinFilterColStats {
           join_filter_program_state(std::move(rtjf_state_map)) {}
     JoinFilterColStats() = default;
 
-    std::unordered_map<int, std::vector<col_min_max_t>> collect_all();
-
     duckdb::unique_ptr<duckdb::TableFilterSet> insert_filters(
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
-        const std::vector<int64_t> column_projection);
+        const std::vector<int> column_projection);
 };

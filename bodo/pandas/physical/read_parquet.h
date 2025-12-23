@@ -187,10 +187,11 @@ class PhysicalReadParquet : public PhysicalSource {
         // ----------------------------------------------------------
         // Handle filter expressions.
         // ----------------------------------------------------------
+        this->filter_exprs = join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
+
         PyObject *arrowFilterExpr = tableFilterSetToArrowCompute(
-            *this->join_filter_col_stats.insert_filters(
-                std::move(this->filter_exprs), this->selected_columns),
-            this->schema_fields);
+            *this->filter_exprs, this->schema_fields);
 
         // ----------------------------------------------------------
         // Configure internal parquet reader.

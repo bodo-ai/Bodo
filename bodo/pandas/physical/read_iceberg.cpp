@@ -113,6 +113,10 @@ PhysicalReadIceberg::create_internal_reader() {
     // Pipeline buffers assume everything is nullable
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
+    // Insert join filter min/max stats into the duckdb table filters
+    this->filter_exprs = join_filter_col_stats.insert_filters(
+        std::move(this->filter_exprs), this->selected_columns);
+
     // We need to & the iceberg_filter with converted duckdb table filters
     // to apply the filters at the file level.
     PyObjectPtr duckdb_iceberg_filter =
