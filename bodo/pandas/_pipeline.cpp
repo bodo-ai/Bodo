@@ -1,5 +1,4 @@
 #include "_pipeline.h"
-#include <mpi_proto.h>
 #include <iostream>
 #include "../libs/_distributed.h"
 
