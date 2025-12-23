@@ -2,13 +2,11 @@
 
 #include <Python.h>
 #include <arrow/util/key_value_metadata.h>
-#include <algorithm>
 #include <memory>
 #include <utility>
 #include "../_util.h"
 #include "../io/parquet_reader.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
-#include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
 
@@ -186,32 +184,13 @@ class PhysicalReadParquet : public PhysicalSource {
         // ----------------------------------------------------------
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
-        for (const auto &[col_idx, min_max_vec] :
-             this->join_filter_col_stats.collect_all()) {
-            // Find the position of col_idx in selected_columns
-            for (const auto &[min, max] : min_max_vec) {
-                duckdb::unique_ptr<duckdb::TableFilter> min_filter =
-                    duckdb::make_uniq<duckdb::ConstantFilter>(
-                        duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                        ArrowScalarToDuckDBValue(min));
-                duckdb::unique_ptr<duckdb::TableFilter> max_filter =
-                    duckdb::make_uniq<duckdb::ConstantFilter>(
-                        duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
-                        ArrowScalarToDuckDBValue(max));
-                filter_exprs->PushFilter(
-                    duckdb::ColumnIndex(selected_columns[col_idx]),
-                    std::move(min_filter));
-                filter_exprs->PushFilter(
-                    duckdb::ColumnIndex(selected_columns[col_idx]),
-                    std::move(max_filter));
-            }
-        }
-
         // ----------------------------------------------------------
         // Handle filter expressions.
         // ----------------------------------------------------------
-        PyObject *arrowFilterExpr =
-            tableFilterSetToArrowCompute(*filter_exprs, this->schema_fields);
+        PyObject *arrowFilterExpr = tableFilterSetToArrowCompute(
+            *this->join_filter_col_stats.insert_filters(
+                std::move(this->filter_exprs), this->selected_columns),
+            this->schema_fields);
 
         // ----------------------------------------------------------
         // Configure internal parquet reader.

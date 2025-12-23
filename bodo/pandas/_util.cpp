@@ -982,3 +982,26 @@ JoinFilterColStats::collect_all() {
     }
     return result.value();
 }
+
+duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
+    duckdb::unique_ptr<duckdb::TableFilterSet> filters,
+    const std::vector<int64_t> column_projection) {
+    for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
+        // Find the position of col_idx in selected_columns
+        for (const auto &[min, max] : min_max_vec) {
+            duckdb::unique_ptr<duckdb::TableFilter> min_filter =
+                duckdb::make_uniq<duckdb::ConstantFilter>(
+                    duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                    ArrowScalarToDuckDBValue(min));
+            duckdb::unique_ptr<duckdb::TableFilter> max_filter =
+                duckdb::make_uniq<duckdb::ConstantFilter>(
+                    duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+                    ArrowScalarToDuckDBValue(max));
+            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
+                                std::move(min_filter));
+            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
+                                std::move(max_filter));
+        }
+    }
+    return filters;
+}
