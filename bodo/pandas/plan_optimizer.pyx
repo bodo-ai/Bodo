@@ -955,6 +955,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         if isinstance(fpath_noprefix, str):
             fpath_noprefix = [fpath_noprefix]
 
+        # TODO: Make parquet file detection more robust.
         def is_parquet_file(info: pa.fs.FileInfo):
             return info.extension in ["parquet", "pq"]
 
