@@ -25929,6 +25929,57 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#2025121" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.12.1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.12.1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -26028,6 +26079,57 @@
       🐛 Bug Fixes
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2025121" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.12.1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.12.1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -26156,6 +26258,31 @@
 <li>Fix for nested join.</li>
 <li>Fixed remove unused column pass to keep column references alive in conjunction with duckdb version upgrade.</li>
 <li>Better support for operations that result in empty dataframes.</li>
+</ul>
+<h2 id="2025121">2025.12.1<a class="headerlink" href="#2025121" title="Permanent link">&para;</a></h2>
+<h3 id="new-features_1">✨ New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Support negative n in df.head()</li>
+<li>Handle tuple column selection in df.loc</li>
+</ul>
+<h3 id="performance-improvements_1">🏎️ Performance Improvements<a class="headerlink" href="#performance-improvements_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Improved performance of pd.to_datetime</li>
+</ul>
+<h3 id="bug-fixes_1">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed support for AWS Bedrock's EOL titan-text models in the DataFrame Library AI Toolkit.</li>
+<li>Fixed overflow error when estimating the size of large Parquet datasets</li>
+<li>Allow ranks to send concurrent async messages to each other during shuffle</li>
+<li>Fix output Series.name for pd.to_datetime()</li>
+<li>Cast binary operation result to output type properly to avoid downstream errors</li>
+<li>Keep input timestamp unit in Series.dt.tz_localize()</li>
+<li>Fix slicing with negative steps</li>
+<li>Avoid double cast for integer division</li>
+</ul>
+<h3 id="dependency-changes">⚙️ Dependency Changes<a class="headerlink" href="#dependency-changes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Upgrade to Numba 0.63.1</li>
 </ul>
 
 
