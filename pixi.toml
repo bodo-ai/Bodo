@@ -1,7 +1,8 @@
 [workspace]
 name = "bodo"
-channels = ["conda-forge"]
+channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
@@ -112,8 +113,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
-libarrow = { version = "==22.0.0", channel = "conda-forge" }
+pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
