@@ -708,7 +708,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     bool is_anti_join = false;
 
     PhysicalJoinMetrics metrics;
-    int64_t probe_iters;
+    int64_t probe_iters = 0;
 };
 
 #undef CONSUME_PROBE_BATCH
