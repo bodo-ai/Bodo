@@ -632,6 +632,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                       << "| HAVE MORE OUTPUT ITERS: "
                       << this->metrics.have_more_output_iters << std::endl;
         }
+        if (result_flag == OperatorResult::FINISHED) {
+            std::cout << "RANK: " << rank << ": JOIN PROBE FINISHED after "
+                      << probe_iters << " iters." << std::endl;
+        }
 
         return {out_table, result_flag};
     }
