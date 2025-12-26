@@ -83,11 +83,12 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
 
     // Insert and pushdown runtime join filters after optimization since they
     // aren't relational
-    RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer;
-    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
-        runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
+    // RuntimeJoinFilterPushdownOptimizer
+    // runtime_join_filter_pushdown_optimizer;
+    // duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+    //    runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
 
-    return out_plan;
+    return optimized_plan;
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
