@@ -431,7 +431,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_produce = start_timer();
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (is_last) {
+        if (is_last && probe_iters % 1000 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             std::cout << "[Rank " << rank

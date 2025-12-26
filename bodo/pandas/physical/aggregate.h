@@ -256,7 +256,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
-        if (local_is_last) {
+        if (local_is_last && consume_iters % 1000 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             std::cout << "[Rank " << rank
