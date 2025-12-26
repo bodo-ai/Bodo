@@ -737,7 +737,7 @@ def rtjf_term_repr(rtjf_terms):
         else "["
         + ", ".join(
             f"({state_var.name}, {col_indices})"
-            for state_var, col_indices in rtjf_terms
+            for state_var, col_indices, _ in rtjf_terms
         )
         + "]"
     )
