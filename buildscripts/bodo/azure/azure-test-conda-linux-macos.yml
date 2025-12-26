@@ -38,7 +38,6 @@ jobs:
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
   - bash: |
-      rm -rf ~/.cache/rattler
       pixi install -v --locked -e azure
     retryCountOnTaskFailure: 3
     displayName: Install Test Environment

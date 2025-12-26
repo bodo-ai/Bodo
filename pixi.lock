@@ -19779,8 +19779,8 @@ packages:
   size: 184044
   timestamp: 1736977852308
 - conda: https://conda.anaconda.org/bodo.ai/linux-64/pyarrow-22.0.0-py313h78bf25f_0.conda
-  sha256: 07dee1dc7c05eb0f377a25262e38e7959f40c1b526a1e31fdda02fa04442eeae
-  md5: 3df2ef1b12209b2df702c584f6e1cc08
+  sha256: b8b63ee5fdbfdf7baecaf6844af3883e67b0f5ed8e5a33b30738fe9aa82e9f38
+  md5: f3b469f7d1b2e7e72a6c8b9d1937adc8
   depends:
   - libarrow-acero 22.0.0.*
   - libarrow-dataset 22.0.0.*
@@ -19790,8 +19790,8 @@ packages:
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
   license: Apache-2.0
-  size: 26218
-  timestamp: 1761776945608
+  size: 26343
+  timestamp: 1766503172695
 - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyarrow-22.0.0-py313h1258fbd_0.conda
   sha256: a2abb14f194b2290ed8af2fc1333e6de04ddbe3a5c521be8f006efed9c9acd82
   md5: b04eba6b20039fbc7096f8ad8e7c9662
@@ -19803,6 +19803,8 @@ packages:
   - pyarrow-core 22.0.0 *_0_*
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
+  arch: aarch64
+  platform: linux
   license: Apache-2.0
   license_family: APACHE
   size: 26342
@@ -19818,6 +19820,8 @@ packages:
   - pyarrow-core 22.0.0 *_0_*
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
+  arch: x86_64
+  platform: osx
   license: Apache-2.0
   license_family: APACHE
   size: 26262
@@ -19833,6 +19837,8 @@ packages:
   - pyarrow-core 22.0.0 *_0_*
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
+  arch: arm64
+  platform: osx
   license: Apache-2.0
   license_family: APACHE
   size: 26304
@@ -19848,6 +19854,8 @@ packages:
   - pyarrow-core 22.0.0 *_0_*
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
+  arch: x86_64
+  platform: win
   license: Apache-2.0
   license_family: APACHE
   size: 26695
