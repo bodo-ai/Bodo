@@ -4156,7 +4156,11 @@ def _transform_list_appends(func_ir, block):
             rm_existing = False
             for l_var in used_l_vars:
                 l_var_consts = list_vars.pop(l_var)
-                if len(l_var_consts) == 0:
+                # Avoid trivial or non-compilable cases
+                if (
+                    len(l_var_consts) == 0
+                    or len({bodo.typeof(c) for c in l_var_consts}) != 1
+                ):
                     continue
                 scope = inst.target.scope
                 loc = inst.loc
