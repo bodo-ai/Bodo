@@ -256,6 +256,13 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+        if (local_is_last) {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+            std::cout << "[Rank " << rank
+                      << "] PhysicalAggregate: Received last input batch."
+                      << std::endl;
+        }
         bool request_input = true;
         std::shared_ptr<table_info> input_batch_reordered =
             ProjectTable(input_batch, this->input_col_inds);
