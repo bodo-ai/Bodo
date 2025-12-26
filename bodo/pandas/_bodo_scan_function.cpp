@@ -10,7 +10,8 @@
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -50,7 +51,8 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
     return std::make_shared<PhysicalReadPandas>(df, selected_columns,
                                                 this->arrow_schema);
 }
@@ -58,18 +60,30 @@ BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    JoinFilterColStats join_filter_col_stats =
+        this->rtjf_state_map.has_value()
+            ? JoinFilterColStats(join_filter_states,
+                                 this->rtjf_state_map.value())
+            : JoinFilterColStats();
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
-        limit_val);
+        limit_val, join_filter_col_stats);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoIcebergScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    JoinFilterColStats join_filter_col_stats =
+        this->rtjf_state_map.has_value()
+            ? JoinFilterColStats(join_filter_states,
+                                 this->rtjf_state_map.value())
+            : JoinFilterColStats();
     return std::make_shared<PhysicalReadIceberg>(
         this->catalog, this->table_id, this->iceberg_filter,
         this->iceberg_schema, this->arrow_schema, this->snapshot_id,
-        selected_columns, filter_exprs, limit_val);
+        selected_columns, filter_exprs, limit_val, join_filter_col_stats);
 }

@@ -1196,9 +1196,11 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
-    std::vector<std::vector<bool>> is_first_locations) {
+    std::vector<std::vector<bool>> is_first_locations,
+    std::vector<std::vector<int64_t>> orig_build_key_cols) {
     return duckdb::make_uniq<bodo::LogicalJoinFilter>(
-        to_duckdb(source), filter_ids, filter_columns, is_first_locations);
+        to_duckdb(source), filter_ids, filter_columns, is_first_locations,
+        orig_build_key_cols);
 }
 
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(

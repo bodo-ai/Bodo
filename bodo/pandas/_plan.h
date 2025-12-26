@@ -31,15 +31,18 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
     static constexpr const duckdb::LogicalOperatorType TYPE =
         duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR;
 
-    LogicalJoinFilter(duckdb::unique_ptr<duckdb::LogicalOperator> source,
-                      const std::vector<int> filter_ids,
-                      const std::vector<std::vector<int64_t>> filter_columns,
-                      const std::vector<std::vector<bool>> is_first_locations)
+    LogicalJoinFilter(
+        duckdb::unique_ptr<duckdb::LogicalOperator> source,
+        const std::vector<int> filter_ids,
+        const std::vector<std::vector<int64_t>> filter_columns,
+        const std::vector<std::vector<bool>> is_first_locations,
+        const std::vector<std::vector<int64_t>> orig_build_key_cols)
         : duckdb::LogicalOperator(
               duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR),
           filter_ids(std::move(filter_ids)),
           filter_columns(std::move(filter_columns)),
-          is_first_locations(std::move(is_first_locations)) {
+          is_first_locations(std::move(is_first_locations)),
+          orig_build_key_cols(std::move(orig_build_key_cols)) {
         this->children.push_back(std::move(source));
     }
 
@@ -66,6 +69,13 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
                 fmt::format("[{}], ", fmt::join(locs, ", "));
         }
         map["is_first_locations"] += "]";
+        map["orig_build_key_cols"] = "[";
+        for (const auto &cols : this->orig_build_key_cols) {
+            map["orig_build_key_cols"] +=
+                fmt::format("[{}], ", fmt::join(cols, ", "));
+        }
+        map["orig_build_key_cols"] += "]";
+
         return map;
     }
 
@@ -75,6 +85,7 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
     const std::vector<std::vector<int64_t>> filter_columns;
     // Indicating for which of the columns is it the first filtering site
     const std::vector<std::vector<bool>> is_first_locations;
+    const std::vector<std::vector<int64_t>> orig_build_key_cols;
 
    protected:
     void ResolveTypes() override { types = children[0]->types; }
@@ -161,7 +172,8 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
-    std::vector<std::vector<bool>> is_first_locations);
+    std::vector<std::vector<bool>> is_first_locations,
+    std::vector<std::vector<int64_t>> orig_build_key_cols);
 
 /**
  * @brief Creates a LogicalSetOperation node.

@@ -4,7 +4,10 @@
 struct JoinColumnInfo {
     std::vector<int64_t> filter_columns;
     std::vector<bool> is_first_locations;
+    std::vector<int64_t> orig_build_key_cols;
 };
+
+using JoinFilterProgramState = std::unordered_map<int, JoinColumnInfo>;
 
 class RuntimeJoinFilterPushdownOptimizer {
    public:
@@ -21,7 +24,6 @@ class RuntimeJoinFilterPushdownOptimizer {
 
    private:
     size_t cur_join_filter_id = 0;
-    using JoinFilterProgramState = std::unordered_map<int, JoinColumnInfo>;
     JoinFilterProgramState join_state_map;
 
     /**
@@ -120,5 +122,16 @@ class RuntimeJoinFilterPushdownOptimizer {
      * operator
      */
     duckdb::unique_ptr<duckdb::LogicalOperator> VisitUnion(
+        duckdb::unique_ptr<duckdb::LogicalOperator> &op);
+
+    /**
+     * @brief Visits a LogicalGet operator, inserting a join filter node on top
+     * and attaching join statistics to the LogicalGet for runtime filter.
+     *
+     * @param op - the LogicalGet operator to visit
+     * @return duckdb::unique_ptr<duckdb::LogicalOperator> - the optimized
+     * operator
+     */
+    duckdb::unique_ptr<duckdb::LogicalOperator> VisitGet(
         duckdb::unique_ptr<duckdb::LogicalOperator> &op);
 };
