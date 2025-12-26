@@ -281,6 +281,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         if (result == OperatorResult::HAVE_MORE_OUTPUT) {
+            std::cout << "RANK: " << rank << " HAVE MORE OUTPUT CASE"
+                      << std::endl;
             this->metrics.have_more_output_iters += 1;
         }
         if (result == OperatorResult::NEED_MORE_INPUT) {
