@@ -605,6 +605,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         auto [out_table, chunk_size] = join_state_->output_buffer->PopChunk(
             /*force_return*/ is_last);
 
+        if (is_last && join_state_->output_buffer->total_remaining > 0) {
+            request_input = false;
+        }
+
         is_last = is_last && join_state_->output_buffer->total_remaining == 0;
         this->metrics.output_row_count += out_table->nrows();
         this->metrics.process_batch_time += end_timer(start_produce);
