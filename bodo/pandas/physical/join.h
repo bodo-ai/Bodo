@@ -431,6 +431,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_produce = start_timer();
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
+        probe_iters += 1;
         if (is_last && probe_iters % 1000 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -617,7 +618,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        probe_iters += 1;
         if (result_flag == OperatorResult::HAVE_MORE_OUTPUT) {
             this->metrics.have_more_output_iters += 1;
         }
