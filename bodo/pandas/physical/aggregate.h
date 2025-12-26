@@ -385,7 +385,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
-    int64_t consume_iters;
+    int64_t consume_iters = 0;
 };
 
 // Definition of the static member
