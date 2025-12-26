@@ -952,6 +952,10 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         )
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+        if exact:
+            return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+
         if isinstance(fpath_noprefix, str):
             fpath_noprefix = [fpath_noprefix]
 
@@ -981,11 +985,8 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         if n_files == 0:
             return 0
 
-        if exact:
-            sampled = files
-        else:
-            n_sampled = max(3, int(0.001 * n_files))
-            sampled = files[:min(n_sampled, n_files)]
+        n_sampled = max(3, int(0.001 * n_files))
+        sampled = files[:min(n_sampled, n_files)]
 
         rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
 
