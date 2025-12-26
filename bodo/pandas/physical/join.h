@@ -431,13 +431,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_produce = start_timer();
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (is_last && probe_iters % 1000 == 0) {
-            int rank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            std::cout << "[Rank " << rank
-                      << "] PhysicalAggregate: Received last input batch."
-                      << std::endl;
-        }
+        // if (is_last && probe_iters % 1000 == 0) {
+        //     int rank;
+        //     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        //     std::cout << "[Rank " << rank
+        //               << "] PhysicalAggregate: Received last input batch."
+        //               << std::endl;
+        // }
 
         if (has_non_equi_cond) {
             PhysicalExpression::cur_join_expr = physExprTree.get();
