@@ -22,10 +22,14 @@
 
 struct PhysicalAggregateMetrics {
     using time_t = MetricBase::TimerValue;
+    using stat_t = MetricBase::StatValue;
 
     time_t init_time = 0;     // stage_0
     time_t consume_time = 0;  // stage_1
     time_t produce_time = 0;  // stage_2
+
+    stat_t need_more_input_iters = 0;
+    stat_t have_more_output_iters = 0;
 };
 
 /**
@@ -262,9 +266,30 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         if (global_is_last) {
             return OperatorResult::FINISHED;
         }
+
+        OperatorResult result = request_input
+                                    ? OperatorResult::NEED_MORE_INPUT
+                                    : OperatorResult::HAVE_MORE_OUTPUT;
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        consume_iters += 1;
+        if (result == OperatorResult::HAVE_MORE_OUTPUT) {
+            this->metrics.have_more_output_iters += 1;
+        }
+        if (result == OperatorResult::NEED_MORE_INPUT) {
+            this->metrics.need_more_input_iters += 1;
+        }
+        if (consume_iters % 1000 == 0) {
+            std::cout << "RANK: " << rank
+                      << ": GB CONSUME ITERS: " << consume_iters
+                      << " NEED MORE INPUT ITERS: "
+                      << this->metrics.need_more_input_iters
+                      << "| HAVE MORE OUTPUT ITERS: "
+                      << this->metrics.have_more_output_iters << std::endl;
+        }
+
         this->metrics.consume_time += end_timer(start_consume);
-        return request_input ? OperatorResult::NEED_MORE_INPUT
-                             : OperatorResult::HAVE_MORE_OUTPUT;
+        return result;
     }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
@@ -360,6 +385,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
+    int64_t consume_iters;
 };
 
 // Definition of the static member

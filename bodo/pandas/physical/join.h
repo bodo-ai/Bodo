@@ -38,6 +38,8 @@ struct PhysicalJoinMetrics {
     time_t process_batch_time = 0;
 
     stat_t output_row_count = 0;
+    stat_t have_more_output_iters = 0;
+    stat_t need_more_input_iters = 0;
 };
 
 /**
@@ -599,10 +601,31 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         this->metrics.process_batch_time += end_timer(start_produce);
 
         out_table->column_names = this->output_schema->column_names;
-        return {out_table,
-                is_last ? OperatorResult::FINISHED
-                        : (request_input ? OperatorResult::NEED_MORE_INPUT
-                                         : OperatorResult::HAVE_MORE_OUTPUT)};
+
+        OperatorResult result_flag =
+            is_last ? OperatorResult::FINISHED
+                    : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                     : OperatorResult::HAVE_MORE_OUTPUT);
+
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        probe_iters += 1;
+        if (result_flag == OperatorResult::HAVE_MORE_OUTPUT) {
+            this->metrics.have_more_output_iters += 1;
+        }
+        if (result_flag == OperatorResult::NEED_MORE_INPUT) {
+            this->metrics.need_more_input_iters += 1;
+        }
+        if (probe_iters % 1000 == 0) {
+            std::cout << "RANK: " << rank
+                      << ": JOIN PROBE ITERS: " << probe_iters
+                      << " NEED MORE INPUT ITERS: "
+                      << this->metrics.need_more_input_iters
+                      << "| HAVE MORE OUTPUT ITERS: "
+                      << this->metrics.have_more_output_iters << std::endl;
+        }
+
+        return {out_table, result_flag};
     }
 
     /**
@@ -685,6 +708,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     bool is_anti_join = false;
 
     PhysicalJoinMetrics metrics;
+    int64_t probe_iters;
 };
 
 #undef CONSUME_PROBE_BATCH
