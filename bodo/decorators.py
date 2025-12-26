@@ -660,13 +660,13 @@ class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):
             for arg_obj in arg_objs:
                 pyapi.decref(arg_obj)
 
-            # cleanup output
-            if callable(out.cleanup):
-                out.cleanup()
-
             # Error during unboxing
             with builder.if_then(out.is_error):
                 context.call_conv.return_exc(builder)
+
+            # cleanup output
+            if callable(out.cleanup):
+                out.cleanup()
 
             return out.value
 
