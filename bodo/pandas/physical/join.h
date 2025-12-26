@@ -597,10 +597,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         // batch left then we don't need to request input. This is to avoid
         // allocating more memory than necessary and increasing cache
         // coherence
-        // if (join_state_->output_buffer->total_remaining >
-        //     (2 * join_state_->output_buffer->active_chunk_capacity)) {
-        //     request_input = false;
-        // }
+        if (join_state_->output_buffer->total_remaining >
+            (2 * join_state_->output_buffer->active_chunk_capacity)) {
+            request_input = false;
+        }
 
         auto [out_table, chunk_size] = join_state_->output_buffer->PopChunk(
             /*force_return*/ is_last);
