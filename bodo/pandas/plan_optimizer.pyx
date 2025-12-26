@@ -916,17 +916,25 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
+        self.nrows = -1
+        cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        from bodo.ext import hdist
+
+        if self.nrows == -1:
+            self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=True) if bodo.get_rank() == 0 else 0)
         return self.nrows
 
-    def _get_nrows(self):
+    def _get_nrows(self, exact : bool = True):
+        """ Get the number of rows in the Parquet dataset.
+        If exact is False, estimate the number of rows by sampling files.
+        """
         from bodo.io.fs_io import (
             expand_path_globs,
             getfs,
@@ -939,13 +947,50 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         # Since we are supplying the filesystem to pq.read_table,
         # Any prefixes e.g. s3:// should be removed.
-        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
             fpath, protocol, parsed_url
         )
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
-        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+        if exact:
+            return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+
+        if isinstance(fpath_noprefix, str):
+            fpath_noprefix = [fpath_noprefix]
+
+        # TODO: Make parquet file detection more robust.
+        def is_parquet_file(info: pa.fs.FileInfo):
+            return info.extension in ["parquet", "pq"]
+
+        files = []
+
+        for path in fpath_noprefix:
+            info = fs.get_file_info(path)
+
+            if info.type == pa.fs.FileType.File:
+                if is_parquet_file(info):
+                    files.append(path)
+
+            elif info.type == pa.fs.FileType.Directory:
+                selector = pa.fs.FileSelector(path, recursive=True)
+                infos = fs.get_file_info(selector)
+                files.extend(
+                    i.path for i in infos
+                    if i.type == pa.fs.FileType.File
+                    and is_parquet_file(i)
+                )
+
+        n_files = len(files)
+        if n_files == 0:
+            return 0
+
+        n_sampled = max(3, int(0.001 * n_files))
+        sampled = files[:min(n_sampled, n_files)]
+
+        rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
+
+        return int(rows * (n_files / len(sampled)))
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
