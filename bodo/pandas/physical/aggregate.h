@@ -257,7 +257,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         consume_iters += 1;
-        if (local_is_last && consume_iters % 1000 == 0) {
+        if (local_is_last && consume_iters % 100 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             std::cout << "[Rank " << rank
@@ -286,7 +286,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         if (result == OperatorResult::NEED_MORE_INPUT) {
             this->metrics.need_more_input_iters += 1;
         }
-        if (consume_iters % 1000 == 0) {
+        if (consume_iters % 100 == 0) {
             std::cout << "RANK: " << rank
                       << ": GB CONSUME ITERS: " << consume_iters
                       << " NEED MORE INPUT ITERS: "

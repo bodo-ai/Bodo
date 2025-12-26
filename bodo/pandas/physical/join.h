@@ -432,7 +432,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
         probe_iters += 1;
-        if (is_last && probe_iters % 1000 == 0) {
+        if (is_last && probe_iters % 100 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             std::cout << "[Rank " << rank
@@ -624,7 +624,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         if (result_flag == OperatorResult::NEED_MORE_INPUT) {
             this->metrics.need_more_input_iters += 1;
         }
-        if (probe_iters % 1000 == 0) {
+        if (probe_iters % 100 == 0) {
             std::cout << "RANK: " << rank
                       << ": JOIN PROBE ITERS: " << probe_iters
                       << " NEED MORE INPUT ITERS: "
