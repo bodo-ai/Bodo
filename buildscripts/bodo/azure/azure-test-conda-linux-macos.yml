@@ -37,8 +37,7 @@ jobs:
       source ~/.bashrc
       echo "##vso[task.prependpath]$HOME/.pixi/bin"
     displayName: Install Pixi
-  - bash: |
-      pixi install -v --locked -e azure
+  - bash: pixi install -v --locked -e azure
     retryCountOnTaskFailure: 3
     displayName: Install Test Environment
 
