@@ -4156,6 +4156,8 @@ def _transform_list_appends(func_ir, block):
             rm_existing = False
             for l_var in used_l_vars:
                 l_var_consts = list_vars.pop(l_var)
+                if len(l_var_consts) == 0:
+                    continue
                 scope = inst.target.scope
                 loc = inst.loc
                 const_vars = []
@@ -4173,15 +4175,33 @@ def _transform_list_appends(func_ir, block):
                     const_vars.append(const_assign.target)
 
                 out_var = ir.Var(scope, l_var, loc)
-                # Match common val = list pattern
-                if (
-                    is_assign(inst)
-                    and isinstance(inst.value, ir.Var)
-                    and inst.value.name == l_var
-                ):
-                    out_var = inst.target
-                    func_ir._definitions[out_var.name].remove(inst.value)
-                    rm_existing = True
+
+                # Remove old const list append code
+                updated_body = []
+                list_append_func_vars = set()
+                for i, stmt in enumerate(new_body):
+                    if (
+                        is_assign(stmt)
+                        and is_expr(stmt.value, "build_list")
+                        and len(stmt.value.items) == 0
+                    ):
+                        func_ir._definitions[l_var].remove(stmt.value)
+                    elif (
+                        is_assign(stmt)
+                        and is_expr(stmt.value, "getattr")
+                        and stmt.value.attr == "append"
+                        and stmt.value.value.name == l_var
+                    ):
+                        list_append_func_vars.add(stmt.target.name)
+                    elif (
+                        is_call_assign(stmt)
+                        and stmt.value.func.name in list_append_func_vars
+                    ):
+                        pass
+                    else:
+                        updated_body.append(stmt)
+
+                new_body = updated_body
 
                 new_assign = ir.Assign(
                     ir.Expr.build_list(const_vars, loc),
