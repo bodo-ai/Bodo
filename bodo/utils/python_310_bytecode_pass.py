@@ -478,7 +478,6 @@ def _transform_list_appends(func_ir, block):
         else:
             # Materialize any lists that are used in this instruction
             used_l_vars = list_vars.keys() & {v.name for v in inst.list_vars()}
-            rm_existing = False
             for l_var in used_l_vars:
                 l_var_consts = list_vars.pop(l_var)
                 # Avoid trivial or non-compilable cases
@@ -539,9 +538,6 @@ def _transform_list_appends(func_ir, block):
                 )
                 func_ir._definitions[out_var.name].append(new_assign.value)
                 new_body.append(new_assign)
-
-            if rm_existing:
-                continue
 
         new_body.append(inst)
 
