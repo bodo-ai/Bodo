@@ -2785,6 +2785,8 @@ def _get_df_apply_used_cols(func, columns):
     df.groupby().apply(func) if possible (has to be conservative and assume all columns
     are used when it cannot analyze the IR properly)
     """
+    from bodo.utils.python_310_bytecode_pass import _transform_list_appends
+
     lambda_ir = numba.core.compiler.run_frontend(func)
     columns_set = set(columns)
 
@@ -2796,6 +2798,8 @@ def _get_df_apply_used_cols(func, columns):
     arg_var = first_stmt.target
     use_all_cols = False
     for bl in lambda_ir.blocks.values():
+        # df.iloc[:,[c1, c2,..]] may have long constant lists
+        _transform_list_appends(lambda_ir, bl)
         for stmt in bl.body:
             # ignore ir.Arg
             if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
