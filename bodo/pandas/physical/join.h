@@ -389,12 +389,16 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (local_is_last) {
+        build_iters += 1;
+        if (local_is_last && build_iters % 100 == 0) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            std::cout << "[Rank " << rank
-                      << "] PhysicalJoin: Received last build input batch."
-                      << std::endl;
+            if (rank == 0) {
+                std::cout << "[Rank " << rank
+                          << "] PhysicalJoin: Build side received last input "
+                             "batch."
+                          << std::endl;
+            }
         }
 
         if (join_state_->IsNestedLoopJoin()) {
@@ -729,6 +733,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     PhysicalJoinMetrics metrics;
     int64_t probe_iters = 0;
+    in64_t build_iters = 0;
 };
 
 #undef CONSUME_PROBE_BATCH
