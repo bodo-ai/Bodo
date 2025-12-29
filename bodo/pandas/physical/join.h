@@ -733,7 +733,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     PhysicalJoinMetrics metrics;
     int64_t probe_iters = 0;
-    in64_t build_iters = 0;
+    int64_t build_iters = 0;
 };
 
 #undef CONSUME_PROBE_BATCH
