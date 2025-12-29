@@ -389,6 +389,14 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
+        if (local_is_last) {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+            std::cout << "[Rank " << rank
+                      << "] PhysicalJoin: Received last build input batch."
+                      << std::endl;
+        }
+
         if (join_state_->IsNestedLoopJoin()) {
             bool global_is_last = nested_loop_join_build_consume_batch(
                 (NestedLoopJoinState*)join_state_.get(), input_batch,
