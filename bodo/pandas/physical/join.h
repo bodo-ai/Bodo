@@ -423,6 +423,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             join_state, input_batch_reordered, has_bloom_filter, local_is_last);
 
         if (global_is_last) {
+            std::cout << "PhysicalJoin: Build side finished after "
+                      << build_iters << " iters." << std::endl;
             return OperatorResult::FINISHED;
         }
         this->metrics.consume_time += end_timer(start_consume);
