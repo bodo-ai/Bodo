@@ -54,6 +54,10 @@ jobs:
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
         os: [{os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
+        exclude:
+          # Exclude Windows 3.14 due to CIBW configuration issues.
+          - os: { os: windows-latest, name: windows }
+            python_version: "3.14"
           # Don't publish linux arm until we can get nightly fixed
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
