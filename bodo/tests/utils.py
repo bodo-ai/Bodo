@@ -3416,9 +3416,10 @@ pytest_mark_oracle = compose_decos(
                 os.name == "posix"
                 and platform.system() == "Linux"
                 and "arm" in platform.machine().lower()
-                or "aarch64" in platform.machine().lower()
+                or "aarch64" in platform.machine().lower(),
             )
-            or platform.system() == "Windows"
+            or platform.system() == "Windows",
+            reason="Oracle client not supported on ARM64 Linux or Windows",
         ),
     )
 )
