@@ -71,7 +71,12 @@ from bodo.utils.typing import (
     to_nullable_type,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import check_java_installation, is_assign, is_call, is_expr
+from bodo.utils.utils import (
+    check_java_installation,
+    is_assign,
+    is_call,
+    is_expr,
+)
 
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover

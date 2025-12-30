@@ -26,6 +26,7 @@ class Bodo310ByteCodePass(FunctionPass):
         dprint_func_ir(state.func_ir, "starting Bodo 3.10 Bytecode optimizations pass")
         peep_hole_fuse_dict_add_updates(state.func_ir)
         peep_hole_fuse_tuple_adds(state.func_ir)
+        peep_hole_fix_build_list(state.func_ir)
         return True
 
 
@@ -380,3 +381,164 @@ def _build_new_build_map(func_ir, name, old_body, old_lineno, new_items):
 
     # Return a new assign.
     return ir.Assign(new_bm, ir.Var(old_target.scope, name, old_target.loc), new_bm.loc)
+
+
+def peep_hole_fix_build_list(func_ir):
+    """Transform constant lists created via list append operations into a simple
+    build_list expression"""
+    for block in func_ir.blocks.values():
+        _transform_list_appends(func_ir, block)
+
+
+def _get_const_append_list_var_name(call_expr, func_ir, list_vars):
+    """Match list.append(constant) pattern and return the list variable name and
+    constant value.
+    Return None if pattern doesn't match.
+    """
+    from numba.core.ir_utils import (
+        GuardException,
+        find_callname,
+        guard,
+    )
+
+    from bodo.utils.transform import (
+        get_const_value_inner,
+    )
+
+    fdef = guard(find_callname, func_ir, call_expr)
+    if (
+        fdef is None
+        or fdef[0] != "append"
+        or not isinstance(fdef[1], ir.Var)
+        or (l_var := fdef[1].name) not in list_vars
+    ):
+        return None
+
+    try:
+        const = get_const_value_inner(func_ir, call_expr.args[0])
+    except GuardException:
+        return None
+
+    return l_var, const
+
+
+def _transform_list_appends(func_ir, block):
+    """Transform constant lists created via list append operations into a simple
+    build_list expression to facilitate pattern matching later.
+    See read_csv() names argument of load_performance_data() in
+    etl_data_conversion_mortgages example on Python 3.14.
+    Example:
+    l = []
+    l.append(1)
+    l.append(2)
+    to:
+    l = [1, 2]
+
+    Args:
+        func_ir: The function IR containing the block.
+        block: The block of instructions to be transformed.
+    """
+    from numba.core.ir_utils import (
+        mk_unique_var,
+    )
+
+    from bodo.utils.utils import (
+        is_assign,
+        is_call_assign,
+        is_expr,
+    )
+
+    list_vars = {}
+    new_body = []
+
+    for inst in block.body:
+        if (
+            is_assign(inst)
+            and is_expr(inst.value, "build_list")
+            and len(inst.value.items) == 0
+        ):
+            list_vars[inst.target.name] = []
+        elif (
+            is_assign(inst)
+            and is_expr(inst.value, "getattr")
+            and inst.value.attr == "append"
+        ):
+            pass
+        elif (
+            is_call_assign(inst)
+            and (
+                append_info := _get_const_append_list_var_name(
+                    inst.value, func_ir, list_vars
+                )
+            )
+            is not None
+        ):
+            l_var, const = append_info
+            list_vars[l_var].append(const)
+        else:
+            # Materialize any lists that are used in this instruction
+            used_l_vars = list_vars.keys() & {v.name for v in inst.list_vars()}
+            for l_var in used_l_vars:
+                l_var_consts = list_vars.pop(l_var)
+                # Avoid trivial or non-compilable cases
+                if (
+                    len(l_var_consts) == 0
+                    or len({numba.typeof(c) for c in l_var_consts}) != 1
+                ):
+                    continue
+                scope = inst.target.scope
+                loc = inst.loc
+                const_vars = []
+                # Create variables for constants
+                for c in l_var_consts:
+                    const_assign = ir.Assign(
+                        ir.Const(c, loc),
+                        ir.Var(scope, mk_unique_var("append_const"), loc),
+                        loc,
+                    )
+                    func_ir._definitions[const_assign.target.name].append(
+                        const_assign.value
+                    )
+                    new_body.append(const_assign)
+                    const_vars.append(const_assign.target)
+
+                out_var = ir.Var(scope, l_var, loc)
+
+                # Remove old const list append code
+                updated_body = []
+                list_append_func_vars = set()
+                for i, stmt in enumerate(new_body):
+                    if (
+                        is_assign(stmt)
+                        and is_expr(stmt.value, "build_list")
+                        and len(stmt.value.items) == 0
+                    ):
+                        func_ir._definitions[l_var].remove(stmt.value)
+                    elif (
+                        is_assign(stmt)
+                        and is_expr(stmt.value, "getattr")
+                        and stmt.value.attr == "append"
+                        and stmt.value.value.name == l_var
+                    ):
+                        list_append_func_vars.add(stmt.target.name)
+                    elif (
+                        is_call_assign(stmt)
+                        and stmt.value.func.name in list_append_func_vars
+                    ):
+                        pass
+                    else:
+                        updated_body.append(stmt)
+
+                new_body = updated_body
+
+                new_assign = ir.Assign(
+                    ir.Expr.build_list(const_vars, loc),
+                    out_var,
+                    loc,
+                )
+                func_ir._definitions[out_var.name].append(new_assign.value)
+                new_body.append(new_assign)
+
+        new_body.append(inst)
+
+    block.body = new_body
