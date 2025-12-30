@@ -277,6 +277,9 @@ uint64_t Pipeline::Execute() {
     }
 
     DEBUG_PIPELINE_FINALIZE(rank, source);
+
+    std::cout << "Rank " << rank << " Finalizing pipeline after processing "
+              << batches_processed << " batches." << std::endl;
     // Finalize
     source->FinalizeSource();
 

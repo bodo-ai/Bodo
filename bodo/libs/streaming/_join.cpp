@@ -1907,6 +1907,10 @@ void HashJoinState::ReportBuildStageMetrics(
 }
 
 void HashJoinState::FinalizeBuild() {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    std::cout << "[Rank " << rank << "] Finalize Build Called" << std::endl;
+
     time_pt start_finalize = start_timer();
     // Free build shuffle buffer, etc.
     this->build_shuffle_state.Finalize();
