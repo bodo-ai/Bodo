@@ -138,7 +138,7 @@ jobs:
       # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
       PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
       if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
-        pixi run -e azure \ 
+        pixi run -e azure \
           env LD_PRELOAD=libgomp.so.1 \
           python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
@@ -147,7 +147,7 @@ jobs:
         export BODO_ENABLE_DATAFRAME_LIBRARY=0
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pixi run -e azure \ 
+        pixi run -e azure \
           env LD_PRELOAD=libgomp.so.1 \
           pytest -s -v -Wignore -m "$(PYTEST_MARKER)" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
