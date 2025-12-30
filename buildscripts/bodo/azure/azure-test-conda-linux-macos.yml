@@ -135,6 +135,7 @@ jobs:
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
 
+      export LD_PRELOAD=$CONDA_PREFIX/lib/libgomp.so.1
 
       # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
       PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
