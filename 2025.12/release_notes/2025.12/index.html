@@ -25980,6 +25980,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#2025122" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.12.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.12.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -26133,6 +26166,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#2025122" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.12.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.12.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Changes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -26267,11 +26333,11 @@
 </ul>
 <h3 id="performance-improvements_1">🏎️ Performance Improvements<a class="headerlink" href="#performance-improvements_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Improved performance of pd.to_datetime</li>
+<li>Improved performance of pd.to_datetime()</li>
 </ul>
 <h3 id="bug-fixes_1">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Removed support for AWS Bedrock's EOL titan-text models in the DataFrame Library AI Toolkit.</li>
+<li>Removed support for AWS Bedrock's EOL titan-text models in the DataFrame Library AI Toolkit</li>
 <li>Fixed overflow error when estimating the size of large Parquet datasets</li>
 <li>Allow ranks to send concurrent async messages to each other during shuffle</li>
 <li>Fix output Series.name for pd.to_datetime()</li>
@@ -26283,6 +26349,17 @@
 <h3 id="dependency-changes">⚙️ Dependency Changes<a class="headerlink" href="#dependency-changes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Upgrade to Numba 0.63.1</li>
+</ul>
+<h2 id="2025122">2025.12.2<a class="headerlink" href="#2025122" title="Permanent link">&para;</a></h2>
+<h3 id="performance-improvements_2">🏎️ Performance Improvements<a class="headerlink" href="#performance-improvements_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Generate min/max filters that are pushed to Parquet or Iceberg I/O using statistics collected during join build.</li>
+<li>Estimate large Parquet dataset cardinality during planning instead of getting exact row count.</li>
+</ul>
+<h3 id="dependency-changes_1">⚙️ Dependency Changes<a class="headerlink" href="#dependency-changes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added support for Python 3.14.</li>
+<li>Dropped support for Mac Intel.</li>
 </ul>
 
 
