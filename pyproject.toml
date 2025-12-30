@@ -261,7 +261,7 @@ exclude = [
 # ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
 # Disable building wheels for musllinux, i686 and power pc
-skip = ["pp*", "*musllinux*", "*i686*"]
+skip = ["pp*", "*musllinux*", "*i686*", "*-win32*"]
 # Increase pip debugging output
 build-verbosity = 1
 build-frontend = { name = "pip" }

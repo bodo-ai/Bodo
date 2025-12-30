@@ -16,9 +16,6 @@ parameters:
 - name: pool_name
   type: string
   default: 'ScalingVMSet'
-- name: use_bodo_arrow_fork
-  type: number
-  default: 1
 
 jobs:
 - job: ${{ parameters.name }}
