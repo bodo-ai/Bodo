@@ -98,7 +98,7 @@ jobs:
             if [ "$ARCH" = "x86_64" ]; then
               PKGS="$PKGS libpsm2"
             fi
-            yum install -y $PKGS
+            dnf install -y $PKGS
 
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
