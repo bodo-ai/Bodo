@@ -263,6 +263,11 @@ uint64_t Pipeline::Execute() {
                 ? OperatorResult::FINISHED
                 : OperatorResult::NEED_MORE_INPUT;
 
+        if (produce_result == OperatorResult::FINISHED) {
+            std::cout << "Rank " << rank
+                      << " Pipeline source produced FINISHED " << std::endl;
+        }
+
         DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result);
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
