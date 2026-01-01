@@ -259,6 +259,23 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             this->groupby_state.get(), input_batch_reordered, local_is_last,
             true, &request_input);
 
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        consume_iters += 1;
+        if (global_is_last) {
+            std::cout << "Rank " << rank
+                      << " Aggregate Consume Iters: " << consume_iters
+                      << "FINISHED " << std::endl;
+        }
+        if (consume_iters % 100 == 0) {
+            // OperatorResult result =
+            //     request_input ? OperatorResult::NEED_MORE_INPUT
+            //                   : OperatorResult::HAVE_MORE_OUTPUT;
+            std::cout << "Rank " << rank
+                      << " Aggregate Consume Iters: " << consume_iters
+                      << "Local is last: " << local_is_last << std::endl;
+        }
+
         if (global_is_last) {
             return OperatorResult::FINISHED;
         }
@@ -360,6 +377,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
+
+    int consume_iters = 0;
 };
 
 // Definition of the static member
