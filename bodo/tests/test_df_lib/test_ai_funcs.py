@@ -399,6 +399,7 @@ def test_embed_bedrock_default_formatter():
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
 
+@pytest.mark.skip("TODO: Enable when PyTorch is available on Python 3.14.")
 @pytest.mark.jit_dependency
 def test_torch_train():
     import tempfile

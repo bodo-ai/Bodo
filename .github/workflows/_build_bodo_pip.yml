@@ -82,7 +82,7 @@ jobs:
           echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
-        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
+        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
@@ -91,7 +91,7 @@ jobs:
             # Global Tools
             pixi global install sccache ninja
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
+            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel libpsm2
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -118,8 +118,7 @@ jobs:
             rm -rf {package}/build
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" --default-timeout=100
+            pip install mpich --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
