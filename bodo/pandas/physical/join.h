@@ -599,6 +599,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         this->metrics.process_batch_time += end_timer(start_produce);
 
         out_table->column_names = this->output_schema->column_names;
+
+        if (is_last) {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+            std::cout << "Join Finished on rank " << rank << std::endl;
+        }
+
         return {out_table,
                 is_last ? OperatorResult::FINISHED
                         : (request_input ? OperatorResult::NEED_MORE_INPUT
