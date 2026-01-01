@@ -236,6 +236,16 @@ uint64_t Pipeline::Execute() {
     std::shared_ptr<table_info> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (rank == 0) {
+        std::cout << "Starting pipeline execution" << std::endl;
+        std::cout << "Pipeline source: " << source->ToString() << std::endl;
+        for (const auto& op : between_ops) {
+            std::cout << "Pipeline operator: " << op->ToString() << std::endl;
+        }
+        std::cout << "Pipeline sink: " << sink->ToString() << std::endl;
+    }
+
     while (!finished) {
         batches_processed++;
 
