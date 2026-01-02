@@ -61,11 +61,11 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
 
   master_instance_group {
-    instance_type = "c6i.16xlarge"
+    instance_type = "r6i.16xlarge"
   }
 
   core_instance_group {
-    instance_type  = "c6i.16xlarge"
+    instance_type  = "r6i.16xlarge"
     instance_count = 3
 
     ebs_config {
