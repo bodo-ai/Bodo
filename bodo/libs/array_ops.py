@@ -360,6 +360,7 @@ def overload_array_op_min(arr):
                 val = arr[i]
                 count_val = 1
             s = min(s, val)
+            print(s)
             count += count_val
         res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
         return res
