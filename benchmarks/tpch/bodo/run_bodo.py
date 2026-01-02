@@ -8,7 +8,7 @@ Refer to the SDK guide for more details:
 
 https://docs.bodo.ai/latest/guides/using_bodo_platform/bodo_platform_sdk_guide/#installation
 
-NOTE: This script assumes that you have the file `dataframe_lib.py`
+NOTE: This script assumes that you have the file `dataframe_queries.py`
 copied in your current workspace.
 
 usage:
