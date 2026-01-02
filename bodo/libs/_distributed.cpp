@@ -1067,8 +1067,8 @@ MPI_Op createArgMaxOp() {
 MPI_Op createArgMinMaxOp(MPI_Datatype mpi_typ, MPI_Op mpi_op) {
     // Instantiate templates for argmin/argmax data types (should match relevant
     // types in get_MPI_typ)
-    EXPAND_ARGMINMAX(MPI_UNSIGNED_CHAR, unsigned char)
-    EXPAND_ARGMINMAX(MPI_CHAR, char)
+    EXPAND_ARGMINMAX(MPI_UINT8_T, uint8_t)
+    EXPAND_ARGMINMAX(MPI_INT8_T, int8_t)
     EXPAND_ARGMINMAX(MPI_INT, int)
     EXPAND_ARGMINMAX(MPI_UNSIGNED, uint32_t)
     EXPAND_ARGMINMAX(MPI_LONG_LONG_INT, int64_t)
