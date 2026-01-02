@@ -665,7 +665,7 @@ static MPI_Datatype get_MPI_typ() {
             return MPI_UNSIGNED_CHAR;  // MPI_C_BOOL doesn't support operations
                                        // like min
         case Bodo_CTypes::INT8:
-            return MPI_CHAR;
+            return MPI_SIGNED_CHAR;
         case Bodo_CTypes::UINT8:
             return MPI_UNSIGNED_CHAR;
         case Bodo_CTypes::INT32:
