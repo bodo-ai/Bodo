@@ -1,0 +1,154 @@
+# Azure Pipeline that is Fridays at midnight
+trigger: none
+pr: none
+
+# Currently nightly can take up to ~8 hours to run. 1 AM is a good time to start.
+# (Note that this is in UTC time, so 1AM UTC is 8PM EST)
+schedules:
+- cron: "0 1 * * FRI"
+  displayName: 'FRI midnight build'
+  branches:
+    include:
+    - main
+    exclude:
+    - develop
+
+parameters:
+  - name: PYTEST_MARKER
+    displayName: PyTest Marker
+    type: string
+    default: 'not weekly'
+
+# NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
+# See get_channel.sh
+# Originally added through Azure Pipeline UI.
+# Azure pipeline UI includes AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+variables:
+  # Azure Pipelines currently doesn't have a "range" function to count from 1 to total
+  # We have to manually add the element and split into an array
+  # TODO: Replace with range when available
+  bodo_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
+  bodo_1p_total: 22
+  bodo_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
+  bodo_2p_total: 30
+  bodo_df_1p_each: "1,2"
+  bodo_df_1p_total: 2
+  bodo_spawn_2p_each: "1,2"
+  bodo_spawn_2p_total: 2
+  bodo_df_2p_each: "1,2,3,4,5"
+  bodo_df_2p_total: 5
+  bodosql_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12"
+  bodosql_1p_total: 12
+  bodosql_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
+  bodosql_2p_total: 22
+
+stages:
+ # ------------------------------- ARM Tests -------------------------------- #
+- stage: Test_Bodo_ARM
+  displayName: 'Test Bodo Linux Arm'
+  dependsOn: []
+  jobs:
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: name is used later in the buildscripts to determine which version of conda to install
+      name: Bodo_Tests
+      test_type: COMPILER
+      pool_name: linux-arm
+      matrix:
+        ${{ each slice in split(variables.bodo_1p_each, ',') }}:
+          ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
+        ${{ each slice in split(variables.bodo_2p_each, ',') }}:
+          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
+
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      name: Cache_tests
+      test_type: CACHE
+      pool_name: linux-arm
+      matrix:
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: ""
+
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      name: Bodo_Spawn_mode_tests
+      test_type: SPAWN
+      pool_name: linux-arm
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "spawn_mode"
+        ${{ each slice in split(variables.bodo_spawn_2p_each, ',') }}:
+          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_spawn_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: "spawn_mode and ${{ format('bodo_spawn_{0}of{1} and ({2})', slice, variables.bodo_spawn_2p_total, parameters.PYTEST_MARKER) }}"
+
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      name: Bodo_df_library_tests
+      test_type: DF_LIB
+      pool_name: linux-arm
+      matrix:
+        ${{ each slice in split(variables.bodo_df_1p_each, ',') }}:
+          ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_df_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: "df_lib and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
+        ${{ each slice in split(variables.bodo_df_2p_each, ',') }}:
+          ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_df_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: "df_lib and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_2p_total, parameters.PYTEST_MARKER) }}"
+
+
+- stage: Test_BodoSQL_ARM
+  displayName: 'Test BodoSQL Linux Arm'
+  dependsOn: []
+  jobs:
+
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BodoSQL_Streaming_Tests
+      test_type: NORMAL
+      pool_name: linux-arm
+      matrix:
+        ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
+          ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
+        ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
+          ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
+            NP: 2
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
+
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BodoSQL_Streaming_Caching_Tests
+      test_type: CACHE
+      pool_name: linux-arm
+      matrix:
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: ""
+
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BodoSQL_Streaming_Spawn_mode_tests
+      test_type: SPAWN
+      pool_name: linux-arm
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "spawn_mode"
+        TEST_2P:
+          NP: 2
+          PYTEST_MARKER: "spawn_mode"

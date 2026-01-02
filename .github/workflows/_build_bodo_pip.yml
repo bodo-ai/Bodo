@@ -88,10 +88,18 @@ jobs:
             # Install Pixi and Environment
             curl -fsSL https://pixi.sh/install.sh | bash
             source ~/.bashrc
+
             # Global Tools
             pixi global install sccache ninja
+
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel libpsm2
+            ARCH=$(uname -m)
+            PKGS="libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel"
+            if [ "$ARCH" = "x86_64" ]; then
+              PKGS="$PKGS libpsm2"
+            fi
+            dnf install -y $PKGS
+
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
