@@ -94,7 +94,7 @@ jobs:
 
             # Install dependencies available on package manager
             ARCH=$(uname -m)
-            PKGS="curl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel python3-devel"
+            PKGS="libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel"
             if [ "$ARCH" = "x86_64" ]; then
               PKGS="$PKGS libpsm2"
             fi
