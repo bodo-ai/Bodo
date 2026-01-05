@@ -29,8 +29,6 @@ jobs:
       arm: false
     secrets: inherit
   bodo-conda-linux-arm:
-    # Don't publish linux arm until we can get nightly fixed
-    if: false
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false

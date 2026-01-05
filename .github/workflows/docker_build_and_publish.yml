@@ -83,8 +83,9 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v6
+      if: ${{ inputs.is-release }}
       with:
         push: ${{ inputs.is-release }}
         file: ./buildscripts/docker/docker_release/Dockerfile
         platforms: linux/amd64, linux/arm64
-        tags: "test-img"
+        tags: ${{ env.LATEST_TAG}}  
