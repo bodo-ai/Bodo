@@ -122,16 +122,19 @@ def _concat_same_type(cls, to_concat):
     else:
         pa_dtype = to_concat[0].dtype.pyarrow_dtype
     arr = pa.chunked_array(chunks, type=pa_dtype)
-    return cls(arr)
+    if pandas_version < (3, 0):
+        return cls(arr)
+    else:
+        return to_concat[0]._from_pyarrow_array(arr)
 
 
 if _check_pandas_change:
     lines = inspect.getsource(
         pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type
     )
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "8f29eb56a84ce4000be3ba611f5a23cbf81b981fd8cfe5c7776e79f7800ba94e"
+    if hashlib.sha256(lines.encode()).hexdigest() not in (
+        "8f29eb56a84ce4000be3ba611f5a23cbf81b981fd8cfe5c7776e79f7800ba94e",
+        "b06e7a78317c289db40080d30c60ae03fa93afd073c85fb033ec43e9ad1dd9f0",
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type has changed"
