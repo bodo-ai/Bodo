@@ -93,7 +93,7 @@ jobs:
       uses: docker/build-push-action@v6
       if: ${{ inputs.is-release }}
       with:
-        push: ${{ inputs.is-release }}
+        push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
         platforms: linux/amd64, linux/arm64
         tags: ${{ env.LATEST_TAG}}  
