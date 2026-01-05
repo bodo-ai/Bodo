@@ -87,7 +87,5 @@ jobs:
       with:
         push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
-        # Don't publish linux arm until we can get nightly fixed
-        #platforms: linux/amd64, linux/arm64
-        platforms: linux/amd64
+        platforms: linux/amd64, linux/arm64
         tags: ${{ env.LATEST_TAG}}  
