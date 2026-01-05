@@ -158,9 +158,9 @@ def _str_find(self, sub: str, start: int = 0, end: int | None = None):
 
 if _check_pandas_change:
     lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._str_find)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370"
+    if hashlib.sha256(lines.encode()).hexdigest() not in (
+        "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370",
+        "951a1ecf005bf7e00146c61e878ff1615950c20a95b323007ee9d69271524d78",
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.arrow.array.ArrowExtensionArray._str_find has changed"
