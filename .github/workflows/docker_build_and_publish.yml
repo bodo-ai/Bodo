@@ -50,6 +50,7 @@ jobs:
         load: true
         file: ./buildscripts/docker/docker_release/Dockerfile
         tags: ${{ env.TEST_TAG }}
+        platforms: linux/amd64, linux/arm64
  
     - name: Test Jupyter notebooks inside the Docker image
       run: |
