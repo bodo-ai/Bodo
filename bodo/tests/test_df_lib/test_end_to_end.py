@@ -96,7 +96,7 @@ def test_read_parquet(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -118,7 +118,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         path = datapath(file_path)
 
         bodo_out = bd.read_parquet(path)[["three", "four"]]
-        py_out = pd.read_parquet(path)[["three", "four"]]
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["three", "four"]]
 
     _test_equal(
         bodo_out,
@@ -152,7 +152,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
         df.to_parquet(path)
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         _test_equal(
             bodo_out,
@@ -166,7 +166,7 @@ def test_read_parquet_len_shape(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         # len directly on parquet file doesn't require plan execution
         assert len(bodo_out) == len(py_out)
@@ -185,7 +185,7 @@ def test_read_parquet_series_len_shape(datapath):
 
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out["A"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out["A"]
 
         # len directly on parquet file doesn't require plan execution
@@ -247,7 +247,7 @@ def test_write_parquet(index_val):
         assert bodo_df.is_lazy_plan()
 
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -268,7 +268,7 @@ def test_write_parquet(index_val):
         f(bodo_df)
         bodo_df.to_parquet(path)
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -1127,7 +1127,7 @@ def test_parquet_read_partitioned(datapath):
 
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     # NOTE: Bodo DataFrames currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
@@ -1147,7 +1147,7 @@ def test_parquet_read_partitioned_filter(datapath):
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out[bodo_out.part == "a"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out[py_out.part == "a"]
 
     # TODO: test logs to make sure filter pushdown happened and files skipped
@@ -3615,7 +3615,7 @@ def test_dataframe_jit_fallback(datapath):
     path = datapath("dataframe_library/df1.parquet")
 
     bodo_out = bd.read_parquet(path)[["A", "D"]]
-    py_out = pd.read_parquet(path)[["A", "D"]]
+    py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["A", "D"]]
 
     start_jit_fallback_compile_success = JITFallback.compile_success
     with assert_executed_plan_count(1):
