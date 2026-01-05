@@ -842,16 +842,16 @@ def test_series_map_non_jit(index_val):
     warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func1)
+        bdf2 = bdf.C.map(func1)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func1)
+    pdf2 = pdf.C.map(func1)
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func2)
+        bdf2 = bdf.C.map(func2)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func2)
+    pdf2 = pdf.C.map(func2)
 
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
