@@ -292,6 +292,7 @@ duckdb::Value ArrowScalarToDuckDBValue(
                 "ArrowScalarToDuckDBValue unhandled type: " +
                 scalar->type->ToString());
     }
+    return duckdb::Value();
 }
 
 arrow::compute::Expression tableFilterToArrowExpr(
