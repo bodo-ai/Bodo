@@ -58,48 +58,47 @@ if pandas_version < (1, 4):
         _set_noconvert_columns
     )
 
-
-# Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
-# also allow dict-encoded string arrays from Bodo
-# Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
-def ArrowStringArray__init__(self, values):
-    import pyarrow as pa
-    from pandas.core.arrays.string_ import StringDtype
-    from pandas.core.arrays.string_arrow import ArrowStringArray
-
-    super(ArrowStringArray, self).__init__(values)
-    self._dtype = StringDtype(storage=self._storage)
-
+if pandas_version < (3, 0):
     # Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
     # also allow dict-encoded string arrays from Bodo
-    if not (
-        pa.types.is_string(self._pa_array.type)
-        or pa.types.is_large_string(self._pa_array.type)
-        or (
-            pa.types.is_dictionary(self._pa_array.type)
-            and (
-                pa.types.is_string(self._pa_array.type.value_type)
-                or pa.types.is_large_string(self._pa_array.type.value_type)
+    # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
+    def ArrowStringArray__init__(self, values):
+        import pyarrow as pa
+        from pandas.core.arrays.string_ import StringDtype
+        from pandas.core.arrays.string_arrow import ArrowStringArray
+
+        super(ArrowStringArray, self).__init__(values)
+        self._dtype = StringDtype(storage=self._storage)
+
+        # Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
+        # also allow dict-encoded string arrays from Bodo
+        if not (
+            pa.types.is_string(self._pa_array.type)
+            or pa.types.is_large_string(self._pa_array.type)
+            or (
+                pa.types.is_dictionary(self._pa_array.type)
+                and (
+                    pa.types.is_string(self._pa_array.type.value_type)
+                    or pa.types.is_large_string(self._pa_array.type.value_type)
+                )
+                and pa.types.is_int32(self._pa_array.type.index_type)
             )
-            and pa.types.is_int32(self._pa_array.type.index_type)
-        )
-    ):
-        raise ValueError(
-            "ArrowStringArray requires a PyArrow (chunked) array of string type"
-        )
+        ):
+            raise ValueError(
+                "ArrowStringArray requires a PyArrow (chunked) array of string type"
+            )
 
+    if _check_pandas_change:
+        lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "5127b219e8856a16ef858b0f120881e32623d75422e50597f8a2fbb5281900c0"
+        ):  # pragma: no cover
+            warnings.warn(
+                "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
+            )
 
-if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "5127b219e8856a16ef858b0f120881e32623d75422e50597f8a2fbb5281900c0"
-    ):  # pragma: no cover
-        warnings.warn(
-            "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
-        )
-
-pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
+    pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
 
 @classmethod
