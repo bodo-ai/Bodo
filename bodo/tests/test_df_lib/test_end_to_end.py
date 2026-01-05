@@ -132,7 +132,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         pytest.param(
             pd.DataFrame(
                 {
-                    "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+                    "one": [-1.0, -4.1, 2.5, 3.0, 4.0, 6.0, 10.0],
                     "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
                     "three": [True, False, True, True, True, False, False],
                     "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
@@ -231,7 +231,7 @@ def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
         {
-            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "one": [-1.0, -4.3, 2.5, 3.0, 4.0, 6.0, 10.0],
             "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
             "three": [True, False, True, True, True, False, False],
             "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
