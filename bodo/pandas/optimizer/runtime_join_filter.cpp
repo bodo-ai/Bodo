@@ -735,10 +735,19 @@ duckdb::unique_ptr<duckdb::LogicalOperator>
 RuntimeJoinFilterPushdownOptimizer::VisitGet(
     duckdb::unique_ptr<duckdb::LogicalOperator> &op) {
     auto &get_op = op->Cast<duckdb::LogicalGet>();
+    // We have to cast to our subtype so we can attach the join filter state
     BodoScanFunctionData *scan_function_data =
         dynamic_cast<BodoScanFunctionData *>(get_op.bind_data.get());
     assert(scan_function_data);
 
+    // We attach the current join program state to the scan function
+    // scan_function_data- so it will be passed to the creation of our physical
+    // read operators when we convert the plan. This lets the physical read
+    // operator apply statistics from the joins in the program state to generate
+    // filters that can be pushed into I/O. They must generate the filters in
+    // their first batch so we can guarantee the join build has been completed
+    // (we add the join build as a dependency to the pipeline with this logical
+    // get during plan conversion).
     scan_function_data->rtjf_state_map = this->join_state_map;
     return this->insert_join_filters(op, this->join_state_map);
 }
