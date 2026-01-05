@@ -1405,6 +1405,16 @@ def _test_equal(
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
 
+        # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
+        # mismatch errors
+        for i, (bodo_dtype, py_dtype) in enumerate(zip(bodo_out.dtypes, py_out.dtypes)):
+            if isinstance(bodo_dtype, pd.ArrowDtype) and pa.types.is_floating(
+                bodo_dtype.pyarrow_dtype
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
         # We return typed extension arrays like StringArray for all APIs but Pandas
         # & Spark doesn't return them by default in all APIs yet.
         py_out_dtypes = py_out.dtypes.values.tolist()
