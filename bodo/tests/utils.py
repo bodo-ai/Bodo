@@ -1408,8 +1408,10 @@ def _test_equal(
         # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
         # mismatch errors
         for i, (bodo_dtype, py_dtype) in enumerate(zip(bodo_out.dtypes, py_out.dtypes)):
-            if isinstance(bodo_dtype, pd.ArrowDtype) and pa.types.is_floating(
-                bodo_dtype.pyarrow_dtype
+            if (
+                isinstance(bodo_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.float32, np.float64)
             ):
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
