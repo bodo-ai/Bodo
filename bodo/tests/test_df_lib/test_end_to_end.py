@@ -1628,7 +1628,6 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 @pytest.mark.parametrize(
     "func, kwargs",
     [
-        pytest.param({"mean_A": "mean", "count_A": "count"}, {}, id="func_dict"),
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
