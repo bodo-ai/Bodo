@@ -1345,6 +1345,12 @@ def _test_equal(
                     bodo_out.dtype,
                     py_out.name,
                 )
+            # Convert float types
+            if pa.types.is_floating(pa_type) and py_out.dtype in (
+                np.float32,
+                np.float64,
+            ):
+                py_out = py_out.astype(bodo_out.dtype)
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
