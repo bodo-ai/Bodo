@@ -279,6 +279,7 @@ def test_apply_basic(dropna, as_index):
             "BB": ["a", "b"] * 6,
         }
     )
+    df["A"] = df["A"].astype("string[pyarrow]")
 
     bdf = bd.from_pandas(df)
 
