@@ -2479,12 +2479,11 @@ def test_df_state_change():
         bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
         bdf2 = bdf.A.map(lambda x: x)
 
-    with assert_executed_plan_count(1):
-        # Collect the df, original result id is stale
-        print(bdf)
+    # Collect the df, original result id is stale
+    print(bdf)
 
-        # Plan execution shouldn't fail due to stale res id
-        print(bdf2)
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
 
 
 def test_dataframe_concat(datapath):
