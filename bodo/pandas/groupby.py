@@ -914,6 +914,7 @@ def _get_agg_output_type(
             or pa.types.is_floating(pa_type)
             or pa.types.is_boolean(pa_type)
             or pa.types.is_string(pa_type)
+            or pa.types.is_large_string(pa_type)
             or pa.types.is_duration(pa_type)
             or pa.types.is_date(pa_type)
             or pa.types.is_timestamp(pa_type)
@@ -949,7 +950,7 @@ def _get_agg_output_type(
                 out_numba_type, (bodo.types.SeriesType, bodo.types.DataFrameType)
             )
             or is_array_typ(out_numba_type)
-        ) and not pa.types.is_list(pa_type):
+        ) and not (pa.types.is_list(pa_type) or pa.types.is_large_list(pa_type)):
             raise ValueError(
                 "Groupby.agg(): User defined function must produce aggregated value."
             )
