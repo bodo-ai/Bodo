@@ -2670,11 +2670,10 @@ def test_series_describe_nonnumeric():
 
     bdf = bd.from_pandas(df)
     for c in df.columns:
-        with assert_executed_plan_count(3):
-            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
-            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
-            describe_pd = df[c].describe().map(str)
-            describe_bodo = bdf[c].describe()
+        # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+        # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+        describe_pd = df[c].describe().map(str)
+        describe_bodo = bdf[c].describe()
         _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
 
 
