@@ -167,13 +167,14 @@ class DataFrameGroupBy:
         Convert func and kwargs into a list of (column, function) tuples.
         """
         # list of (input column name, function) pairs
-        normalized_func: list[tuple[str, str]] = []
+        normalized_func: list[GroupbyAggFunc] = []
 
         if func is None and kwargs:
             # Handle cases like agg(my_sum=("A", "sum")) -> creates column my_sum
             # that sums column A.
             normalized_func = [
-                GroupbyAggFunc(col, func_) for col, func_ in kwargs.values()
+                GroupbyAggFunc(named_agg.column, named_agg.aggfunc)
+                for named_agg in kwargs.values()
             ]
         elif is_dict_like(func):
             # Handle cases like {"A": "sum"} -> creates sum column over column A
@@ -894,7 +895,7 @@ def _get_agg_output_type(
             new_type = pa_type
         elif pa.types.is_floating(pa_type):
             new_type = pa.float64()
-        elif pa.types.is_string(pa_type):
+        elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
