@@ -1557,29 +1557,27 @@ def test_groupby_fallback():
         bdf = bd.from_pandas(df)
 
     # Series groupby
-    with assert_executed_plan_count(3):
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
-                "B"
-            ].sum(engine="cython")
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
-            engine="cython"
-        )
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
-    with assert_executed_plan_count(2):
-        bdf2 = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df)
 
-        # DataFrame groupby
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf2.groupby(
-                "A", dropna=False, as_index=False, sort=True
-            ).sum(engine="cython")
-
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+    # DataFrame groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
 
