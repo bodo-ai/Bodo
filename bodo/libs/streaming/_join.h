@@ -252,6 +252,11 @@ struct HashJoinMetrics : public JoinMetrics {
     // Time spent probing bloom filter
     time_t join_filter_bloom_filter_probe_time = 0;
     stat_t join_filter_bloom_filter_probe_nrows = 0;
+
+    // Time spent making cudf table from finalized build side.
+    time_t cudf_build_time = 0;
+    // Time spent calling cudf join.
+    time_t cudf_join_time = 0;
 };
 
 /**
@@ -678,6 +683,8 @@ class JoinState {
     cond_expr_fn_t cond_func;
     const bool build_table_outer;
     const bool probe_table_outer;
+    const std::vector<uint64_t> build_kept_cols;
+    const std::vector<uint64_t> probe_kept_cols;
     const bool force_broadcast;
     // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
@@ -752,11 +759,12 @@ class JoinState {
 
     JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
               const std::shared_ptr<bodo::Schema> probe_table_schema_,
-              uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
-              bool probe_table_outer_, cond_expr_fn_t cond_func_,
-              bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
-              bool is_na_equal_ = false, bool is_mark_join_ = false);
+              uint64_t n_keys_, bool build_table_outer_,
+              bool probe_table_outer_, bool force_broadcast_,
+              cond_expr_fn_t cond_func_, bool build_parallel_,
+              bool probe_parallel_, int64_t output_batch_size_,
+              int64_t sync_iter_, int64_t op_id_, bool is_na_equal_ = false,
+              bool is_mark_join_ = false);
 
     virtual ~JoinState() {}
 

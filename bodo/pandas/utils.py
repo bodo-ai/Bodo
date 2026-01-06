@@ -1651,6 +1651,36 @@ def cpp_table_to_cudf(cpp_table_ptr):
     return cudf.DataFrame(bodo_df)
 
 
+def cpp_table_to_hash_join(cpp_table_ptr, nkeys):
+    """
+    cpp_table_ptr: pointer to C++ table_info (or equivalent)
+    Returns: cuDF DataFrame
+    """
+    import cudf
+    import pylibcudf as plc
+
+    from bodo.ext import libcudf_hash_join
+    from bodo.pandas.utils import cpp_table_to_df
+
+    bodo_df = cpp_table_to_df(cpp_table_ptr, use_arrow_dtypes=True, delete_input=False)
+    df = cudf.DataFrame(bodo_df)
+    df_keys = df.iloc[:, :nkeys]
+    arrow_df = df.to_arrow()
+    arrow_df_keys = df_keys.to_arrow()
+    plc_df = plc.Table.from_arrow(arrow_df)
+    plc_df_keys = plc.Table.from_arrow(arrow_df_keys)
+    # print("to_hash_join", len(df), len(df_keys), len(arrow_df), len(arrow_df_keys), plc_df.shape(), plc_df_keys.shape(), "\n", arrow_df_keys.to_pandas())
+    hash_joined_table = libcudf_hash_join.HashJoin(
+        plc_df_keys,
+        libcudf_hash_join.NullEquality.EQUAL,
+        None,  # libcudf_hash_join.NullableJoin.NO,
+        0.5,
+        plc.utils.CUDF_DEFAULT_STREAM,
+    )
+    # plc_df_keys to make sure that it stays alive until HashJoin is done
+    return (arrow_df, hash_joined_table, plc_df, plc_df_keys, df.columns)
+
+
 def cudf_probe_join_with_build(
     build_gdf,
     probe_cpp_table,
@@ -1691,6 +1721,116 @@ def cudf_probe_join_with_build(
             x + len(probe_gdf.columns) for x in build_kept_cols
         ]
     result_gdf = result_gdf.iloc[:, keep_col_list]
+
+    result_df = result_gdf.to_arrow().to_pandas()
+    out_ptr, _ = df_to_cpp_table(result_df)
+    return out_ptr
+
+
+def cudf_probe_hash_join(
+    table_hash_join,  # 2-tuple of full build table and HashJoin object
+    probe_cpp_table,
+    nkeys,
+    build_kept_cols,
+    probe_kept_cols,
+    join_kind="inner",
+):
+    """
+    table_hash_join: result of cpp_table_to_hash_join (full build side plus HashJoin)
+    probe_cpp_table: pandas DataFrame (probe side)
+    nkeys: number of join keys.  both input have to have keys in
+        the same order at the beginning of the columns
+    build_kept_cols: columns to keep from the build side
+    probe_kept_cols: columns to keep from the probe side
+    join_kind: join type ("inner", "left", "right", "outer")
+    """
+
+    import cudf
+    import pylibcudf as plc
+    import rmm.mr
+
+    from bodo.pandas.utils import df_to_cpp_table
+
+    full_build_table, build_hash_join, plc_build_table, _, build_table_columns = (
+        table_hash_join
+    )
+    probe_df = cpp_table_to_df(
+        probe_cpp_table, use_arrow_dtypes=True, delete_input=False
+    )
+    probe_gdf = cudf.DataFrame(probe_df)
+    probe_gdf_keys = probe_gdf.iloc[:, :nkeys]
+    arrow_df = probe_gdf.to_arrow()
+    arrow_df_keys = probe_gdf_keys.to_arrow()
+    plc_df = plc.Table.from_arrow(arrow_df)
+    plc_df_keys = plc.Table.from_arrow(arrow_df_keys)
+    # print("Probe keys\n", arrow_df_keys.to_pandas())
+
+    cudfstream = plc.utils.CUDF_DEFAULT_STREAM
+    dmr = rmm.mr.get_current_device_resource()
+
+    if join_kind == "inner":
+        result = build_hash_join.inner_join(plc_df_keys, None, cudfstream, dmr)
+    else:
+        raise BodoLibNotImplementedException(
+            "hash_join other than inner not yet supported."
+        )
+
+    if not isinstance(result, tuple) or len(result) != 2:
+        raise Exception("hash_join result not a 2-tuple")
+
+    probe_idx_col, build_idx_col = result
+    build_idx_series = build_idx_col.to_arrow()
+    probe_idx_series = probe_idx_col.to_arrow()
+
+    use_gather = True
+
+    # print("cudf_probe_hash_join sizes", len(build_idx_series), len(probe_idx_series), len(full_build_table), len(arrow_df))
+    if use_gather:
+        probe_rows = plc.copying.gather(
+            plc_df,
+            probe_idx_col,
+            plc.copying.OutOfBoundsPolicy.NULLIFY,
+            cudfstream,
+            dmr,
+        )
+        build_rows = plc.copying.gather(
+            plc_build_table,
+            build_idx_col,
+            plc.copying.OutOfBoundsPolicy.NULLIFY,
+            cudfstream,
+            dmr,
+        )
+        kept_probe_rows = [probe_rows.columns()[i] for i in probe_kept_cols]
+        kept_build_rows = [build_rows.columns()[i] for i in build_kept_cols]
+        result_plc_table = plc.Table(kept_probe_rows + kept_build_rows)
+        result_arrow_table = result_plc_table.to_arrow()
+        column_names = [probe_df.columns[i] for i in probe_kept_cols] + [
+            build_table_columns[i] for i in build_kept_cols
+        ]
+        result_arrow_table = result_arrow_table.rename_columns(column_names)
+        result_gdf = cudf.DataFrame.from_arrow(result_arrow_table)
+    else:
+        build_rows = full_build_table.take(build_idx_series)  # gather build rows
+        probe_rows = arrow_df.take(probe_idx_series)  # gather probe rows
+        # combine: keep key columns once, add payload columns from both sides as desired
+        result_gdf = cudf.concat(
+            [
+                cudf.DataFrame.from_arrow(probe_rows),
+                cudf.DataFrame.from_arrow(build_rows),
+            ],
+            axis=1,
+        )
+
+        if join_kind == "right":
+            keep_col_list = [
+                x + len(build_table_columns) for x in probe_kept_cols
+            ] + build_kept_cols
+        else:
+            keep_col_list = probe_kept_cols + [
+                x + len(probe_gdf.columns) for x in build_kept_cols
+            ]
+
+        result_gdf = result_gdf.iloc[:, keep_col_list]
 
     result_df = result_gdf.to_arrow().to_pandas()
     out_ptr, _ = df_to_cpp_table(result_df)
