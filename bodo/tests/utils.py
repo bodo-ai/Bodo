@@ -1423,6 +1423,16 @@ def _test_equal(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
 
+        # Handle Arrow float types in Index
+        if not isinstance(bodo_out.index, pd.MultiIndex):
+            index_dtype = bodo_out.index.dtype
+            if (
+                isinstance(index_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(index_dtype.pyarrow_dtype)
+                and py_out.index.dtype in (np.float32, np.float64)
+            ):
+                py_out.index = py_out.index.astype(index_dtype)
+
         # We return typed extension arrays like StringArray for all APIs but Pandas
         # & Spark doesn't return them by default in all APIs yet.
         py_out_dtypes = py_out.dtypes.values.tolist()
