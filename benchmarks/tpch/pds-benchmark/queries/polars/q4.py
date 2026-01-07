@@ -19,8 +19,8 @@ def q(
     assert lineitem is not None
     assert orders is not None
 
-    var1 = date(1993, 7, 1)
-    var2 = date(1993, 10, 1)
+    var1 = date(1993, 8, 1)
+    var2 = date(1993, 11, 1)
 
     return (
         # SQL exists translates to semi join in Polars API
@@ -38,4 +38,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)

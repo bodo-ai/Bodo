@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import datetime
 import warnings
-from datetime import datetime
 
 import pandas as pd
 from queries.dask import utils
@@ -17,7 +17,7 @@ def q() -> None:
         orders = utils.get_orders_ds()
         lineitem = utils.get_line_item_ds()
 
-        receiptdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
+        receiptdate_from = datetime.datetime.strptime("1994-01-01", "%Y-%m-%d")
         receiptdate_to = receiptdate_from + datetime.timedelta(days=365)
 
         table = orders.merge(lineitem, left_on="o_orderkey", right_on="l_orderkey")

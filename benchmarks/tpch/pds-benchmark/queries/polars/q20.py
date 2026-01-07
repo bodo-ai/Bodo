@@ -28,10 +28,10 @@ def q(
     assert partsupp is not None
     assert supplier is not None
 
-    var1 = date(1994, 1, 1)
-    var2 = date(1995, 1, 1)
-    var3 = "CANADA"
-    var4 = "forest"
+    var1 = date(1996, 1, 1)
+    var2 = date(1997, 1, 1)
+    var3 = "JORDAN"
+    var4 = "azure"
 
     q1 = (
         lineitem.filter(pl.col("l_shipdate").is_between(var1, var2, closed="left"))
@@ -59,4 +59,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)

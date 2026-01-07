@@ -34,8 +34,8 @@ def q(
     assert orders is not None
 
     var1 = "ASIA"
-    var2 = date(1994, 1, 1)
-    var3 = date(1995, 1, 1)
+    var2 = date(1996, 1, 1)
+    var3 = date(1997, 1, 1)
 
     return (
         region.join(nation, left_on="r_regionkey", right_on="n_regionkey")
@@ -59,4 +59,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)

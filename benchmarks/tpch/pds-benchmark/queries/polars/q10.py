@@ -25,8 +25,8 @@ def q(
     assert nation is not None
     assert orders is not None
 
-    var1 = date(1993, 10, 1)
-    var2 = date(1994, 1, 1)
+    var1 = date(1994, 11, 1)
+    var2 = date(1995, 2, 1)
 
     return (
         customer.join(orders, left_on="c_custkey", right_on="o_custkey")
@@ -65,4 +65,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)

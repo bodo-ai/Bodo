@@ -62,7 +62,7 @@ This section describes how to reproduce benchmark results for both single node a
 | duckdb | 1.4.2 |
 | dask   | 2025.11.0 |
 | dask-cloudprovider  | 2025.9.0 |
-| PySpark  | 3.5.2 |
+| PySpark  | 3.5.5 |
 <!-- TODO: Daft -->
 <!-- TODO: Modin -->
 

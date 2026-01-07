@@ -41,7 +41,7 @@ def q(
         )
         .join(orders, left_on="l_orderkey", right_on="o_orderkey")
         .join(nation, left_on="s_nationkey", right_on="n_nationkey")
-        .filter(pl.col("p_name").str.contains("green"))
+        .filter(pl.col("p_name").str.contains("ghost"))
         .select(
             pl.col("n_name").alias("nation"),
             pl.col("o_orderdate").dt.year().alias("o_year"),
@@ -57,4 +57,4 @@ def q(
 
 
 if __name__ == "__main__":
-    utils.run_query(Q_NUM, q())
+    utils.run_query(Q_NUM, q)

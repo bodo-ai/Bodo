@@ -327,7 +327,6 @@ def test_llm_generate_bedrock_custom_formatters():
     [
         "us.amazon.nova-lite-v1:0",
         "anthropic.claude-3-haiku-20240307-v1:0",
-        "amazon.titan-text-lite-v1",
     ],
 )
 def test_llm_generate_bedrock_default_formatter(modelId):
@@ -400,6 +399,7 @@ def test_embed_bedrock_default_formatter():
     assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
 
+@pytest.mark.skip("TODO: Enable when PyTorch is available on Python 3.14.")
 @pytest.mark.jit_dependency
 def test_torch_train():
     import tempfile

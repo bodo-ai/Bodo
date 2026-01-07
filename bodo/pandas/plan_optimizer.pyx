@@ -322,7 +322,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id) except +
-    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations) except +
+    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols) except +
     cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
@@ -909,7 +909,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """
     cdef readonly object path
     cdef readonly object storage_options
-    cdef readonly int nrows
+    cdef readonly int64_t nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         from bodo.ext import hdist
@@ -917,17 +917,25 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
+        self.nrows = -1
+        cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        from bodo.ext import hdist
+
+        if self.nrows == -1:
+            self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=True) if bodo.get_rank() == 0 else 0)
         return self.nrows
 
-    def _get_nrows(self):
+    def _get_nrows(self, exact : bool = True):
+        """ Get the number of rows in the Parquet dataset.
+        If exact is False, estimate the number of rows by sampling files.
+        """
         from bodo.io.fs_io import (
             expand_path_globs,
             getfs,
@@ -940,13 +948,50 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         # Since we are supplying the filesystem to pq.read_table,
         # Any prefixes e.g. s3:// should be removed.
-        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
             fpath, protocol, parsed_url
         )
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
-        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+        if exact:
+            return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+
+        if isinstance(fpath_noprefix, str):
+            fpath_noprefix = [fpath_noprefix]
+
+        # TODO: Make parquet file detection more robust.
+        def is_parquet_file(info: pa.fs.FileInfo):
+            return info.extension in ["parquet", "pq"]
+
+        files = []
+
+        for path in fpath_noprefix:
+            info = fs.get_file_info(path)
+
+            if info.type == pa.fs.FileType.File:
+                if is_parquet_file(info):
+                    files.append(path)
+
+            elif info.type == pa.fs.FileType.Directory:
+                selector = pa.fs.FileSelector(path, recursive=True)
+                infos = fs.get_file_info(selector)
+                files.extend(
+                    i.path for i in infos
+                    if i.type == pa.fs.FileType.File
+                    and is_parquet_file(i)
+                )
+
+        n_files = len(files)
+        if n_files == 0:
+            return 0
+
+        n_sampled = max(3, int(0.001 * n_files))
+        sampled = files[:min(n_sampled, n_files)]
+
+        rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
+
+        return int(rows * (n_files / len(sampled)))
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
@@ -971,10 +1016,10 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
 
 
 cdef class LogicalGetPandasReadParallel(LogicalOperator):
-    cdef int nrows
+    cdef int64_t nrows
 
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, int nrows, object result_id):
+    def __cinit__(self, object out_schema, int64_t nrows, object result_id):
         # result_id could be a string or LazyPlanDistributedArg if we are constructing the
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
@@ -1033,7 +1078,7 @@ cdef class LogicalIcebergWrite(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source,
             str table_loc,
             str bucket_region,
-            int max_pq_chunksize,
+            int64_t max_pq_chunksize,
             str compression,
             object partition_tuples,
             object sort_tuples,
@@ -1083,8 +1128,9 @@ cdef class LogicalJoinFilter(LogicalOperator):
             vector[int] join_filter_ids,
             vector[vector[int64_t]] equality_filter_columns,
             vector[vector[c_bool]] equality_is_first_locations):
+        cdef vector[vector[int64_t]] orig_build_key_cols
 
-        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations)
+        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_join_filter.release())
 
     def __str__(self):

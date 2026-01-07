@@ -19,16 +19,16 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 python = "3.13.*"
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi", "cpu"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "313" }
+default =      { features = ["rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "314-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "314-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "313-linux" }
+default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "314-linux" }
 
 [tasks.build-arrow-cuda]
 cmd = "pip install cudf-cu13==25.12 --extra-index-url https://pypi.nvidia.com"
@@ -109,7 +109,7 @@ macos = "12.0"
 [dependencies]
 pip = "*"
 # Core Python Deps
-numba = ">=0.62,<0.63.0"
+numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
 fsspec = ">=2021.09"
@@ -123,7 +123,8 @@ py4j = "==0.10.9.9"
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = ">=1.4"
+# sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
+scikit-learn = ">=1.4,<1.8"
 matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
@@ -167,11 +168,11 @@ boost-cpp = "*"
 aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
+hdf5 = { version = "*", build = "*mpi_impi_*" }
 
 [feature.dev.dependencies]
 # Build Python
@@ -180,7 +181,7 @@ setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
-mpi4py = ">=4.0,<4.1"
+mpi4py = ">=4.0"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -196,7 +197,8 @@ sqlglot = "*"
 # Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
 duckdb = "!=1.2.1"
 
-pyspark = "4.*"
+# Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
+pyspark = "4.0.*"
 matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
@@ -217,7 +219,8 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-pytest = "*"
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
 pytest-xdist = "*"
@@ -237,7 +240,8 @@ ipython = "*"
 # Generation/Embedding Tests
 openai = "*"
 
-pytorch = ">=2.0"
+# TODO: Enable when PyTorch is available on Python 3.14
+# pytorch = ">=2.0"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
@@ -290,9 +294,9 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
@@ -301,7 +305,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "=4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]

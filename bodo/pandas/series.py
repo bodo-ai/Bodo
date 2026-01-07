@@ -2808,6 +2808,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             False,  # is_method
             (idx,),  # args
             {},  # kwargs
+            True,  # use_arrow_dtypes
         ),
         (0,) + index_cols,
         False,  # is_cfunc
@@ -2816,7 +2817,14 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
 
 
 def _get_series_func_plan(
-    series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
+    series_proj,
+    empty_data,
+    func,
+    args,
+    kwargs,
+    is_method=True,
+    cfunc_decorator=None,
+    use_arrow_dtypes=None,
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     ScalarFuncExpression with the correct arguments and a LogicalProjection.
@@ -2910,6 +2918,7 @@ def _get_series_func_plan(
                 is_method,  # is_method
                 args,  # args
                 kwargs,  # kwargs
+                use_arrow_dtypes,
             )
             is_cfunc = False
 

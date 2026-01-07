@@ -47,15 +47,29 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     //        "PhysicalPlanBuilder::Visit LogicalGet: dynamic filters not "
     //        "supported");
     //}
+    //
+    BodoScanFunctionData& scan_data =
+        op.bind_data->Cast<BodoScanFunctionData>();
 
-    auto physical_op =
-        op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns, op.table_filters, op.extra_info.limit_val);
+    auto physical_op = scan_data.CreatePhysicalOperator(
+        selected_columns, op.table_filters, op.extra_info.limit_val,
+        this->join_filter_states);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
     }
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+
+    // If the logical get is associated with runtime join filter states,
+    // add the join filter pipelines to be run before this scan operator so the
+    // stats are available. This should already be the case since filtering is
+    // done on reads on the probe side, but added for completeness.
+    if (scan_data.rtjf_state_map.has_value()) {
+        for (const auto& [join_id, state] : scan_data.rtjf_state_map.value()) {
+            this->active_pipeline->addRunBefore(
+                this->join_filter_pipelines->at(join_id));
+        }
+    }
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalEmptyResult& op) {
