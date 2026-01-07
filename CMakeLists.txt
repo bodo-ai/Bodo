@@ -558,6 +558,8 @@ add_custom_command(
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 -I "${PYLIBCUDF_BASE_DIR}" -I "${RMM_BASE_DIR}" --output-file "bodo/pandas/libcudf_hash_join.cpp" "bodo/pandas/libcudf_hash_join.pyx"
+  # Our use of libcudf's Cython puts libcudf_exception_handler in the code but it is unused so our
+  # compiler complains.  This is just a hack to make it appear as used.
   COMMAND echo "static void * volatile __libcudf_exception_handler_ref = (void*)libcudf_exception_handler;" >> "bodo/pandas/libcudf_hash_join.cpp"
   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/pandas/libcudf_hash_join.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/libcudf_hash_join.cpp"
   COMMENT "Cythonizing Source bodo/pandas/libcudf_hash_join.pyx into bodo/pandas/libcudf_hash_join.cpp"
@@ -891,38 +893,34 @@ if(USE_CUDF)
     ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
   )
 
-  # find_package(CUDAToolkit REQUIRED)
-  # message(STATUS "CUDAToolkit include dirs: ${CUDAToolkit_INCLUDE_DIRS}")
   # RMM library defines
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import librmm, os; print(os.path.join(os.path.dirname(librmm.__file__), 'include'))" OUTPUT_VARIABLE RMM_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "RMM include dir: ${RMM_INCLUDE_DIR}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import librmm, os; p=os.path.dirname(librmm.__file__); print(os.path.join(p, 'lib64', 'librmm.so'))" OUTPUT_VARIABLE RMM_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "Using RMM library: ${RMM_LIB}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import librmm, os; print(os.path.join(os.path.dirname(librmm.__file__), 'lib64'))" OUTPUT_VARIABLE RMM_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Using RMM libdir: ${RMM_LIBDIR}")
+  find_path(RMM_INCLUDE_DIR NAMES rmm/cuda_stream_view.hpp)
+  find_library(RMM_LIB NAMES librmm.so)
+  get_filename_component(RMM_LIBDIR "${RMM_LIB}" DIRECTORY)
+  message(STATUS "RMM include: ${RMM_INCLUDE_DIR} lib: ${RMM_LIBDIR}")
   add_library(rmm SHARED IMPORTED)
   set_target_properties(rmm PROPERTIES IMPORTED_LOCATION "${RMM_LIB}")
   # Rapids logger defines
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import rapids_logger, os; print(os.path.join(os.path.dirname(rapids_logger.__file__), 'include'))" OUTPUT_VARIABLE RAPIDS_LOGGER_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "rapids_logger include dir: ${RAPIDS_LOGGER_INCLUDE_DIR}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import rapids_logger, os; p=os.path.dirname(rapids_logger.__file__); print(os.path.join(p, 'lib64', 'librapids_logger.so'))" OUTPUT_VARIABLE RL_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "Using rapids_logger library: ${RL_LIB}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import rapids_logger, os; print(os.path.join(os.path.dirname(rapids_logger.__file__), 'lib64'))" OUTPUT_VARIABLE RL_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Using rapids_logger libdir: ${RL_LIBDIR}")
+  find_path(RAPIDS_LOGGER_INCLUDE_DIR NAMES rapids_logger/log_levels.h)
+  find_library(RL_LIB NAMES librapids_logger.so)
+  get_filename_component(RL_LIBDIR "${RL_LIB}" DIRECTORY)
+  message(STATUS "RapidsLogger include: ${RAPIDS_LOGGER_INCLUDE_DIR} lib: ${RL_LIBDIR}")
+  add_library(rapids_logger SHARED IMPORTED)
+  set_target_properties(rapids_logger PROPERTIES IMPORTED_LOCATION "${RL_LIB}")
   # libcudf defines
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import libcudf, os; print(os.path.join(os.path.dirname(libcudf.__file__), 'include'))" OUTPUT_VARIABLE LIBCUDF_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "libcudf include dir: ${LIBCUDF_INCLUDE_DIR}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import libcudf, os; p=os.path.dirname(libcudf.__file__); print(os.path.join(p, 'lib64', 'libcudf.so'))" OUTPUT_VARIABLE LIBCUDF_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "Using libcudf library: ${LIBCUDF_LIB}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import libcudf, os; print(os.path.join(os.path.dirname(libcudf.__file__), 'lib64'))" OUTPUT_VARIABLE LIBCUDF_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Using libcudf libdir: ${LIBCUDF_LIBDIR}")
+  find_path(LIBCUDF_INCLUDE_DIR NAMES cudf/types.hpp)
+  find_library(LIBCUDF_LIB NAMES libcudf.so)
+  get_filename_component(LIBCUDF_LIBDIR "${LIBCUDF_LIB}" DIRECTORY)
+  message(STATUS "libcudf include: ${LIBCUDF_INCLUDE_DIR} lib: ${LIBCUDF_LIB}")
   add_library(libcudf SHARED IMPORTED)
   set_target_properties(libcudf PROPERTIES IMPORTED_LOCATION "${LIBCUDF_LIB}")
   # libkvikio defines
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; p=os.path.dirname(libkvikio.__file__); print(os.path.join(p, 'lib64', 'libkvikio.so'))" OUTPUT_VARIABLE LIBKVIKIO_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "Using libkvikio library: ${LIBKVIKIO_LIB}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; print(os.path.join(os.path.dirname(libkvikio.__file__), 'lib64'))" OUTPUT_VARIABLE LIBKVIKIO_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Using libkvikio libdir: ${LIBKVIKIO_LIBDIR}")
+  #execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; p=os.path.dirname(libkvikio.__file__); print(os.path.join(p, 'lib64', 'libkvikio.so'))" OUTPUT_VARIABLE LIBKVIKIO_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
+  #message(STATUS "Using libkvikio library: ${LIBKVIKIO_LIB}")
+  #execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; print(os.path.join(os.path.dirname(libkvikio.__file__), 'lib64'))" OUTPUT_VARIABLE LIBKVIKIO_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+  #message(STATUS "Using libkvikio libdir: ${LIBKVIKIO_LIBDIR}")
+  find_library(LIBKVIKIO_LIB NAMES libkvikio.so)
+  get_filename_component(LIBKVIKIO_LIBDIR "${LIBKVIKIO_LIB}" DIRECTORY)
   add_library(libkvikio SHARED IMPORTED)
   set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
 
@@ -933,12 +931,8 @@ if(USE_CUDF)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   find_package(cudf REQUIRED CONFIG)
-  # find_package(Arrow REQUIRED CONFIG)
-  # target_link_libraries(ext PRIVATE cudf::cudf CUDA::cudart)
   target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
-  target_link_libraries(ext PRIVATE rmm libcudf libkvikio)
-  # find_package(Arrow REQUIRED CONFIG)
-  # target_link_libraries(ext PRIVATE arrow_cuda)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libkvikio)
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy

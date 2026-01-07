@@ -970,7 +970,12 @@ class HashJoinState : public JoinState {
                   bool is_na_equal_ = false, bool is_mark_join_ = false,
                   bool _use_cudf = false);
 
-    ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
+    ~HashJoinState() {
+        MPI_Comm_free(&this->shuffle_comm);
+        if (cudf_build_table) {
+            Py_DECREF(cudf_build_table);
+        }
+    }
 
     /**
      * @brief Create a global bloom filter for this Hash Join

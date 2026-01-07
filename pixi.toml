@@ -30,7 +30,7 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-fea
 
 default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "314-linux" }
 
-[tasks.build-arrow-cuda]
+[tasks.install-cudf-cu13]
 cmd = "pip install cudf-cu13==25.12 --extra-index-url https://pypi.nvidia.com"
 
 # Build Commands
@@ -45,8 +45,7 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 # Build Commands
 [tasks.build-bodo-cudf]
-depends-on = ["build-arrow-cuda"]
-#depends-on = ["build-arrow-cuda", "build-libcudf", "install-pyspark"]
+depends-on = ["install-cudf-cu13"]
 cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.USE_CUDF=ON"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-cudf.env]  # SCcache Envs
@@ -56,8 +55,7 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-san]
-depends-on = ["build-arrow-cuda"]
-#depends-on = ["build-arrow-cuda", "build-libcudf", "install-pyspark"]
+depends-on = ["install-cudf-cu13"]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-cudf-san.env]  # SCcache Envs
