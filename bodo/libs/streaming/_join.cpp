@@ -3868,17 +3868,15 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     }
 
-    // Make is_last global
-    // if (local_is_last && !join_state->probe_shuffle_state.SendRecvEmpty()) {
-    //     static int n_iters = 0;
-    //     n_iters = n_iters + 1;
-    //     int rank;
-    //     MPI_Comm_rank(join_state->shuffle_comm, &rank);
-    //     if (n_iters % 1000 == 0) {
-    //         std::cout << "RANK" << rank << " Join Iteration " << n_iters
-    //                   << " probe_shuffle_state not empty!" << std::endl;
-    //     }
-    // }
+    if (local_is_last && !join_state->probe_shuffle_state.SendRecvEmpty()) {
+        int rank;
+        MPI_Comm_rank(join_state->shuffle_comm, &rank);
+        if (join_state->probe_iter % 1000 == 0) {
+            std::cout << "RANK" << rank << " Join Iteration "
+                      << join_state->probe_iter
+                      << " probe_shuffle_state not empty!" << std::endl;
+        }
+    }
 
     // Make is_last global
     bool is_last = stream_join_sync_is_last(
