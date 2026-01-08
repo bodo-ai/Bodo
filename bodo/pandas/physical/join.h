@@ -594,17 +594,17 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         auto [out_table, chunk_size] = join_state_->output_buffer->PopChunk(
             /*force_return*/ is_last);
 
-        is_last = is_last && join_state_->output_buffer->total_remaining == 0;
-        this->metrics.output_row_count += out_table->nrows();
-        this->metrics.process_batch_time += end_timer(start_produce);
-
-        out_table->column_names = this->output_schema->column_names;
-
         if (is_last) {
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             std::cout << "Join Finished on rank " << rank << std::endl;
         }
+
+        is_last = is_last && join_state_->output_buffer->total_remaining == 0;
+        this->metrics.output_row_count += out_table->nrows();
+        this->metrics.process_batch_time += end_timer(start_produce);
+
+        out_table->column_names = this->output_schema->column_names;
 
         return {out_table,
                 is_last ? OperatorResult::FINISHED

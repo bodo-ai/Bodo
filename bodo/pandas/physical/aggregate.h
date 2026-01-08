@@ -267,7 +267,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                       << " Aggregate Consume Iters: " << consume_iters
                       << "FINISHED " << std::endl;
         }
-        if (consume_iters % 1000 == 0) {
+        if (consume_iters % 10000 == 0) {
             // OperatorResult result =
             //     request_input ? OperatorResult::NEED_MORE_INPUT
             //                   : OperatorResult::HAVE_MORE_OUTPUT;
