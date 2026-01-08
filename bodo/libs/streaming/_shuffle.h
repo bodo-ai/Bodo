@@ -863,6 +863,10 @@ class IncrementalShuffleState {
     std::optional<std::shared_ptr<table_info>> ShuffleIfRequired(
         const bool is_last);
 
+    bool RecvEmpty() { return this->recv_states.empty(); }
+
+    bool SendEmpty() { return this->send_states.empty(); }
+
     bool SendRecvEmpty();
 
     /**
