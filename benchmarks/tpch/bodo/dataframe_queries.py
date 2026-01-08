@@ -956,7 +956,12 @@ def run_queries(root: str, queries: list[int], scale_factor: float, backend):
 
     total_start = time.time()
     for query in queries:
-        globals()[f"q{query:02}"](*queries_to_args[query])
+        query_func = globals()[f"q{query:02}"]
+        # Warm up run:
+        query_func(*queries_to_args[query])
+
+        # Second run for timing:
+        query_func(*queries_to_args[query])
     print(f"Total query execution time (s): {time.time() - total_start}")
 
 

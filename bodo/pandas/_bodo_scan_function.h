@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utility>
-#include "_pipeline.h"
 #include "_util.h"
 
 #include "duckdb/function/function.hpp"
@@ -9,7 +8,6 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "fmt/core.h"
 #include "optimizer/runtime_join_filter.h"
-#include "physical/join.h"
 #include "physical/operator.h"
 
 /**
