@@ -34,11 +34,11 @@
 
 PyObject* cpp_table_to_cudf_cpp(int64_t py_cpp_table_ptr);
 PyObject* cpp_table_to_hash_join_cpp(int64_t py_cpp_table_ptr, int64_t nkeys);
-int64_t cudf_join_with_prebuilt_hash_join(
+std::pair<int64_t, int64_t> cudf_join_with_prebuilt_hash_join(
     PyObject* py_build_gdf, int64_t py_probe_cpp_table, int64_t nkeys,
     const std::vector<uint64_t> build_kept_cols,
-    const std::vector<uint64_t> probe_kept_cols,
-    const std::string& how = "inner");
+    const std::vector<uint64_t> probe_kept_cols, const std::string& how,
+    bool local_is_last);
 
 /* --------------------------- HashHashJoinTable -------------------------- */
 
@@ -2067,6 +2067,19 @@ void HashJoinState::FinalizeBuild() {
 
     this->metrics.build_finalize_time += end_timer(start_finalize);
     JoinState::FinalizeBuild();
+
+#ifdef USE_CUDF
+    assert(this->cudf_build_table == nullptr);
+    if (!local_empty_build && this->use_cudf) {
+        time_pt cudf_build = start_timer();
+        auto dt = this->partitions[0]->build_table_buffer->data_table;
+        std::shared_ptr<table_info> ti = std::make_shared<table_info>(*dt);
+        this->cudf_build_table = cpp_table_to_hash_join_cpp(
+            reinterpret_cast<int64_t>(ti.get()), n_keys);
+        Py_INCREF(this->cudf_build_table);
+        this->metrics.cudf_build_time += end_timer(cudf_build);
+    }
+#endif
 }
 
 bool HashJoinState::RuntimeFilter(
@@ -3661,32 +3674,28 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                                                 {"right", "outer"}};
 
 #ifdef USE_CUDF
-    bool local_empty_build =
-        join_state->partitions.empty() ||
-        join_state->partitions[0]->build_table_buffer->data_table->nrows() == 0;
-    if (join_state->cudf_build_table == nullptr && !local_empty_build &&
-        join_state->use_cudf) {
-        time_pt cudf_build = start_timer();
-        auto dt = join_state->partitions[0]->build_table_buffer->data_table;
-        std::shared_ptr<table_info> ti = std::make_shared<table_info>(*dt);
-        join_state->cudf_build_table = cpp_table_to_hash_join_cpp(
-            reinterpret_cast<int64_t>(ti.get()), join_state->n_keys);
-        Py_INCREF(join_state->cudf_build_table);
-        join_state->metrics.cudf_build_time += end_timer(cudf_build);
-    }
-
-    std::shared_ptr<table_info> spti;
+    std::shared_ptr<table_info> spti = nullptr;
     if (join_state->use_cudf) {
         if (in_table->nrows() > 0) {
             time_pt cudf_join_time = start_timer();
             table_info* ti = new table_info(*in_table);
-            int64_t join_res = cudf_join_with_prebuilt_hash_join(
-                join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
-                join_state->n_keys, build_kept_cols, probe_kept_cols,
-                join_kind_table[build_table_outer][probe_table_outer]);
-            table_info* tires = reinterpret_cast<table_info*>(join_res);
-            spti = std::shared_ptr<table_info>(tires);
-            auto ctbschema = join_state->output_buffer->active_chunk->schema();
+            std::pair<int64_t, int64_t> join_res =
+                cudf_join_with_prebuilt_hash_join(
+                    join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
+                    join_state->n_keys, build_kept_cols, probe_kept_cols,
+                    join_kind_table[build_table_outer][probe_table_outer],
+                    local_is_last);
+            if (join_res.second == 2) {
+                table_info* tires =
+                    reinterpret_cast<table_info*>(join_res.first);
+                spti = std::shared_ptr<table_info>(tires);
+            } else {
+                throw std::runtime_error(
+                    "join_probe_consume_batch: cudf_join return no data or has "
+                    "extra data and we don't handle that case yet.");
+            }
+            // auto ctbschema =
+            // join_state->output_buffer->active_chunk->schema();
             join_state->metrics.cudf_join_time += end_timer(cudf_join_time);
         }
         did_gpu_offload = true;
@@ -4833,10 +4842,11 @@ void import_compiler() {
 PyObject* cpp_table_to_cudf_cpp(int64_t py_cpp_table_ptr) {
     import_compiler();
 
-    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
     if (!bodo_module) {
         PyErr_Print();
-        throw std::runtime_error("Failed to import bodo.pandas.utils module");
+        throw std::runtime_error(
+            "Failed to import bodo.pandas.join_utils module");
     }
 
     PyObject* pyFunc = PyObject_GetAttrString(bodo_module, "cpp_table_to_cudf");
@@ -4888,14 +4898,15 @@ PyObject* uint64_vector_to_pylist(const std::vector<uint64_t>& vec) {
 PyObject* cpp_table_to_hash_join_cpp(int64_t py_cpp_table_ptr, int64_t nkeys) {
     import_compiler();
 
-    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
     if (!bodo_module) {
         PyErr_Print();
-        throw std::runtime_error("Failed to import bodo.pandas.utils module");
+        throw std::runtime_error(
+            "Failed to import bodo.pandas.join_utils module");
     }
 
     PyObject* pyFunc =
-        PyObject_GetAttrString(bodo_module, "cpp_table_to_hash_join");
+        PyObject_GetAttrString(bodo_module, "cpp_table_to_hash_join_async");
     if (!pyFunc || !PyCallable_Check(pyFunc)) {
         throw std::runtime_error(
             "Could not find Python function cpp_table_to_cudf");
@@ -4919,19 +4930,29 @@ PyObject* cpp_table_to_hash_join_cpp(int64_t py_cpp_table_ptr, int64_t nkeys) {
     return result;
 }
 
-int64_t cudf_join_with_prebuilt_hash_join(
+/*
+ * Returns: pair of (int64_t cast of table output,
+ *                   int64_t result code)
+ * Result codes:
+ *     0 - no data available yet
+ *     1 - output table returned and more output expected
+ *     2 - output table returned and no more output expected
+ */
+std::pair<int64_t, int64_t> cudf_join_with_prebuilt_hash_join(
     PyObject* py_build_gdf,      // cuDF DataFrame for build
     int64_t py_probe_cpp_table,  // C++ table pointer wrapped as PyObject*
     int64_t nkeys, const std::vector<uint64_t> build_kept_cols,
-    const std::vector<uint64_t> probe_kept_cols, const std::string& how) {
-    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+    const std::vector<uint64_t> probe_kept_cols, const std::string& how,
+    bool is_last) {
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
     if (!bodo_module) {
         PyErr_Print();
-        throw std::runtime_error("Failed to import bodo.pandas.utils module");
+        throw std::runtime_error(
+            "Failed to import bodo.pandas.join_utils module");
     }
 
     PyObject* pyFunc =
-        PyObject_GetAttrString(bodo_module, "cudf_probe_hash_join");
+        PyObject_GetAttrString(bodo_module, "cudf_probe_hash_join_async");
     if (!pyFunc || !PyCallable_Check(pyFunc)) {
         throw std::runtime_error(
             "Could not find Python function cudf_join_with_prebuilt_hash_join");
@@ -4942,8 +4963,9 @@ int64_t cudf_join_with_prebuilt_hash_join(
     PyObject* build_kept_cols_list = uint64_vector_to_pylist(build_kept_cols);
     PyObject* probe_kept_cols_list = uint64_vector_to_pylist(probe_kept_cols);
     PyObject* pyHow = PyUnicode_FromString(how.c_str());
+    PyObject* pyLast = PyBool_FromLong(is_last);
 
-    PyObject* args = PyTuple_New(6);
+    PyObject* args = PyTuple_New(7);
 
     Py_INCREF(py_build_gdf);
     PyTuple_SET_ITEM(args, 0, py_build_gdf);
@@ -4952,6 +4974,7 @@ int64_t cudf_join_with_prebuilt_hash_join(
     PyTuple_SET_ITEM(args, 3, build_kept_cols_list);
     PyTuple_SET_ITEM(args, 4, probe_kept_cols_list);
     PyTuple_SET_ITEM(args, 5, pyHow);
+    PyTuple_SET_ITEM(args, 6, pyLast);
 
     PyObject* result = PyObject_CallObject(pyFunc, args);
 
@@ -4963,5 +4986,7 @@ int64_t cudf_join_with_prebuilt_hash_join(
             "Python cudf_join_with_prebuilt_hash_join failed");
     }
 
-    return PyLong_AsLongLong(result);
+    PyObject* item0 = PyTuple_GetItem(result, 0);  // borrowed reference
+    PyObject* item1 = PyTuple_GetItem(result, 1);  // borrowed reference
+    return {PyLong_AsLongLong(item0), PyLong_AsLongLong(item1)};
 }
