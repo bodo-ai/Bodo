@@ -52,13 +52,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: ["3.14"] #${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os:  [{os: windows-latest, name: windows}] #[{os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}, {os: ubuntu-24.04-arm, name: linux-arm}]
-        #exclude:
-          # Exclude Windows 3.14 due to CIBW configuration issues.
-          #- os: { os: windows-latest, name: windows }
-          #  python_version: "3.14"
-          # Don't publish linux arm until we can get nightly fixed
+        python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
+        os:  [{os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}, {os: ubuntu-24.04-arm, name: linux-arm}]
+        exclude:
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
     with:
