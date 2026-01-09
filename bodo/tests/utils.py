@@ -1346,6 +1346,26 @@ def _test_equal(
                     bodo_out.dtype,
                     py_out.name,
                 )
+            # Convert float types
+            if pa.types.is_floating(pa_type) and py_out.dtype in (
+                np.float32,
+                np.float64,
+            ):
+                py_out = py_out.astype(bodo_out.dtype)
+
+            # Handle all-NA Pandas output stored as float NaNs
+            if (
+                py_out.dtype in (np.float64, np.float32)
+                and pa.types.is_integer(pa_type)
+                and py_out.isnull().all()
+                and bodo_out.isnull().all()
+            ):
+                py_out = pd.Series(
+                    pd.array([pd.NA] * len(py_out), dtype=bodo_out.dtype),
+                    index=py_out.index,
+                    name=py_out.name,
+                )
+
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1405,6 +1425,28 @@ def _test_equal(
         if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
+
+        # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
+        # mismatch errors
+        for i, (bodo_dtype, py_dtype) in enumerate(zip(bodo_out.dtypes, py_out.dtypes)):
+            if (
+                isinstance(bodo_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.float32, np.float64)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
+        # Handle Arrow float types in Index
+        if not isinstance(bodo_out.index, pd.MultiIndex):
+            index_dtype = bodo_out.index.dtype
+            if (
+                isinstance(index_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(index_dtype.pyarrow_dtype)
+                and py_out.index.dtype in (np.float32, np.float64)
+            ):
+                py_out.index = py_out.index.astype(index_dtype)
 
         # We return typed extension arrays like StringArray for all APIs but Pandas
         # & Spark doesn't return them by default in all APIs yet.

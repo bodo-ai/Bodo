@@ -494,7 +494,6 @@ def to_datetime(
     format=None,
     exact=lib.no_default,
     unit=None,
-    infer_datetime_format=lib.no_default,
     origin="unix",
     cache=True,
 ):
@@ -515,7 +514,6 @@ def to_datetime(
         "format": format,
         "exact": exact,
         "unit": unit,
-        "infer_datetime_format": infer_datetime_format,
         "origin": origin,
         "cache": cache,
     }
