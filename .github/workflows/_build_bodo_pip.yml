@@ -36,6 +36,11 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
       - uses: actions/checkout@v5
 
       # https://github.com/actions/runner-images/issues/10624
