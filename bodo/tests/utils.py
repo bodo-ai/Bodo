@@ -1351,6 +1351,20 @@ def _test_equal(
                 np.float64,
             ):
                 py_out = py_out.astype(bodo_out.dtype)
+
+            # Handle all-NA Pandas output stored as float NaNs
+            if (
+                py_out.dtype in (np.float64, np.float32)
+                and pa.types.is_integer(pa_type)
+                and py_out.isnull().all()
+                and bodo_out.isnull().all()
+            ):
+                py_out = pd.Series(
+                    pd.array([pd.NA] * len(py_out), dtype=bodo_out.dtype),
+                    index=py_out.index,
+                    name=py_out.name,
+                )
+
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
