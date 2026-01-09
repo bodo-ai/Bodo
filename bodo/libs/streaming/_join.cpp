@@ -3674,30 +3674,51 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                                                 {"right", "outer"}};
 
 #ifdef USE_CUDF
-    std::shared_ptr<table_info> spti = nullptr;
+    std::vector<std::shared_ptr<table_info>> spti;
     if (join_state->use_cudf) {
-        if (in_table->nrows() > 0) {
-            time_pt cudf_join_time = start_timer();
-            table_info* ti = new table_info(*in_table);
+        //        if (in_table->nrows() > 0) {
+        time_pt cudf_join_time = start_timer();
+        table_info* ti = new table_info(*in_table);
+        std::cout << "before cudf_join_with_prebuilt_hash_join loop"
+                  << std::endl;
+        while (true) {
+            std::cout << "before cudf_join_with_prebuilt_hash_join call"
+                      << std::endl;
             std::pair<int64_t, int64_t> join_res =
                 cudf_join_with_prebuilt_hash_join(
                     join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
                     join_state->n_keys, build_kept_cols, probe_kept_cols,
                     join_kind_table[build_table_outer][probe_table_outer],
                     local_is_last);
-            if (join_res.second == 2) {
+            std::cout << "after cudf_join_with_prebuilt_hash_join call "
+                      << join_res.second << std::endl;
+            if (join_res.second == 0) {
+                break;  // break out of loop if no more data available
+            } else if (join_res.second == 1) {
                 table_info* tires =
                     reinterpret_cast<table_info*>(join_res.first);
-                spti = std::shared_ptr<table_info>(tires);
+                spti.push_back(std::shared_ptr<table_info>(tires));
+                // don't break so we go around the loop again to potentially
+                // get more data
+                ti = nullptr;
+            } else if (join_res.second == 2) {
+                table_info* tires =
+                    reinterpret_cast<table_info*>(join_res.first);
+                spti.push_back(std::shared_ptr<table_info>(tires));
+                break;
             } else {
                 throw std::runtime_error(
-                    "join_probe_consume_batch: cudf_join return no data or has "
-                    "extra data and we don't handle that case yet.");
+                    "join_probe_consume_batch: "
+                    "cudf_join_with_prebuilt_hash_join"
+                    " returned an unknown result code.");
             }
-            // auto ctbschema =
-            // join_state->output_buffer->active_chunk->schema();
-            join_state->metrics.cudf_join_time += end_timer(cudf_join_time);
         }
+        std::cout << "after cudf_join_with_prebuilt_hash_join loop"
+                  << std::endl;
+        // auto ctbschema =
+        // join_state->output_buffer->active_chunk->schema();
+        join_state->metrics.cudf_join_time += end_timer(cudf_join_time);
+        //        }
         did_gpu_offload = true;
     }
 #endif  // USE_CUDF
@@ -3757,8 +3778,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
     // Insert output rows into the output buffer:
     if (did_gpu_offload) {
-        if (spti != nullptr) {
-            join_state->output_buffer->AppendBatch(spti);
+        for (auto& result : spti) {
+            join_state->output_buffer->AppendBatch(result);
         }
     } else {
         join_state->output_buffer->AppendJoinOutput(
