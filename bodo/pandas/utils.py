@@ -298,6 +298,11 @@ def report_times():
 if bodo.dataframe_library_profile:
     atexit.register(report_times)
 
+if bodo.gpu_enabled:
+    from bodo.ext import plan_optimizer
+
+    plan_optimizer.c_set_use_cudf(True)
+
 
 def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
     """Wrap obj with a Bodo constructor or return obj unchanged if

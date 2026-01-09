@@ -2411,13 +2411,21 @@ void DEBUG_PrintSetOfColumn(
     DEBUG_PrintVectorArrayInfo(os, ListArr);
 }
 
-void DEBUG_PrintTable(std::ostream& os, table_info* table) {
+void DEBUG_PrintTable(std::ostream& os, const table_info* table,
+                      bool print_column_names) {
+    if (print_column_names) {
+        for (auto& val : table->column_names) {
+            os << val << " ";
+        }
+        os << "\n";
+    }
     DEBUG_PrintSetOfColumn(os, table->columns);
 }
 
 void DEBUG_PrintTable(std::ostream& os,
-                      const std::shared_ptr<const table_info>& table) {
-    DEBUG_PrintSetOfColumn(os, table->columns);
+                      const std::shared_ptr<const table_info>& table,
+                      bool print_column_names) {
+    DEBUG_PrintTable(os, table.get(), print_column_names);
 }
 
 void DEBUG_PrintUnorderedMap(std::ostream& os,
