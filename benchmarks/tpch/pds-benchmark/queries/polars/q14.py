@@ -19,8 +19,8 @@ def q(
     assert lineitem is not None
     assert part is not None
 
-    var1 = date(1995, 9, 1)
-    var2 = date(1995, 10, 1)
+    var1 = date(1994, 3, 1)
+    var2 = date(1994, 4, 1)
 
     return (
         lineitem.join(part, left_on="l_partkey", right_on="p_partkey")

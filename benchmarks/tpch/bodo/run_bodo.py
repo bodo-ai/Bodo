@@ -8,7 +8,7 @@ Refer to the SDK guide for more details:
 
 https://docs.bodo.ai/latest/guides/using_bodo_platform/bodo_platform_sdk_guide/#installation
 
-NOTE: This script assumes that you have the file `dataframe_lib.py`
+NOTE: This script assumes that you have the file `dataframe_queries.py`
 copied in your current workspace.
 
 usage:
@@ -19,8 +19,8 @@ import argparse
 
 from bodosdk import BodoWorkspaceClient
 
-NUM_WORKERS = 2
-WORKER_INSTANCE = "r6i.8xlarge"
+NUM_WORKERS = 4
+WORKER_INSTANCE = "r6i.16xlarge"
 
 
 def run_bodo_benchmark(folder, queries, scale_factor):
@@ -32,22 +32,21 @@ def run_bodo_benchmark(folder, queries, scale_factor):
     )
     benchmark_cluster.wait_for_status(["RUNNING"])
 
-    args = {
-        "folder": folder,
-        "scale_factor": str(scale_factor),
-    }
-    if queries:
-        args["queries"] = " ".join(str(q) for q in queries)
+    for query in queries:
+        args = {
+            "folder": folder,
+            "scale_factor": str(scale_factor),
+            "queries": str(query),
+        }
+        arg_str = " ".join(f"--{key} {value}" for key, value in args.items())
 
-    arg_str = " ".join(f"--{key} {value}" for key, value in args.items())
-
-    benchmark_job = benchmark_cluster.run_job(
-        code_type="PYTHON",
-        source={"type": "WORKSPACE", "path": "/"},
-        exec_file="dataframe_queries.py",
-        args=arg_str,
-    )
-    print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
+        benchmark_job = benchmark_cluster.run_job(
+            code_type="PYTHON",
+            source={"type": "WORKSPACE", "path": "/"},
+            exec_file="dataframe_queries.py",
+            args=arg_str,
+        )
+        print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 
     # cleanup:
     benchmark_cluster.stop(wait=True)
@@ -77,7 +76,10 @@ def main():
         help="Scale factor (used in query 11).",
     )
     args = parser.parse_args()
-    run_bodo_benchmark(args.folder, args.queries, args.scale_factor)
+    queries = list(range(1, 23))
+    if args.queries is not None:
+        queries = args.queries
+    run_bodo_benchmark(args.folder, queries, args.scale_factor)
 
 
 if __name__ == "__main__":
