@@ -40,6 +40,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+      - uses:
+        name: Install pipx
+        run: python -m pip install pipx
 
       - uses: actions/checkout@v5
 
@@ -87,7 +90,7 @@ jobs:
           echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
-        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel
+        run: python -m pipx run cibuildwheel
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
