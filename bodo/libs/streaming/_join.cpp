@@ -3481,9 +3481,10 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
     if (local_is_last && join_state->local_is_last_debug_counter == 0) {
         std::cout << fmt::format(
-                         "[DEBUG] HashJoin (Op ID: {}): Rank {} received "
+                         "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
                          "local_is_last = true on probe iteration {}",
-                         join_state->op_id, myrank, join_state->probe_iter)
+                         __LINE__, join_state->op_id, myrank,
+                         join_state->probe_iter)
                   << std::endl;
         join_state->local_is_last_debug_counter = 1;
     }
@@ -3745,6 +3746,18 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             }
 
             append_time = 0;
+
+            if (local_is_last && join_state->local_is_last_debug_counter == 2) {
+                std::cout
+                    << fmt::format(
+                           "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
+                           "local_is_last = true on probe iteration {}",
+                           __LINE__, join_state->op_id, myrank,
+                           join_state->probe_iter)
+                    << std::endl;
+                join_state->local_is_last_debug_counter = 3;
+            }
+
             for (size_t batch_start_row = 0;
                  batch_start_row < new_data->nrows();
                  batch_start_row += STREAMING_BATCH_SIZE) {
@@ -3888,6 +3901,16 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             }
             active_partition->probe_table = nullptr;
         }
+    }
+
+    if (local_is_last && join_state->local_is_last_debug_counter == 3) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
+                         "local_is_last = true on probe iteration {}",
+                         __LINE__, join_state->op_id, myrank,
+                         join_state->probe_iter)
+                  << std::endl;
+        join_state->local_is_last_debug_counter = 4;
     }
 
     if (local_is_last && !join_state->probe_shuffle_state.SendRecvEmpty()) {
