@@ -3479,13 +3479,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    if (local_is_last && !join_state->local_is_last) {
+    if (local_is_last && join_state->local_is_last_debug_counter == 0) {
         std::cout << fmt::format(
                          "[DEBUG] HashJoin (Op ID: {}): Rank {} received "
                          "local_is_last = true on probe iteration {}",
                          join_state->op_id, myrank, join_state->probe_iter)
                   << std::endl;
-        join_state->local_is_last = true;
+        join_state->local_is_last_debug_counter = 1;
     }
 
     if (join_state->probe_iter == 0) {
@@ -3704,6 +3704,17 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     probe_idxs.clear();
 
     if (shuffle_possible) {
+        if (local_is_last && join_state->local_is_last_debug_counter == 1) {
+            std::cout
+                << fmt::format(
+                       "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
+                       "local_is_last = true on probe iteration {}",
+                       __LINE__, join_state->op_id, myrank,
+                       join_state->probe_iter)
+                << std::endl;
+            join_state->local_is_last_debug_counter = 2;
+        }
+
         std::optional<std::shared_ptr<table_info>> new_data_ =
             join_state->probe_shuffle_state.ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
