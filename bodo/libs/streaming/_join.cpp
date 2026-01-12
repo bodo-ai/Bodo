@@ -3937,13 +3937,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                       << join_state->probe_shuffle_state.SendEmpty()
                       << std::endl;
         }
-    } else if (local_is_last &&
-               join_state->probe_shuffle_state.SendRecvEmpty()) {
-        if (join_state->probe_iter > 0 && join_state->op_id == 5) {
-            std::cout << "RANK" << myrank << " Join Iteration "
-                      << join_state->probe_iter << " probe_shuffle_state empty!"
-                      << std::endl;
-        }
     }
 
     // Make is_last global
