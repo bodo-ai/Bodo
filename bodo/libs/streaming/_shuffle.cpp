@@ -722,7 +722,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
         this->metrics.shuffle_recv_time += end_timer(start);
     }
 
-    if (print_debug == 0) {
+    if (print_debug == 2) {
         std::cout << fmt::format(
                          "[DEBUG]:{} ShuffleState: Rank {} received "
                          "local_is_last = true",
@@ -737,6 +737,14 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
     consume_completed_recvs(this->recv_states, this->shuffle_comm,
                             this->dict_builders, this->metrics, out_builder);
     this->metrics.shuffle_recv_finalization_time += end_timer(start);
+
+    if (print_debug == 2) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
+    }
 
     std::optional<std::shared_ptr<table_info>> new_data =
         out_builder.data_table->nrows() != 0
@@ -758,6 +766,14 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
         return done;
     });
     this->metrics.shuffle_send_finalization_time += end_timer(start);
+
+    if (print_debug == 2) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
+    }
 
     bool shuffle_now = this->ShouldShuffleAfterProcessing(is_last);
     if (!shuffle_now) {
@@ -816,10 +832,24 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
             "[IncrementalShuffleState::ShuffleIfRequired] Unable to get "
             "available MPI tag for shuffle send. All tags are inflight.");
     }
+    if (print_debug == 2) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
+    }
     this->send_states.push_back(
         shuffle_issend(std::move(shuffle_table), shuffle_hashes,
                        keep_row_bitmask.get(), this->shuffle_comm, start_tag));
     this->inflight_tags.insert(start_tag);
+    if (print_debug == 2) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
+    }
 
     this->metrics.shuffle_send_time += end_timer(start);
     this->metrics.n_shuffle_send++;
