@@ -1688,7 +1688,7 @@ def _test_equal_struct_array(
 
 
 def _gather_output(bodo_output):
-    """gather bodo output from all processes. Uses bodo.gatherv() if there are no typing
+    """gather bodo output from all processes. Uses bodo.libs.distributed_api.gatherv() if there are no typing
     issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
     """
 

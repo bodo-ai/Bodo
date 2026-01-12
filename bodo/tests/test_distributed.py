@@ -729,7 +729,7 @@ def test_dist_global_flag1(memory_leak_check):
 
     n = 12
     df = pd.DataFrame({"A": np.arange(n)})
-    df = bodo.scatterv(df if bodo.get_rank() == 0 else None)
+    df = bodo.libs.distributed_api.scatterv(df if bodo.get_rank() == 0 else None)
     del df._bodo_meta
 
     @bodo.jit(distributed=["df"])
@@ -1821,7 +1821,7 @@ def test_replicated_flag(memory_leak_check):
 
     df1 = pd.DataFrame({"A": np.arange(50)})
     # use scatterv so that bodo meta is set to distributed
-    df1_chunk = bodo.scatterv(df1)
+    df1_chunk = bodo.libs.distributed_api.scatterv(df1)
     df2 = pd.DataFrame({"A": np.arange(30) ** 2})
     impl1(df1_chunk, df2)
     arr_dists = (
@@ -2268,7 +2268,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
         data_to_scatter = None
     else:
         data_to_scatter = orig_data
-    recv_data = bodo.scatterv(data_to_scatter)
+    recv_data = bodo.libs.distributed_api.scatterv(data_to_scatter)
     rank = bodo.get_rank()
     n_pes = bodo.get_size()
 
@@ -2285,7 +2285,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
     assert n_passed == n_pes
 
     # check data with gatherv
-    gathered_data = bodo.gatherv(recv_data)
+    gathered_data = bodo.libs.distributed_api.gatherv(recv_data)
     if rank == 0:
         passed = _test_equal_guard(gathered_data, orig_data)
     else:
@@ -2588,7 +2588,7 @@ def scatter_gather_data(request):
 
 
 def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_check):
-    """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
+    """Test bodo.libs.distributed_api.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
     n = len(scatter_gather_data)
 
     _check_scatterv_gatherv_allgatherv(scatter_gather_data, n)
@@ -2597,7 +2597,7 @@ def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_che
 
 
 def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
-    """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
+    """Test bodo.libs.distributed_api.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
     n = len(df_value)
 
     _check_scatterv_gatherv_allgatherv(df_value, n)
@@ -2614,10 +2614,11 @@ def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
 
     df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df_value)
     # We have some minor dtype differences from pandas
-    _test_equal_guard(df_value, bodo.allgatherv(df_scattered), check_dtype=False)
-
+    _test_equal_guard(
+        df_value, bodo.libs.distributed_api.allgatherv(df_scattered), check_dtype=False
+    )
     passed = 1
-    gathered_val = bodo.gatherv(df_scattered)
+    gathered_val = bodo.libs.distributed_api.gatherv(df_scattered)
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(df_value, gathered_val, check_dtype=False)
 
@@ -2632,19 +2633,19 @@ def test_scatterv_None_warning(df_value):
         df_proper = df_value
     else:
         df_proper = None
-    df_proper = bodo.scatterv(df_proper)
+    df_proper = bodo.libs.distributed_api.scatterv(df_proper)
 
     df_improper = df_value
     if bodo.get_rank() == 0:
-        df_improper = bodo.scatterv(df_improper)
+        df_improper = bodo.libs.distributed_api.scatterv(df_improper)
     else:
         with pytest.warns(BodoWarning) as warn:
-            df_improper = bodo.scatterv(df_improper)
+            df_improper = bodo.libs.distributed_api.scatterv(df_improper)
 
         assert len(warn) == 1
         assert (
             str(warn[0].message)
-            == "bodo.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
+            == "bodo.libs.distributed_api.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
             "This data won't be sent to any other ranks and will be overwritten with data from rank 0."
         )
 
@@ -3268,7 +3269,9 @@ def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.scatterv(scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
     _res_id = spawner.worker_intercomm.recv(None, source=0)
 
 
@@ -3283,7 +3286,9 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
     spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.scatterv(scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
     res_id = spawner.worker_intercomm.recv(None, source=0)
 
     spawner.worker_intercomm.bcast(CommandType.GATHER.value, bcast_root)
