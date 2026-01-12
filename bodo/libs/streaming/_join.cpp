@@ -3884,7 +3884,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     } else if (local_is_last &&
                join_state->probe_shuffle_state.SendRecvEmpty()) {
-        if (join_state->probe_iter % 10000 == 0) {
+        if (join_state->probe_iter > 0) {
             std::cout << "RANK" << rank << " Join Iteration "
                       << join_state->probe_iter << " probe_shuffle_state empty!"
                       << std::endl;
