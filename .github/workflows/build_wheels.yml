@@ -54,7 +54,7 @@ jobs:
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
         os:  [{os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}, {os: ubuntu-24.04-arm, name: linux-arm}]
-        exclude:
+        #exclude:
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
     with:
