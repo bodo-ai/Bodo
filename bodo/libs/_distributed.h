@@ -662,12 +662,12 @@ template <int typ_enum>
 static MPI_Datatype get_MPI_typ() {
     switch (typ_enum) {
         case Bodo_CTypes::_BOOL:
-            return MPI_UNSIGNED_CHAR;  // MPI_C_BOOL doesn't support operations
-                                       // like min
+            return MPI_UINT8_T;  // MPI_C_BOOL doesn't support operations
+                                 // like min
         case Bodo_CTypes::INT8:
-            return MPI_CHAR;
+            return MPI_INT8_T;
         case Bodo_CTypes::UINT8:
-            return MPI_UNSIGNED_CHAR;
+            return MPI_UINT8_T;
         case Bodo_CTypes::INT32:
         case Bodo_CTypes::DATE:
             return MPI_INT;
