@@ -3758,6 +3758,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 }
 
                 if (join_state->partitions.size() > 1) {
+                    std::cout << "RANK " << myrank << " NUMBER OF PARTITIONS: "
+                              << join_state->partitions.size() << std::endl;
                     // NOTE: Partition hashes need to be consistent across
                     // ranks, so need to use dictionary hashes. Since we are
                     // using dictionary hashes, we don't need dictionaries to be
@@ -3877,18 +3879,22 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     }
 
-    int rank;
-    MPI_Comm_rank(join_state->shuffle_comm, &rank);
-
     if (local_is_last && !join_state->probe_shuffle_state.SendRecvEmpty()) {
         if (join_state->probe_iter % 10000 == 0) {
-            std::cout << "RANK" << rank << " Join Iteration "
+            std::cout << "RANK" << myrank << " Join Iteration "
                       << join_state->probe_iter
                       << " probe_shuffle_state not empty!"
                       << " Recv states empty: "
                       << join_state->probe_shuffle_state.RecvEmpty()
                       << " Send states empty: "
                       << join_state->probe_shuffle_state.SendEmpty()
+                      << std::endl;
+        }
+    } else if (local_is_last &&
+               join_state->probe_shuffle_state.SendRecvEmpty()) {
+        if (join_state->probe_iter > 0 && join_state->op_id == 5) {
+            std::cout << "RANK" << myrank << " Join Iteration "
+                      << join_state->probe_iter << " probe_shuffle_state empty!"
                       << std::endl;
         }
     }
@@ -3911,7 +3917,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         if (build_needs_reduction) {
             // start reduction
             if (!join_state->probe_reduce_started) {
-                std::cout << "RANK" << rank
+                std::cout << "RANK" << myrank
                           << " Starting build table matched reduction"
                           << std::endl;
 
