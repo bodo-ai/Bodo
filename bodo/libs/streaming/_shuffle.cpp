@@ -1132,10 +1132,10 @@ void AsyncShuffleSendState::send_metadata(
 
         MPI_Request req;
         CHECK_MPI(
-            MPI_Isend(this->rank_to_metadata_vec[rank].data(),
-                      this->rank_to_metadata_vec[rank].size(), MPI_UINT64_T,
-                      rank, SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
-            "AsyncShuffleSendState::send_metadata: MPI error on MPI_Isend:");
+            MPI_Issend(this->rank_to_metadata_vec[rank].data(),
+                       this->rank_to_metadata_vec[rank].size(), MPI_UINT64_T,
+                       rank, SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
+            "AsyncShuffleSendState::send_metadata: MPI error on MPI_Issend:");
         this->send_requests.push_back(req);
     }
 }
