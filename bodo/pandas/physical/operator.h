@@ -16,6 +16,9 @@ enum class OperatorType : uint8_t {
     SOURCE,
     SINK,
     SOURCE_AND_SINK,
+    GPU_SOURCE,
+    GPU_SINK,
+    GPU_SOURCE_AND_SINK,
 };
 
 /// Specifies the status of the physical operator in the execution:
@@ -123,6 +126,73 @@ class PhysicalProcessBatch : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
+#define GPU_DATA PyObject*
+/**
+ * @brief Base class for operators that produce batches at the start of
+ * pipelines.
+ *
+ */
+class PhysicalGPUSource : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SOURCE;
+    }
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatch() = 0;
+
+    // Constructor is always required for initialization
+    // We should have a separate Finalize step that can throw an exception
+    // as well as the destructor for cleanup
+    virtual void FinalizeSource() = 0;
+
+    /**
+     * @brief Get the physical schema of the source data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+};
+
+/**
+ * @brief Base class for operators that consume batches at the end of pipelines.
+ *
+ */
+class PhysicalGPUSink : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SINK;
+    }
+
+    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                        OperatorResult prev_op_result) = 0;
+    virtual std::variant<GPU_DATA, PyObject*> GetResult() = 0;
+
+    virtual void FinalizeSink() = 0;
+};
+
+/**
+ * @brief Base class for operators that both consume and produce batches in the
+ * middle of pipelines.
+ *
+ */
+class PhysicalGPUProcessBatch : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SOURCE_AND_SINK;
+    }
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result) = 0;
+
+    virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+};
 /**
  * @brief Get the streaming batch size from environment variable.
  * It looks up the environment variable dynamically to enable setting it
