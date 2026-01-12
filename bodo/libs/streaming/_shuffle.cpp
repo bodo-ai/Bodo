@@ -693,10 +693,22 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
 }
 
 std::optional<std::shared_ptr<table_info>>
-IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
+IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
+                                           const int print_debug) {
     // Reduce MPI call overheads by communicating only every 10 iterations
     if (!(is_last || ((this->curr_iter % 10) == 0))) {
         return std::nullopt;
+    }
+
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    if (print_debug == 2) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
     }
 
     // recv data first, but avoid receiving too much data at once
@@ -708,6 +720,14 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         this->metrics.n_shuffle_recv +=
             this->recv_states.size() - prev_recv_states_size;
         this->metrics.shuffle_recv_time += end_timer(start);
+    }
+
+    if (print_debug == 0) {
+        std::cout << fmt::format(
+                         "[DEBUG]:{} ShuffleState: Rank {} received "
+                         "local_is_last = true",
+                         __LINE__, myrank)
+                  << std::endl;
     }
 
     TableBuildBuffer out_builder(this->schema, this->dict_builders);
