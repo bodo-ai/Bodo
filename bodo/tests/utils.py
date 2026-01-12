@@ -1701,7 +1701,8 @@ def _gather_output(bodo_output):
 
     try:
         _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        # Use JIT version of gatherv to avoid nanosecond precision loss in some types
+        bodo_output = bodo.libs.distributed_api.gatherv(bodo_output)
     except Exception:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
@@ -2112,7 +2113,7 @@ def check_parallel_coherency(
     parall_output_proc = convert_non_pandas_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
     _check_typing_issues(parall_output_proc)
-    parall_output_final = bodo.gatherv(parall_output_proc)
+    parall_output_final = bodo.libs.distributed_api.gatherv(parall_output_proc)
 
     # Doing the sorting. Mandatory here
     if sort_output:
