@@ -3268,7 +3268,7 @@ def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
 
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+    spawner.worker_intercomm.bcast(CommandType.SCATTER_JIT.value, bcast_root)
     bodo.libs.distributed_api.scatterv(
         scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
     )
@@ -3285,13 +3285,13 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     # Scatter the data to workers then gather
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+    spawner.worker_intercomm.bcast(CommandType.SCATTER_JIT.value, bcast_root)
     bodo.libs.distributed_api.scatterv(
         scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
     )
     res_id = spawner.worker_intercomm.recv(None, source=0)
 
-    spawner.worker_intercomm.bcast(CommandType.GATHER.value, bcast_root)
+    spawner.worker_intercomm.bcast(CommandType.GATHER_JIT.value, bcast_root)
     spawner.worker_intercomm.bcast(res_id, bcast_root)
     out = bodo.libs.distributed_api.gatherv(
         None, root=bcast_root, comm=spawner.worker_intercomm

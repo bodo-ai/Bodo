@@ -38,6 +38,8 @@ class CommandType(str, Enum):
     SET_CONFIG = "set_config"
     SPAWN_PROCESS = "spawn_process"
     STOP_PROCESS = "stop_process"
+    SCATTER_JIT = "scatter_jit"
+    GATHER_JIT = "gather_jit"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
