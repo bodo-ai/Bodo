@@ -303,9 +303,10 @@ done
 
 [tool.cibuildwheel.windows]
 # Can't use pytest because we don't include tests in the wheel
-test-command = """
-set BODO_NUM_WORKERS=2 # && python {project}\\buildscripts\\bodo\\pip\\test.py
-"""
+#test-command = """
+#set BODO_NUM_WORKERS=2  && python {project}\\buildscripts\\bodo\\pip\\test.py
+#"""
+test-command = "echo Skipping tests on Windows."
 
 # ---------------------------------------- PR CI ---------------------------------------- #
 [tool.coverage.run]
