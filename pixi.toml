@@ -125,7 +125,7 @@ aws-sdk-cpp = "*"
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = "*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = "*", build = "*mpi_impi_*" }
 
@@ -174,7 +174,7 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use.
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
 pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
@@ -260,7 +260,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { impi-devel = "*" }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
