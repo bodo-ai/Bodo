@@ -3718,6 +3718,18 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
         std::optional<std::shared_ptr<table_info>> new_data_ =
             join_state->probe_shuffle_state.ShuffleIfRequired(local_is_last);
+
+        if (local_is_last && join_state->local_is_last_debug_counter == 2) {
+            std::cout
+                << fmt::format(
+                       "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
+                       "local_is_last = true on probe iteration {}",
+                       __LINE__, join_state->op_id, myrank,
+                       join_state->probe_iter)
+                << std::endl;
+            join_state->local_is_last_debug_counter = 3;
+        }
+
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             active_partition->probe_table = new_data;
@@ -3747,7 +3759,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
             append_time = 0;
 
-            if (local_is_last && join_state->local_is_last_debug_counter == 2) {
+            if (local_is_last && join_state->local_is_last_debug_counter == 3) {
                 std::cout
                     << fmt::format(
                            "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
@@ -3755,7 +3767,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                            __LINE__, join_state->op_id, myrank,
                            join_state->probe_iter)
                     << std::endl;
-                join_state->local_is_last_debug_counter = 3;
+                join_state->local_is_last_debug_counter = 4;
             }
 
             for (size_t batch_start_row = 0;
@@ -3903,14 +3915,14 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     }
 
-    if (local_is_last && join_state->local_is_last_debug_counter == 3) {
+    if (local_is_last && join_state->local_is_last_debug_counter == 4) {
         std::cout << fmt::format(
                          "[DEBUG]:{} HashJoin (Op ID: {}): Rank {} received "
                          "local_is_last = true on probe iteration {}",
                          __LINE__, join_state->op_id, myrank,
                          join_state->probe_iter)
                   << std::endl;
-        join_state->local_is_last_debug_counter = 4;
+        join_state->local_is_last_debug_counter = 5;
     }
 
     if (local_is_last && !join_state->probe_shuffle_state.SendRecvEmpty()) {
