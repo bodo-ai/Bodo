@@ -1,6 +1,6 @@
 [workspace]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge", "conda-forge/label/pandas_rc"]
+channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
@@ -72,8 +72,7 @@ pip = "*"
 # Core Python Deps
 numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
-pandas = { version = "3.0.0rc1", channel = "conda-forge/label/pandas_rc" }
-# pandas = ">=2.2"
+pandas = ">=2.2"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
