@@ -3679,19 +3679,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         //        if (in_table->nrows() > 0) {
         time_pt cudf_join_time = start_timer();
         table_info* ti = new table_info(*in_table);
-        std::cout << "before cudf_join_with_prebuilt_hash_join loop"
-                  << std::endl;
         while (true) {
-            std::cout << "before cudf_join_with_prebuilt_hash_join call"
-                      << std::endl;
             std::pair<int64_t, int64_t> join_res =
                 cudf_join_with_prebuilt_hash_join(
                     join_state->cudf_build_table, reinterpret_cast<int64_t>(ti),
                     join_state->n_keys, build_kept_cols, probe_kept_cols,
                     join_kind_table[build_table_outer][probe_table_outer],
                     local_is_last);
-            std::cout << "after cudf_join_with_prebuilt_hash_join call "
-                      << join_res.second << std::endl;
             if (join_res.second == 0) {
                 break;  // break out of loop if no more data available
             } else if (join_res.second == 1) {
@@ -3713,8 +3707,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     " returned an unknown result code.");
             }
         }
-        std::cout << "after cudf_join_with_prebuilt_hash_join loop"
-                  << std::endl;
         // auto ctbschema =
         // join_state->output_buffer->active_chunk->schema();
         join_state->metrics.cudf_join_time += end_timer(cudf_join_time);

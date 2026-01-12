@@ -57,7 +57,6 @@ def cpp_table_to_pylibcudf_table(cpp_table_ptr, stream):
     Returns: cuDF DataFrame
     """
     if stream is None:
-        print("cpp_table_to_pylibcudf_table using default stream")
         stream = rmm.pylibrmm.stream.Stream(plc.utils.CUDF_DEFAULT_STREAM)
 
     bodo_df = cpp_table_to_df(cpp_table_ptr, use_arrow_dtypes=True, delete_input=False)
@@ -108,8 +107,6 @@ def cpp_table_to_hash_join_async(cpp_table_ptr, nkeys):
     cpp_table_ptr: pointer to C++ table_info (or equivalent)
     Returns: cuDF DataFrame
     """
-    print("hash_join_async")
-
     build_stream = new_stream()
     build_event = new_event()
 
@@ -147,6 +144,7 @@ def cpp_table_to_hash_join_async(cpp_table_ptr, nkeys):
         # Will be a list of tuples (probe_stream, probe_event).
         "probe_tables": [],
         "compute_streams": [],
+        "d2h_streams": [],
     }
 
 
@@ -259,16 +257,37 @@ def add_probe_table(cudf_join_data, probe_cpp_table):
                         "probe_columns": probe_columns,
                     }
                 )
-            else:
-                print("probe table empty")
-    else:
-        print("probe table missing")
+
+
+def check_for_completed_d2h(cudf_join_data, is_last):
+    if len(cudf_join_data["d2h_streams"]) > 0:
+        d2h_ready = False
+        if is_last:
+            # If this is the last time through then we have to return data.
+            cudf_join_data["d2h_streams"][0]["d2h_event"].synchronize()
+            d2h_ready = True
+        else:
+            if event_done(cudf_join_data["d2h_streams"][0]["d2h_event"]):
+                d2h_ready = True
+
+        if d2h_ready:
+            d2h_data = cudf_join_data["d2h_streams"].pop(0)
+
+            result_df = d2h_data["result_arrow_table"].to_pandas()
+            out_ptr, _ = df_to_cpp_table(result_df)
+            return out_ptr, 1 if (
+                len(cudf_join_data["probe_tables"]) > 0
+                or len(cudf_join_data["compute_streams"]) > 0
+                or len(cudf_join_data["d2h_streams"]) > 0
+            ) else 2
+
+    return None
 
 
 def check_for_completed_compute(
     cudf_join_data, is_last, build_kept_cols, probe_kept_cols, cudfstream, dmr
 ):
-    print("check_for_completed_compute", len(cudf_join_data["compute_streams"]))
+    # print("check_for_completed_compute", len(cudf_join_data["compute_streams"]))
 
     if len(cudf_join_data["compute_streams"]) > 0:
         compute_ready = False
@@ -281,57 +300,63 @@ def check_for_completed_compute(
                 compute_ready = True
 
         if compute_ready:
-            compute_data = cudf_join_data["compute_streams"].pop(0)
+            d2h_stream = new_stream()
+            d2h_event = new_event()
+            with d2h_stream:
+                d2h_rmm_stream = rmm.pylibrmm.stream.Stream(d2h_stream)
+                compute_data = cudf_join_data["compute_streams"].pop(0)
 
-            if (
-                not isinstance(compute_data["result"], tuple)
-                or len(compute_data["result"]) != 2
-            ):
-                raise Exception("hash_join result not a 2-tuple")
+                if (
+                    not isinstance(compute_data["result"], tuple)
+                    or len(compute_data["result"]) != 2
+                ):
+                    raise Exception("hash_join result not a 2-tuple")
 
-            # result is 2-tuple of columns containing row indices.
-            probe_idx_col, build_idx_col = compute_data["result"]
+                # result is 2-tuple of columns containing row indices.
+                probe_idx_col, build_idx_col = compute_data["result"]
 
-            # Equivalent of pd.DataFrame.take.  Grab rows from row indices.
-            probe_rows = plc.copying.gather(
-                compute_data["plc_df"],
-                probe_idx_col,
-                plc.copying.OutOfBoundsPolicy.NULLIFY,
-                cudfstream,
-                dmr,
-            )
-            build_rows = plc.copying.gather(
-                cudf_join_data["plc_df"],
-                build_idx_col,
-                plc.copying.OutOfBoundsPolicy.NULLIFY,
-                cudfstream,
-                dmr,
-            )
-            # Drop columns not needed in the output.
-            kept_probe_rows = [probe_rows.columns()[i] for i in probe_kept_cols]
-            kept_build_rows = [build_rows.columns()[i] for i in build_kept_cols]
-            result_plc_table = plc.Table(kept_probe_rows + kept_build_rows)
-            result_arrow_table = result_plc_table.to_arrow()
-            # Add column_names to arrow otherwise conversion to cudf drops
-            # all but one unnamed column.
-            probe_columns = compute_data["probe_data"]["probe_columns"]
-            column_names = [probe_columns[i] for i in probe_kept_cols] + [
-                cudf_join_data["df_columns"][i] for i in build_kept_cols
-            ]
-            result_arrow_table = result_arrow_table.rename_columns(column_names)
-            result_gdf = cudf.DataFrame.from_arrow(result_arrow_table)
-            result_df = result_gdf.to_arrow().to_pandas()
-            out_ptr, _ = df_to_cpp_table(result_df)
-            return out_ptr, 1 if (
-                len(cudf_join_data["probe_tables"]) > 0
-                or len(cudf_join_data["compute_streams"]) > 0
-            ) else 2
+                # Equivalent of pd.DataFrame.take.  Grab rows from row indices.
+                probe_rows = plc.copying.gather(
+                    compute_data["plc_df"],
+                    probe_idx_col,
+                    plc.copying.OutOfBoundsPolicy.NULLIFY,
+                    d2h_rmm_stream,
+                    dmr,
+                )
+                build_rows = plc.copying.gather(
+                    cudf_join_data["plc_df"],
+                    build_idx_col,
+                    plc.copying.OutOfBoundsPolicy.NULLIFY,
+                    d2h_rmm_stream,
+                    dmr,
+                )
+                # Drop columns not needed in the output.
+                kept_probe_rows = [probe_rows.columns()[i] for i in probe_kept_cols]
+                kept_build_rows = [build_rows.columns()[i] for i in build_kept_cols]
+                result_plc_table = plc.Table(kept_probe_rows + kept_build_rows)
 
-    return None
+                # Add column_names to arrow otherwise conversion to cudf drops
+                # all but one unnamed column.
+                probe_columns = compute_data["probe_data"]["probe_columns"]
+                column_names = [probe_columns[i] for i in probe_kept_cols] + [
+                    cudf_join_data["df_columns"][i] for i in build_kept_cols
+                ]
+                result_arrow_table = result_plc_table.to_arrow(
+                    metadata=column_names, stream=d2h_rmm_stream
+                )
+                d2h_event.record()
+                cudf_join_data["d2h_streams"].append(
+                    {
+                        "d2h_stream": d2h_stream,
+                        "d2h_event": d2h_event,
+                        "result_arrow_table": result_arrow_table,
+                        "d2h_rmm_stream": d2h_rmm_stream,
+                    }
+                )
 
 
 def check_for_completed_probe(cudf_join_data, is_last, nkeys, join_kind, dmr):
-    print("check_for_completed_probe", len(cudf_join_data["probe_tables"]))
+    # print("check_for_completed_probe", len(cudf_join_data["probe_tables"]))
 
     # See if any outstanding probe table transfers.
     if len(cudf_join_data["probe_tables"]) > 0:
@@ -351,7 +376,7 @@ def check_for_completed_probe(cudf_join_data, is_last, nkeys, join_kind, dmr):
                 # Probe ready if build and probe event have triggered.
                 probe_ready = True
 
-        print("probe_ready:", probe_ready)
+        # print("probe_ready:", probe_ready)
         # We know we have a built and probe table ready for compute here.
         if probe_ready:
             compute_stream = new_stream()
@@ -410,24 +435,27 @@ def cudf_probe_hash_join_async(
     cudfstream = rmm.pylibrmm.stream.Stream(cupy_def_stream)
     dmr = rmm.mr.get_current_device_resource()
 
-    print("cudf_probe_hash_join_async", is_last, len(cudf_join_data["probe_tables"]))
+    # print("cudf_probe_hash_join_async", is_last, len(cudf_join_data["probe_tables"]))
     # TO-DO
     # Filter out unused columns before transfering to GPU.
 
     # Start probe table transfer to GPU if we have a valid probe table we havne't seen before.
     add_probe_table(cudf_join_data, probe_cpp_table)
 
+    """
     print(
         "cudf_probe_hash_join_async after probe batch processing",
         len(cudf_join_data["probe_tables"]),
     )
+    """
     # If there are probe tables that we started transferring before, see
     # if the transfers are done and we can launch the join kernel.
     check_for_completed_probe(cudf_join_data, is_last, nkeys, join_kind, dmr)
     # If there are completed compute kernels then start the transfer back from the device.
-    results = check_for_completed_compute(
+    check_for_completed_compute(
         cudf_join_data, is_last, build_kept_cols, probe_kept_cols, cudfstream, dmr
     )
+    results = check_for_completed_d2h(cudf_join_data, is_last)
     if results is not None:
         return results
 
