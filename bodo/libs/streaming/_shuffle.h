@@ -126,7 +126,7 @@ class IncrementalShuffleMetrics {
 
 /**
  * @brief Holds buffers and MPI requests for async shuffle sends for an array
- (MPI_Issend calls). Buffers cannot be freed until send is completed.
+ (MPI_Isend calls). Buffers cannot be freed until send is completed.
  *
  */
 class AsyncShuffleSendState {
@@ -271,10 +271,10 @@ class AsyncShuffleSendState {
 
         MPI_Request send_req_null;
         CHECK_MPI(
-            MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
-                       curr_tags[p]++, shuffle_comm, &send_req_null),
+            MPI_Isend(buf, comm_info.send_count_null[p], mpi_type_null, p,
+                      curr_tags[p]++, shuffle_comm, &send_req_null),
             "AsyncShuffleSendState::send_shuffle_null_bitmask: MPI error on "
-            "MPI_Issend:");
+            "MPI_Isend:");
         this->send_requests.push_back(send_req_null);
     }
     /**
@@ -306,10 +306,10 @@ class AsyncShuffleSendState {
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
             MPI_Request send_req;
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &send_req),
+                MPI_Isend(buff, comm_info.send_count[p], mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NUMPY]: MPI error on "
-                "MPI_Issend:");
+                "MPI_Isend:");
             this->send_requests.push_back(send_req);
         }
     }
@@ -344,10 +344,10 @@ class AsyncShuffleSendState {
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &send_req),
+                MPI_Isend(buff, comm_info.send_count[p], mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NULLABLE, !BOOL]: "
-                "MPI error on MPI_Issend:");
+                "MPI error on MPI_Isend:");
 
             this->send_requests.push_back(send_req);
             this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
@@ -386,10 +386,10 @@ class AsyncShuffleSendState {
             char* buff = send_arr->template data1<arr_type>() +
                          comm_info.send_disp_null[p];
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &send_req),
+                MPI_Isend(buff, comm_info.send_count_null[p], mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NULLABLE][BOOL]: MPI "
-                "error on MPI_Issend:");
+                "error on MPI_Isend:");
             this->send_requests.push_back(send_req);
 
             this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
@@ -427,9 +427,9 @@ class AsyncShuffleSendState {
             const void* data_buff = send_arr->template data1<arr_type>() +
                                     str_comm_info.send_disp_sub[p];
             CHECK_MPI(
-                MPI_Issend(data_buff, str_comm_info.send_count_sub[p],
-                           data_mpi_type, p, curr_tags[p]++, shuffle_comm,
-                           &data_send_req),
+                MPI_Isend(data_buff, str_comm_info.send_count_sub[p],
+                          data_mpi_type, p, curr_tags[p]++, shuffle_comm,
+                          &data_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[STRING]: MPI error "
                 "on Issend:");
             this->send_requests.push_back(data_send_req);
@@ -439,10 +439,10 @@ class AsyncShuffleSendState {
                                    (sizeof(uint32_t) * comm_info.send_disp[p]);
 
             CHECK_MPI(
-                MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &len_send_req),
+                MPI_Isend(len_buff, comm_info.send_count[p], len_mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &len_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[STRING]: MPI error "
-                "on MPI_Issend:");
+                "on MPI_Isend:");
             this->send_requests.push_back(len_send_req);
 
             this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
@@ -488,32 +488,32 @@ class AsyncShuffleSendState {
             MPI_Request data_send_req;
             const void* data_buff = dict_arr->data1<bodo_array_type::STRING>();
             CHECK_MPI(
-                MPI_Issend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &data_send_req),
+                MPI_Isend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &data_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[DICT]: MPI error on "
-                "MPI_Issend:");
+                "MPI_Isend:");
             this->send_requests.push_back(data_send_req);
 
             MPI_Request offset_send_req;
             const void* offset_buff =
                 dict_arr->data2<bodo_array_type::STRING>();
             CHECK_MPI(
-                MPI_Issend(offset_buff, dict_arr->length + 1, offset_mpi_type,
-                           p, curr_tags[p]++, shuffle_comm, &offset_send_req),
+                MPI_Isend(offset_buff, dict_arr->length + 1, offset_mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &offset_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[DICT]: MPI error on "
-                "MPI_Issend:");
+                "MPI_Isend:");
             this->send_requests.push_back(offset_send_req);
 
             MPI_Request null_send_req;
             const void* null_buff =
                 dict_arr->null_bitmask<bodo_array_type::STRING>();
             CHECK_MPI(
-                MPI_Issend(null_buff,
-                           arrow::bit_util::BytesForBits(dict_arr->length),
-                           MPI_UNSIGNED_CHAR, p, curr_tags[p]++, shuffle_comm,
-                           &null_send_req),
+                MPI_Isend(null_buff,
+                          arrow::bit_util::BytesForBits(dict_arr->length),
+                          MPI_UNSIGNED_CHAR, p, curr_tags[p]++, shuffle_comm,
+                          &null_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[DICT] MPI error on "
-                "MPI_Issend:");
+                "MPI_Isend:");
             this->send_requests.push_back(null_send_req);
         }
         this->send_arrs.push_back(dict_arr);
@@ -551,10 +551,10 @@ class AsyncShuffleSendState {
             const void* buff = send_arr->data1<arr_type>() +
                                (sizeof(uint32_t) * comm_info.send_disp[p]);
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count[p], lens_mpi_type, p,
-                           curr_tags[p]++, shuffle_comm, &send_req),
+                MPI_Isend(buff, comm_info.send_count[p], lens_mpi_type, p,
+                          curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[ARRAY_ITEM]: MPI "
-                "error on MPI_Issend:");
+                "error on MPI_Isend:");
 
             // Shuffle the null bitmask
             this->send_requests.push_back(send_req);
@@ -600,20 +600,20 @@ class AsyncShuffleSendState {
                 send_arr->data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count[p], mpi_datetime_type, p,
-                           curr_tags[p]++, shuffle_comm, &datetime_send_req),
+                MPI_Isend(buff, comm_info.send_count[p], mpi_datetime_type, p,
+                          curr_tags[p]++, shuffle_comm, &datetime_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[TIMESTAMPTZ]: MPI "
-                "error on MPI_Issend:");
+                "error on MPI_Isend:");
             this->send_requests.push_back(datetime_send_req);
 
             MPI_Request tz_offset_send_req;
             buff = send_arr->data2<arr_type>() +
                    (numpy_item_size[offset_type] * comm_info.send_disp[p]);
             CHECK_MPI(
-                MPI_Issend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
-                           curr_tags[p]++, shuffle_comm, &tz_offset_send_req),
+                MPI_Isend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
+                          curr_tags[p]++, shuffle_comm, &tz_offset_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[TIMESTAMPTZ]: MPI "
-                "error on MPI_Issend:");
+                "error on MPI_Isend:");
             this->send_requests.push_back(tz_offset_send_req);
 
             this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
