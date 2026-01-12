@@ -932,6 +932,8 @@ class HashJoinState : public JoinState {
     // Same as build_na_counter but for probe NAs
     size_t probe_na_counter = 0;
 
+    bool local_is_last = false;
+
     /// @brief Whether we should print debug information
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
