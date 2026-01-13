@@ -844,8 +844,12 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
                          myrank, this->recv_states.size(),
                          this->send_states.size())
                   << std::endl;
-        std::cout << "Data table schema: "
-                  << this->table_buffer->data_table->schema()->ToString()
+
+        size_t num_send_reqs = 0;
+        for (const auto& send_state : this->send_states) {
+            num_send_reqs += send_state.GetNumSendRequests();
+        }
+        std::cout << "Number of send requests in flight: " << num_send_reqs
                   << std::endl;
     }
     this->send_states.push_back(

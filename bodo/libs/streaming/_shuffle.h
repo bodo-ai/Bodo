@@ -146,6 +146,8 @@ class AsyncShuffleSendState {
      */
     int get_starting_msg_tag() const { return this->starting_msg_tag; }
 
+    size_t GetNumSendRequests() const { return this->send_requests.size(); }
+
     /**
      * @brief Post async sends to shuffle a table to other ranks
      * @param in_table Input table
