@@ -989,11 +989,7 @@ def _fix_struct_arr_names(arr, pa_type):
     """
 
     # Handle list recursively
-    if (
-        pa.types.is_list(arr.type)
-        or pa.types.is_large_list(arr.type)
-        or pa.types.is_fixed_size_list(arr.type)
-    ):
+    if pa.types.is_list(arr.type) or pa.types.is_large_list(arr.type):
         if isinstance(arr, pa.ChunkedArray):
             arr = arr.combine_chunks()
         new_arr = pa.LargeListArray.from_arrays(
