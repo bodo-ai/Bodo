@@ -1352,6 +1352,8 @@ def _test_equal(
                 np.float64,
             ):
                 py_out = py_out.astype(bodo_out.dtype)
+                # astype converts all NaNs to NAs so need to match it here
+                bodo_out = bodo_out.map(lambda a: pd.NA if np.isnan(a) else a)
 
             # Handle all-NA Pandas output stored as float NaNs
             if (
