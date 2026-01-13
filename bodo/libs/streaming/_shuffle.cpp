@@ -838,6 +838,15 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
                          "local_is_last = true",
                          __LINE__, myrank)
                   << std::endl;
+        std::cout << fmt::format(
+                         "[DEBUG]: ShuffleState BEFORE SEND: Rank {} n recv "
+                         "states: {} n send states: {}",
+                         myrank, this->recv_states.size(),
+                         this->send_states.size())
+                  << std::endl;
+        std::cout << "Data table schema: "
+                  << this->table_buffer->data_table->schema()->ToString()
+                  << std::endl;
     }
     this->send_states.push_back(
         shuffle_issend(std::move(shuffle_table), shuffle_hashes,
