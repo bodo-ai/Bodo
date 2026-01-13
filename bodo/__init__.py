@@ -323,11 +323,8 @@ def allgatherv(*args, **kwargs):
 
 
 def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
-    import pandas as pd
-    from pandas.core.arrays.arrow import ArrowExtensionArray
-
     # Fall back to JIT version if not a spawn gatherv (workers may use comm=None)
-    if allgather is True or warn_if_rep is False or not isinstance(data, (pd.DataFrame, pd.Series, ArrowExtensionArray, pd.arrays.DatetimeArray)):
+    if allgather is True or warn_if_rep is False:
         # Import compiler lazily
         import bodo.decorators
         from bodo.libs.distributed_api import gatherv
@@ -339,10 +336,8 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=0, comm=None):
 
 
 def scatterv(data, send_counts=None, warn_if_dist=True, root=0, comm=None):
-    import pandas as pd
-
     # Fall back to JIT version if not a spawn scatterv
-    if send_counts is not None or warn_if_dist is False or comm is None or not isinstance(data, (pd.DataFrame, pd.Series)):
+    if send_counts is not None or warn_if_dist is False or comm is None:
         # Import compiler lazily
         import bodo.decorators
         from bodo.libs.distributed_api import scatterv
