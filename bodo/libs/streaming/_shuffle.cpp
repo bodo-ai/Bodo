@@ -838,20 +838,21 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
                          "local_is_last = true",
                          __LINE__, myrank)
                   << std::endl;
-        std::cout << fmt::format(
-                         "[DEBUG]: ShuffleState BEFORE SEND: Rank {} n recv "
-                         "states: {} n send states: {}",
-                         myrank, this->recv_states.size(),
-                         this->send_states.size())
-                  << std::endl;
-
-        size_t num_send_reqs = 0;
-        for (const auto& send_state : this->send_states) {
-            num_send_reqs += send_state.GetNumSendRequests();
-        }
-        std::cout << "Number of send requests in flight: " << num_send_reqs
-                  << std::endl;
     }
+    std::cout << fmt::format(
+                     "[DEBUG]: ShuffleState BEFORE SEND: Rank {} n recv "
+                     "states: {} n send states: {}",
+                     myrank, this->recv_states.size(), this->send_states.size())
+              << std::endl;
+
+    size_t num_send_reqs = 0;
+    for (const auto& send_state : this->send_states) {
+        num_send_reqs += send_state.GetNumSendRequests();
+    }
+    std::cout << "[DEBUG]: ShuffleState BEFORE SEND: Rank " << myrank
+              << " Number of send requests in flight: " << num_send_reqs
+              << std::endl;
+
     this->send_states.push_back(
         shuffle_issend(std::move(shuffle_table), shuffle_hashes,
                        keep_row_bitmask.get(), this->shuffle_comm, start_tag));
