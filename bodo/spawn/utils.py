@@ -234,13 +234,22 @@ def gatherv_nojit(data, root, comm):
         if is_receiver:
             data = comm.recv(source=0, tag=11)
         elif rank == 0:
+            if data is not None:
+                sample = (
+                    data.head(0)
+                    if isinstance(data, (pd.DataFrame, pd.Series))
+                    else data[:0]
+                )
+            else:
+                sample = None
             comm.send(
-                data.head(0)
-                if isinstance(data, (pd.DataFrame, pd.Series))
-                else data[:0],
+                sample,
                 dest=0,
                 tag=11,
             )
+
+    if data is None:
+        return None
 
     # Fallback to JIT version if unsupported type
     if data is not None and not isinstance(
