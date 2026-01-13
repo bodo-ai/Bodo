@@ -160,6 +160,11 @@ def test_distributed_input_output_df(df_value):
     def test(df):
         return df
 
+    # Convert non-string column names to strings
+    if not all(isinstance(col, str) for col in df_value.columns):
+        df_value = df_value.copy()
+        df_value.columns = df_value.columns.astype(str)
+
     check_func(test, (df_value,), only_spawn=True, check_pandas_types=False)
 
 
