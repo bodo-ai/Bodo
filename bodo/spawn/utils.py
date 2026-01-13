@@ -16,6 +16,7 @@ from enum import Enum
 from time import sleep
 
 import pandas as pd
+import pyarrow as pa
 from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
@@ -211,11 +212,15 @@ def gatherv_nojit(data, root, comm):
     compiler which can be slow.
     """
 
+    if isinstance(data, pd.arrays.DatetimeArray):
+        arr = pa.array(data)
+        data = pd.array(arr, dtype=pd.ArrowDtype(arr.type))
+
     if data is not None and not isinstance(
         data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
     ):
         raise ValueError(
-            "gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input"
+            f"gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input, not {type(data)}"
         )
 
     from bodo.ext import hdist
