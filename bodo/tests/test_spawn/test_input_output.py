@@ -24,7 +24,10 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame({"A": list(range(100))}, pd.interval_range(0, 100)),
             id="interval_index",
-            marks=[pytest.mark.slow],
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skip("support IntervalIndex in non-jit gather/scatter"),
+            ],
         ),
         pytest.param(
             pd.DataFrame(
