@@ -297,11 +297,11 @@ def _is_supported_gather_scatter_type(data) -> bool:
 
     if isinstance(data, pd.DataFrame):
         for dtype in data.dtypes:
-            if pd.api.types.is_categorical_dtype(dtype):
+            if isinstance(dtype, pd.CategoricalDtype):
                 return False
 
     if isinstance(data, pd.Series):
-        if pd.api.types.is_categorical_dtype(data.dtype):
+        if isinstance(data.dtype, pd.CategoricalDtype):
             return False
 
     return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(

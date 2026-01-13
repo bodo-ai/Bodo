@@ -233,7 +233,7 @@ def _empty_like(val):
     original_val = val
     cat_cols = set()
     for cname, dtype in val.dtypes.items():
-        if pd.api.types.is_categorical_dtype(dtype):
+        if isinstance(dtype, pd.CategoricalDtype):
             cat_cols.add(cname)
             val = val.assign(**{cname: np.arange(len(val))})
 
