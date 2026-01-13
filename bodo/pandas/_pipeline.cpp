@@ -155,6 +155,73 @@
     } while (0)
 #endif
 
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
+    PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
+    if (!bodo_module) {
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to import bodo.pandas.join_utils module");
+    }
+
+    PyObject *pyFunc =
+        PyObject_GetAttrString(bodo_module, "pylibcudf_table_to_cpp_table");
+    if (!pyFunc || !PyCallable_Check(pyFunc)) {
+        throw std::runtime_error(
+            "Could not find Python function pylibcudf_table_to_cpp_table");
+    }
+
+    PyObject *args = PyTuple_New(3);
+    PyTuple_SET_ITEM(args, 0, batch.pyobj);
+    PyTuple_SET_ITEM(args, 1, Py_None);
+    PyTuple_SET_ITEM(args, 2, Py_None);
+
+    PyObject *result = PyObject_CallObject(pyFunc, args);
+    Py_DECREF(args);
+    Py_DECREF(pyFunc);
+
+    if (!result) {
+        throw std::runtime_error("Python pylibcudf_table_to_cpp_table failed");
+    }
+
+    int64_t int_res = PyLong_AsLongLong(result);
+    return std::shared_ptr<table_info>(reinterpret_cast<table_info *>(int_res));
+}
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
+    int64_t py_cpp_table_ptr = reinterpret_cast<int64_t>(batch.get());
+
+    PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
+    if (!bodo_module) {
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to import bodo.pandas.join_utils module");
+    }
+
+    PyObject *pyFunc =
+        PyObject_GetAttrString(bodo_module, "cpp_table_to_pylibcudf_table");
+    if (!pyFunc || !PyCallable_Check(pyFunc)) {
+        throw std::runtime_error(
+            "Could not find Python function cpp_table_to_pylibcudf_table");
+    }
+
+    PyObject *intPtr = PyLong_FromLongLong(py_cpp_table_ptr);
+
+    PyObject *args = PyTuple_New(2);
+    PyTuple_SET_ITEM(args, 0, intPtr);
+    PyTuple_SET_ITEM(args, 1, Py_None);
+
+    PyObject *result = PyObject_CallObject(pyFunc, args);
+    Py_DECREF(args);
+    Py_DECREF(pyFunc);
+
+    if (!result) {
+        throw std::runtime_error("Python cpp_table_to_pylibcudf_table failed");
+    }
+
+    GPU_DATA res = {result};
+    return res;
+}
+
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
  * say that it HAVE_MORE_OUTPUT in which case we need to call it again for the
@@ -162,9 +229,9 @@
  * nodes in the pipeline to process the first set of output.  Each operator
  * could theoretically require multiple (different) iterations in this manner.
  */
-bool Pipeline::midPipelineExecute(unsigned idx,
-                                  std::shared_ptr<table_info> batch,
-                                  OperatorResult prev_op_result, int rank) {
+bool Pipeline::midPipelineExecute(
+    unsigned idx, std::variant<std::shared_ptr<table_info>, GPU_DATA> batch,
+    OperatorResult prev_op_result, int rank) {
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
@@ -173,8 +240,19 @@ bool Pipeline::midPipelineExecute(unsigned idx,
         // says HAVE_MORE_OUTPUT that we can iterate with an empty batch.
         while (true) {
             DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result);
-            OperatorResult consume_result =
-                sink->ConsumeBatch(batch, prev_op_result);
+            OperatorResult consume_result;
+            std::visit(
+                [&](auto &vop) {
+                    std::visit(
+                        [&](auto &vbatch) {
+                            auto converted =
+                                prepare_batch_for_operator(vop, vbatch);
+                            consume_result =
+                                vop->ConsumeBatch(converted, prev_op_result);
+                        },
+                        batch);
+                },
+                sink);
             DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result);
             if (consume_result == OperatorResult::FINISHED) {
                 return true;
@@ -182,30 +260,78 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             if (consume_result == OperatorResult::NEED_MORE_INPUT) {
                 return false;
             }
-            if (batch->nrows() != 0) {
+            size_t batch_nrows;
+            std::visit(
+                [&](auto &x) {
+                    using T = std::decay_t<decltype(x)>;
+                    if constexpr (std::is_same_v<T,
+                                                 std::shared_ptr<table_info>>) {
+                        batch_nrows = x->nrows();
+                    } else {
+                        batch_nrows = true;
+                        throw std::runtime_error(
+                            "Need to get whether GPU_DATA is empty.");
+                    }
+                },
+                batch);
+            if (batch_nrows != 0) {
                 DEBUG_PIPELINE_CONSUME_LOOP(rank);
-                batch = RetrieveTable(batch, std::vector<int64_t>());
+                std::visit(
+                    [&](auto &x) {
+                        using T = std::decay_t<decltype(x)>;
+                        if constexpr (std::is_same_v<
+                                          T, std::shared_ptr<table_info>>) {
+                            batch = RetrieveTable(x, std::vector<int64_t>());
+                        } else {
+                            // make gpu batch empty!
+                            throw std::runtime_error(
+                                "Need to create empty GPU_DATA.");
+                        }
+                    },
+                    batch);
             }
         }
     } else {
         // Get the current operator.
-        std::shared_ptr<PhysicalProcessBatch>& op = between_ops[idx];
+        std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                     std::shared_ptr<PhysicalGPUProcessBatch>> &op =
+            between_ops[idx];
         DEBUG_PIPELINE_IN_BATCH(rank, op, batch);
         while (true) {
             DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result);
 
             // Process this batch with this operator.
-            std::pair<std::shared_ptr<table_info>, OperatorResult> result =
-                op->ProcessBatch(batch, prev_op_result);
-            prev_op_result = result.second;
+            std::variant<std::pair<std::shared_ptr<table_info>, OperatorResult>,
+                         std::pair<GPU_DATA, OperatorResult>>
+                result;
+            std::visit(
+                [&](auto &vop) {
+                    std::visit(
+                        [&](auto &vbatch) {
+                            auto converted =
+                                prepare_batch_for_operator(vop, vbatch);
+                            auto pb_res =
+                                vop->ProcessBatch(converted, prev_op_result);
+                            result = pb_res;
+                            prev_op_result = pb_res.second;
+                        },
+                        batch);
+                },
+                op);
 
             DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result);
 
             // Execute subsequent operators and if any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
-            if (midPipelineExecute(idx + 1, result.first, prev_op_result,
-                                   rank)) {
+            bool mpe_res;
+            std::visit(
+                [&](auto &vres) {
+                    mpe_res = midPipelineExecute(idx + 1, vres.first,
+                                                 prev_op_result, rank);
+                },
+                result);
+            if (mpe_res) {
                 return true;
             }
 
@@ -220,8 +346,35 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             // to give this operator a chance to produce more output.
             // Currently, streaming operators assume input to be empty in this
             // case to match BodoSQL.
-            if (batch->nrows() != 0) {
-                batch = RetrieveTable(batch, std::vector<int64_t>());
+            size_t batch_nrows;
+            std::visit(
+                [&](auto &x) {
+                    using T = std::decay_t<decltype(x)>;
+                    if constexpr (std::is_same_v<T,
+                                                 std::shared_ptr<table_info>>) {
+                        batch_nrows = x->nrows();
+                    } else {
+                        batch_nrows = true;
+                        throw std::runtime_error(
+                            "Need to get whether GPU_DATA is empty "
+                            "midpipeline.");
+                    }
+                },
+                batch);
+            if (batch_nrows != 0) {
+                std::visit(
+                    [&](auto &x) {
+                        using T = std::decay_t<decltype(x)>;
+                        if constexpr (std::is_same_v<
+                                          T, std::shared_ptr<table_info>>) {
+                            batch = RetrieveTable(x, std::vector<int64_t>());
+                        } else {
+                            // make gpu batch empty!
+                            throw std::runtime_error(
+                                "Need to create empty GPU_DATA midpipeline.");
+                        }
+                    },
+                    batch);
             }
         }
     }
@@ -233,7 +386,7 @@ uint64_t Pipeline::Execute() {
 
     uint64_t batches_processed = 0;
     bool finished = false;
-    std::shared_ptr<table_info> batch;
+    std::variant<std::shared_ptr<table_info>, GPU_DATA> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     while (!finished) {
@@ -241,17 +394,27 @@ uint64_t Pipeline::Execute() {
 
         DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source);
 
+        OperatorResult produce_result;
+        OperatorResult source_result_or;
+        std::variant<std::pair<std::shared_ptr<table_info>, OperatorResult>,
+                     std::pair<GPU_DATA, OperatorResult>>
+            result;
         // Execute the source to get the base batch
-        std::pair<std::shared_ptr<table_info>, OperatorResult> result =
-            source->ProduceBatch();
-        batch = result.first;
+        std::visit(
+            [&](auto &op) {
+                auto pb_res = op->ProduceBatch();
+                result = pb_res;
+                source_result_or = pb_res.second;
+                batch = std::variant<std::shared_ptr<table_info>, GPU_DATA>{
+                    std::in_place_type<decltype(pb_res.first)>, pb_res.first};
+                produce_result = pb_res.second == OperatorResult::FINISHED
+                                     ? OperatorResult::FINISHED
+                                     : OperatorResult::NEED_MORE_INPUT;
+            },
+            source);
         // Use NEED_MORE_INPUT for sources
         // just for compatibility with other operators' input expectations and
         // simplifying the pipeline code.
-        OperatorResult produce_result =
-            result.second == OperatorResult::FINISHED
-                ? OperatorResult::FINISHED
-                : OperatorResult::NEED_MORE_INPUT;
 
         DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result);
         // Run the between_ops and sink of the pipeline allowing repetition
@@ -264,8 +427,21 @@ uint64_t Pipeline::Execute() {
         // in the loop below and break out of this one so as not to record
         // additional batches processed and muddy this code with checks for this
         // state.
-        if (!finished && result.second == OperatorResult::FINISHED) {
-            batch = RetrieveTable(batch, std::vector<int64_t>());
+        if (!finished && source_result_or == OperatorResult::FINISHED) {
+            std::visit(
+                [&](auto &x) {
+                    using T = std::decay_t<decltype(x)>;
+                    if constexpr (std::is_same_v<T,
+                                                 std::shared_ptr<table_info>>) {
+                        batch = RetrieveTable(x, std::vector<int64_t>());
+                    } else {
+                        // make gpu batch empty!
+                        throw std::runtime_error(
+                            "Need to create empty GPU_DATA after "
+                            "ProduceBatch.");
+                    }
+                },
+                batch);
             break;
         }
     }
@@ -278,25 +454,33 @@ uint64_t Pipeline::Execute() {
 
     DEBUG_PIPELINE_FINALIZE(rank, source);
     // Finalize
-    source->FinalizeSource();
+    std::visit([&](auto &vop) { vop->FinalizeSource(); }, source);
 
-    for (auto& op : between_ops) {
+    for (auto &op : between_ops) {
         DEBUG_PIPELINE_FINALIZE(rank, op);
-        op->FinalizeProcessBatch();
+        std::visit([&](auto &vop) { vop->FinalizeProcessBatch(); }, op);
     }
     DEBUG_PIPELINE_FINALIZE(rank, sink);
-    sink->FinalizeSink();
+    std::visit([&](auto &vop) { vop->FinalizeSink(); }, sink);
 
     executed = true;
     return batches_processed;
 }
 
-std::variant<std::shared_ptr<table_info>, PyObject*> Pipeline::GetResult() {
-    return sink->GetResult();
+std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
+             std::variant<GPU_DATA, PyObject *>>
+Pipeline::GetResult() {
+    std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
+                 std::variant<GPU_DATA, PyObject *>>
+        res;
+    std::visit([&](auto &vop) { res = vop->GetResult(); }, sink);
+    return res;
 }
 
 std::shared_ptr<Pipeline> PipelineBuilder::Build(
-    std::shared_ptr<PhysicalSink> sink) {
+    std::variant<std::shared_ptr<PhysicalSink>,
+                 std::shared_ptr<PhysicalGPUSink>>
+        sink) {
     auto pipeline = std::make_shared<Pipeline>();
     pipeline->source = source;
     pipeline->between_ops = std::move(between_ops);

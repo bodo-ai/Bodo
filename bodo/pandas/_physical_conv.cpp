@@ -10,6 +10,7 @@
 #include "physical/aggregate.h"
 #include "physical/cte.h"
 #include "physical/filter.h"
+#include "physical/gpu_join.h"
 #include "physical/join.h"
 #include "physical/join_filter.h"
 #include "physical/limit.h"
@@ -252,10 +253,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op, get_use_cudf());
+    std::variant<std::shared_ptr<PhysicalJoin>,
+                 std::shared_ptr<PhysicalGPUJoin>>
+        physical_join;
+    if (node_run_on_gpu(op)) {
+        physical_join = std::make_shared<PhysicalGPUJoin>(op);
+    } else {
+        physical_join = std::make_shared<PhysicalJoin>(op, get_use_cudf());
+    }
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
+    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, join_filter_states,
                                     join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
@@ -278,8 +286,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
      * that to store the build-side pipeline in join_filter_states so
      * that it is accessible when processing the probe side.
      */
-    std::shared_ptr<Pipeline> done_pipeline =
-        rhs_builder.active_pipeline->Build(physical_join);
+    std::shared_ptr<Pipeline> done_pipeline;
+    std::visit(
+        [&](auto& vop) {
+            done_pipeline = rhs_builder.active_pipeline->Build(vop);
+        },
+        physical_join);
     if (!done_pipeline) {
         throw std::runtime_error("done_pipeline null in ComparisonJoin.");
     }
@@ -291,11 +303,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    physical_join->buildProbeSchemas(op, op.conditions, build_table_schema,
-                                     probe_table_schema);
-    (*this->join_filter_states)[op.join_id] = physical_join->getJoinStatePtr();
-
-    this->active_pipeline->AddOperator(physical_join);
+    std::visit(
+        [&](auto& vop) {
+            vop->buildProbeSchemas(op, op.conditions, build_table_schema,
+                                   probe_table_schema);
+            (*this->join_filter_states)[op.join_id] = vop->getJoinStatePtr();
+            this->active_pipeline->AddOperator(vop);
+        },
+        physical_join);
     // Build side pipeline runs before probe side.
     this->active_pipeline->addRunBefore(done_pipeline);
 }
@@ -366,7 +381,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     // Same as LogicalComparisonJoin, but without conditions.
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
+    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, join_filter_states,
                                     join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
@@ -412,8 +427,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
         // UNION ALL
         if (op.setop_all) {
             // Right-child will feed into a table.
-            PhysicalPlanBuilder rhs_builder(ctes, join_filter_states,
-                                            join_filter_pipelines);
+            PhysicalPlanBuilder rhs_builder(
+                ctes, run_on_gpu, join_filter_states, join_filter_pipelines);
             rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();

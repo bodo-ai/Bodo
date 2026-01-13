@@ -126,7 +126,10 @@ class PhysicalProcessBatch : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
-#define GPU_DATA PyObject*
+struct GPU_DATA {
+    PyObject* pyobj;
+};
+
 /**
  * @brief Base class for operators that produce batches at the start of
  * pipelines.

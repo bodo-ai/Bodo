@@ -17,9 +17,15 @@
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
    private:
-    std::shared_ptr<PhysicalSource> source;
-    std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
-    std::shared_ptr<PhysicalSink> sink;
+    std::variant<std::shared_ptr<PhysicalSource>,
+                 std::shared_ptr<PhysicalGPUSource>>
+        source;
+    std::vector<std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                             std::shared_ptr<PhysicalGPUProcessBatch>>>
+        between_ops;
+    std::variant<std::shared_ptr<PhysicalSink>,
+                 std::shared_ptr<PhysicalGPUSink>>
+        sink;
     bool executed;
     // A vector of pipelines that needs to run before the current pipeline.
     std::vector<std::shared_ptr<Pipeline>> run_before;
@@ -34,8 +40,9 @@ class Pipeline {
      * @return - bool that is True if some operator in the pipeline has
      * indicated that no more output needs to be generated.
      */
-    bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch,
-                            OperatorResult prev_op_result, int rank);
+    bool midPipelineExecute(
+        unsigned idx, std::variant<std::shared_ptr<table_info>, GPU_DATA> batch,
+        OperatorResult prev_op_result, int rank);
 
     friend class PipelineBuilder;
 
@@ -49,7 +56,9 @@ class Pipeline {
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write
     // returns a PyObject* of Iceberg files infos.
-    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult();
+    std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
+                 std::variant<GPU_DATA, PyObject *>>
+    GetResult();
 
     // Const iterator accessors
     std::vector<std::shared_ptr<Pipeline>>::const_iterator run_before_begin()
@@ -84,16 +93,23 @@ class Pipeline {
 
 class PipelineBuilder {
    private:
-    std::shared_ptr<PhysicalSource> source;
-    std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
     std::vector<std::shared_ptr<Pipeline>> run_before;
+
+    std::variant<std::shared_ptr<PhysicalSource>,
+                 std::shared_ptr<PhysicalGPUSource>>
+        source;
+    std::vector<std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                             std::shared_ptr<PhysicalGPUProcessBatch>>>
+        between_ops;
 
    public:
     explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
         : source(std::move(_source)) {}
 
     // Add a physical operator to the pipeline
-    void AddOperator(std::shared_ptr<PhysicalProcessBatch> op) {
+    void AddOperator(std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                                  std::shared_ptr<PhysicalGPUProcessBatch>>
+                         op) {
         between_ops.emplace_back(op);
     }
 
@@ -105,7 +121,10 @@ class PipelineBuilder {
     }
 
     /// @brief Build the pipeline and return it
-    std::shared_ptr<Pipeline> Build(std::shared_ptr<PhysicalSink> sink);
+    std::shared_ptr<Pipeline> Build(
+        std::variant<std::shared_ptr<PhysicalSink>,
+                     std::shared_ptr<PhysicalGPUSink>>
+            sink);
 
     /**
      * @brief Build the last pipeline for a plan, using a result collector as
@@ -130,9 +149,62 @@ class PipelineBuilder {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     std::shared_ptr<bodo::Schema> getPrevOpOutputSchema() {
+        std::shared_ptr<bodo::Schema> ret;
         if (this->between_ops.empty()) {
-            return this->source->getOutputSchema();
+            std::visit([&](auto &vop) { ret = vop->getOutputSchema(); },
+                       this->source);
+            return ret;
         }
-        return this->between_ops.back()->getOutputSchema();
+        std::visit([&](auto &vop) { ret = vop->getOutputSchema(); },
+                   this->between_ops.back());
+        return ret;
     }
 };
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
+
+template <typename OpT, typename BatchT>
+auto prepare_batch_for_operator(OpT &op, BatchT &batch) {
+    using Op = std::decay_t<OpT>;
+    using B = std::decay_t<BatchT>;
+
+    // CPU operator
+    if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalProcessBatch>>) {
+        if constexpr (std::is_same_v<B, GPU_DATA>) {
+            return convertGPUToTable(batch);
+        } else {
+            return batch;  // already table_info
+        }
+    }
+
+    // GPU operator
+    else if constexpr (std::is_same_v<
+                           Op, std::shared_ptr<PhysicalGPUProcessBatch>>) {
+        if constexpr (std::is_same_v<B, std::shared_ptr<table_info>>) {
+            return convertTableToGPU(batch);
+        } else {
+            return batch;  // already GPU_DATA
+        }
+    }
+
+    // CPU sink
+    else if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalSink>>) {
+        if constexpr (std::is_same_v<B, GPU_DATA>) {
+            return convertGPUToTable(batch);
+        } else {
+            return batch;  // already table_info
+        }
+    }
+
+    // GPU sink
+    else if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalGPUSink>>) {
+        if constexpr (std::is_same_v<B, std::shared_ptr<table_info>>) {
+            return convertTableToGPU(batch);
+        } else {
+            return batch;  // already GPU_DATA
+        }
+    } else {
+        return batch;
+    }
+}

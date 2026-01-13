@@ -18,10 +18,21 @@ struct CTEInfo {
 };
 
 class PhysicalPlanBuilder {
+   private:
+    bool node_run_on_gpu(duckdb::LogicalOperator& op) {
+        auto iter = run_on_gpu.find(&op);
+        if (iter == run_on_gpu.end()) {
+            return false;
+        } else {
+            return iter->second;
+        }
+    }
+
    public:
     std::shared_ptr<PipelineBuilder> active_pipeline;
     std::shared_ptr<Pipeline> terminal_pipeline;
     std::map<duckdb::idx_t, CTEInfo>& ctes;
+    std::map<void*, bool>& run_on_gpu;
 
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
@@ -33,6 +44,7 @@ class PhysicalPlanBuilder {
 
     PhysicalPlanBuilder(
         std::map<duckdb::idx_t, CTEInfo>& _ctes,
+        std::map<void*, bool>& _run_on_gpu,
         std::shared_ptr<std::unordered_map<int, JoinState*>>
             _join_filter_states =
                 std::make_shared<std::unordered_map<int, JoinState*>>(),
@@ -41,6 +53,7 @@ class PhysicalPlanBuilder {
                 std::unordered_map<int, std::shared_ptr<Pipeline>>>())
         : active_pipeline(nullptr),
           ctes(_ctes),
+          run_on_gpu(_run_on_gpu),
           join_filter_states(_join_filter_states),
           join_filter_pipelines(_join_filter_pipelines) {}
 

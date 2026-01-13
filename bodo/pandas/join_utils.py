@@ -67,6 +67,18 @@ def cpp_table_to_pylibcudf_table(cpp_table_ptr, stream):
     ), bodo_df.columns
 
 
+def pylibcudf_table_to_cpp_table(pylibcudf_table, stream, column_names):
+    if stream is None:
+        stream = rmm.pylibrmm.stream.Stream(plc.utils.CUDF_DEFAULT_STREAM)
+    if column_names is None:
+        column_names = ["C" + str(i) for i in range(pylibcudf_table.num_columns())]
+
+    result_arrow_table = pylibcudf_table.to_arrow(metadata=column_names, stream=stream)
+    result_df = result_arrow_table.to_pandas()
+    out_ptr, _ = df_to_cpp_table(result_df)
+    return out_ptr
+
+
 def cpp_table_to_hash_join(cpp_table_ptr, nkeys):
     """
     cpp_table_ptr: pointer to C++ table_info (or equivalent)
