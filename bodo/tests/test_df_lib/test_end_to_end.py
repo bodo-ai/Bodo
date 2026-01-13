@@ -1816,6 +1816,7 @@ def test_series_compound_expression(datapath):
 
         py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
         py_df2 = (py_df1["A"] + 50) * 2 / 7
+        py_df2 = py_df2.astype(pd.ArrowDtype(pa.float64()))
 
     _test_equal(
         bodo_df2,
