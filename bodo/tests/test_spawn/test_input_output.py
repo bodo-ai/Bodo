@@ -32,7 +32,7 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame(
                 {"A": list(range(100))},
-                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50),
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50, names=["AA", "BB"]),
             ),
             id="multi_index",
             marks=[pytest.mark.slow],
