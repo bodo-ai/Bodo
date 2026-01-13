@@ -252,8 +252,10 @@ def gatherv_nojit(data, root, comm):
         return None
 
     # Fallback to JIT version if unsupported type
-    if data is not None and not isinstance(
-        data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
+    if (
+        data is not None
+        and not isinstance(data, ArrowExtensionArray)
+        and not _is_supported_gather_scatter_type(data)
     ):
         # Import compiler lazily
         import bodo.decorators
@@ -290,6 +292,21 @@ def gatherv_nojit(data, root, comm):
     return out
 
 
+def _is_supported_gather_scatter_type(data) -> bool:
+    """Make sure data is a DataFrame or Series with types supported in gather/scatter (without categorical dtypes currently)."""
+
+    if isinstance(data, pd.DataFrame):
+        for dtype in data.dtypes:
+            if pd.api.types.is_categorical_dtype(dtype):
+                return False
+
+    if isinstance(data, pd.Series):
+        if pd.api.types.is_categorical_dtype(data.dtype):
+            return False
+
+    return isinstance(data, (pd.DataFrame, pd.Series))
+
+
 def scatterv_nojit(data, root, comm):
     """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
@@ -308,7 +325,7 @@ def scatterv_nojit(data, root, comm):
     data = sample_data if not is_sender else data
 
     # Fallback to JIT version if unsupported type
-    if not isinstance(data, (pd.DataFrame, pd.Series)):
+    if not _is_supported_gather_scatter_type(data):
         # Import compiler lazily
         from bodo.libs.distributed_api import scatterv
 
