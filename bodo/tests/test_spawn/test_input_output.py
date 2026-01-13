@@ -90,7 +90,8 @@ def df_value(request):
         ),
         pytest.param(
             pd.Series(
-                list(range(100)), pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50)
+                list(range(100)),
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50, names=["AA", "BB"]),
             ),
             id="multi_index",
             marks=[pytest.mark.slow],
