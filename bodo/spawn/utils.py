@@ -305,7 +305,7 @@ def _is_supported_gather_scatter_type(data) -> bool:
             return False
 
     return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(
-        data.index, (pd.CategoricalIndex, pd.PeriodIndex)
+        data.index, (pd.CategoricalIndex, pd.PeriodIndex, pd.IntervalIndex)
     )
 
 

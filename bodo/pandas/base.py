@@ -250,7 +250,7 @@ def _empty_like(val):
     if is_cat_index:
         out.index = original_val.index[:0]
 
-    if isinstance(original_val.index, pd.PeriodIndex):
+    if isinstance(original_val.index, (pd.PeriodIndex, pd.IntervalIndex)):
         out.index = original_val.index[:0]
 
     if is_series:
