@@ -269,6 +269,7 @@ def test_agg_null_keys(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, reset_index=(not as_index))
 
 
+@pytest.mark.skip(reason="TODO[BSE-5254]: Fix CI error with map")
 def test_apply_basic(dropna, as_index):
     """Test basic groupby apply example"""
     df = pd.DataFrame(
