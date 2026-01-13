@@ -3718,7 +3718,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
         std::optional<std::shared_ptr<table_info>> new_data_ =
             join_state->probe_shuffle_state.ShuffleIfRequired(
-                local_is_last, join_state->local_is_last_debug_counter);
+                local_is_last, join_state->local_is_last_debug_counter,
+                join_state->op_id);
 
         if (local_is_last && join_state->local_is_last_debug_counter == 2) {
             std::cout

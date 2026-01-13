@@ -694,7 +694,8 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
 
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
-                                           const int print_debug) {
+                                           const int print_debug,
+                                           const int op_id) {
     // Reduce MPI call overheads by communicating only every 10 iterations
     if (!(is_last || ((this->curr_iter % 10) == 0))) {
         return std::nullopt;
@@ -850,6 +851,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
         num_send_reqs += send_state.GetNumSendRequests();
     }
     std::cout << "[DEBUG]: ShuffleState BEFORE SEND: Rank " << myrank
+              << " OP_ID " << op_id
               << " Number of send requests in flight: " << num_send_reqs
               << std::endl;
 
