@@ -219,6 +219,8 @@ def gatherv_nojit(data, root, comm):
         df_to_cpp_table,
     )
 
+    original_data = data
+
     if isinstance(data, pd.arrays.DatetimeArray):
         arr = pa.array(data)
         data = pd.array(arr, dtype=pd.ArrowDtype(arr.type))
@@ -248,7 +250,7 @@ def gatherv_nojit(data, root, comm):
         import bodo.decorators
         from bodo.libs.distributed_api import gatherv
 
-        return gatherv(data, False, True, root, comm)
+        return gatherv(original_data, False, True, root, comm)
 
     is_series = isinstance(data, pd.Series)
     is_array = isinstance(data, ArrowExtensionArray)
@@ -293,6 +295,7 @@ def scatterv_nojit(data, root, comm):
     is_sender = root == MPI.ROOT
 
     sample_data = comm.bcast(_get_data_sample(data) if is_sender else None, root)
+    original_data = data
     data = sample_data if not is_sender else data
 
     # Fallback to JIT version if unsupported type
@@ -300,7 +303,7 @@ def scatterv_nojit(data, root, comm):
         # Import compiler lazily
         from bodo.libs.distributed_api import scatterv
 
-        return scatterv(data, None, True, root, comm)
+        return scatterv(original_data, None, True, root, comm)
 
     is_series = isinstance(data, pd.Series)
 
@@ -344,7 +347,13 @@ def _get_data_sample(data):
         # NOTE: handles object columns correctly using Arrow schema inference for Pandas
         return _empty_like(data)
 
-    return data[:0]
+    if isinstance(data, dict):
+        return {k: _get_data_sample(v) for k, v in data.items()}
+
+    try:
+        return data[:0]
+    except Exception:
+        return data
 
 
 def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
