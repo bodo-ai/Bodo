@@ -836,8 +836,9 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last,
     if (print_debug == 2) {
         std::cout << fmt::format(
                          "[DEBUG]:{} ShuffleState: Rank {} received "
-                         "local_is_last = true",
-                         __LINE__, myrank)
+                         "local_is_last = true | schema = {}",
+                         __LINE__, myrank,
+                         this->table_buffer->data_table->schema()->ToString())
                   << std::endl;
     }
     std::cout << fmt::format(
