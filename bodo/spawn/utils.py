@@ -304,7 +304,9 @@ def _is_supported_gather_scatter_type(data) -> bool:
         if pd.api.types.is_categorical_dtype(data.dtype):
             return False
 
-    return isinstance(data, (pd.DataFrame, pd.Series))
+    return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(
+        data.index, pd.CategoricalIndex
+    )
 
 
 def scatterv_nojit(data, root, comm):

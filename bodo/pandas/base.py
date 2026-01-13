@@ -237,11 +237,18 @@ def _empty_like(val):
             cat_cols.add(cname)
             val = val.assign(**{cname: np.arange(len(val))})
 
+    is_cat_index = isinstance(val.index, pd.CategoricalIndex)
+    if is_cat_index:
+        val = val.reset_index(drop=True)
+
     # Reuse arrow_to_empty_df to make sure details like Index handling are correct
     out = arrow_to_empty_df(pa.Schema.from_pandas(val))
 
     for cname in cat_cols:
         out[cname] = original_val[cname].iloc[:0]
+
+    if is_cat_index:
+        out.index = original_val.index[:0]
 
     if is_series:
         out = out.iloc[:, 0]
