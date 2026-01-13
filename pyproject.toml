@@ -304,7 +304,7 @@ done
 [tool.cibuildwheel.windows]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
-set BODO_NUM_WORKERS=2 && for /f "delims=" %i in ('python -c "import sys; print(sys.prefix)"') do set I_MPI_ROOT=%i && python "{project}\\buildscripts\\bodo\\pip\\test.py"
+set BODO_NUM_WORKERS=2 && python "{project}\\buildscripts\\bodo\\pip\\test.py"
 """
 
 # ---------------------------------------- PR CI ---------------------------------------- #
