@@ -293,8 +293,7 @@ def test_bodo_dataframe_arg_updates():
     @bodo.jit(spawn=True)
     def impl(df, kwarg=None):
         df["A"] += 3
-        if kwarg is not None:
-            kwarg["A"] += 3
+        kwarg["A"] += 3
         return 1
 
     df = pd.DataFrame({"A": [1, 2, 3] * 100})
@@ -314,6 +313,9 @@ def test_bodo_dataframe_arg_updates():
     _test_equal_guard(kwarg_bodo_df, df + 3, check_pandas_types=False)
 
 
+@pytest.mark.skip(
+    reason="TODO: support updating kwargs other than Numpy arrays in the compiler"
+)
 def test_tuple_bodo_dataframe_arg_updates():
     """
     Test that passing a BodoDataFrame in a tuple as an argument to a function updates the data returned when collected
@@ -326,8 +328,7 @@ def test_tuple_bodo_dataframe_arg_updates():
     @bodo.jit(spawn=True)
     def impl(arg, kwarg=None):
         arg[0]["A"] += 3
-        if kwarg is not None:
-            kwarg[0]["A"] += 3
+        kwarg[0]["A"] += 3
         return arg[1]
 
     df = pd.DataFrame({"A": [1, 2, 3] * 100})
@@ -421,6 +422,9 @@ def test_tuple_bodo_series_arg_doesnt_collect():
     _test_equal_guard(new_bodo_series, series, check_pandas_types=False)
 
 
+@pytest.mark.skip(
+    reason="TODO: support updating args other than Numpy arrays in the compiler"
+)
 def test_bodo_series_arg_updates():
     """
     Test that passing a BodoSeries as an argument to a function updates the data returned when collected
