@@ -2645,7 +2645,7 @@ def test_scatterv_None_warning(df_value):
         assert len(warn) == 1
         assert (
             str(warn[0].message)
-            == "bodo.libs.distributed_api.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
+            == "bodo.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
             "This data won't be sent to any other ranks and will be overwritten with data from rank 0."
         )
 
