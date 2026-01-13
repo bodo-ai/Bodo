@@ -2897,7 +2897,7 @@ def test_barrier_error():
 
     with pytest.raises(
         numba.TypingError,
-        match=r"too many positional arguments",
+        match=r"unsupported features or typing issues",
     ):
         bodo.jit(f)()
 
