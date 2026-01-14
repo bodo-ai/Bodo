@@ -2921,8 +2921,8 @@ def test_subdate_cols_td_arg1(
     # other tests
     in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
     in_dfs["TABLE1"]["INTERVALS"] = [
-        np.timedelta64(10, "Y"),
-        np.timedelta64(9, "M"),
+        np.timedelta64(100, "h"),
+        np.timedelta64(9, "h"),
         np.timedelta64(8, "W"),
         np.timedelta64(6, "h"),
         np.timedelta64(5, "m"),
@@ -2964,8 +2964,8 @@ def test_subdate_td_scalars(
     # other tests
     in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
     in_dfs["TABLE1"]["INTERVALS"] = [
-        np.timedelta64(10, "Y"),
-        np.timedelta64(9, "M"),
+        np.timedelta64(100, "h"),
+        np.timedelta64(9, "h"),
         np.timedelta64(8, "W"),
         np.timedelta64(6, "h"),
         np.timedelta64(5, "m"),

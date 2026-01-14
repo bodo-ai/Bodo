@@ -540,8 +540,8 @@ def bodosql_date_types(request):
             "TABLE1": pd.DataFrame(
                 {
                     "A": [
-                        np.timedelta64(10, "Y"),
-                        np.timedelta64(9, "M"),
+                        np.timedelta64(100, "h"),
+                        np.timedelta64(9, "h"),
                         np.timedelta64(8, "W"),
                     ]
                     * 4,
@@ -894,7 +894,7 @@ def bodosql_nullable_numeric_types(request):
                     ),
                     "B": pd.Series(
                         [
-                            np.timedelta64(10, "Y"),
+                            np.timedelta64(100, "h"),
                             np.timedelta64("NaT"),
                             np.timedelta64("NaT"),
                             np.timedelta64("NaT"),

@@ -1201,8 +1201,8 @@ def test_td64_max(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
@@ -1217,8 +1217,8 @@ def test_td64_min(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
@@ -1320,8 +1320,8 @@ def test_td64_astype_int64(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
