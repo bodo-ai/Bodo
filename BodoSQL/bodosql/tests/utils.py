@@ -971,7 +971,7 @@ def check_query_jit_1D(
     )
     if is_out_distributed:
         try:
-            bodosql_output = bodo.gatherv(bodosql_output)
+            bodosql_output = bodo.libs.distributed_api.gatherv(bodosql_output)
         except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)
@@ -1065,7 +1065,7 @@ def check_query_jit_1DVar(
     )
     if is_out_distributed:
         try:
-            bodosql_output = bodo.gatherv(bodosql_output)
+            bodosql_output = bodo.libs.distributed_api.gatherv(bodosql_output)
         except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)

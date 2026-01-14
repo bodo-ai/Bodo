@@ -970,7 +970,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
         bodo.barrier()
 
         bodo_result = bodo.jit(sf_read)(conn, b_tablename)
-        bodo_result = bodo.gatherv(bodo_result)
+        bodo_result = bodo.libs.distributed_api.gatherv(bodo_result)
 
     passed = 1
     if bodo.get_rank() == 0:
@@ -1113,7 +1113,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         test_write(_get_dist_arg(df), b_tablename, conn, schema)
         bodo_result = bodo.jit(sf_read)(conn, b_tablename)
 
-    bodo_result = bodo.gatherv(bodo_result)
+    bodo_result = bodo.libs.distributed_api.gatherv(bodo_result)
 
     passed = 1
     if bodo.get_rank() == 0:
@@ -1266,7 +1266,7 @@ def test_snowflake_to_sql_nullarray(memory_leak_check):
         if bodo.get_rank() == 0:
             py_output = sf_read(conn, b_tablename)
 
-    bodo_result = bodo.gatherv(bodo_result)
+    bodo_result = bodo.libs.distributed_api.gatherv(bodo_result)
 
     passed = 1
     if bodo.get_rank() == 0:
@@ -1391,7 +1391,7 @@ def test_snowflake_to_sql_colname_case(memory_leak_check):
             return pd.read_sql(f"select * from {name}", conn)
 
         bodo_result = bodo.jit(sf_read)(conn)
-        bodo_result = bodo.gatherv(bodo_result)
+        bodo_result = bodo.libs.distributed_api.gatherv(bodo_result)
 
         passed = 1
         if bodo.get_rank() == 0:

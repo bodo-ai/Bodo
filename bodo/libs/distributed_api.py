@@ -200,6 +200,21 @@ def barrier():  # pragma: no cover
     _barrier()
 
 
+@overload(bodo.barrier)
+def barrier_overload():  # pragma: no cover
+    return lambda: _barrier()
+
+
+@overload(bodo.get_rank)
+def get_rank_overload():  # pragma: no cover
+    return lambda: get_rank()
+
+
+@overload(bodo.get_size)
+def get_size_overload():  # pragma: no cover
+    return lambda: get_size()
+
+
 @numba.njit(cache=True)
 def get_cpu_id():  # pragma: no cover
     """
@@ -723,6 +738,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=Non
     return gatherv_impl_wrapper(data, allgather, warn_if_rep, root, comm_ptr)
 
 
+@overload(bodo.gatherv)
 @overload(gatherv)
 def gatherv_overload(
     data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
@@ -798,6 +814,19 @@ def overload_distributed_transpose(arr):
 @numba.njit(cache=True)
 def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     return rebalance_impl(data, dests, random, random_seed, parallel)
+
+
+@overload(bodo.rebalance)
+def rebalance_overload(
+    data, dests=None, random=False, random_seed=None, parallel=False
+):
+    return (
+        lambda data,
+        dests=None,
+        random=False,
+        random_seed=None,
+        parallel=False: rebalance_impl(data, dests, random, random_seed, parallel)
+    )
 
 
 @numba.generated_jit(nopython=True, no_unliteral=True)
@@ -912,6 +941,19 @@ def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
     return random_shuffle_impl(data, seed, dests, n_samples, parallel)
 
 
+@overload(bodo.random_shuffle)
+def random_shuffle_overload(
+    data, seed=None, dests=None, n_samples=None, parallel=False
+):
+    return (
+        lambda data,
+        seed=None,
+        dests=None,
+        n_samples=None,
+        parallel=False: random_shuffle_impl(data, seed, dests, n_samples, parallel)
+    )
+
+
 @numba.generated_jit(nopython=True)
 def random_shuffle_impl(data, seed=None, dests=None, n_samples=None, parallel=False):
     func_text = (
@@ -979,6 +1021,14 @@ def allgatherv(data, warn_if_rep=True, root=DEFAULT_ROOT):
 
 @numba.generated_jit(nopython=True)
 def allgatherv_impl(data, warn_if_rep=True, root=DEFAULT_ROOT):
+    return lambda data, warn_if_rep=True, root=DEFAULT_ROOT: gatherv(
+        data, True, warn_if_rep, root
+    )  # pragma: no cover
+
+
+@overload(bodo.allgatherv)
+def allgatherv_overload(data, warn_if_rep=True, root=DEFAULT_ROOT):
+    """support bodo.allgatherv() inside jit functions"""
     return lambda data, warn_if_rep=True, root=DEFAULT_ROOT: gatherv(
         data, True, warn_if_rep, root
     )  # pragma: no cover
@@ -1280,6 +1330,7 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=
     return scatterv_impl(data, send_counts, warn_if_dist, root, comm_ptr)
 
 
+@overload(bodo.scatterv)
 @overload(scatterv)
 def scatterv_overload(
     data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -2323,6 +2374,16 @@ def parallel_print(*args):  # pragma: no cover
     print(*args)
 
 
+@overload(bodo.parallel_print)
+def overload_parallel_print(*args):
+    """print input arguments on all ranks in parallel"""
+
+    def impl(*args):  # pragma: no cover
+        parallel_print(*args)
+
+    return impl
+
+
 @numba.njit(cache=True)
 def single_print(*args):  # pragma: no cover
     if bodo.libs.distributed_api.get_rank() == 0:
@@ -2896,16 +2957,3 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
-
-
-# Replace top export wrappers to help function matching inside JIT compilation
-bodo.allgatherv = allgatherv
-bodo.barrier = barrier
-bodo.gatherv = gatherv
-bodo.get_rank = get_rank
-bodo.get_size = get_size
-bodo.get_nodes_first_ranks = get_nodes_first_ranks
-bodo.parallel_print = parallel_print
-bodo.rebalance = rebalance
-bodo.random_shuffle = random_shuffle
-bodo.scatterv = scatterv
