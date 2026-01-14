@@ -2655,7 +2655,9 @@ def test_series_describe_numeric(percentiles):
         # For all other stats (count, mean, std, min, max), keep exact check
         _test_equal(
             describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
-            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]).astype(
+                pd.ArrowDtype(pa.float64())
+            ),
             check_pandas_types=False,
         )
 
