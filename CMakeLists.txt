@@ -760,8 +760,9 @@ endif()
 cmake_print_variables(NO_HDF5)
 
 if (USE_CUDF)
-  set(sources_list "${sources_list}"
-    "bodo/pandas/libcudf_hash_join.cpp")
+    list(APPEND sources_list
+    "bodo/pandas/libcudf_hash_join.cpp"
+    "bodo/libs/streaming/cuda_join.cpp")
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
@@ -934,9 +935,10 @@ if(USE_CUDF)
   #set(CMAKE_SKIP_INSTALL_RPATH FALSE)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
-  find_package(cudf REQUIRED CONFIG)
+    #find_package(cudf REQUIRED CONFIG)
+  message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf 
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
       libkvikio

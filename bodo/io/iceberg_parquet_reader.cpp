@@ -407,8 +407,10 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
     CHECK_ARROW_READER_AND_ASSIGN(
         builder->GetScanOptions(), "Error during GetScanOptions",
         std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
-
+    
+    #if ARROW_VERSION_MAJOR >= 22
     scan_options->cpu_executor = cpu_executor;
+    #endif
 
     return scan_options;
 }
