@@ -67,7 +67,7 @@ jobs:
       - name: Get Version
         run: |
           set -exo pipefail
-          echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
+          echo "BODO_VERSION=2025.12.2" >> $GITHUB_ENV
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
 
       - name: Build Bodo Conda Package
