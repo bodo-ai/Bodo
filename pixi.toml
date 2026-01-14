@@ -113,6 +113,7 @@ pyzmq = "*"
 
 [target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+pyarrow-core = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps

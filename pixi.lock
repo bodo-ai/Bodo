@@ -65,7 +65,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3394656_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12-hedf47ba_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12.2-hedf47ba_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cffi-1.17.1-py314ha6a4811_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -384,7 +384,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/sqlalchemy-2.0.45-py314h5bd0f2a_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/sysroot_linux-64-2.28-h4ee821c_9.conda
@@ -507,7 +507,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cairo-1.18.4-h83712da_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12-h185addb_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12.2-h185addb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cffi-1.17.1-py314h7fea217_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -826,7 +826,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/sqlalchemy-2.0.45-py314hafb4487_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/sysroot_linux-aarch64-2.28-h585391f_9.conda
@@ -945,7 +945,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cairo-1.18.4-h950ec3b_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12-h23dfd00_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12.2-h23dfd00_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cctools_impl_osx-64-1030.6.3-llvm19_1_h3b512aa_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cctools_osx-64-1030.6.3-llvm19_1_h8f0d4bb_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
@@ -1251,7 +1251,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/sqlalchemy-2.0.45-py314h6482030_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/tapi-1600.0.11.8-h8d8e812_0.conda
@@ -1347,7 +1347,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cairo-1.18.4-h6a3b0d2_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12-h414bf82_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12.2-h414bf82_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_impl_osx-arm64-1030.6.3-llvm19_1_h8c76c84_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_osx-arm64-1030.6.3-llvm19_1_h6d92914_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
@@ -1653,7 +1653,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/sqlalchemy-2.0.45-py314h0612a62_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tapi-1600.0.11.8-h997e182_0.conda
@@ -1744,7 +1744,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cairo-1.18.4-h477c42c_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12-h7fd822b_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12.2-h7fd822b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cffi-1.17.1-py314h5a2d7ad_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -2007,7 +2007,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/sqlalchemy-2.0.45-py314h5a2d7ad_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/symlink-exe-runtime-1.0-hcfcfb64_0.tar.bz2
@@ -2118,7 +2118,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3394656_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12-hedf47ba_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12.2-hedf47ba_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cffi-1.17.1-py314ha6a4811_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -2435,7 +2435,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/sqlalchemy-2.0.45-py314h5bd0f2a_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/sysroot_linux-64-2.28-h4ee821c_9.conda
@@ -2558,7 +2558,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cairo-1.18.4-h83712da_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12-h185addb_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12.2-h185addb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cffi-1.17.1-py314h7fea217_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -2875,7 +2875,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/sqlalchemy-2.0.45-py314hafb4487_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/sysroot_linux-aarch64-2.28-h585391f_9.conda
@@ -2994,7 +2994,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cairo-1.18.4-h950ec3b_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12-h23dfd00_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12.2-h23dfd00_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cctools_impl_osx-64-1030.6.3-llvm19_1_h3b512aa_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cctools_osx-64-1030.6.3-llvm19_1_h8f0d4bb_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
@@ -3298,7 +3298,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/sqlalchemy-2.0.45-py314h6482030_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/tapi-1600.0.11.8-h8d8e812_0.conda
@@ -3394,7 +3394,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cairo-1.18.4-h6a3b0d2_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12-h414bf82_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12.2-h414bf82_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_impl_osx-arm64-1030.6.3-llvm19_1_h8c76c84_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_osx-arm64-1030.6.3-llvm19_1_h6d92914_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
@@ -3698,7 +3698,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/sqlalchemy-2.0.45-py314h0612a62_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tapi-1600.0.11.8-h997e182_0.conda
@@ -3789,7 +3789,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cairo-1.18.4-h477c42c_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12-h7fd822b_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12.2-h7fd822b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cffi-1.17.1-py314h5a2d7ad_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -4050,7 +4050,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/sqlalchemy-2.0.45-py314h5a2d7ad_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/symlink-exe-runtime-1.0-hcfcfb64_0.tar.bz2
@@ -5219,7 +5219,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/cachetools-6.2.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3394656_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12-hedf47ba_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12.2-hedf47ba_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.1.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cffi-1.17.1-py313hfab6e84_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cfgv-3.5.0-pyhd8ed1ab_0.conda
@@ -5533,7 +5533,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/sortedcontainers-2.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/soupsieve-2.8.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/sqlalchemy-2.0.45-py313h07c4f96_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/strictyaml-1.7.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/sysroot_linux-64-2.28-h4ee821c_9.conda
@@ -8271,66 +8271,66 @@ packages:
   license: LGPL-2.1-only or MPL-1.1
   size: 1537783
   timestamp: 1766416059188
-- conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12-hedf47ba_0.conda
-  sha256: 80d2cae07db36638548628f07ec19b232ed1d885f17a6b4a82822b7d37329d2f
-  md5: cf8a7c34522b938a9e0f518dabdfc5f2
+- conda: https://conda.anaconda.org/conda-forge/linux-64/ccache-4.12.2-hedf47ba_0.conda
+  sha256: dc5869b7fb7a585d7bfcadf19e52609d0da96a8b0b1a990e7e9561543985ebb2
+  md5: 894811fefb5d282448a1685193feffaf
   depends:
   - __glibc >=2.17,<3.0.a0
-  - libgcc >=14
   - libstdcxx >=14
-  - libhiredis >=1.3.0,<1.4.0a0
-  - xxhash >=0.8.3,<0.8.4.0a0
+  - libgcc >=14
   - zstd >=1.5.7,<1.6.0a0
+  - xxhash >=0.8.3,<0.8.4.0a0
+  - libhiredis >=1.3.0,<1.4.0a0
   arch: x86_64
   platform: linux
   license: GPL-3.0-only
-  size: 725686
-  timestamp: 1768401195207
-- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12-h185addb_0.conda
-  sha256: cbaef31b758cead3bc4a64d24b9422412dc715984cebe2cf00751543061d7a8d
-  md5: 583cf8c8bd1f72ef25291a96b1028828
+  size: 726429
+  timestamp: 1768407504987
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ccache-4.12.2-h185addb_0.conda
+  sha256: 4f937b26bf492a9246c2296bc6a132bebe3d43af8f93799daa705493da260893
+  md5: bd265b4c7864af1bcc22822150cf74be
   depends:
-  - libgcc >=14
   - libstdcxx >=14
+  - libgcc >=14
   - zstd >=1.5.7,<1.6.0a0
   - xxhash >=0.8.3,<0.8.4.0a0
   - libhiredis >=1.3.0,<1.4.0a0
   arch: aarch64
   platform: linux
   license: GPL-3.0-only
-  size: 736688
-  timestamp: 1768401391886
-- conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12-h23dfd00_0.conda
-  sha256: 1cca5d942c25f5c2c290cfc692a1be91d12b14204dd89e1ebfe520e8070e933e
-  md5: 5f61e11a1dbc1010e5d5e2e11fb1e162
+  size: 737663
+  timestamp: 1768407686575
+- conda: https://conda.anaconda.org/conda-forge/osx-64/ccache-4.12.2-h23dfd00_0.conda
+  sha256: 2fa9a172498b7703896aac087c9acc7336774f608c7705f6a7c2ad3a09a6da71
+  md5: 18be62e9b80f56a47b1ccd830e5e1941
   depends:
-  - __osx >=10.13
   - libcxx >=19
+  - __osx >=10.13
   - zstd >=1.5.7,<1.6.0a0
-  - xxhash >=0.8.3,<0.8.4.0a0
   - libhiredis >=1.3.0,<1.4.0a0
+  - xxhash >=0.8.3,<0.8.4.0a0
   arch: x86_64
   platform: osx
   license: GPL-3.0-only
-  size: 595865
-  timestamp: 1768401294984
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12-h414bf82_0.conda
-  sha256: c3ecd076c6fec50acc59cda78053eb3935017a4a106cd4e57e9dd7852aeafced
-  md5: 2bc2c9042e154893e3f5ee4dde180ffa
+  size: 596204
+  timestamp: 1768407594928
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/ccache-4.12.2-h414bf82_0.conda
+  sha256: a0460f56377790cfd5d72e82bf6bb36ff3c8089f823661bcd0a249db53978d02
+  md5: 5cacaa11f10beb9477976bc997305e27
   depends:
-  - __osx >=11.0
   - libcxx >=19
+  - __osx >=11.0
   - libhiredis >=1.3.0,<1.4.0a0
-  - zstd >=1.5.7,<1.6.0a0
   - xxhash >=0.8.3,<0.8.4.0a0
+  - zstd >=1.5.7,<1.6.0a0
   arch: arm64
   platform: osx
   license: GPL-3.0-only
-  size: 551016
-  timestamp: 1768401431202
-- conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12-h7fd822b_0.conda
-  sha256: 177e7addf3e79a40a1b8c86e5d3f3aa4441359415b9e57dbb8a2ec2c08fd915d
-  md5: 2bdc0096056327a4a6d278e03d02ecb3
+  size: 551354
+  timestamp: 1768407585049
+- conda: https://conda.anaconda.org/conda-forge/win-64/ccache-4.12.2-h7fd822b_0.conda
+  sha256: b82850516a19a6fe5f6184407e541dda519c588a054e1185a5fa36fbcb0e2d80
+  md5: cca30eaea34263796765cc120e1ebbb1
   depends:
   - ucrt
   - vc >=14.3,<15
@@ -8342,8 +8342,8 @@ packages:
   arch: x86_64
   platform: win
   license: GPL-3.0-only
-  size: 650876
-  timestamp: 1768401215867
+  size: 651616
+  timestamp: 1768407513478
 - conda: https://conda.anaconda.org/conda-forge/osx-64/cctools_impl_osx-64-1030.6.3-llvm19_1_h3b512aa_3.conda
   sha256: 60dfb2c7b685aeb867c7b359ae0c7e2147b90cc15b0397040f256d17e62c4d5b
   md5: a52bbde5581ef42bdcbf050ca8c83646
@@ -25160,18 +25160,17 @@ packages:
   license_family: MIT
   size: 3774888
   timestamp: 1765352212228
-- conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.5.0-pyhcf101f3_0.conda
-  sha256: 7d894c9d0c9b5ebb4db7a830f082156b6dce28404d7ad9f4d3201b840a9e0a03
-  md5: a25b46d3c37dd33d14be68e5a457854c
+- conda: https://conda.anaconda.org/conda-forge/noarch/sqlglot-28.6.0-pyhcf101f3_0.conda
+  sha256: b8587abbdbec40fda1f193e8c89cfd09ecd6f6d509fc819a0d4f8ea5a22bb98c
+  md5: a4a2a4821aa52ab1d7c861fe2d8f563a
   depends:
   - python >=3.10
   - python
   constrains:
-  - sqlglotrs ==0.10.0
+  - sqlglotrs ==0.11.0
   license: MIT
-  license_family: MIT
-  size: 5195947
-  timestamp: 1766087767117
+  size: 5212901
+  timestamp: 1768411089262
 - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
   sha256: 570da295d421661af487f1595045760526964f41471021056e993e73089e9c41
   md5: b1b505328da7a6b246787df4b5a49fbc
