@@ -3600,7 +3600,7 @@ def test_series_quantile_singleton():
 
     _test_equal(
         out_bd,
-        out_pd,
+        out_pd.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
