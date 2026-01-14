@@ -877,7 +877,7 @@ def test_set_operations_unsupported():
 
     with pytest.raises(BodoError, match=err_msg4):
         bodo.jit(impl4)(
-            pd.date_range("2018-01-01", "2018-12-01", freq="M"),
+            pd.date_range("2018-01-01", "2018-12-01", freq="ME"),
             pd.TimedeltaIndex(
                 ["1 days", "2 days", "3 days", "4 days", "5 days", "6 days"]
             ),
