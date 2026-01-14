@@ -936,7 +936,11 @@ if(USE_CUDF)
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   find_package(cudf REQUIRED CONFIG)
   target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libkvikio)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf 
+  # Force the linker to include libkvikio even if no symbols are used directly
+      "-Wl,--no-as-needed"
+      libkvikio
+      "-Wl,--as-needed")
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
