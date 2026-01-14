@@ -17,15 +17,9 @@
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
    private:
-    std::variant<std::shared_ptr<PhysicalSource>,
-                 std::shared_ptr<PhysicalGPUSource>>
-        source;
-    std::vector<std::variant<std::shared_ptr<PhysicalProcessBatch>,
-                             std::shared_ptr<PhysicalGPUProcessBatch>>>
-        between_ops;
-    std::variant<std::shared_ptr<PhysicalSink>,
-                 std::shared_ptr<PhysicalGPUSink>>
-        sink;
+    PhysicalCpuGpuSource source;
+    std::vector<PhysicalCpuGpuProcessBatch> between_ops;
+    PhysicalCpuGpuSink sink;
     bool executed;
     // A vector of pipelines that needs to run before the current pipeline.
     std::vector<std::shared_ptr<Pipeline>> run_before;
@@ -95,21 +89,15 @@ class PipelineBuilder {
    private:
     std::vector<std::shared_ptr<Pipeline>> run_before;
 
-    std::variant<std::shared_ptr<PhysicalSource>,
-                 std::shared_ptr<PhysicalGPUSource>>
-        source;
-    std::vector<std::variant<std::shared_ptr<PhysicalProcessBatch>,
-                             std::shared_ptr<PhysicalGPUProcessBatch>>>
-        between_ops;
+    PhysicalCpuGpuSource source;
+    std::vector<PhysicalCpuGpuProcessBatch> between_ops;
 
    public:
-    explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
+    explicit PipelineBuilder(PhysicalCpuGpuSource _source)
         : source(std::move(_source)) {}
 
     // Add a physical operator to the pipeline
-    void AddOperator(std::variant<std::shared_ptr<PhysicalProcessBatch>,
-                                  std::shared_ptr<PhysicalGPUProcessBatch>>
-                         op) {
+    void AddOperator(PhysicalCpuGpuProcessBatch op) {
         between_ops.emplace_back(op);
     }
 
@@ -121,10 +109,7 @@ class PipelineBuilder {
     }
 
     /// @brief Build the pipeline and return it
-    std::shared_ptr<Pipeline> Build(
-        std::variant<std::shared_ptr<PhysicalSink>,
-                     std::shared_ptr<PhysicalGPUSink>>
-            sink);
+    std::shared_ptr<Pipeline> Build(PhysicalCpuGpuSink sink);
 
     /**
      * @brief Build the last pipeline for a plan, using a result collector as

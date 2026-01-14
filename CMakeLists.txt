@@ -915,19 +915,23 @@ if(USE_CUDF)
   add_library(libcudf SHARED IMPORTED)
   set_target_properties(libcudf PROPERTIES IMPORTED_LOCATION "${LIBCUDF_LIB}")
   # libkvikio defines
-  #execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; p=os.path.dirname(libkvikio.__file__); print(os.path.join(p, 'lib64', 'libkvikio.so'))" OUTPUT_VARIABLE LIBKVIKIO_LIB OUTPUT_STRIP_TRAILING_WHITESPACE )
-  #message(STATUS "Using libkvikio library: ${LIBKVIKIO_LIB}")
-  #execute_process( COMMAND ${Python_EXECUTABLE} -c "import libkvikio, os; print(os.path.join(os.path.dirname(libkvikio.__file__), 'lib64'))" OUTPUT_VARIABLE LIBKVIKIO_LIBDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-  #message(STATUS "Using libkvikio libdir: ${LIBKVIKIO_LIBDIR}")
   find_library(LIBKVIKIO_LIB NAMES libkvikio.so)
   get_filename_component(LIBKVIKIO_LIBDIR "${LIBKVIKIO_LIB}" DIRECTORY)
+  message(STATUS "libkvikio lib: ${LIBKVIKIO_LIB} libdir: ${LIBKVIKIO_LIBDIR}")
   add_library(libkvikio SHARED IMPORTED)
   set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
 
   set_target_properties(ext PROPERTIES
+      #BUILD_RPATH_USE_ORIGIN TRUE
+      #INSTALL_RPATH_USE_ORIGIN TRUE
     BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR}"
     INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR}"
   )
+
+  #set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+  #set(CMAKE_INSTALL_RPATH_USE_ORIGIN TRUE)
+  #set(CMAKE_SKIP_RPATH FALSE)
+  #set(CMAKE_SKIP_INSTALL_RPATH FALSE)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   find_package(cudf REQUIRED CONFIG)

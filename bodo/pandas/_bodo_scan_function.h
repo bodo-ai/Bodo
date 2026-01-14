@@ -32,7 +32,7 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      *
      * @return std::shared_ptr<PhysicalSource> read operator
      */
-    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+    virtual PhysicalCpuGpuSource CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
@@ -88,7 +88,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         Py_DECREF(path);
     }
 
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+    PhysicalCpuGpuSource CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
@@ -136,7 +136,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+    PhysicalCpuGpuSource CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
@@ -164,7 +164,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+    PhysicalCpuGpuSource CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
@@ -221,7 +221,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         Py_DECREF(this->iceberg_schema);
     };
 
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+    PhysicalCpuGpuSource CreatePhysicalOperator(
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,

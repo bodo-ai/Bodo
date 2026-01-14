@@ -293,9 +293,7 @@ bool Pipeline::midPipelineExecute(
         }
     } else {
         // Get the current operator.
-        std::variant<std::shared_ptr<PhysicalProcessBatch>,
-                     std::shared_ptr<PhysicalGPUProcessBatch>> &op =
-            between_ops[idx];
+        PhysicalCpuGpuProcessBatch &op = between_ops[idx];
         DEBUG_PIPELINE_IN_BATCH(rank, op, batch);
         while (true) {
             DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result);
@@ -477,10 +475,7 @@ Pipeline::GetResult() {
     return res;
 }
 
-std::shared_ptr<Pipeline> PipelineBuilder::Build(
-    std::variant<std::shared_ptr<PhysicalSink>,
-                 std::shared_ptr<PhysicalGPUSink>>
-        sink) {
+std::shared_ptr<Pipeline> PipelineBuilder::Build(PhysicalCpuGpuSink sink) {
     auto pipeline = std::make_shared<Pipeline>();
     pipeline->source = source;
     pipeline->between_ops = std::move(between_ops);

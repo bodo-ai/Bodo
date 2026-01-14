@@ -207,3 +207,11 @@ int get_streaming_batch_size();
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size();
+
+using PhysicalCpuGpuSource = std::variant<std::shared_ptr<PhysicalSource>,
+                                          std::shared_ptr<PhysicalGPUSource>>;
+using PhysicalCpuGpuSink = std::variant<std::shared_ptr<PhysicalSink>,
+                                        std::shared_ptr<PhysicalGPUSink>>;
+using PhysicalCpuGpuProcessBatch =
+    std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                 std::shared_ptr<PhysicalGPUProcessBatch>>;

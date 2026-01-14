@@ -7,7 +7,7 @@
 
 #include <fmt/format.h>
 
-std::shared_ptr<PhysicalSource>
+PhysicalCpuGpuSource
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
@@ -48,8 +48,7 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
                                                 this->arrow_schema);
 }
 
-std::shared_ptr<PhysicalSource>
-BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
+PhysicalCpuGpuSource BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
@@ -57,8 +56,7 @@ BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
                                                 this->arrow_schema);
 }
 
-std::shared_ptr<PhysicalSource>
-BodoParquetScanFunctionData::CreatePhysicalOperator(
+PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
@@ -72,8 +70,7 @@ BodoParquetScanFunctionData::CreatePhysicalOperator(
         limit_val, join_filter_col_stats);
 }
 
-std::shared_ptr<PhysicalSource>
-BodoIcebergScanFunctionData::CreatePhysicalOperator(
+PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
