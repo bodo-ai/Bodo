@@ -3541,7 +3541,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
     )
@@ -3563,7 +3563,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
