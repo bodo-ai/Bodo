@@ -1432,7 +1432,6 @@ def convert_nullable_object(df):
             (
                 pd.core.arrays.integer.IntegerDtype,
                 pd.core.arrays.boolean.BooleanDtype,
-                pd.StringDtype,
             ),
         )
         for x in df.dtypes
@@ -1444,7 +1443,6 @@ def convert_nullable_object(df):
                 (
                     pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
-                    pd.StringDtype,
                 ),
             ):
                 S = df.iloc[:, i]
