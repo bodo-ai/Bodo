@@ -36,6 +36,7 @@ from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
+    _test_equal,
     gen_unique_table_id,
 )
 from bodo.tests.utils_jit import reduce_sum
@@ -1335,11 +1336,10 @@ def _test_equal_guard(
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
@@ -1349,11 +1349,10 @@ def _test_equal_guard(
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
