@@ -1125,27 +1125,27 @@ def local_tz():
 @pytest.fixture
 def tz_aware_df():
     # Transition to Daylight Savings
-    # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds
+    # "1D2h37min48s" --> 1 day, 2 hours, 37 minutes, 48 seconds
     to_dst_series = pd.date_range(
-        start="11/3/2021", freq="1D2H37T48S", periods=30, tz="US/Pacific"
+        start="11/3/2021", freq="1D2h37min48s", periods=30, tz="US/Pacific"
     ).to_series()
 
     # Transition back from Daylight Savings
     from_dst_series = pd.date_range(
-        start="03/1/2022", freq="0D12H30T1S", periods=60, tz="US/Pacific"
+        start="03/1/2022", freq="0D12h30min1s", periods=60, tz="US/Pacific"
     ).to_series()
 
     # February is weird with leap years
     feb_leap_year_series = pd.date_range(
-        start="02/20/2020", freq="1D0H30T0S", periods=20, tz="US/Pacific"
+        start="02/20/2020", freq="1D0h30min0s", periods=20, tz="US/Pacific"
     ).to_series()
 
     second_quarter_series = pd.date_range(
-        start="05/01/2015", freq="2D0H1T59S", periods=20, tz="US/Pacific"
+        start="05/01/2015", freq="2D0h1min59s", periods=20, tz="US/Pacific"
     ).to_series()
 
     third_quarter_series = pd.date_range(
-        start="08/17/2000", freq="10D1H1T10S", periods=20, tz="US/Pacific"
+        start="08/17/2000", freq="10D1h1min10s", periods=20, tz="US/Pacific"
     ).to_series()
 
     df = pd.DataFrame(
