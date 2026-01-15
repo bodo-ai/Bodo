@@ -394,7 +394,7 @@ def test_timestamp_to_char(memory_leak_check):
     """simplest test for TO_CHAR on timezone-naive timestamps"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5H15T45S").to_series()
+    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5h15min45s").to_series()
     df = pd.DataFrame({"A": dt_series})
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 
