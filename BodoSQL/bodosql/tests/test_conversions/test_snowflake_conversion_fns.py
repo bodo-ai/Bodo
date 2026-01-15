@@ -720,7 +720,15 @@ def to_double_equiv(arr):
         except Exception:
             return np.nan
 
-    return arr.apply(_conv_to_double)
+    out_arr = arr.apply(_conv_to_double)
+    # Make sure NaNs are preserved correctly in Arrow conversion
+    out_arr = pa.compute.cast(
+        out_arr.map(lambda x: str(x))
+        .astype(pd.ArrowDtype(pa.large_string()))
+        .array._pa_array,
+        pa.float64(),
+    )
+    return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
 
 
 def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
@@ -728,7 +736,7 @@ def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"A": to_double_equiv(arr).astype("float64")})
+    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
     check_query(
         query,
         ctx,
