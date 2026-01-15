@@ -48,15 +48,6 @@ def test_join(
     if bodosql.use_cpp_backend and (comparison_ops != "=" or join_type != "FULL OUTER"):
         return
 
-    # For nullable integers convert the pyspark output from
-    # float to object
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -74,7 +65,6 @@ def test_join(
         spark_info,
         check_dtype=False,
         check_names=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )
@@ -104,13 +94,6 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     can be merged if aliased.
     """
     if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
-    if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
     ):
@@ -130,22 +113,12 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
 
 def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check):
     """test simple natural join queries"""
-    # For nullable integers convert the pyspark output from
-    # float to object
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -160,7 +133,6 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
         spark_info,
         check_dtype=False,
         check_names=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )

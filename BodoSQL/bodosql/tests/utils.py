@@ -73,7 +73,6 @@ def check_query(
     convert_columns_decimal: list[str] | None = None,
     convert_input_to_nullable_float: bool = True,
     convert_expected_output_to_nullable_float: bool = True,
-    convert_float_nan: bool = False,
     convert_columns_bool: list[str] | None = None,
     convert_columns_tz_naive: list[str] | None = None,
     return_codegen: bool = False,
@@ -164,10 +163,6 @@ def check_query(
 
         convert_expected_output_to_nullable_float: Convert float columns in expected
             output to nullable float if the nullable float global flag is enabled.
-
-        convert_float_nan: Convert NaN values in float columns to None.
-            This is used when Spark and Bodo will have different output
-            types.
 
         convert_columns_bool: Convert NaN values to None by setting datatype
             to boolean.
@@ -423,8 +418,6 @@ def check_query(
             }
         if convert_expected_output_to_nullable_float:
             expected_output = _convert_float_to_nullable_float(expected_output)
-        if convert_float_nan:
-            expected_output = convert_spark_nan_none(expected_output)
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
 
@@ -1419,15 +1412,6 @@ def convert_spark_timedelta(df, columns):
         .where(pd.notnull(df_proj), np.timedelta64("nat"))
         .astype("timedelta64[ns]")
     )
-    return df
-
-
-def convert_spark_nan_none(df):
-    """
-    Function the converts Float NaN values to None. This is used because Spark
-    may convert nullable integers to floats.
-    """
-    df = df.astype(object).where(pd.notnull(df), None)
     return df
 
 
