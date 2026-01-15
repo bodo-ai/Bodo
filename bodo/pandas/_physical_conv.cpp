@@ -54,9 +54,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     BodoScanFunctionData& scan_data =
         op.bind_data->Cast<BodoScanFunctionData>();
 
+#ifdef USE_CUDF
+    bool run_on_gpu = node_run_on_gpu(op);
+#endif
+
     auto physical_op = scan_data.CreatePhysicalOperator(
         selected_columns, op.table_filters, op.extra_info.limit_val,
-        this->join_filter_states);
+        this->join_filter_states
+#ifdef USE_CUDF
+        ,
+        run_on_gpu
+#endif
+    );
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
