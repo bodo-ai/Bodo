@@ -721,6 +721,9 @@ def to_double_equiv(arr):
             return None
 
     out_arr = arr.apply(_conv_to_double)
+    # Workaround Int NA being passed as NaN
+    if arr.dtype == pd.Int64Dtype():
+        out_arr = out_arr.map(lambda x: None if x == "nan" else x)
     # Make sure NaNs are preserved correctly in Arrow conversion
     out_arr = pa.compute.cast(
         out_arr.astype(pd.ArrowDtype(pa.large_string())).array._pa_array,
