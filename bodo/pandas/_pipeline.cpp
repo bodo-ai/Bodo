@@ -1,5 +1,11 @@
 #include "_pipeline.h"
+#include "physical/operator.h"
 
+#include <arrow/c/bridge.h>
+#include <arrow/table.h>
+#include <cudf/interop.hpp>
+#include <cudf/table/table_view.hpp>
+#include "physical/operator.h"
 #include "physical/result_collector.h"
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
@@ -156,70 +162,118 @@
 #endif
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
-    PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
-    if (!bodo_module) {
-        PyErr_Print();
-        throw std::runtime_error(
-            "Failed to import bodo.pandas.join_utils module");
+    cudf::table_view view = batch.table->view();
+    // Setup Metadata (Arrow requires column names)
+    // We must create a cudf::column_metadata hierarchy matching the table
+    // structure.
+    std::vector<cudf::column_metadata> meta;
+    for (const auto &name : batch.schema->field_names()) {
+        meta.emplace_back(name);
     }
 
-    PyObject *pyFunc =
-        PyObject_GetAttrString(bodo_module, "pylibcudf_table_to_cpp_table");
-    if (!pyFunc || !PyCallable_Check(pyFunc)) {
-        throw std::runtime_error(
-            "Could not find Python function pylibcudf_table_to_cpp_table");
+    cudf::unique_schema_t unique_schema = cudf::to_arrow_schema(view, meta);
+
+    // Move Data to Host (GPU -> CPU Copy happens here)
+    // 'to_arrow_host' performs the D2H copy and populates an ArrowDeviceArray.
+    cudf::unique_device_array_t unique_device_array = cudf::to_arrow_host(view);
+
+    // We release the raw pointers from the unique_ptrs because Arrow's Import
+    // function takes ownership of the C-structs and manages their lifecycle
+    // internally.
+    struct ArrowSchema *raw_schema = unique_schema.release();
+    struct ArrowDeviceArray *raw_array = unique_device_array.release();
+
+    // ImportDeviceRecordBatch is the zero-copy bridge from the C-structs to C++
+    // objects. (The data is already on CPU from step 3, so this import is
+    // cheap).
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch =
+        arrow::ImportDeviceRecordBatch(raw_array, raw_schema);
+
+    if (!maybe_batch.ok()) {
+        throw std::runtime_error("Failed to import Arrow RecordBatch: " +
+                                 maybe_batch.status().ToString());
     }
 
-    PyObject *args = PyTuple_New(3);
-    PyTuple_SET_ITEM(args, 0, batch.pyobj);
-    PyTuple_SET_ITEM(args, 1, Py_None);
-    PyTuple_SET_ITEM(args, 2, Py_None);
+    std::shared_ptr<arrow::RecordBatch> arrow_batch = maybe_batch.ValueOrDie();
 
-    PyObject *result = PyObject_CallObject(pyFunc, args);
-    Py_DECREF(args);
-    Py_DECREF(pyFunc);
-
-    if (!result) {
-        throw std::runtime_error("Python pylibcudf_table_to_cpp_table failed");
+    // Wrap in an Arrow Table
+    arrow::Result<std::shared_ptr<arrow::Table>> maybe_table =
+        arrow::Table::FromRecordBatches({arrow_batch});
+    if (!maybe_table.ok()) {
+        // Handle error (e.g., throw or log)
+        throw std::runtime_error("Failed to create Arrow Table: " +
+                                 maybe_table.status().ToString());
     }
 
-    int64_t int_res = PyLong_AsLongLong(result);
-    return std::shared_ptr<table_info>(reinterpret_cast<table_info *>(int_res));
+    std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
+
+    return arrow_table_to_bodo(table, bodo::BufferPool::Default().get());
 }
 
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
-    int64_t py_cpp_table_ptr = reinterpret_cast<int64_t>(batch.get());
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(batch);
 
-    PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.join_utils");
-    if (!bodo_module) {
-        PyErr_Print();
-        throw std::runtime_error(
-            "Failed to import bodo.pandas.join_utils module");
+    // Arrow tables can have fragmented columns (chunks). libcudf expects
+    // contiguous memory. This merges all chunks into a single RecordBatch.
+    std::shared_ptr<arrow::RecordBatch> arrow_batch;
+    auto combined_table_result = arrow_table->CombineChunks();
+    if (!combined_table_result.ok()) {
+        throw std::runtime_error("Failed to combine Arrow chunks");
+    }
+    std::shared_ptr<arrow::Table> combined_table =
+        combined_table_result.ValueOrDie();
+
+    // Read the single batch
+    arrow::TableBatchReader reader(*combined_table);
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
+        reader.Next();
+    if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
+        throw std::runtime_error("Failed to extract batch from Arrow table");
+    }
+    arrow_batch = batch_result.ValueOrDie();
+
+    // Export to C Data Interface Structs
+    // These are lightweight structs that hold pointers to the CPU data.
+    struct ArrowSchema arrow_schema;
+    struct ArrowArray arrow_array;
+
+    // ExportRecordBatch fills these structs.
+    arrow::Status status =
+        arrow::ExportRecordBatch(*arrow_batch, &arrow_array, &arrow_schema);
+    if (!status.ok()) {
+        throw std::runtime_error("Failed to export to Arrow C interface");
     }
 
-    PyObject *pyFunc =
-        PyObject_GetAttrString(bodo_module, "cpp_table_to_pylibcudf_table");
-    if (!pyFunc || !PyCallable_Check(pyFunc)) {
-        throw std::runtime_error(
-            "Could not find Python function cpp_table_to_pylibcudf_table");
+    // Wrap ArrowArray in ArrowDeviceArray for cudf
+    struct ArrowDeviceArray device_array;
+
+    // Copy the array content into the device wrapper
+    // (ArrowDeviceArray contains an 'array' member which is the ArrowArray
+    // struct)
+    device_array.array = arrow_array;
+
+    // Explicitly mark this as CPU data
+    device_array.device_id = -1;
+    device_array.device_type = ARROW_DEVICE_CPU;
+    device_array.sync_event = nullptr;  // No CUDA event needed for CPU data
+
+    // Move Data to GPU
+    // from_arrow_host parses the structs, allocates GPU memory, and performs
+    // the copy.
+    std::unique_ptr<cudf::table> result =
+        cudf::from_arrow_host(&arrow_schema, &device_array);
+
+    // Clean up the C structs (Arrow requires manual release if not imported,
+    // but Export gives us ownership, so we must release the release callbacks)
+    if (device_array.array.release) {
+        device_array.array.release(&device_array.array);
+    }
+    if (arrow_schema.release) {
+        arrow_schema.release(&arrow_schema);
     }
 
-    PyObject *intPtr = PyLong_FromLongLong(py_cpp_table_ptr);
-
-    PyObject *args = PyTuple_New(2);
-    PyTuple_SET_ITEM(args, 0, intPtr);
-    PyTuple_SET_ITEM(args, 1, Py_None);
-
-    PyObject *result = PyObject_CallObject(pyFunc, args);
-    Py_DECREF(args);
-    Py_DECREF(pyFunc);
-
-    if (!result) {
-        throw std::runtime_error("Python cpp_table_to_pylibcudf_table failed");
-    }
-
-    GPU_DATA res = {result};
-    return res;
+    // Return the cudf::table (moving ownership)
+    return GPU_DATA{std::move(result), arrow_batch->schema()};
 }
 
 /*

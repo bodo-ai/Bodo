@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cudf/table/table.hpp>
 #include <memory>
 #include <typeinfo>
 #include <utility>
@@ -127,7 +128,8 @@ class PhysicalProcessBatch : public PhysicalOperator {
 };
 
 struct GPU_DATA {
-    PyObject* pyobj;
+    std::shared_ptr<cudf::table> table;
+    std::shared_ptr<arrow::Schema> schema;
 };
 
 /**

@@ -209,12 +209,12 @@ class Executor {
                 if constexpr (std::is_same_v<
                                   T, std::variant<GPU_DATA, PyObject *>>) {
                     std::visit(
-                        [&](auto &gpu_pyobject_var) {
-                            using U = std::decay_t<decltype(gpu_pyobject_var)>;
+                        [&](auto &gpu_var) {
+                            using U = std::decay_t<decltype(gpu_var)>;
                             if constexpr (std::is_same_v<U, GPU_DATA>) {
-                                ret = convertGPUToTable(gpu_pyobject_var);
+                                ret = convertGPUToTable(gpu_var);
                             } else {
-                                ret = gpu_pyobject_var;
+                                ret = gpu_var;
                             }
                         },
                         vres);
