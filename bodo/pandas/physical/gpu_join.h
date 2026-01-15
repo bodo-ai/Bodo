@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cudf/types.hpp>
 #include "../../libs/streaming/_join.h"
+#include "../../libs/streaming/cuda_join.h"
 #include "../_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
@@ -32,7 +34,53 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
-        throw std::runtime_error("Not implemented.");
+        assert(logical_join.join_type == duckdb::JoinType::INNER);
+
+        // Probe side
+        duckdb::vector<duckdb::ColumnBinding> left_bindings =
+            logical_join.children[0]->GetColumnBindings();
+        // Build side
+        duckdb::vector<duckdb::ColumnBinding> right_bindings =
+            logical_join.children[1]->GetColumnBindings();
+
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+            left_col_ref_map = getColRefMap(left_bindings);
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+            right_col_ref_map = getColRefMap(right_bindings);
+
+        std::vector<cudf::size_type> probe_keys;
+        std::vector<cudf::size_type> build_keys;
+
+        for (const duckdb::JoinCondition& cond : logical_join.conditions) {
+            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+                throw std::runtime_error(
+                    "Non-equi join conditions are not supported in GPU join.");
+            }
+            if (cond.left->GetExpressionClass() !=
+                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Join condition left side is not a column reference.");
+            }
+            if (cond.right->GetExpressionClass() !=
+                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Join condition right side is not a column reference.");
+            }
+            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+                auto& left_bce =
+                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                auto& right_bce =
+                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
+                probe_keys.push_back(
+                    left_col_ref_map[{left_bce.binding.table_index,
+                                      left_bce.binding.column_index}]);
+                build_keys.push_back(
+                    right_col_ref_map[{right_bce.binding.table_index,
+                                       right_bce.binding.column_index}]);
+            }
+        }
+
+        this->cuda_join = CudaHashJoin(build_keys, probe_keys, cudf::null_equality::EQUAL);
     }
 
     /**
@@ -113,7 +161,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     bool has_non_equi_cond;
     bool is_mark_join = false;
     bool is_anti_join = false;
-    bool use_cudf = false;
 
     PhysicalGPUJoinMetrics metrics;
+
+    CudaHashJoin cuda_join;
 };
