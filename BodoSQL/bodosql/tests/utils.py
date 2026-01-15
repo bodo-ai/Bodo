@@ -1317,6 +1317,18 @@ def _test_equal_guard(
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
+    # Handle binary ArrowDtype comparison
+    for i, (bodo_dtype, py_dtype) in enumerate(
+        zip(bodosql_output.dtypes, expected_output.dtypes)
+    ):
+        if isinstance(bodo_dtype, pd.ArrowDtype) and (
+            pa.types.is_binary(bodo_dtype.pyarrow_dtype)
+            or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
+        ):
+            expected_output[expected_output.columns[i]] = pd.array(
+                expected_output[expected_output.columns[i]], dtype=bodo_dtype
+            )
+
     # No need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
     if bodo.get_size() == 1:
