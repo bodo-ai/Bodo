@@ -6,11 +6,20 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [feature.cudf]
 platforms = ["linux-64"]
+channels = ["rapidsai", "nvidia", "conda-forge"]
 
 [feature.cudf.dependencies]
 python = "3.13.*"
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
+rmm = ">=25.12"
+librmm = ">=25.12"
+cudf = ">=25.12"
+nccl = ">=2.18"
+numba = ">=0.60,<0.62.0"
+pyarrow = "21.0.*"
+libarrow = "21.0.*"
+
 
 [feature.cpu]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
@@ -30,8 +39,6 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-fea
 
 default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "314-linux" }
 
-[tasks.install-cudf-cu13]
-cmd = "pip install cudf-cu13==25.12 --extra-index-url https://pypi.nvidia.com"
 
 # Build Commands
 [tasks.build-bodo]
@@ -45,7 +52,6 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 # Build Commands
 [tasks.build-bodo-cudf]
-depends-on = ["install-cudf-cu13"]
 cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.USE_CUDF=ON"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-cudf.env]  # SCcache Envs
@@ -55,7 +61,6 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-san]
-depends-on = ["install-cudf-cu13"]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-cudf-san.env]  # SCcache Envs
@@ -107,7 +112,7 @@ macos = "12.0"
 [dependencies]
 pip = "*"
 # Core Python Deps
-numba = ">=0.62,<0.64.0"
+#numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
 fsspec = ">=2021.09"
@@ -154,10 +159,7 @@ libutf8proc = "*"
 [feature.cpu.target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
-
-[feature.cudf.target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
-libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+numba = ">=0.62,<0.64.0"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
