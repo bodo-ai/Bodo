@@ -4,6 +4,9 @@
 #include "physical/read_iceberg.h"
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
+#if USE_CUDF
+#include "physical/gpu_read_parquet.h"
+#endif
 
 #include <fmt/format.h>
 
@@ -11,7 +14,12 @@ PhysicalCpuGpuSource
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
+#ifdef USE_CUDF
+    ,
+    bool run_on_gpu
+#endif
+) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -51,7 +59,12 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 PhysicalCpuGpuSource BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
+#ifdef USE_CUDF
+    ,
+    bool run_on_gpu
+#endif
+) {
     return std::make_shared<PhysicalReadPandas>(df, selected_columns,
                                                 this->arrow_schema);
 }
@@ -59,12 +72,24 @@ PhysicalCpuGpuSource BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
 PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
+#ifdef USE_CUDF
+    ,
+    bool run_on_gpu
+#endif
+) {
     JoinFilterColStats join_filter_col_stats =
         this->rtjf_state_map.has_value()
             ? JoinFilterColStats(join_filter_states,
                                  this->rtjf_state_map.value())
             : JoinFilterColStats();
+#ifdef USE_CUDF
+    if (run_on_gpu) {
+        return std::make_shared<PhysicalGPUReadParquet>(
+            path, pyarrow_schema, storage_options, selected_columns,
+            filter_exprs, limit_val, join_filter_col_stats);
+    }
+#endif
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
         limit_val, join_filter_col_stats);
@@ -73,7 +98,12 @@ PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
 PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states) {
+    std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
+#ifdef USE_CUDF
+    ,
+    bool run_on_gpu
+#endif
+) {
     JoinFilterColStats join_filter_col_stats =
         this->rtjf_state_map.has_value()
             ? JoinFilterColStats(join_filter_states,
