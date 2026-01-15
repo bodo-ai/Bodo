@@ -714,18 +714,16 @@ def to_double_equiv(arr):
     def _conv_to_double(x):
         """Converts an array of values to double"""
         if pd.isna(x):
-            return np.nan
+            return None
         try:
-            return np.float64(x)
+            return str(np.float64(x))
         except Exception:
-            return np.nan
+            return None
 
     out_arr = arr.apply(_conv_to_double)
     # Make sure NaNs are preserved correctly in Arrow conversion
     out_arr = pa.compute.cast(
-        out_arr.map(lambda x: str(x))
-        .astype(pd.ArrowDtype(pa.large_string()))
-        .array._pa_array,
+        out_arr.astype(pd.ArrowDtype(pa.large_string())).array._pa_array,
         pa.float64(),
     )
     return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
