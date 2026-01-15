@@ -1,12 +1,12 @@
 #include "_pipeline.h"
 #include "physical/operator.h"
 
-#include "physical/operator.h"
-#include "physical/result_collector.h"
-#include <cudf/interop.hpp>
-#include <cudf/table/table_view.hpp>
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cudf/interop.hpp>
+#include <cudf/table/table_view.hpp>
+#include "physical/operator.h"
+#include "physical/result_collector.h"
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result)   \
@@ -162,12 +162,12 @@
 #endif
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
-
     cudf::table_view view = batch.table->view();
     // Setup Metadata (Arrow requires column names)
-    // We must create a cudf::column_metadata hierarchy matching the table structure.
+    // We must create a cudf::column_metadata hierarchy matching the table
+    // structure.
     std::vector<cudf::column_metadata> meta;
-    for (const auto& name : batch.schema->field_names()) {
+    for (const auto &name : batch.schema->field_names()) {
         meta.emplace_back(name);
     }
 
@@ -177,52 +177,56 @@ std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
     // 'to_arrow_host' performs the D2H copy and populates an ArrowDeviceArray.
     cudf::unique_device_array_t unique_device_array = cudf::to_arrow_host(view);
 
-    // We release the raw pointers from the unique_ptrs because Arrow's Import function
-    // takes ownership of the C-structs and manages their lifecycle internally.
-    struct ArrowSchema* raw_schema = unique_schema.release();
-    struct ArrowDeviceArray* raw_array = unique_device_array.release();
+    // We release the raw pointers from the unique_ptrs because Arrow's Import
+    // function takes ownership of the C-structs and manages their lifecycle
+    // internally.
+    struct ArrowSchema *raw_schema = unique_schema.release();
+    struct ArrowDeviceArray *raw_array = unique_device_array.release();
 
-    // ImportDeviceRecordBatch is the zero-copy bridge from the C-structs to C++ objects.
-    // (The data is already on CPU from step 3, so this import is cheap).
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch = arrow::ImportDeviceRecordBatch(raw_array, raw_schema);
+    // ImportDeviceRecordBatch is the zero-copy bridge from the C-structs to C++
+    // objects. (The data is already on CPU from step 3, so this import is
+    // cheap).
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch =
+        arrow::ImportDeviceRecordBatch(raw_array, raw_schema);
 
     if (!maybe_batch.ok()) {
-        throw std::runtime_error("Failed to import Arrow RecordBatch: " + 
+        throw std::runtime_error("Failed to import Arrow RecordBatch: " +
                                  maybe_batch.status().ToString());
     }
 
     std::shared_ptr<arrow::RecordBatch> arrow_batch = maybe_batch.ValueOrDie();
 
     // Wrap in an Arrow Table
-    arrow::Result<std::shared_ptr<arrow::Table>> maybe_table = arrow::Table::FromRecordBatches({arrow_batch});
+    arrow::Result<std::shared_ptr<arrow::Table>> maybe_table =
+        arrow::Table::FromRecordBatches({arrow_batch});
     if (!maybe_table.ok()) {
         // Handle error (e.g., throw or log)
-        throw std::runtime_error("Failed to create Arrow Table: " + 
+        throw std::runtime_error("Failed to create Arrow Table: " +
                                  maybe_table.status().ToString());
     }
-    
+
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
 
     return arrow_table_to_bodo(table, bodo::BufferPool::Default().get());
 }
 
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
-    
-    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
-            batch);
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(batch);
 
-    // Arrow tables can have fragmented columns (chunks). libcudf expects contiguous memory.
-    // This merges all chunks into a single RecordBatch.
+    // Arrow tables can have fragmented columns (chunks). libcudf expects
+    // contiguous memory. This merges all chunks into a single RecordBatch.
     std::shared_ptr<arrow::RecordBatch> arrow_batch;
     auto combined_table_result = arrow_table->CombineChunks();
     if (!combined_table_result.ok()) {
-         throw std::runtime_error("Failed to combine Arrow chunks");
+        throw std::runtime_error("Failed to combine Arrow chunks");
     }
-    std::shared_ptr<arrow::Table> combined_table = combined_table_result.ValueOrDie();
-    
+    std::shared_ptr<arrow::Table> combined_table =
+        combined_table_result.ValueOrDie();
+
     // Read the single batch
     arrow::TableBatchReader reader(*combined_table);
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result = reader.Next();
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
+        reader.Next();
     if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
         throw std::runtime_error("Failed to extract batch from Arrow table");
     }
@@ -234,29 +238,32 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     struct ArrowArray arrow_array;
 
     // ExportRecordBatch fills these structs.
-    arrow::Status status = arrow::ExportRecordBatch(*arrow_batch, &arrow_array, &arrow_schema);
+    arrow::Status status =
+        arrow::ExportRecordBatch(*arrow_batch, &arrow_array, &arrow_schema);
     if (!status.ok()) {
         throw std::runtime_error("Failed to export to Arrow C interface");
     }
 
     // Wrap ArrowArray in ArrowDeviceArray for cudf
     struct ArrowDeviceArray device_array;
-    
+
     // Copy the array content into the device wrapper
-    // (ArrowDeviceArray contains an 'array' member which is the ArrowArray struct)
-    device_array.array = arrow_array; 
-    
+    // (ArrowDeviceArray contains an 'array' member which is the ArrowArray
+    // struct)
+    device_array.array = arrow_array;
+
     // Explicitly mark this as CPU data
     device_array.device_id = -1;
     device_array.device_type = ARROW_DEVICE_CPU;
-    device_array.sync_event = nullptr; // No CUDA event needed for CPU data
+    device_array.sync_event = nullptr;  // No CUDA event needed for CPU data
 
     // Move Data to GPU
-    // from_arrow_host parses the structs, allocates GPU memory, and performs the copy.
-    std::unique_ptr<cudf::table> result = cudf::from_arrow_host(&arrow_schema, &device_array);
+    // from_arrow_host parses the structs, allocates GPU memory, and performs
+    // the copy.
+    std::unique_ptr<cudf::table> result =
+        cudf::from_arrow_host(&arrow_schema, &device_array);
 
-
-    // Clean up the C structs (Arrow requires manual release if not imported, 
+    // Clean up the C structs (Arrow requires manual release if not imported,
     // but Export gives us ownership, so we must release the release callbacks)
     if (device_array.array.release) {
         device_array.array.release(&device_array.array);

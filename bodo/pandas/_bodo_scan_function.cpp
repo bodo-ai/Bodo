@@ -5,7 +5,7 @@
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 #if USE_CUDF
-//#include "physical/gpu_read_parquet.h"
+// #include "physical/gpu_read_parquet.h"
 #endif
 
 #include <fmt/format.h>
@@ -84,11 +84,11 @@ PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
                                  this->rtjf_state_map.value())
             : JoinFilterColStats();
 #ifdef USE_CUDF
-    //if (run_on_gpu) {
-    //    return std::make_shared<PhysicalGPUReadParquet>(
-    //        path, pyarrow_schema, storage_options, selected_columns,
-    //        filter_exprs, limit_val, join_filter_col_stats);
-    //}
+    // if (run_on_gpu) {
+    //     return std::make_shared<PhysicalGPUReadParquet>(
+    //         path, pyarrow_schema, storage_options, selected_columns,
+    //         filter_exprs, limit_val, join_filter_col_stats);
+    // }
 #endif
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
