@@ -214,6 +214,8 @@ openai = "*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
+# The platform uses Python 3.13 to be compatible with conda in the base environment.
+# TODO: Update platform environment to use Python 3.14 once conda is compatible with it.
 [feature.py313.dependencies]
 python = "3.13.*"
 
