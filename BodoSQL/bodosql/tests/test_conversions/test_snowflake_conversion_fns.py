@@ -4,6 +4,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
@@ -204,7 +205,7 @@ def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_ch
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) or np.isinf(x) else bool(x)
         )
-    py_output = pd.DataFrame({"A": py_output})
+    py_output = pd.DataFrame({"A": py_output.astype(pd.ArrowDtype(pa.bool_()))})
     check_query(
         query,
         ctx,
