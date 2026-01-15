@@ -10,7 +10,9 @@
 #include "physical/aggregate.h"
 #include "physical/cte.h"
 #include "physical/filter.h"
+#if USE_CUDF
 #include "physical/gpu_join.h"
+#endif
 #include "physical/join.h"
 #include "physical/join_filter.h"
 #include "physical/limit.h"

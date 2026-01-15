@@ -4,6 +4,9 @@
 #include "physical/read_iceberg.h"
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
+#if USE_CUDF
+#include "physical/gpu_read_parquet.h"
+#endif
 
 #include <fmt/format.h>
 
