@@ -1323,6 +1323,13 @@ def _test_equal_guard(
                 expected_output[expected_output.columns[i]], dtype=bodo_dtype
             )
 
+    # Convert datetime64[us] to datetime64[ns] for comparison
+    for i, dtype in enumerate(expected_output.dtypes):
+        if dtype == np.dtype("datetime64[us]"):
+            expected_output[expected_output.columns[i]] = expected_output[
+                expected_output.columns[i]
+            ].astype("datetime64[ns]")
+
     # No need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
     if bodo.get_size() == 1:
