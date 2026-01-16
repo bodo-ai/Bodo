@@ -47,7 +47,7 @@ struct GPU_DATA {
     std::shared_ptr<arrow::Schema> schema;
 
     GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
-        : table(t), schema(s) {}
+        : table(std::move(t)), schema(std::move(s)) {}
 };
 
 /**
