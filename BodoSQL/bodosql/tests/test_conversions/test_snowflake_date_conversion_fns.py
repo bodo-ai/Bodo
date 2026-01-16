@@ -107,7 +107,7 @@ def test_date_casting_functions_case(
                 lambda val: scalar_to_date_equiv_fn(val)
                 if scalar_to_date_equiv_fn(val) is not None
                 and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
-                else None
+                else pd.NA
             )
         }
     )
