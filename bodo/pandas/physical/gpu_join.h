@@ -121,7 +121,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                 OperatorResult prev_op_result) override {
         cuda_join.BuildConsumeBatch(input_batch.table);
-        return OperatorResult::NEED_MORE_INPUT;
+        return prev_op_result == OperatorResult::FINISHED
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
