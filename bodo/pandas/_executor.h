@@ -132,6 +132,8 @@ class Executor {
             if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET ||
                 op.type ==
                     duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+                // op.type == duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE)
+                // {
                 run_on_gpu[&op] = true;
             } else {
                 run_on_gpu[&op] = false;
