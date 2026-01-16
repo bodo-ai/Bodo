@@ -28,16 +28,16 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 python = "3.13.*"
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
+default =      { features = ["py314", "rcpp", "dev", "local-mpi"],          solve-group = "314" }
+azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure"], solve-group = "314" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "314-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "314-platform" }
+platform =     { features = ["py313", "rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
+platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip", "cpu"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["rcpp", "dev", "local-mpi", "cudf"],          solve-group = "314-linux" }
+default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
 
 
 # Build Commands
@@ -158,6 +158,7 @@ libutf8proc = "*"
 
 [feature.cpu.target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+pyarrow-core = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 numba = ">=0.62,<0.64.0"
 
@@ -219,7 +220,7 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use.
 pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
@@ -255,6 +256,14 @@ openai = "*"
 # - tensorflow
 # - pip:
 #   - horovod
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+# The platform uses Python 3.13 to be compatible with conda in the base environment.
+# TODO: Update platform environment to use Python 3.14 once conda is compatible with it.
+[feature.py313.dependencies]
+python = "3.13.*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]

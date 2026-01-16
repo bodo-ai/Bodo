@@ -365,24 +365,12 @@ if(DEFINED ENV{BODO_VENDOR_MPI4PY} AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/b
   file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
 endif()
 
-# Find PyArrow Include and Lib Directory
-# TODO: Use Arrow Directories from Conda Instead if Available
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; print(pyarrow.get_include())"
-  OUTPUT_VARIABLE PYARROW_INCLUDE_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-# PyArrow on Pip bundles the Arrow shared libraries, but named as lib*.EXT.VERSION
-# I.E. libarrow.so.1700 instead of the expected libarrow.so
-# Thus, we need PyArrow to create symlinks to the correct names
-# They have a helper function to do this, and it should be a NOOP with PyArrow on Conda
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; pyarrow.create_library_symlinks(); print(pyarrow.get_library_dirs()[0])"
-  OUTPUT_VARIABLE PYARROW_LIB_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-cmake_print_variables(PYARROW_INCLUDE_DIR)
-cmake_print_variables(PYARROW_LIB_DIR)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(PyArrowHelpers)
+setup_pyarrow_dirs()
+
+message(STATUS "PyArrow Includes: ${PYARROW_INCLUDE_DIR}")
+message(STATUS "PyArrow Lib Dirs: ${PYARROW_LIBRARY_DIRS}")
 
 # Numpy Include Directory is provided by scikit-build-core
 # through `Python_NumPy_INCLUDE_DIR`
@@ -409,7 +397,7 @@ python_add_library(csv_json_reader
   "bodo/io/csv_json_reader.cpp"
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
-target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(csv_json_reader PRIVATE arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
@@ -426,7 +414,7 @@ add_custom_command(
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 # On Windows this is necessary to define due to importing/exporting DLL semantics.
 # See https://github.com/apache/arrow/blob/9105a4109a80a1c01eabb24ee4b9f7c94ee942cb/python/CMakeLists.txt#L472
 target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
@@ -469,7 +457,7 @@ add_custom_command(
 
 python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
-target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
+target_link_directories(memory PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
 install(TARGETS memory DESTINATION "bodo/")
 
@@ -496,7 +484,7 @@ python_add_library(
 )
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
-target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(memory_tester PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
@@ -595,7 +583,7 @@ python_add_library(memory_cpp
   "bodo/libs/_storage_manager.cpp"
 )
 target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIBRARY_DIRS} ${MPI_LIB_DIR})
 target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS memory_cpp DESTINATION "bodo/")
 
@@ -834,7 +822,7 @@ if (NOT WIN32)
   )
 endif()
 
-target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
+target_link_directories(ext PRIVATE ${PYARROW_LIBRARY_DIRS} "${Python_NumPy_INCLUDE_DIR}/../lib")
 target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE

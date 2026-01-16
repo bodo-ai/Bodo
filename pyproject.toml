@@ -261,8 +261,6 @@ exclude = [
 # ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
 # Disable building wheels for musllinux, i686 and power pc
-# Don't publish linux arm until we can get nightly fixed
-#skip = ["pp*", "*musllinux*", "*i686*"]
 skip = ["pp*", "*musllinux*", "*i686*", "*-win32*"]
 # Increase pip debugging output
 build-verbosity = 1
@@ -306,7 +304,7 @@ done
 [tool.cibuildwheel.windows]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
-set BODO_NUM_WORKERS=2 && python {project}\\buildscripts\\bodo\\pip\\test.py
+set BODO_NUM_WORKERS=2 && python "{project}\\buildscripts\\bodo\\pip\\test.py"
 """
 
 # ---------------------------------------- PR CI ---------------------------------------- #

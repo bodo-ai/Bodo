@@ -36,6 +36,13 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install pipx
+        run: python -m pip install pipx
+
       - uses: actions/checkout@v5
 
       # https://github.com/actions/runner-images/issues/10624
@@ -82,16 +89,24 @@ jobs:
           echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
-        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel
+        run: python -m pipx run cibuildwheel
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
             curl -fsSL https://pixi.sh/install.sh | bash
             source ~/.bashrc
+
             # Global Tools
             pixi global install sccache ninja
+
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel libpsm2
+            ARCH=$(uname -m)
+            PKGS="libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel"
+            if [ "$ARCH" = "x86_64" ]; then
+              PKGS="$PKGS libpsm2"
+            fi
+            dnf install -y $PKGS
+
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"

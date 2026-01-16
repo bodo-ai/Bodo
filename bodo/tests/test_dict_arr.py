@@ -1647,7 +1647,7 @@ def test_gatherv_dict_enc_and_normal_str_array_table(
         table_format_df_scattered = make_df_impl(A, B, C, D)
         bodo.hiframes.boxing._use_dict_str_type = False
         # Gatherv will cause the dict encoded
-        bodo_output = bodo.gatherv(table_format_df_scattered)
+        bodo_output = bodo.libs.distributed_api.gatherv(table_format_df_scattered)
         passed = 1
         if bodo.get_rank() == 0:
             passed = _test_equal_guard(

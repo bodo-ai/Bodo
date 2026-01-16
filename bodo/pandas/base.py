@@ -204,6 +204,7 @@ def _empty_like(val):
     For Pandas DataFrame or Series, uses Arrow for schema inference of object columns
     and returns typed output.
     """
+    import numpy as np
     import pyarrow as pa
 
     if type(val) not in (
@@ -228,8 +229,29 @@ def _empty_like(val):
     if is_series:
         val = val.to_frame(name=BODO_NONE_DUMMY if val.name is None else val.name)
 
+    # Work around categorical gaps in Arrow-Pandas conversion
+    original_val = val
+    cat_cols = set()
+    for cname, dtype in val.dtypes.items():
+        if isinstance(dtype, pd.CategoricalDtype):
+            cat_cols.add(cname)
+            val = val.assign(**{cname: np.arange(len(val))})
+
+    is_cat_index = isinstance(val.index, pd.CategoricalIndex)
+    if is_cat_index:
+        val = val.reset_index(drop=True)
+
     # Reuse arrow_to_empty_df to make sure details like Index handling are correct
     out = arrow_to_empty_df(pa.Schema.from_pandas(val))
+
+    for cname in cat_cols:
+        out[cname] = original_val[cname].iloc[:0]
+
+    if is_cat_index:
+        out.index = original_val.index[:0]
+
+    if isinstance(original_val.index, (pd.PeriodIndex, pd.IntervalIndex)):
+        out.index = original_val.index[:0]
 
     if is_series:
         out = out.iloc[:, 0]
@@ -494,7 +516,6 @@ def to_datetime(
     format=None,
     exact=lib.no_default,
     unit=None,
-    infer_datetime_format=lib.no_default,
     origin="unix",
     cache=True,
 ):
@@ -515,7 +536,6 @@ def to_datetime(
         "format": format,
         "exact": exact,
         "unit": unit,
-        "infer_datetime_format": infer_datetime_format,
         "origin": origin,
         "cache": cache,
     }

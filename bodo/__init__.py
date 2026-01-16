@@ -235,6 +235,29 @@ import pyarrow
 import pyarrow.parquet
 
 if platform.system() == "Windows":
+    # For Windows pip we need to ensure impi DLLs are added to the search path
+    # This is required for Python 3.14+ due to stricter DLL loading behavior
+    # Search common locations where impi-rt installs DLLs
+    base_dirs = []
+    try:
+        import sys
+        base_dirs.append(sys.prefix)
+        import impi_rt
+        base_dirs.append(os.path.dirname(impi_rt.__file__))
+    except ImportError:
+        pass
+
+    # Search for impi DLLs in common installation locations
+    for base_dir in base_dirs:
+        for search_dir in [
+            os.path.join(base_dir, "Library", "bin"),
+            os.path.join(base_dir, "Scripts"),
+            os.path.join(base_dir, "Lib", "site-packages"),
+            os.path.join(base_dir, "lib", "site-packages"),
+        ]:
+            if os.path.isdir(search_dir):
+                os.add_dll_directory(search_dir)
+
     # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
     # guarantees that impi.dll is loaded, and therefore found when MPI calls are made
     import bodo.mpi4py

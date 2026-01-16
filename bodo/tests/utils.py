@@ -8,6 +8,7 @@ import datetime
 import gzip
 import io
 import os
+import platform
 import random
 import re
 import shutil
@@ -1345,6 +1346,33 @@ def _test_equal(
                     bodo_out.dtype,
                     py_out.name,
                 )
+            # Convert float types
+            if pa.types.is_floating(pa_type) and py_out.dtype in (
+                np.float32,
+                np.float64,
+            ):
+                from bodo.pandas.series import BodoSeries
+
+                py_out = py_out.astype(bodo_out.dtype)
+                # astype converts all NaNs to NAs so need to match it here
+                if isinstance(bodo_out, BodoSeries):
+                    # Avoid changing the plan of bodo_out
+                    bodo_out = pd.Series(bodo_out)
+                bodo_out = bodo_out.map(lambda a: pd.NA if np.isnan(a) else a)
+
+            # Handle all-NA Pandas output stored as float NaNs
+            if (
+                py_out.dtype in (np.float64, np.float32)
+                and pa.types.is_integer(pa_type)
+                and py_out.isnull().all()
+                and bodo_out.isnull().all()
+            ):
+                py_out = pd.Series(
+                    pd.array([pd.NA] * len(py_out), dtype=bodo_out.dtype),
+                    index=py_out.index,
+                    name=py_out.name,
+                )
+
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1404,6 +1432,28 @@ def _test_equal(
         if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
+
+        # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
+        # mismatch errors
+        for i, (bodo_dtype, py_dtype) in enumerate(zip(bodo_out.dtypes, py_out.dtypes)):
+            if (
+                isinstance(bodo_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.float32, np.float64)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
+        # Handle Arrow float types in Index
+        if not isinstance(bodo_out.index, pd.MultiIndex):
+            index_dtype = bodo_out.index.dtype
+            if (
+                isinstance(index_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(index_dtype.pyarrow_dtype)
+                and py_out.index.dtype in (np.float32, np.float64)
+            ):
+                py_out.index = py_out.index.astype(index_dtype)
 
         # We return typed extension arrays like StringArray for all APIs but Pandas
         # & Spark doesn't return them by default in all APIs yet.
@@ -1645,7 +1695,7 @@ def _test_equal_struct_array(
 
 
 def _gather_output(bodo_output):
-    """gather bodo output from all processes. Uses bodo.gatherv() if there are no typing
+    """gather bodo output from all processes. Uses bodo.libs.distributed_api.gatherv() if there are no typing
     issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
     """
 
@@ -1658,7 +1708,8 @@ def _gather_output(bodo_output):
 
     try:
         _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        # Use JIT version of gatherv to avoid nanosecond precision loss in some types
+        bodo_output = bodo.libs.distributed_api.gatherv(bodo_output)
     except Exception:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
@@ -2069,7 +2120,7 @@ def check_parallel_coherency(
     parall_output_proc = convert_non_pandas_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
     _check_typing_issues(parall_output_proc)
-    parall_output_final = bodo.gatherv(parall_output_proc)
+    parall_output_final = bodo.libs.distributed_api.gatherv(parall_output_proc)
 
     # Doing the sorting. Mandatory here
     if sort_output:
@@ -3326,6 +3377,7 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     from bodo.tests.utils_jit import _nullable_float_arr_maker
 
     S = _nullable_float_arr_maker(L, to_null, to_nan)
+
     # Remove the bodo metadata. It improperly assigns
     # 1D_Var to the series which interferes with the test
     # functionality. Deleting the metadata sets it back to
@@ -3409,6 +3461,37 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
+
+
+pytest_mark_oracle = compose_decos(
+    (
+        pytest.mark.oracle,
+        pytest.mark.slow,
+        pytest.mark.skipif(
+            (
+                os.name == "posix"
+                and platform.system() == "Linux"
+                and "arm" in platform.machine().lower()
+                or "aarch64" in platform.machine().lower(),
+            )
+            or platform.system() == "Windows",
+            reason="Oracle client not supported on ARM64 Linux or Windows",
+        ),
+    )
+)
+pytest_oracle = [
+    pytest.mark.oracle,
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        (
+            os.name == "posix"
+            and platform.system() == "Linux"
+            and "arm" in platform.machine().lower()
+            or "aarch64" in platform.machine().lower()
+        )
+        or platform.system() == "Windows"
+    ),
+]
 
 
 def compress_dir(dir_name):
