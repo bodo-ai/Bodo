@@ -80,7 +80,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             }
         }
 
-        this->cuda_join = CudaHashJoin(build_keys, probe_keys, cudf::null_equality::EQUAL);
+        this->cuda_join =
+            CudaHashJoin(build_keys, probe_keys, cudf::null_equality::EQUAL);
     }
 
     /**
@@ -102,14 +103,10 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUJoin() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink() override { cuda_join.FinalizeBuild(); }
 
     void FinalizeProcessBatch() override {
-        throw std::runtime_error("Not implemented.");
-    }
-
-    JoinState* getJoinStatePtr() const {
-        throw std::runtime_error("Not implemented.");
+        // throw std::runtime_error("Not implemented.");
     }
 
     /**
@@ -120,7 +117,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
      */
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                 OperatorResult prev_op_result) override {
-        throw std::runtime_error("Not implemented.");
+        cuda_join.BuildConsumeBatch(input_batch.table);
+        return OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -131,7 +129,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
      */
     std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         GPU_DATA input_batch, OperatorResult prev_op_result) override {
-        throw std::runtime_error("Not implemented.");
+        std::unique_ptr<cudf::table> output_table =
+            cuda_join.ProbeProcessBatch(input_batch.table);
+        GPU_DATA output_gpu_data = {std::move(output_table),
+                                    this->getOutputSchema()->ToArrowSchema()};
+        return {output_gpu_data, prev_op_result};
     }
 
     /**

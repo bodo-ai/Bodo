@@ -318,7 +318,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         [&](auto& vop) {
             vop->buildProbeSchemas(op, op.conditions, build_table_schema,
                                    probe_table_schema);
-            (*this->join_filter_states)[op.join_id] = vop->getJoinStatePtr();
+            if constexpr (std::is_same_v<std::decay_t<decltype(vop)>,
+                                         std::shared_ptr<PhysicalJoin>>) {
+                // GPU Joins don't support runtime join filter yet.
+                (*this->join_filter_states)[op.join_id] =
+                    vop->getJoinStatePtr();
+            }
             this->active_pipeline->AddOperator(vop);
         },
         physical_join);
