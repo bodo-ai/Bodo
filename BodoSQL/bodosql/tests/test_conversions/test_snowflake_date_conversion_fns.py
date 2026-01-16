@@ -198,7 +198,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
 
     # Construct expected answer using Pandas
     valid_answers = valid_datetimes.dt.date
-    invalid_answers = pd.Series([None] * len(invalid_str_datetimes))
+    invalid_answers = pd.Series([pd.NA] * len(invalid_str_datetimes))
     expected_output = pd.DataFrame(
         {"DATES": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
     )
@@ -224,7 +224,7 @@ def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
 
     if test_fn == "TRY_TO_DATE":
         expected_output = pd.DataFrame(
-            {"FOO": pd.Series([None] * len(dt_fn_dataframe["TABLE1"]))}
+            {"FOO": pd.Series([pd.NA] * len(dt_fn_dataframe["TABLE1"]))}
         )
         dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
         check_query(
