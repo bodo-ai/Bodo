@@ -27,6 +27,8 @@ void CudaHashJoin::build_hash_table(
 void CudaHashJoin::FinalizeBuild() {
     this->build_hash_table(this->_build_chunks);
 
+    std::shared_ptr<arrow::Schema> build_table_arrow_schema =
+        this->build_table_schema->ToArrowSchema();
     for (const auto& col_idx : this->build_key_indices) {
         auto [min, max] =
             cudf::minmax(this->_build_table->get_column(col_idx).view());
@@ -35,8 +37,14 @@ void CudaHashJoin::FinalizeBuild() {
         columns.emplace_back(cudf::make_column_from_scalar(*max, 1));
         std::shared_ptr<cudf::table> stats_table =
             std::make_shared<cudf::table>(std::move(columns));
-        GPU_DATA stats_gpu_data = {stats_table,
-                                   this->build_table_schema->ToArrowSchema()};
+
+        std::vector<std::shared_ptr<arrow::Field>> fields = {
+            arrow::field("min",
+                         build_table_arrow_schema->field(col_idx)->type()),
+            arrow::field("max",
+                         build_table_arrow_schema->field(col_idx)->type())};
+        GPU_DATA stats_gpu_data = {
+            stats_table, std::make_shared<arrow::Schema>(std::move(fields))};
         std::shared_ptr<arrow::Table> stats = convertGPUToArrow(stats_gpu_data);
         this->min_max_stats.push_back(stats);
     }
