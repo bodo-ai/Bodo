@@ -1235,7 +1235,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # Mark column is after the left columns in DuckDB, see:
             # https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/operator/logical_join.cpp#L20
             empty_join_out = pd.concat(
-                [empty_left, pd.Series([], dtype=pd.ArrowDtype(pa.bool_()))], axis=1
+                [
+                    empty_left,
+                    pd.Series(
+                        [], dtype=pd.ArrowDtype(pa.bool_()), index=empty_left.index
+                    ),
+                ],
+                axis=1,
             )
             empty_join_out.index = empty_left.index
             planComparisonJoin = LogicalComparisonJoin(

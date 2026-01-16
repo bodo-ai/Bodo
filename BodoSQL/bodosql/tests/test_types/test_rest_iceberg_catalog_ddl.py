@@ -88,7 +88,7 @@ def test_create_view(polaris_catalog, polaris_connection, memory_leak_check):
 
     def verify_view_created():
         x = bc.sql(f"SELECT * FROM {view_name_with_schema}")
-        x = bodo.gatherv(x)
+        x = bodo.libs.distributed_api.gatherv(x)
         if bodo.get_rank() == 0:
             assert "A" in x
             assert len(x["A"]) == 1

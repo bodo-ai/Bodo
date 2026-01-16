@@ -988,6 +988,18 @@ def _fix_struct_arr_names(arr, pa_type):
     struct arrays.
     """
 
+    # Handle list recursively
+    if pa.types.is_list(arr.type) or pa.types.is_large_list(arr.type):
+        if isinstance(arr, pa.ChunkedArray):
+            arr = arr.combine_chunks()
+        new_arr = pa.LargeListArray.from_arrays(
+            arr.offsets, _fix_struct_arr_names(arr.values, pa_type.value_type)
+        )
+        # Arrow's from_arrays ignores nulls (bug as of Arrow 13) so we add them back manually
+        return pa.Array.from_buffers(
+            new_arr.type, len(new_arr), arr.buffers()[:2], children=[new_arr.values]
+        )
+
     if not pa.types.is_struct(arr.type):
         return arr
 
@@ -1019,8 +1031,7 @@ def _arrow_array_to_pd(arrow_array, pa_type, use_arrow_dtypes=True, name=None):
 
     # Our C++ code may not preserve the field names in struct arrays
     # so we fix them here to match the Arrow schema.
-    if pa.types.is_struct(arrow_array.type):
-        arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
+    arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
 
     # Cast to expected type to match Pandas (as determined by the frontend)
     if pa_type != arrow_array.type:

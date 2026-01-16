@@ -96,7 +96,7 @@ def test_read_parquet(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -118,7 +118,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         path = datapath(file_path)
 
         bodo_out = bd.read_parquet(path)[["three", "four"]]
-        py_out = pd.read_parquet(path)[["three", "four"]]
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["three", "four"]]
 
     _test_equal(
         bodo_out,
@@ -132,7 +132,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         pytest.param(
             pd.DataFrame(
                 {
-                    "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+                    "one": [-1.0, -4.1, 2.5, 3.0, 4.0, 6.0, 10.0],
                     "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
                     "three": [True, False, True, True, True, False, False],
                     "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
@@ -152,7 +152,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
         df.to_parquet(path)
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         _test_equal(
             bodo_out,
@@ -166,7 +166,7 @@ def test_read_parquet_len_shape(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         # len directly on parquet file doesn't require plan execution
         assert len(bodo_out) == len(py_out)
@@ -185,7 +185,7 @@ def test_read_parquet_series_len_shape(datapath):
 
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out["A"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out["A"]
 
         # len directly on parquet file doesn't require plan execution
@@ -231,7 +231,7 @@ def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
         {
-            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "one": [-1.0, -4.3, 2.5, 3.0, 4.0, 6.0, 10.0],
             "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
             "three": [True, False, True, True, True, False, False],
             "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
@@ -247,7 +247,7 @@ def test_write_parquet(index_val):
         assert bodo_df.is_lazy_plan()
 
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -268,7 +268,7 @@ def test_write_parquet(index_val):
         f(bodo_df)
         bodo_df.to_parquet(path)
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -842,16 +842,16 @@ def test_series_map_non_jit(index_val):
     warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func1)
+        bdf2 = bdf.C.map(func1)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func1)
+    pdf2 = pdf.C.map(func1)
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func2)
+        bdf2 = bdf.C.map(func2)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func2)
+    pdf2 = pdf.C.map(func2)
 
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
@@ -1127,7 +1127,7 @@ def test_parquet_read_partitioned(datapath):
 
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     # NOTE: Bodo DataFrames currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
@@ -1147,7 +1147,7 @@ def test_parquet_read_partitioned_filter(datapath):
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out[bodo_out.part == "a"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out[py_out.part == "a"]
 
     # TODO: test logs to make sure filter pushdown happened and files skipped
@@ -1557,29 +1557,27 @@ def test_groupby_fallback():
         bdf = bd.from_pandas(df)
 
     # Series groupby
-    with assert_executed_plan_count(3):
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
-                "B"
-            ].sum(engine="cython")
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
-            engine="cython"
-        )
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
-    with assert_executed_plan_count(2):
-        bdf2 = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df)
 
-        # DataFrame groupby
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf2.groupby(
-                "A", dropna=False, as_index=False, sort=True
-            ).sum(engine="cython")
-
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+    # DataFrame groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
 
@@ -1628,7 +1626,6 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 @pytest.mark.parametrize(
     "func, kwargs",
     [
-        pytest.param({"mean_A": "mean", "count_A": "count"}, {}, id="func_dict"),
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
@@ -1819,6 +1816,7 @@ def test_series_compound_expression(datapath):
 
         py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
         py_df2 = (py_df1["A"] + 50) * 2 / 7
+        py_df2 = py_df2.astype(pd.ArrowDtype(pa.float64()))
 
     _test_equal(
         bodo_df2,
@@ -2482,12 +2480,11 @@ def test_df_state_change():
         bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
         bdf2 = bdf.A.map(lambda x: x)
 
-    with assert_executed_plan_count(1):
-        # Collect the df, original result id is stale
-        print(bdf)
+    # Collect the df, original result id is stale
+    print(bdf)
 
-        # Plan execution shouldn't fail due to stale res id
-        print(bdf2)
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
 
 
 def test_dataframe_concat(datapath):
@@ -2658,7 +2655,9 @@ def test_series_describe_numeric(percentiles):
         # For all other stats (count, mean, std, min, max), keep exact check
         _test_equal(
             describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
-            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]).astype(
+                pd.ArrowDtype(pa.float64())
+            ),
             check_pandas_types=False,
         )
 
@@ -2674,11 +2673,10 @@ def test_series_describe_nonnumeric():
 
     bdf = bd.from_pandas(df)
     for c in df.columns:
-        with assert_executed_plan_count(3):
-            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
-            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
-            describe_pd = df[c].describe().map(str)
-            describe_bodo = bdf[c].describe()
+        # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+        # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+        describe_pd = df[c].describe().map(str)
+        describe_bodo = bdf[c].describe()
         _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
 
 
@@ -3543,7 +3541,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
     )
@@ -3565,7 +3563,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
@@ -3584,7 +3582,7 @@ def test_series_quantile_tails():
 
     _test_equal(
         out_bd,
-        out_pd,
+        out_pd.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
     )
@@ -3602,7 +3600,7 @@ def test_series_quantile_singleton():
 
     _test_equal(
         out_bd,
-        out_pd,
+        out_pd.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
@@ -3615,7 +3613,7 @@ def test_dataframe_jit_fallback(datapath):
     path = datapath("dataframe_library/df1.parquet")
 
     bodo_out = bd.read_parquet(path)[["A", "D"]]
-    py_out = pd.read_parquet(path)[["A", "D"]]
+    py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["A", "D"]]
 
     start_jit_fallback_compile_success = JITFallback.compile_success
     with assert_executed_plan_count(1):

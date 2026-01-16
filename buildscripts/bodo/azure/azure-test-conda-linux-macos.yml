@@ -48,7 +48,7 @@ jobs:
 
       if [[ "$(uname)" == 'Linux' ]]; then
         if [[ "$(uname -m)" == "x86_64" ]]; then
-          wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux-arm64-21.5.0.0.0dbru.zip
+          wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
           sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
         else
           wget https://download.oracle.com/otn_software/linux/instantclient/1925000/instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip
