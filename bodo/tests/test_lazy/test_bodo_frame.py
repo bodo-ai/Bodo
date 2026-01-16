@@ -2,7 +2,14 @@ import os
 
 import pandas as pd
 import pytest
-from pandas.core.internals.array_manager import ArrayManager
+
+try:
+    from pandas.core.internals.array_manager import ArrayManager
+except ModuleNotFoundError:
+    # Pandas >= 3 does not have an array_manager module (uses BlockManager/SinglBlockManager).
+    class ArrayManager:
+        pass
+
 
 import bodo
 from bodo.pandas.frame import BodoDataFrame
