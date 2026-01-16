@@ -14,6 +14,32 @@
 #include <iostream>
 #endif
 
+template <class T>
+std::string getNodeString(T &t) {
+    std::string ret;
+    std::visit([&](auto &vt) { ret = vt->ToString(); }, t);
+    return ret;
+}
+
+template <class T>
+uint64_t getBatchRows(T &t) {
+    uint64_t ret;
+    std::visit(
+        [&](auto &vt) {
+            using U = std::decay_t<decltype(vt)>;
+            if constexpr (std::is_same_v<U, std::shared_ptr<table_info>>) {
+                ret = vt->nrows();
+            } else if constexpr (std::is_same_v<U, GPU_DATA>) {
+                ret = vt.table->num_rows();
+            } else {
+                throw std::runtime_error(
+                    "Getting number of rows for not table_info for GPU_data.");
+            }
+        },
+        t);
+    return ret;
+}
+
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
    private:
@@ -69,11 +95,13 @@ class Pipeline {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        std::cout << "Rank " << rank << " " << source->ToString() << std::endl;
+        std::cout << "Rank " << rank << " " << getNodeString(source)
+                  << std::endl;
         for (auto &op : between_ops) {
-            std::cout << "Rank " << rank << " " << op->ToString() << std::endl;
+            std::cout << "Rank " << rank << " " << getNodeString(op)
+                      << std::endl;
         }
-        std::cout << "Rank " << rank << " " << sink->ToString() << std::endl;
+        std::cout << "Rank " << rank << " " << getNodeString(sink) << std::endl;
     }
 #endif
 
@@ -157,8 +185,14 @@ auto prepare_batch_for_operator(OpT &op, BatchT &batch) {
     // CPU operator
     if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalProcessBatch>>) {
         if constexpr (std::is_same_v<B, GPU_DATA>) {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch GPU to CPU." << std::endl;
+#endif
             return convertGPUToTable(batch);
         } else {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch CPU to CPU." << std::endl;
+#endif
             return batch;  // already table_info
         }
     }
@@ -167,8 +201,14 @@ auto prepare_batch_for_operator(OpT &op, BatchT &batch) {
     else if constexpr (std::is_same_v<
                            Op, std::shared_ptr<PhysicalGPUProcessBatch>>) {
         if constexpr (std::is_same_v<B, std::shared_ptr<table_info>>) {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch CPU to GPU." << std::endl;
+#endif
             return convertTableToGPU(batch);
         } else {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch GPU to GPU." << std::endl;
+#endif
             return batch;  // already GPU_DATA
         }
     }
@@ -176,8 +216,14 @@ auto prepare_batch_for_operator(OpT &op, BatchT &batch) {
     // CPU sink
     else if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalSink>>) {
         if constexpr (std::is_same_v<B, GPU_DATA>) {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch sink GPU to CPU." << std::endl;
+#endif
             return convertGPUToTable(batch);
         } else {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch sink CPU to CPU." << std::endl;
+#endif
             return batch;  // already table_info
         }
     }
@@ -185,8 +231,14 @@ auto prepare_batch_for_operator(OpT &op, BatchT &batch) {
     // GPU sink
     else if constexpr (std::is_same_v<Op, std::shared_ptr<PhysicalGPUSink>>) {
         if constexpr (std::is_same_v<B, std::shared_ptr<table_info>>) {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch CPU to GPU." << std::endl;
+#endif
             return convertTableToGPU(batch);
         } else {
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+            std::cout << "prepare_batch sink GPU to GPU." << std::endl;
+#endif
             return batch;  // already GPU_DATA
         }
     } else {

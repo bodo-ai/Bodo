@@ -23,18 +23,18 @@ enum class OperatorType : uint8_t {
 };
 
 /// Specifies the status of the physical operator in the execution:
-/// 1. NEED_MORE_INPUT means the operator is ready for additional input
-/// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
+/// 0. NEED_MORE_INPUT means the operator is ready for additional input
+/// 1. HAVE_MORE_OUTPUT means the operator can produce more output without
 /// additional input.
-/// 3. FINISHED means the operator is done executing.
+/// 2. FINISHED means the operator is done executing.
 // This is passed across operators and the pipeline terminates when the sink
 // operator returns this status.
 // DuckDB's description for background (Bodo's
 // semantics is different per above): https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
-    NEED_MORE_INPUT,
-    HAVE_MORE_OUTPUT,
-    FINISHED,
+    NEED_MORE_INPUT = 0,
+    HAVE_MORE_OUTPUT = 1,
+    FINISHED = 2,
 };
 
 /**
@@ -128,8 +128,12 @@ class PhysicalProcessBatch : public PhysicalOperator {
 };
 
 struct GPU_DATA {
+   public:
     std::shared_ptr<cudf::table> table;
     std::shared_ptr<arrow::Schema> schema;
+
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
+        : table(t), schema(s) {}
 };
 
 /**

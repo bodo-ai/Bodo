@@ -921,17 +921,30 @@ if(USE_CUDF)
   message(STATUS "libkvikio lib: ${LIBKVIKIO_LIB} libdir: ${LIBKVIKIO_LIBDIR}")
   add_library(libkvikio SHARED IMPORTED)
   set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
+  # cudart
+  #find_package(CUDAToolkit REQUIRED)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  # Ask Python where site‑packages is
+  execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import sysconfig; print(sysconfig.get_paths()['purelib'])" OUTPUT_VARIABLE PY_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(CUDA_RUNTIME_DIR "${PY_SITE_PACKAGES}/nvidia/cu13/lib")
+  #list(APPEND CMAKE_LIBRARY_PATH "$ENV{CONDA_PREFIX}/lib/python3.13/site-packages/nvidia/cu13/lib" )
+  find_library(LIBCUDART_LIB NAMES libcudart.so.13 PATHS "${CUDA_RUNTIME_DIR}" NO_DEFAULT_PATH)
+  get_filename_component(LIBCUDART_LIBDIR "${LIBCUDART_LIB}" DIRECTORY)
+  message(STATUS "libcudart lib: ${LIBCUDART_LIB} libdir: ${LIBCUDART_LIBDIR}")
+  add_library(libcudart SHARED IMPORTED)
+  set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
 
+  # RPATH
   set_target_properties(ext PROPERTIES
-    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR}"
-    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR}"
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
   )
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
     #find_package(cudf REQUIRED CONFIG)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
       libkvikio

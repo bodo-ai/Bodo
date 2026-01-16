@@ -36,12 +36,9 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
-#ifdef USE_CUDF
-        ,
-        bool run_on_gpu
-#endif
-        ) = 0;
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        bool run_on_gpu) = 0;
 
     // This allows pushing runtime join filter state from the optimizer to the
     // physical read operators which can generate filters from join key
@@ -96,12 +93,9 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
-#ifdef USE_CUDF
-        ,
-        bool run_on_gpu
-#endif
-        ) override;
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        bool run_on_gpu) override;
 
     // Parquet dataset path
     PyObject *path;
@@ -148,12 +142,9 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
-#ifdef USE_CUDF
-        ,
-        bool run_on_gpu
-#endif
-        ) override;
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        bool run_on_gpu) override;
 
     PyObject *df;
     const std::shared_ptr<arrow::Schema> arrow_schema;
@@ -180,12 +171,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
-#ifdef USE_CUDF
-        ,
-        bool run_on_gpu
-#endif
-        ) override;
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        bool run_on_gpu) override;
     std::string result_id;
     const std::shared_ptr<arrow::Schema> arrow_schema;
 };
@@ -241,12 +229,9 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_filter_states
-#ifdef USE_CUDF
-        ,
-        bool run_on_gpu
-#endif
-        ) override;
+        std::shared_ptr<std::unordered_map<int, JoinState *>>
+            join_filter_states,
+        bool run_on_gpu) override;
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;
