@@ -86,7 +86,6 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-# Defaults
 [dependencies]
 pip = "*"
 # Core Python Deps
@@ -164,6 +163,8 @@ nccl = ">=2.18"
 numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
+[feature.cudf.pypi-dependencies]
+cudf-cu13 = "==25.12"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
