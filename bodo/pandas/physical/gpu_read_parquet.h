@@ -333,9 +333,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
         // of dataframe later)
         arrow_schema = MakeNullableSchema(unwrap_schema(pyarrow_schema));
-        this->out_metadata =
-            std::make_shared<TableMetadata>(arrow_schema->metadata()->keys(),
-                                            arrow_schema->metadata()->values());
+        this->out_metadata = std::make_shared<bodo::TableMetadata>(
+            arrow_schema->metadata()->keys(),
+            arrow_schema->metadata()->values());
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
 
@@ -437,7 +437,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
     // Column names and metadata (Pandas Index info) used for dataframe
     // construction
-    std::shared_ptr<TableMetadata> out_metadata;
+    std::shared_ptr<bodo::TableMetadata> out_metadata;
     std::vector<std::string> out_column_names;
 
    private:

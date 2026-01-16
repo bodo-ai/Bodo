@@ -1,10 +1,12 @@
 #include "_util.h"
 #include <arrow/api.h>
+#include <arrow/c/bridge.h>
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
 #include <arrow/scalar.h>
+#include <arrow/table.h>
 #include <arrow/type_fwd.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
@@ -927,25 +929,47 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
 
 std::optional<JoinFilterColStats::col_min_max_t>
 JoinFilterColStats::col_stats_collector::collect_min_max() const {
-    std::unique_ptr<bodo::DataType> dt =
-        join_state->build_table_schema->column_types[build_key_col]->copy();
-    const auto &col_min_max = join_state->min_max_values[build_key_col];
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return std::visit(
+        [&](const auto &join_state)
+            -> std::optional<JoinFilterColStats::col_min_max_t> {
+            using T = std::decay_t<decltype(join_state)>;
+            if constexpr (std::is_same_v<T, JoinState *>) {
+                std::unique_ptr<bodo::DataType> dt =
+                    join_state->build_table_schema->column_types[build_key_col]
+                        ->copy();
+                const auto &col_min_max =
+                    join_state->min_max_values[build_key_col];
+                arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
 
-    if (!col_min_max.has_value()) {
-        return std::nullopt;
-    }
+                if (!col_min_max.has_value()) {
+                    return std::nullopt;
+                }
 
-    std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
-        bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
-        dt->timezone, time_unit, false, bodo::default_buffer_memory_manager());
+                std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
+                    bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
+                    dt->timezone, time_unit, false,
+                    bodo::default_buffer_memory_manager());
 
-    std::shared_ptr<arrow::Scalar> min_scalar =
-        arrow_array->GetScalar(0).ValueOrDie();
-    std::shared_ptr<arrow::Scalar> max_scalar =
-        arrow_array->GetScalar(1).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> min_scalar =
+                    arrow_array->GetScalar(0).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> max_scalar =
+                    arrow_array->GetScalar(1).ValueOrDie();
 
-    return std::make_optional<col_min_max_t>(min_scalar, max_scalar);
+                return std::make_optional<col_min_max_t>(min_scalar,
+                                                         max_scalar);
+            } else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
+                std::shared_ptr<arrow::Table> min_max_values =
+                    join_state->get_min_max_state()[build_key_col];
+
+                std::shared_ptr<arrow::Scalar> min_scalar =
+                    min_max_values->column(0)->GetScalar(0).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> max_scalar =
+                    min_max_values->column(1)->GetScalar(0).ValueOrDie();
+                return std::make_optional<col_min_max_t>(min_scalar,
+                                                         max_scalar);
+            }
+        },
+        join_state);
 }
 
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
@@ -969,7 +993,7 @@ JoinFilterColStats::collect_all() {
                 std::to_string(join_id));
         }
 
-        JoinState *join_state = join_state_it->second;
+        join_state_t join_state = join_state_it->second;
         for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
             if (col_info.filter_columns[i] < 0) {
                 continue;
@@ -1018,4 +1042,124 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
         }
     }
     return filters;
+}
+
+std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
+    cudf::table_view view = batch.table->view();
+    // Setup Metadata (Arrow requires column names)
+    // We must create a cudf::column_metadata hierarchy matching the table
+    // structure.
+    std::vector<cudf::column_metadata> meta;
+    for (const auto &name : batch.schema->field_names()) {
+        meta.emplace_back(name);
+    }
+
+    cudf::unique_schema_t unique_schema = cudf::to_arrow_schema(view, meta);
+
+    // Move Data to Host (GPU -> CPU Copy happens here)
+    // 'to_arrow_host' performs the D2H copy and populates an ArrowDeviceArray.
+    cudf::unique_device_array_t unique_device_array = cudf::to_arrow_host(view);
+
+    // We release the raw pointers from the unique_ptrs because Arrow's Import
+    // function takes ownership of the C-structs and manages their lifecycle
+    // internally.
+    struct ArrowSchema *raw_schema = unique_schema.release();
+    struct ArrowDeviceArray *raw_array = unique_device_array.release();
+
+    // ImportDeviceRecordBatch is the zero-copy bridge from the C-structs to C++
+    // objects. (The data is already on CPU from step 3, so this import is
+    // cheap).
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch =
+        arrow::ImportDeviceRecordBatch(raw_array, raw_schema);
+
+    if (!maybe_batch.ok()) {
+        throw std::runtime_error("Failed to import Arrow RecordBatch: " +
+                                 maybe_batch.status().ToString());
+    }
+
+    std::shared_ptr<arrow::RecordBatch> arrow_batch = maybe_batch.ValueOrDie();
+
+    // Wrap in an Arrow Table
+    arrow::Result<std::shared_ptr<arrow::Table>> maybe_table =
+        arrow::Table::FromRecordBatches({arrow_batch});
+    if (!maybe_table.ok()) {
+        // Handle error (e.g., throw or log)
+        throw std::runtime_error("Failed to create Arrow Table: " +
+                                 maybe_table.status().ToString());
+    }
+
+    std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
+    table = table->ReplaceSchemaMetadata(batch.schema->metadata());
+    return table;
+}
+
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
+    std::shared_ptr<arrow::Table> arrow_table = convertGPUToArrow(batch);
+    return arrow_table_to_bodo(arrow_table, nullptr);
+}
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(batch);
+
+    // Arrow tables can have fragmented columns (chunks). libcudf expects
+    // contiguous memory. This merges all chunks into a single RecordBatch.
+    std::shared_ptr<arrow::RecordBatch> arrow_batch;
+    auto combined_table_result = arrow_table->CombineChunks();
+    if (!combined_table_result.ok()) {
+        throw std::runtime_error("Failed to combine Arrow chunks");
+    }
+    std::shared_ptr<arrow::Table> combined_table =
+        combined_table_result.ValueOrDie();
+
+    // Read the single batch
+    arrow::TableBatchReader reader(*combined_table);
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
+        reader.Next();
+    if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
+        throw std::runtime_error("Failed to extract batch from Arrow table");
+    }
+    arrow_batch = batch_result.ValueOrDie();
+
+    // Export to C Data Interface Structs
+    // These are lightweight structs that hold pointers to the CPU data.
+    struct ArrowSchema arrow_schema;
+    struct ArrowArray arrow_array;
+
+    // ExportRecordBatch fills these structs.
+    arrow::Status status =
+        arrow::ExportRecordBatch(*arrow_batch, &arrow_array, &arrow_schema);
+    if (!status.ok()) {
+        throw std::runtime_error("Failed to export to Arrow C interface");
+    }
+
+    // Wrap ArrowArray in ArrowDeviceArray for cudf
+    struct ArrowDeviceArray device_array;
+
+    // Copy the array content into the device wrapper
+    // (ArrowDeviceArray contains an 'array' member which is the ArrowArray
+    // struct)
+    device_array.array = arrow_array;
+
+    // Explicitly mark this as CPU data
+    device_array.device_id = -1;
+    device_array.device_type = ARROW_DEVICE_CPU;
+    device_array.sync_event = nullptr;  // No CUDA event needed for CPU data
+
+    // Move Data to GPU
+    // from_arrow_host parses the structs, allocates GPU memory, and performs
+    // the copy.
+    std::unique_ptr<cudf::table> result =
+        cudf::from_arrow_host(&arrow_schema, &device_array);
+
+    // Clean up the C structs (Arrow requires manual release if not imported,
+    // but Export gives us ownership, so we must release the release callbacks)
+    if (device_array.array.release) {
+        device_array.array.release(&device_array.array);
+    }
+    if (arrow_schema.release) {
+        arrow_schema.release(&arrow_schema);
+    }
+
+    // Return the cudf::table (moving ownership)
+    return GPU_DATA{std::move(result), arrow_batch->schema()};
 }

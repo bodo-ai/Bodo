@@ -189,7 +189,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 bodo_col_schema->column_types[i]->copy());
             bodo_schema->column_names.push_back(std::to_string(i));
         }
-        bodo_schema->metadata = std::make_shared<TableMetadata>(
+        bodo_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
         // If function_names includes quantiles, create a PhysicalQuantile
@@ -318,12 +318,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         [&](auto& vop) {
             vop->buildProbeSchemas(op, op.conditions, build_table_schema,
                                    probe_table_schema);
-            if constexpr (std::is_same_v<std::decay_t<decltype(vop)>,
-                                         std::shared_ptr<PhysicalJoin>>) {
-                // GPU Joins don't support runtime join filter yet.
-                (*this->join_filter_states)[op.join_id] =
-                    vop->getJoinStatePtr();
-            }
+            (*this->join_filter_states)[op.join_id] = vop->getJoinStatePtr();
             this->active_pipeline->AddOperator(vop);
         },
         physical_join);

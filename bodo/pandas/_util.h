@@ -3,11 +3,14 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <cstdint>
+#include <cudf/interop.hpp>
+#include <cudf/table/table.hpp>
 #include <map>
 #include <utility>
 #include <variant>
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_join.h"
+#include "../libs/streaming/cuda_join.h"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/planner/column_binding.hpp"
@@ -333,6 +336,8 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
+
+using join_state_t = std::variant<JoinState *, CudaHashJoin *>;
 /**
  * @brief Collect min/max statistics from join build tables for join filter
  * columns.
@@ -345,12 +350,12 @@ class JoinFilterColStats {
     // Helper struct to collect min/max for a specific join filter column
     struct col_stats_collector {
         int64_t build_key_col;
-        JoinState *join_state;
+        join_state_t join_state;
         std::optional<col_min_max_t> collect_min_max() const;
     };
 
     // Map of join IDs to their corresponding JoinState pointers
-    const std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map;
+    const std::shared_ptr<std::unordered_map<int, join_state_t>> join_state_map;
 
     // Runtime join filter program state to know what columns to collect stats
     // for and the associated join id
@@ -365,7 +370,7 @@ class JoinFilterColStats {
 
    public:
     JoinFilterColStats(
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map,
+        std::shared_ptr<std::unordered_map<int, join_state_t>> join_state_map,
         JoinFilterProgramState rtjf_state_map)
         : join_state_map(std::move(join_state_map)),
           join_filter_program_state(std::move(rtjf_state_map)) {}
@@ -383,3 +388,16 @@ class JoinFilterColStats {
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
 };
+
+struct GPU_DATA {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::shared_ptr<arrow::Schema> schema;
+
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
+        : table(std::move(t)), schema(std::move(s)) {}
+};
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
+std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);

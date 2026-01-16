@@ -78,6 +78,6 @@ class PhysicalReadIceberg : public PhysicalSource {
 
     // Column names and metadata (Pandas Index info) used for dataframe
     // construction
-    const std::shared_ptr<TableMetadata> out_metadata;
+    const std::shared_ptr<bodo::TableMetadata> out_metadata;
     const std::vector<std::string> out_column_names;
 };

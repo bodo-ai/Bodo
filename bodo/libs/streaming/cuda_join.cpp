@@ -1,6 +1,9 @@
 #include "cuda_join.h"
+#include <cudf/column/column_factories.hpp>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/reduction.hpp>
+#include "../../pandas/_util.h"
 
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
@@ -23,6 +26,21 @@ void CudaHashJoin::build_hash_table(
 
 void CudaHashJoin::FinalizeBuild() {
     this->build_hash_table(this->_build_chunks);
+
+    for (const auto& col_idx : this->build_key_indices) {
+        auto [min, max] =
+            cudf::minmax(this->_build_table->get_column(col_idx).view());
+        std::vector<std::unique_ptr<cudf::column>> columns;
+        columns.emplace_back(cudf::make_column_from_scalar(*min, 1));
+        columns.emplace_back(cudf::make_column_from_scalar(*max, 1));
+        std::shared_ptr<cudf::table> stats_table =
+            std::make_shared<cudf::table>(std::move(columns));
+        GPU_DATA stats_gpu_data = {stats_table,
+                                   this->build_table_schema->ToArrowSchema()};
+        std::shared_ptr<arrow::Table> stats = convertGPUToArrow(stats_gpu_data);
+        this->min_max_stats.push_back(stats);
+    }
+
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 }

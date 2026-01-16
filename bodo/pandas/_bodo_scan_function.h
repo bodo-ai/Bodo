@@ -36,7 +36,7 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) = 0;
 
@@ -93,7 +93,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
 
@@ -142,7 +142,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
 
@@ -171,7 +171,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
     std::string result_id;
@@ -229,7 +229,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        std::shared_ptr<std::unordered_map<int, JoinState *>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
     const std::shared_ptr<arrow::Schema> arrow_schema;

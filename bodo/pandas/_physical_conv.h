@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "_plan.h"
@@ -37,7 +38,7 @@ class PhysicalPlanBuilder {
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
-    std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
+    std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states;
     // Mapping of join ids to the pipeline for build side of the join.
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
         join_filter_pipelines;
@@ -45,17 +46,17 @@ class PhysicalPlanBuilder {
     PhysicalPlanBuilder(
         std::map<duckdb::idx_t, CTEInfo>& _ctes,
         std::map<void*, bool>& _run_on_gpu,
-        std::shared_ptr<std::unordered_map<int, JoinState*>>
+        std::shared_ptr<std::unordered_map<int, join_state_t>>
             _join_filter_states =
-                std::make_shared<std::unordered_map<int, JoinState*>>(),
+                std::make_shared<std::unordered_map<int, join_state_t>>(),
         std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
             _join_filter_pipelines = std::make_shared<
                 std::unordered_map<int, std::shared_ptr<Pipeline>>>())
         : active_pipeline(nullptr),
           ctes(_ctes),
           run_on_gpu(_run_on_gpu),
-          join_filter_states(_join_filter_states),
-          join_filter_pipelines(_join_filter_pipelines) {}
+          join_filter_states(std::move(_join_filter_states)),
+          join_filter_pipelines(std::move(_join_filter_pipelines)) {}
 
     template <typename T>
     void FinishPipelineOneOperator(std::shared_ptr<T> obj) {

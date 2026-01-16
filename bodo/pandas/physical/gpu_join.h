@@ -97,8 +97,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             }
         }
 
-        this->cuda_join =
-            CudaHashJoin(build_keys, probe_keys, cudf::null_equality::EQUAL);
+        this->cuda_join = std::make_unique<CudaHashJoin>(
+            build_keys, probe_keys, build_table_schema, probe_table_schema,
+            cudf::null_equality::EQUAL);
 
         this->output_schema = build_table_schema->copy();
         this->output_schema->append_schema(probe_table_schema->copy());
@@ -106,7 +107,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUJoin() = default;
 
-    void FinalizeSink() override { cuda_join.FinalizeBuild(); }
+    void FinalizeSink() override { cuda_join->FinalizeBuild(); }
 
     void FinalizeProcessBatch() override {
         // throw std::runtime_error("Not implemented.");
@@ -120,7 +121,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
      */
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                 OperatorResult prev_op_result) override {
-        cuda_join.BuildConsumeBatch(input_batch.table);
+        cuda_join->BuildConsumeBatch(input_batch.table);
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -135,7 +136,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         GPU_DATA input_batch, OperatorResult prev_op_result) override {
         std::unique_ptr<cudf::table> output_table =
-            cuda_join.ProbeProcessBatch(input_batch.table);
+            cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table),
                                     this->getOutputSchema()->ToArrowSchema()};
         return {output_gpu_data, prev_op_result};
@@ -162,6 +163,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
 
+    CudaHashJoin* getJoinStatePtr() { return this->cuda_join.get(); }
+
    private:
     std::shared_ptr<bodo::Schema> output_schema;
 
@@ -171,5 +174,5 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     PhysicalGPUJoinMetrics metrics;
 
-    CudaHashJoin cuda_join;
+    std::unique_ptr<CudaHashJoin> cuda_join;
 };

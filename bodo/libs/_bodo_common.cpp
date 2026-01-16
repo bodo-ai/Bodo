@@ -784,6 +784,15 @@ std::unique_ptr<DataType> DataType::Deserialize(
     return from_byte_helper(arr_array_types, arr_c_types, i);
 }
 
+TableMetadata TableMetadata::append(TableMetadata const& other) const {
+    std::vector<std::string> new_keys(this->keys);
+    std::vector<std::string> new_values(this->values);
+    new_keys.insert(new_keys.end(), other.keys.begin(), other.keys.end());
+    new_values.insert(new_values.end(), other.values.begin(),
+                      other.values.end());
+    return TableMetadata{.keys = new_keys, .values = new_values};
+}
+
 Schema::Schema() : column_types() {}
 Schema::Schema(const Schema& other) {
     this->column_types.reserve(other.column_types.size());
@@ -809,7 +818,7 @@ Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
                std::vector<std::string> column_names,
-               std::shared_ptr<TableMetadata> metadata)
+               std::shared_ptr<bodo::TableMetadata> metadata)
     : column_types(std::move(column_types_)),
       column_names(column_names),
       metadata(metadata) {}
@@ -840,6 +849,11 @@ void Schema::append_schema(std::unique_ptr<Schema>&& other_schema) {
     for (auto& col : other_schema->column_types) {
         this->column_types.push_back(std::move(col));
     }
+    for (auto& col_name : other_schema->column_names) {
+        this->column_names.push_back(std::move(col_name));
+    }
+    this->metadata = std::make_shared<TableMetadata>(
+        this->metadata->append(*other_schema->metadata));
 }
 size_t Schema::ncols() const { return this->column_types.size(); }
 
