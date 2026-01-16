@@ -671,10 +671,10 @@ def test_to_timestamp_non_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 4 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
+        {0: pd.Series([None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer])}
     )
     if use_case:
-        expected_output[0][ctx["TABLE1"]["B"]] = None
+        expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
 
     check_query(
         query,
