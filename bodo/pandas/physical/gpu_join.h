@@ -35,7 +35,24 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
         assert(logical_join.join_type == duckdb::JoinType::INNER);
+    }
 
+    /**
+     * @brief Physical Join constructor for cross join.
+     *
+     */
+    PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
+                    const std::shared_ptr<bodo::Schema> build_table_schema,
+                    const std::shared_ptr<bodo::Schema> probe_table_schema)
+        : has_non_equi_cond(false) {
+        throw std::runtime_error("Not implemented.");
+    }
+
+    void buildProbeSchemas(
+        duckdb::LogicalComparisonJoin& logical_join,
+        duckdb::vector<duckdb::JoinCondition>& conditions,
+        const std::shared_ptr<bodo::Schema> build_table_schema,
+        const std::shared_ptr<bodo::Schema> probe_table_schema) {
         // Probe side
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
@@ -82,24 +99,10 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         this->cuda_join =
             CudaHashJoin(build_keys, probe_keys, cudf::null_equality::EQUAL);
-    }
 
-    /**
-     * @brief Physical Join constructor for cross join.
-     *
-     */
-    PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
-                    const std::shared_ptr<bodo::Schema> build_table_schema,
-                    const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false) {
-        throw std::runtime_error("Not implemented.");
+        this->output_schema = build_table_schema->copy();
+        this->output_schema->append_schema(probe_table_schema->copy());
     }
-
-    void buildProbeSchemas(
-        duckdb::LogicalComparisonJoin& logical_join,
-        duckdb::vector<duckdb::JoinCondition>& conditions,
-        const std::shared_ptr<bodo::Schema> build_table_schema,
-        const std::shared_ptr<bodo::Schema> probe_table_schema) {}
 
     virtual ~PhysicalGPUJoin() = default;
 

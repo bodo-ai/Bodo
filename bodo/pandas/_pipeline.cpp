@@ -228,14 +228,26 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     std::shared_ptr<arrow::Table> combined_table =
         combined_table_result.ValueOrDie();
 
-    // Read the single batch
-    arrow::TableBatchReader reader(*combined_table);
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
-        reader.Next();
-    if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
-        throw std::runtime_error("Failed to extract batch from Arrow table");
+    if (combined_table->num_rows() == 0) {
+        // We preserve the schema but create a batch with length 0.
+        // This allows downstream cudf code to know the column types.
+        auto empty_batch_result =
+            arrow::RecordBatch::MakeEmpty(arrow_table->schema());
+        if (!empty_batch_result.ok()) {
+            throw std::runtime_error("Failed to create empty RecordBatch");
+        }
+        arrow_batch = empty_batch_result.ValueOrDie();
+    } else {
+        // Read the single batch
+        arrow::TableBatchReader reader(*combined_table);
+        arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
+            reader.Next();
+        if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
+            throw std::runtime_error(
+                "Failed to extract batch from Arrow table");
+        }
+        arrow_batch = batch_result.ValueOrDie();
     }
-    arrow_batch = batch_result.ValueOrDie();
 
     // Export to C Data Interface Structs
     // These are lightweight structs that hold pointers to the CPU data.

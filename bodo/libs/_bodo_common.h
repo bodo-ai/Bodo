@@ -839,6 +839,9 @@ struct Schema {
     /// @brief Convert from an Arrow schema to a Bodo schema
     static std::shared_ptr<Schema> FromArrowSchema(
         std::shared_ptr<::arrow::Schema> schema);
+
+    // @brief Deep copy of the Schema
+    std::unique_ptr<Schema> copy() const;
 };
 
 }  // namespace bodo

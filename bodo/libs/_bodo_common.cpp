@@ -980,6 +980,16 @@ std::shared_ptr<Schema> Schema::FromArrowSchema(
                                     schema->field_names(), metadata);
 }
 
+std::unique_ptr<Schema> Schema::copy() const {
+    std::vector<std::unique_ptr<DataType>> column_types_copy;
+    column_types_copy.reserve(this->column_types.size());
+    for (const auto& t : this->column_types) {
+        column_types_copy.push_back(t->copy());
+    }
+    return std::make_unique<Schema>(std::move(column_types_copy),
+                                    this->column_names, this->metadata);
+}
+
 }  // namespace bodo
 
 // ---------------------------------------------------------------------------
