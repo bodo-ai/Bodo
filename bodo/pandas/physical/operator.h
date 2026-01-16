@@ -1,11 +1,15 @@
 #pragma once
 
+#include <arrow/c/bridge.h>
+#include <arrow/table.h>
+#include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #include <memory>
 #include <typeinfo>
 #include <utility>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
 
 /// Specifies physical operator types in the execution pipeline:
@@ -35,6 +39,15 @@ enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT = 0,
     HAVE_MORE_OUTPUT = 1,
     FINISHED = 2,
+};
+
+struct GPU_DATA {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::shared_ptr<arrow::Schema> schema;
+
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
+        : table(t), schema(s) {}
 };
 
 /**
@@ -96,6 +109,10 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result) = 0;
+
+    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                        OperatorResult prev_op_result);
+
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
 
@@ -117,6 +134,9 @@ class PhysicalProcessBatch : public PhysicalOperator {
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) = 0;
 
+    virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result);
+
     virtual void FinalizeProcessBatch() = 0;
 
     /**
@@ -125,15 +145,6 @@ class PhysicalProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
-};
-
-struct GPU_DATA {
-   public:
-    std::shared_ptr<cudf::table> table;
-    std::shared_ptr<arrow::Schema> schema;
-
-    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
-        : table(t), schema(s) {}
 };
 
 /**
@@ -174,6 +185,10 @@ class PhysicalGPUSink : public PhysicalOperator {
 
     virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                         OperatorResult prev_op_result) = 0;
+
+    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                        OperatorResult prev_op_result);
+
     virtual std::variant<GPU_DATA, PyObject*> GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
@@ -192,6 +207,9 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
 
     virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         GPU_DATA input_batch, OperatorResult prev_op_result) = 0;
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
 
     virtual void FinalizeProcessBatch() = 0;
 
@@ -221,3 +239,6 @@ using PhysicalCpuGpuSink = std::variant<std::shared_ptr<PhysicalSink>,
 using PhysicalCpuGpuProcessBatch =
     std::variant<std::shared_ptr<PhysicalProcessBatch>,
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
