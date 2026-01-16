@@ -3,6 +3,7 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cudf/copying.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table_view.hpp>
 #include "physical/operator.h"
@@ -15,7 +16,7 @@
             std::cout << " ";                                       \
         std::cout << "Rank " << rank                                \
                   << " midPipelineExecute before ConsumeBatch "     \
-                  << sink->ToString() << " "                        \
+                  << getNodeString(sink) << " "                     \
                   << static_cast<int>(prev_op_result) << std::endl; \
     } while (0)
 #else
@@ -31,7 +32,7 @@
             std::cout << " ";                                       \
         std::cout << "Rank " << rank                                \
                   << " midPipelineExecute after ConsumeBatch "      \
-                  << sink->ToString() << " "                        \
+                  << getNodeString(sink) << " "                     \
                   << static_cast<int>(consume_result) << std::endl; \
     } while (0)
 #else
@@ -45,7 +46,7 @@
     do {                                                       \
         std::cout << "Rank " << rank                           \
                   << " Pipeline::Execute before ProduceBatch " \
-                  << source->ToString() << std::endl;          \
+                  << getNodeString(source) << std::endl;       \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source) \
@@ -58,7 +59,7 @@
     do {                                                            \
         std::cout << "Rank " << rank                                \
                   << " Pipeline::Execute after ProduceBatch "       \
-                  << source->ToString() << " "                      \
+                  << getNodeString(source) << " "                   \
                   << static_cast<int>(produce_result) << std::endl; \
     } while (0)
 #else
@@ -81,14 +82,14 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result)                \
-    do {                                                                       \
-        for (unsigned i = 0; i < idx; ++i)                                     \
-            std::cout << " ";                                                  \
-        std::cout << "Rank " << rank                                           \
-                  << " midPipelineExecute before ProcessBatch "                \
-                  << op->ToString() << " " << static_cast<int>(prev_op_result) \
-                  << std::endl;                                                \
+#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result)     \
+    do {                                                            \
+        for (unsigned i = 0; i < idx; ++i)                          \
+            std::cout << " ";                                       \
+        std::cout << "Rank " << rank                                \
+                  << " midPipelineExecute before ProcessBatch "     \
+                  << getNodeString(op) << " "                       \
+                  << static_cast<int>(prev_op_result) << std::endl; \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result) \
@@ -97,14 +98,14 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result)                 \
-    do {                                                                       \
-        for (unsigned i = 0; i < idx; ++i)                                     \
-            std::cout << " ";                                                  \
-        std::cout << "Rank " << rank                                           \
-                  << " midPipelineExecute after ProcessBatch "                 \
-                  << op->ToString() << " " << static_cast<int>(prev_op_result) \
-                  << std::endl;                                                \
+#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result)      \
+    do {                                                            \
+        for (unsigned i = 0; i < idx; ++i)                          \
+            std::cout << " ";                                       \
+        std::cout << "Rank " << rank                                \
+                  << " midPipelineExecute after ProcessBatch "      \
+                  << getNodeString(op) << " "                       \
+                  << static_cast<int>(prev_op_result) << std::endl; \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result) \
@@ -118,7 +119,7 @@
         std::cout                                                           \
             << "Rank " << rank                                              \
             << " Pipeline::Execute calling with empty batch until finished" \
-            << source->ToString() << std::endl;                             \
+            << getNodeString(source) << std::endl;                          \
     } while (0)
 #else
 #define DEBUG_PIPELINE_SOURCE_FINISHED(rank, source) \
@@ -130,7 +131,7 @@
 #define DEBUG_PIPELINE_FINALIZE(rank, op)                                      \
     do {                                                                       \
         std::cout << "Rank " << rank << " Pipeline::Execute calling Finalize " \
-                  << op->ToString() << std::endl;                              \
+                  << getNodeString(op) << std::endl;                           \
     } while (0)
 #else
 #define DEBUG_PIPELINE_FINALIZE(rank, op) \
@@ -139,21 +140,23 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 2)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                           \
-    do {                                                                   \
-        for (unsigned i = 0; i < idx; ++i)                                 \
-            std::cout << " ";                                              \
-        std::cout << "Rank " << rank << " midPipelineExecute in batch "    \
-                  << op->ToString() << " " << batch->nrows() << std::endl; \
-        DEBUG_PrintTable(std::cout, batch);                                \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                        \
+    do {                                                                \
+        for (unsigned i = 0; i < idx; ++i)                              \
+            std::cout << " ";                                           \
+        std::cout << "Rank " << rank << " midPipelineExecute in batch " \
+                  << getNodeString(op) << " " << getBatchRows(batch)    \
+                  << std::endl;                                         \
+        DEBUG_PrintTable(std::cout, batch);                             \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                           \
-    do {                                                                   \
-        for (unsigned i = 0; i < idx; ++i)                                 \
-            std::cout << " ";                                              \
-        std::cout << "Rank " << rank << " midPipelineExecute in batch "    \
-                  << op->ToString() << " " << batch->nrows() << std::endl; \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch)                        \
+    do {                                                                \
+        for (unsigned i = 0; i < idx; ++i)                              \
+            std::cout << " ";                                           \
+        std::cout << "Rank " << rank << " midPipelineExecute in batch " \
+                  << getNodeString(op) << " " << getBatchRows(batch)    \
+                  << std::endl;                                         \
     } while (0)
 #else
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch) \
@@ -207,7 +210,9 @@ std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
 
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
 
-    return arrow_table_to_bodo(table, bodo::BufferPool::Default().get());
+    table = table->ReplaceSchemaMetadata(batch.schema->metadata());
+
+    return arrow_table_to_bodo(table, nullptr);
 }
 
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
@@ -276,6 +281,18 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     return GPU_DATA{std::move(result), arrow_batch->schema()};
 }
 
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table) {
+    cudf::table_view tv = input_table->view();
+
+    // slice produces a vector<table_view>
+    auto sliced = cudf::slice(tv, {0, 0});
+    cudf::table_view empty_view = sliced[0];
+
+    // materialize into a real cudf::table
+    return std::make_shared<cudf::table>(empty_view);
+}
+
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
  * say that it HAVE_MORE_OUTPUT in which case we need to call it again for the
@@ -314,20 +331,7 @@ bool Pipeline::midPipelineExecute(
             if (consume_result == OperatorResult::NEED_MORE_INPUT) {
                 return false;
             }
-            size_t batch_nrows;
-            std::visit(
-                [&](auto &x) {
-                    using T = std::decay_t<decltype(x)>;
-                    if constexpr (std::is_same_v<T,
-                                                 std::shared_ptr<table_info>>) {
-                        batch_nrows = x->nrows();
-                    } else {
-                        batch_nrows = true;
-                        throw std::runtime_error(
-                            "Need to get whether GPU_DATA is empty.");
-                    }
-                },
-                batch);
+            size_t batch_nrows = getBatchRows(batch);
             if (batch_nrows != 0) {
                 DEBUG_PIPELINE_CONSUME_LOOP(rank);
                 std::visit(
@@ -337,9 +341,8 @@ bool Pipeline::midPipelineExecute(
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
-                            // make gpu batch empty!
-                            throw std::runtime_error(
-                                "Need to create empty GPU_DATA.");
+                            batch =
+                                GPU_DATA(make_empty_like(x.table), x.schema);
                         }
                     },
                     batch);
@@ -398,21 +401,7 @@ bool Pipeline::midPipelineExecute(
             // to give this operator a chance to produce more output.
             // Currently, streaming operators assume input to be empty in this
             // case to match BodoSQL.
-            size_t batch_nrows;
-            std::visit(
-                [&](auto &x) {
-                    using T = std::decay_t<decltype(x)>;
-                    if constexpr (std::is_same_v<T,
-                                                 std::shared_ptr<table_info>>) {
-                        batch_nrows = x->nrows();
-                    } else {
-                        batch_nrows = true;
-                        throw std::runtime_error(
-                            "Need to get whether GPU_DATA is empty "
-                            "midpipeline.");
-                    }
-                },
-                batch);
+            size_t batch_nrows = getBatchRows(batch);
             if (batch_nrows != 0) {
                 std::visit(
                     [&](auto &x) {
@@ -421,9 +410,8 @@ bool Pipeline::midPipelineExecute(
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
-                            // make gpu batch empty!
-                            throw std::runtime_error(
-                                "Need to create empty GPU_DATA midpipeline.");
+                            batch =
+                                GPU_DATA(make_empty_like(x.table), x.schema);
                         }
                     },
                     batch);
@@ -487,10 +475,7 @@ uint64_t Pipeline::Execute() {
                                                  std::shared_ptr<table_info>>) {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
-                        // make gpu batch empty!
-                        throw std::runtime_error(
-                            "Need to create empty GPU_DATA after "
-                            "ProduceBatch.");
+                        batch = GPU_DATA(make_empty_like(x.table), x.schema);
                     }
                 },
                 batch);
