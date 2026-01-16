@@ -71,7 +71,7 @@ def test_date_casting_functions(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
-                lambda val: None
+                lambda val: pd.NA
                 if scalar_to_date_equiv_fn(val) is None
                 else scalar_to_date_equiv_fn(val)
             )
