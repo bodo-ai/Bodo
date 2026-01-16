@@ -378,7 +378,7 @@ def test_date_casting_functions_with_invalid_format(
     query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
 
     if test_fn == "TRY_TO_DATE":
-        expected_output = pd.DataFrame({"FOO": pd.Series([None] * 24)})
+        expected_output = pd.DataFrame({"FOO": pd.Series([pd.NA] * 24)})
         check_query(
             query,
             format_input_string_df,
