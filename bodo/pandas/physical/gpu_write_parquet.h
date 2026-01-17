@@ -49,6 +49,24 @@ struct PhysicalGPUWriteParquetMetrics {
 /// generated using the same get_fname_prefix() logic as the CPU writer so parts
 /// are lexicographically ordered.
 class PhysicalGPUWriteParquet : public PhysicalGPUSink {
+   private:
+    std::vector<std::string> get_names_from_arrow(
+        std::shared_ptr<arrow::Schema> schema) {
+        std::vector<std::string> names;
+        names.reserve(schema->num_fields());
+        for (int i = 0; i < schema->num_fields(); i++) {
+            names.push_back(schema->field(i)->name());
+        }
+        return names;
+    }
+
+    void recreate_output_dir(const std::string &path) {
+        if (fs::exists(path)) {
+            fs::remove_all(path);
+        }
+        fs::create_directories(path);
+    }
+
    public:
     explicit PhysicalGPUWriteParquet(std::shared_ptr<bodo::Schema> in_schema,
                                      ParquetWriteFunctionData &bind_data)
@@ -65,7 +83,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
           chunk_rows(static_cast<int64_t>(get_parquet_chunk_size())) {
         time_pt start_init = start_timer();
 
-        pq_write_create_dir(this->path.c_str());
+        recreate_output_dir(this->path);
+
+        column_names = get_names_from_arrow(arrow_schema);
 
         // Keep dict builders for API parity with CPU writer (not used for GPU
         // write logic here, but may be useful for metrics/compatibility).
@@ -120,14 +140,21 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             std::string out_path =
                 (fs::path(path) / (fname_prefix + "0.parquet")).string();
 
+            cudf::table_view bttv = buffer_table->view();
+            cudf::io::table_input_metadata meta{bttv};
+            for (int i = 0; i < bttv.num_columns(); ++i) {
+                meta.column_metadata[i].set_name(column_names[i]);
+            }
+
             // build writer options (row_group_size, compression, etc.)
             auto sink = cudf::io::sink_info(out_path);
-            auto builder =
-                cudf::io::parquet_writer_options::builder(sink,
-                                                          buffer_table->view())
-                    .row_group_size_rows(row_group_size)
-                    .stats_level(
-                        cudf::io::statistics_freq::STATISTICS_ROWGROUP);
+            auto builder = cudf::io::parquet_writer_options::builder(sink, bttv)
+                               .metadata(meta);
+            if (row_group_size > 0) {
+                builder = builder.row_group_size_rows(row_group_size);
+            }
+            builder = builder.stats_level(
+                cudf::io::statistics_freq::STATISTICS_ROWGROUP);
             try {
                 builder.compression(static_cast<cudf::io::compression_type>(
                     pq_compression_from_string(compression)));
@@ -154,10 +181,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return OperatorResult::NEED_MORE_INPUT;
     }
 
-    std::variant<GPU_DATA, PyObject *> GetResult() override {
-        std::vector<std::unique_ptr<cudf::column>> no_cols;
-        return GPU_DATA(std::make_shared<cudf::table>(std::move(no_cols)),
-                        arrow_schema);
+    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult() override {
+        return std::shared_ptr<table_info>(nullptr);
     }
 
     void FinalizeSink() override {
@@ -234,7 +259,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return static_cast<int>(cudf::io::compression_type::SNAPPY);
     }
 
-    // State
     const std::string path;
     const std::string compression;
     const int64_t row_group_size;
@@ -243,6 +267,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     const std::shared_ptr<IsLastState> is_last_state;
     bool finished;
+    std::vector<std::string> column_names;
     // chunk_rows is the row-count threshold for emitting a parquet part.
     const int64_t chunk_rows;
     int64_t iter = 0;
