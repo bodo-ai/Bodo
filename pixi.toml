@@ -6,11 +6,11 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "314" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "314" }
+default =      { features = ["py314", "rcpp", "dev", "local-mpi"],          solve-group = "314" }
+azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure"], solve-group = "314" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "314-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "314-platform" }
+platform =     { features = ["py313", "rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
+platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
@@ -67,12 +67,11 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.14.*"
 pip = "*"
 # Core Python Deps
 numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
-pandas = { version = "3.0.0rc1", channel = "conda-forge/label/pandas_rc" }
+pandas = { version = "3.0.0rc*", channel = "conda-forge/label/pandas_rc" }
 # pandas = ">=2.2"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
@@ -115,6 +114,7 @@ pyzmq = "*"
 
 [target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
+pyarrow-core = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
@@ -175,7 +175,7 @@ minio-server = "*"
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use. 
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use.
 pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
@@ -211,6 +211,14 @@ openai = "*"
 # - tensorflow
 # - pip:
 #   - horovod
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+# The platform uses Python 3.13 to be compatible with conda in the base environment.
+# TODO: Update platform environment to use Python 3.14 once conda is compatible with it.
+[feature.py313.dependencies]
+python = "3.13.*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
