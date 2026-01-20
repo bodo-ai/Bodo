@@ -24,8 +24,10 @@ class BodoWriteFunctionData : public duckdb::FunctionData {
      *
      * @return std::shared_ptr<PhysicalSink> write operator
      */
-    virtual std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) = 0;
+    virtual std::variant<std::shared_ptr<PhysicalSink>,
+                         std::shared_ptr<PhysicalGPUSink>>
+    CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
+                           bool run_on_gpu) = 0;
 };
 
 /**
@@ -59,8 +61,10 @@ struct ParquetWriteFunctionData : public BodoWriteFunctionData {
             this->bucket_region, this->row_group_size);
     }
 
-    std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) override;
+    std::variant<std::shared_ptr<PhysicalSink>,
+                 std::shared_ptr<PhysicalGPUSink>>
+    CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
+                           bool run_on_gpu) override;
 
     std::string path;
     std::shared_ptr<arrow::Schema> arrow_schema;
@@ -125,8 +129,10 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
             this->fs);
     }
 
-    std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) override;
+    std::variant<std::shared_ptr<PhysicalSink>,
+                 std::shared_ptr<PhysicalGPUSink>>
+    CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
+                           bool run_on_gpu) override;
 
     std::shared_ptr<arrow::Schema> in_schema;
     std::string table_loc;
@@ -166,8 +172,10 @@ struct S3VectorsWriteFunctionData : public BodoWriteFunctionData {
             this->vector_bucket_name, this->index_name, this->region);
     }
 
-    std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) override;
+    std::variant<std::shared_ptr<PhysicalSink>,
+                 std::shared_ptr<PhysicalGPUSink>>
+    CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
+                           bool run_on_gpu) override;
 
     std::string vector_bucket_name;
     std::string index_name;

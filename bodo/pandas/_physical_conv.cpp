@@ -12,6 +12,7 @@
 #include "physical/filter.h"
 #if USE_CUDF
 #include "physical/gpu_join.h"
+#include "physical/gpu_project.h"
 #endif
 #include "physical/join.h"
 #include "physical/join_filter.h"
@@ -54,18 +55,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     BodoScanFunctionData& scan_data =
         op.bind_data->Cast<BodoScanFunctionData>();
 
-#ifdef USE_CUDF
     bool run_on_gpu = node_run_on_gpu(op);
-#endif
-
     auto physical_op = scan_data.CreatePhysicalOperator(
         selected_columns, op.table_filters, op.extra_info.limit_val,
-        this->join_filter_states
-#ifdef USE_CUDF
-        ,
-        run_on_gpu
-#endif
-    );
+        this->join_filter_states, run_on_gpu);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
@@ -103,9 +96,26 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_op = std::make_shared<PhysicalProjection>(
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalProjection>,
+                 std::shared_ptr<PhysicalGPUProjection>>
+        physical_op;
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        std::cout << "project gpu" << std::endl;
+        physical_op = std::make_shared<PhysicalGPUProjection>(
+            source_cols, op.expressions, in_table_schema);
+    } else {
+        physical_op = std::make_shared<PhysicalProjection>(
+            source_cols, op.expressions, in_table_schema);
+    }
+    std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
+               physical_op);
+#else
+    PhysicalProjection physical_op = std::make_shared<PhysicalProjection>(
         source_cols, op.expressions, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
+#endif
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
@@ -555,7 +565,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
 
     BodoWriteFunctionData& write_data =
         op.bind_data->Cast<BodoWriteFunctionData>();
-    auto physical_op = write_data.CreatePhysicalOperator(in_table_schema);
+    bool run_on_gpu = node_run_on_gpu(op);
+    auto physical_op =
+        write_data.CreatePhysicalOperator(in_table_schema, run_on_gpu);
 
     this->terminal_pipeline = this->active_pipeline->Build(physical_op);
     this->active_pipeline = nullptr;

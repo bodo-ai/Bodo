@@ -131,7 +131,9 @@ class Executor {
         if (get_use_cudf()) {
             if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET ||
                 op.type ==
-                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN ||
+                op.type == duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE ||
+                op.type == duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
                 run_on_gpu[&op] = true;
             } else {
                 run_on_gpu[&op] = false;

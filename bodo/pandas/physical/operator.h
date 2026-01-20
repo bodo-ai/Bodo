@@ -177,7 +177,8 @@ class PhysicalGPUSink : public PhysicalOperator {
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result);
 
-    virtual std::variant<GPU_DATA, PyObject*> GetResult() = 0;
+    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
 };

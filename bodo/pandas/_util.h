@@ -3,8 +3,6 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <cstdint>
-#include <cudf/interop.hpp>
-#include <cudf/table/table.hpp>
 #include <map>
 #include <utility>
 #include <variant>
@@ -389,6 +387,12 @@ class JoinFilterColStats {
         const std::vector<int> column_projection);
 };
 
+#ifdef USE_CUDF
+#include <cstdint>
+#include <cudf/interop.hpp>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/types.hpp>           // cudf::data_type, cudf::type_id
+#include <duckdb/common/types.hpp>  // duckdb::LogicalType, duckdb::LogicalTypeId
 struct GPU_DATA {
    public:
     std::shared_ptr<cudf::table> table;
@@ -401,3 +405,30 @@ struct GPU_DATA {
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
+
+/**
+ * @brief Map DuckDB LogicalType to cudf::data_type.
+ *
+ * @param dtype the DuckDB type
+ * @return cudf::data_type the corresponding cudf type
+ */
+cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype);
+
+/**
+ * @brief Create invalid cudf scalar from a valid one.
+ *
+ * @param src the valid cudf scalar input
+ * @return cudf::scalar the output cudf scalar with valid bit off
+ */
+std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src);
+
+/**
+ * @brief Convert arrow scalar to cudf scalar.
+ *
+ * @param s the input arrow scalar
+ * @return cudf::scalar the output cudf scalar
+ */
+std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
+    const std::shared_ptr<arrow::Scalar> &s);
+
+#endif
