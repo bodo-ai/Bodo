@@ -1885,11 +1885,11 @@ def test_ntile(memory_leak_check):
         pytest.param(
             None,
             pd.array(
-                ({x: x} for x in [40, 50, 60, 70, 80, 90]),
+                [{x: x} for x in [40, 50, 60, 70, 80, 90]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             pd.array(
-                (None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]),
+                [None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             id="map_null",
