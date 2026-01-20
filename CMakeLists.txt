@@ -694,6 +694,11 @@ set(sources_list
   "bodo/libs/_io_cpu_thread_pool.cpp"
 )
 
+if(USE_CUDF)
+  set(sources_list "${sources_list}"
+    "bodo/pandas/physical/gpu_expression.cpp")
+endif()
+
 if (BUILD_WITH_V8)
   set(sources_list "${sources_list}"
     "bodo/libs/_javascript_udf.cpp")
