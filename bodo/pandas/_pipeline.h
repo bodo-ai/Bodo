@@ -30,7 +30,9 @@ uint64_t getBatchRows(T &t) {
             if constexpr (std::is_same_v<U, std::shared_ptr<table_info>>) {
                 ret = vt->nrows();
             } else if constexpr (std::is_same_v<U, GPU_DATA>) {
+#ifdef USE_CUDF
                 ret = vt.table->num_rows();
+#endif
             } else {
                 throw std::runtime_error(
                     "Getting number of rows for not table_info for GPU_data.");

@@ -46,13 +46,12 @@ struct PhysicalJoinMetrics {
  */
 class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
-    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join,
-                          bool _use_cudf)
+    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join)
         : has_non_equi_cond(false),
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
-                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
-          use_cudf(_use_cudf) {}
+                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
+    }
 
     void buildProbeSchemas(
         duckdb::LogicalComparisonJoin& logical_join,
@@ -243,7 +242,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 false, join_func, true, true, get_streaming_batch_size(), -1,
                 //  TODO: support query profiling
                 getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
-                /*is_na_equal*/ true, is_mark_join, use_cudf);
+                /*is_na_equal*/ true, is_mark_join);
         }
 
         this->initOutputSchema(build_table_schema_reordered,
@@ -332,10 +331,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      * @brief Physical Join constructor for cross join.
      *
      */
-    PhysicalJoin(duckdb::LogicalCrossProduct& logical_join, bool _use_cudf,
+    PhysicalJoin(duckdb::LogicalCrossProduct& logical_join,
                  const std::shared_ptr<bodo::Schema> build_table_schema,
                  const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false), use_cudf(_use_cudf) {
+        : has_non_equi_cond(false) {
         time_pt start_init = start_timer();
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
             build_table_schema, probe_table_schema, false, false,
@@ -684,7 +683,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     bool is_mark_join = false;
     bool is_anti_join = false;
-    bool use_cudf = false;
 
     PhysicalJoinMetrics metrics;
 };

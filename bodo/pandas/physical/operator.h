@@ -1,5 +1,7 @@
 #pragma once
 
+#include <arrow/c/bridge.h>
+#include <arrow/table.h>
 #include <memory>
 #include <typeinfo>
 #include <utility>
@@ -209,6 +211,7 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
+
 /**
  * @brief Get the streaming batch size from environment variable.
  * It looks up the environment variable dynamically to enable setting it

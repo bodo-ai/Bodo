@@ -210,6 +210,7 @@ class Executor {
                 using T = std::decay_t<decltype(vres)>;
                 if constexpr (std::is_same_v<
                                   T, std::variant<GPU_DATA, PyObject *>>) {
+#ifdef USE_CUDF
                     std::visit(
                         [&](auto &gpu_var) {
                             using U = std::decay_t<decltype(gpu_var)>;
@@ -220,6 +221,7 @@ class Executor {
                             }
                         },
                         vres);
+#endif
                 } else if constexpr (std::is_same_v<
                                          T, std::variant<
                                                 std::shared_ptr<table_info>,

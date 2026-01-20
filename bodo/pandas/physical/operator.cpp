@@ -14,6 +14,7 @@ int64_t get_parquet_chunk_size() {
                                 : 256e6;  // Default to 256 MiB
 }
 
+#ifdef USE_CUDF
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
@@ -38,3 +39,4 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     auto gpu_batch = convertTableToGPU(input_batch);
     return ProcessBatch(gpu_batch, prev_op_result);
 }
+#endif

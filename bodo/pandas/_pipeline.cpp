@@ -1,8 +1,10 @@
 #include "_pipeline.h"
 #include "physical/operator.h"
 
+#ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
+#endif
 #include "physical/operator.h"
 #include "physical/result_collector.h"
 
@@ -161,6 +163,7 @@
     } while (0)
 #endif
 
+#ifdef USE_CUDF
 std::shared_ptr<cudf::table> make_empty_like(
     std::shared_ptr<cudf::table> input_table) {
     cudf::table_view tv = input_table->view();
@@ -172,6 +175,7 @@ std::shared_ptr<cudf::table> make_empty_like(
     // materialize into a real cudf::table
     return std::make_shared<cudf::table>(empty_view);
 }
+#endif
 
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
@@ -219,8 +223,10 @@ bool Pipeline::midPipelineExecute(
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
+#ifdef USE_CUDF
                             batch =
                                 GPU_DATA(make_empty_like(x.table), x.schema);
+#endif
                         }
                     },
                     batch);
@@ -286,8 +292,10 @@ bool Pipeline::midPipelineExecute(
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
+#ifdef USE_CUDF
                             batch =
                                 GPU_DATA(make_empty_like(x.table), x.schema);
+#endif
                         }
                     },
                     batch);
@@ -351,7 +359,9 @@ uint64_t Pipeline::Execute() {
                                                  std::shared_ptr<table_info>>) {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
+#ifdef USE_CUDF
                         batch = GPU_DATA(make_empty_like(x.table), x.schema);
+#endif
                     }
                 },
                 batch);
