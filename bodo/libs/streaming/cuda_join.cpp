@@ -94,22 +94,26 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     // Gather the actual data
     // This creates new tables containing only the matching rows
     std::unique_ptr<cudf::table> gathered_probe =
-        cudf::gather(probe_chunk->view(), probe_idx_view);
+        cudf::gather(probe_chunk->select(this->probe_kept_cols.begin(),
+                                         this->probe_kept_cols.end()),
+                     probe_idx_view);
     std::unique_ptr<cudf::table> gathered_build =
-        cudf::gather(this->_build_table->view(), build_idx_view);
+        cudf::gather(this->_build_table->select(this->build_kept_cols.begin(),
+                                                this->build_kept_cols.end()),
+                     build_idx_view);
 
     // Assemble the final result
     // We extract the columns from the gathered tables and combine them into one
     // vector.
     std::vector<std::unique_ptr<cudf::column>> final_columns;
 
-    // Move columns from build side
-    for (auto& col : gathered_build->release()) {
+    // Move columns from probe side
+    for (auto& col : gathered_probe->release()) {
         final_columns.push_back(std::move(col));
     }
 
-    // Move columns from probe side
-    for (auto& col : gathered_probe->release()) {
+    // Move columns from build side
+    for (auto& col : gathered_build->release()) {
         final_columns.push_back(std::move(col));
     }
 

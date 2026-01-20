@@ -19,6 +19,9 @@ struct CudaHashJoin {
 
     std::vector<cudf::size_type> build_key_indices;
     std::vector<cudf::size_type> probe_key_indices;
+    std::vector<int64_t> build_kept_cols;
+    std::vector<int64_t> probe_kept_cols;
+
     std::vector<std::shared_ptr<arrow::Table>> min_max_stats;
 
     std::shared_ptr<bodo::Schema> build_table_schema;
@@ -31,9 +34,13 @@ struct CudaHashJoin {
                  std::vector<cudf::size_type> probe_keys,
                  std::shared_ptr<bodo::Schema> build_schema,
                  std::shared_ptr<bodo::Schema> probe_schema,
+                 std::vector<int64_t> build_kept_cols,
+                 std::vector<int64_t> probe_kept_cols,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL)
         : build_key_indices(std::move(build_keys)),
           probe_key_indices(std::move(probe_keys)),
+          build_kept_cols(std::move(build_kept_cols)),
+          probe_kept_cols(std::move(probe_kept_cols)),
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
           null_equality(null_eq) {}

@@ -1,15 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cudf/types.hpp>
-#include "../../libs/streaming/_join.h"
 #include "../../libs/streaming/cuda_join.h"
 #include "../_util.h"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_cross_product.hpp"
-#include "expression.h"
 #include "operator.h"
 
 struct PhysicalGPUJoinMetrics {
@@ -97,12 +95,77 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             }
         }
 
+        // Get the indices of kept build columns
+        std::set<int64_t> bound_probe_inds;
+        std::set<int64_t> bound_build_inds;
+        if (logical_join.left_projection_map.empty()) {
+            for (duckdb::idx_t i = 0;
+                 i < logical_join.children[0]->GetColumnBindings().size();
+                 i++) {
+                bound_probe_inds.insert(i);
+            }
+        } else {
+            for (const auto& c : logical_join.left_projection_map) {
+                bound_probe_inds.insert(c);
+            }
+        }
+
+        if (logical_join.right_projection_map.empty()) {
+            for (duckdb::idx_t i = 0;
+                 i < logical_join.children[1]->GetColumnBindings().size();
+                 i++) {
+                bound_build_inds.insert(i);
+            }
+        } else {
+            for (const auto& c : logical_join.right_projection_map) {
+                bound_build_inds.insert(c);
+            }
+        }
+
+        // Figure out kept columns in output
+        std::vector<int64_t> build_kept_cols;
+        std::vector<int64_t> probe_kept_cols;
+        for (size_t idx = 0; idx < build_table_schema->ncols(); ++idx) {
+            if (std::ranges::find(bound_build_inds, idx) ==
+                bound_build_inds.end()) {
+                continue;
+            }
+            build_kept_cols.push_back(idx);
+        }
+        for (size_t idx = 0; idx < probe_table_schema->ncols(); ++idx) {
+            if (std::ranges::find(bound_probe_inds, idx) ==
+                bound_probe_inds.end()) {
+                continue;
+            }
+            probe_kept_cols.push_back(idx);
+        }
+
         this->cuda_join = std::make_unique<CudaHashJoin>(
             build_keys, probe_keys, build_table_schema, probe_table_schema,
-            cudf::null_equality::EQUAL);
+            build_kept_cols, probe_kept_cols, cudf::null_equality::EQUAL);
 
-        this->output_schema = build_table_schema->copy();
-        this->output_schema->append_schema(probe_table_schema->copy());
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (const auto& kept_col : probe_kept_cols) {
+            this->output_schema->column_types.push_back(
+                probe_table_schema->column_types[kept_col]->copy());
+            this->output_schema->column_names.push_back(
+                probe_table_schema->column_names[kept_col]);
+        }
+        for (const auto& kept_col : build_kept_cols) {
+            this->output_schema->column_types.push_back(
+                build_table_schema->column_types[kept_col]->copy());
+            this->output_schema->column_names.push_back(
+                build_table_schema->column_names[kept_col]);
+        }
+        // Indexes are ignored in the Pandas merge if not joining on Indexes.
+        // We designate empty metadata to indicate generating a trivial
+        // RangeIndex.
+        // TODO[BSE-4820]: support joining on Indexes
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+
+        assert(this->output_schema->ncols() ==
+               logical_join.GetColumnBindings().size());
     }
 
     virtual ~PhysicalGPUJoin() = default;
