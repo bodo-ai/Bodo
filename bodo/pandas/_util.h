@@ -405,7 +405,11 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype);
  * @param src the valid cudf scalar input
  * @return cudf::scalar the output cudf scalar with valid bit off
  */
-std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src);
+std::unique_ptr<cudf::scalar> make_invalid_like(
+    cudf::scalar const &src,
+    rmm::cuda_stream_view stream = cudf::get_default_stream(),
+    rmm::device_async_resource_ref mr =
+        cudf::get_current_device_resource_ref());
 
 /**
  * @brief Convert arrow scalar to cudf scalar.
@@ -414,6 +418,9 @@ std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src);
  * @return cudf::scalar the output cudf scalar
  */
 std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
-    const std::shared_ptr<arrow::Scalar> &s);
+    const std::shared_ptr<arrow::Scalar> &s,
+    rmm::cuda_stream_view stream = cudf::get_default_stream(),
+    rmm::device_async_resource_ref mr =
+        cudf::get_current_device_resource_ref());
 
 #endif

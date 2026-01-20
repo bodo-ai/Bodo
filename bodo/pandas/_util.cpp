@@ -1096,7 +1096,9 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
     }
 }
 
-std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src) {
+std::unique_ptr<cudf::scalar> make_invalid_like(
+    cudf::scalar const &src, rmm::cuda_stream_view stream,
+    rmm::device_async_resource_ref mr) {
     cudf::data_type t = src.type();
 
     switch (t.id()) {
@@ -1134,16 +1136,16 @@ std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src) {
         // **timestamps**
         case cudf::type_id::TIMESTAMP_SECONDS:
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_s>>(
-                0, false);
+                static_cast<int64_t>(0), false, stream, mr);
         case cudf::type_id::TIMESTAMP_MILLISECONDS:
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
-                0, false);
+                static_cast<int64_t>(0), false, stream, mr);
         case cudf::type_id::TIMESTAMP_MICROSECONDS:
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
-                0, false);
+                static_cast<int64_t>(0), false, stream, mr);
         case cudf::type_id::TIMESTAMP_NANOSECONDS:
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
-                0, false);
+                static_cast<int64_t>(0), false, stream, mr);
 
         default:
             throw std::runtime_error(
@@ -1152,7 +1154,8 @@ std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src) {
 }
 
 std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
-    const std::shared_ptr<arrow::Scalar> &s) {
+    const std::shared_ptr<arrow::Scalar> &s, rmm::cuda_stream_view stream,
+    rmm::device_async_resource_ref mr) {
     if (!s) {
         throw std::runtime_error("Null arrow::Scalar pointer");
     }
@@ -1204,33 +1207,39 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
             case arrow::Type::BINARY:
                 return std::make_unique<cudf::string_scalar>("", false);
 
-            case arrow::Type::DATE32:
+            case arrow::Type::DATE32: {
+                using rep = cudf::timestamp_D::rep;
                 return std::make_unique<
-                    cudf::timestamp_scalar<cudf::timestamp_D>>(0, false);
+                    cudf::timestamp_scalar<cudf::timestamp_D>>(rep{0}, false,
+                                                               stream, mr);
+            }
 
-            case arrow::Type::DATE64:
+            case arrow::Type::DATE64: {
+                using rep = cudf::timestamp_ms::rep;
                 return std::make_unique<
-                    cudf::timestamp_scalar<cudf::timestamp_ms>>(0, false);
+                    cudf::timestamp_scalar<cudf::timestamp_ms>>(rep{0}, false,
+                                                                stream, mr);
+            }
 
             case arrow::Type::TIMESTAMP: {
                 auto ts = std::static_pointer_cast<arrow::TimestampType>(t);
                 switch (ts->unit()) {
                     case arrow::TimeUnit::SECOND:
                         return std::make_unique<
-                            cudf::timestamp_scalar<cudf::timestamp_s>>(0,
-                                                                       false);
+                            cudf::timestamp_scalar<cudf::timestamp_s>>(
+                            static_cast<int64_t>(0), false, stream, mr);
                     case arrow::TimeUnit::MILLI:
                         return std::make_unique<
-                            cudf::timestamp_scalar<cudf::timestamp_ms>>(0,
-                                                                        false);
+                            cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                            static_cast<int64_t>(0), false, stream, mr);
                     case arrow::TimeUnit::MICRO:
                         return std::make_unique<
-                            cudf::timestamp_scalar<cudf::timestamp_us>>(0,
-                                                                        false);
+                            cudf::timestamp_scalar<cudf::timestamp_us>>(
+                            static_cast<int64_t>(0), false, stream, mr);
                     case arrow::TimeUnit::NANO:
                         return std::make_unique<
-                            cudf::timestamp_scalar<cudf::timestamp_ns>>(0,
-                                                                        false);
+                            cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                            static_cast<int64_t>(0), false, stream, mr);
                     default:
                         throw std::runtime_error(
                             "Unsupported unit for timestamp conversion");
@@ -1314,20 +1323,20 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
             switch (ttype->unit()) {
                 case arrow::TimeUnit::SECOND:
                     return std::make_unique<
-                        cudf::timestamp_scalar<cudf::timestamp_s>>(ts->value,
-                                                                   true);
+                        cudf::timestamp_scalar<cudf::timestamp_s>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
                 case arrow::TimeUnit::MILLI:
                     return std::make_unique<
-                        cudf::timestamp_scalar<cudf::timestamp_ms>>(ts->value,
-                                                                    true);
+                        cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
                 case arrow::TimeUnit::MICRO:
                     return std::make_unique<
-                        cudf::timestamp_scalar<cudf::timestamp_us>>(ts->value,
-                                                                    true);
+                        cudf::timestamp_scalar<cudf::timestamp_us>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
                 case arrow::TimeUnit::NANO:
                     return std::make_unique<
-                        cudf::timestamp_scalar<cudf::timestamp_ns>>(ts->value,
-                                                                    true);
+                        cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
                 default:
                     throw std::runtime_error(
                         "Unsupported unit for timestamp conversion");
