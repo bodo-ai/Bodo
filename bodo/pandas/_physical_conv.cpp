@@ -112,8 +112,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
                physical_op);
 #else
-    PhysicalProjection physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, op.expressions, in_table_schema);
+    std::shared_ptr<PhysicalProjection> physical_op =
+        std::make_shared<PhysicalProjection>(source_cols, op.expressions,
+                                             in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 #endif
 }
@@ -274,14 +275,19 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
+#ifdef USE_CUDF
     std::variant<std::shared_ptr<PhysicalJoin>,
                  std::shared_ptr<PhysicalGPUJoin>>
         physical_join;
     if (node_run_on_gpu(op)) {
         physical_join = std::make_shared<PhysicalGPUJoin>(op);
     } else {
-        physical_join = std::make_shared<PhysicalJoin>(op, get_use_cudf());
+        physical_join = std::make_shared<PhysicalJoin>(op);
     }
+#else
+    std::shared_ptr<PhysicalJoin> physical_join =
+        std::make_shared<PhysicalJoin>(op);
+#endif
 
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, join_filter_states,
@@ -308,11 +314,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
      * that it is accessible when processing the probe side.
      */
     std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
     std::visit(
         [&](auto& vop) {
             done_pipeline = rhs_builder.active_pipeline->Build(vop);
         },
         physical_join);
+#else
+    done_pipeline = rhs_builder.active_pipeline->Build(physical_join);
+#endif
     if (!done_pipeline) {
         throw std::runtime_error("done_pipeline null in ComparisonJoin.");
     }
@@ -324,6 +334,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+#ifdef USE_CUDF
     std::visit(
         [&](auto& vop) {
             vop->buildProbeSchemas(op, op.conditions, build_table_schema,
@@ -332,6 +343,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
             this->active_pipeline->AddOperator(vop);
         },
         physical_join);
+#else
+    physical_join->buildProbeSchemas(op, op.conditions, build_table_schema,
+                                     probe_table_schema);
+    (*this->join_filter_states)[op.join_id] = physical_join->getJoinStatePtr();
+    this->active_pipeline->AddOperator(physical_join);
+#endif
     // Build side pipeline runs before probe side.
     this->active_pipeline->addRunBefore(done_pipeline);
 }
@@ -413,8 +430,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_join = std::make_shared<PhysicalJoin>(
-        op, get_use_cudf(), build_table_schema, probe_table_schema);
+    auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
+                                                        probe_table_schema);
 
     std::shared_ptr<Pipeline> done_pipeline =
         rhs_builder.active_pipeline->Build(physical_join);

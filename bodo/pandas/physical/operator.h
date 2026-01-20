@@ -2,8 +2,10 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#ifdef USE_CUDF
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
+#endif
 #include <memory>
 #include <typeinfo>
 #include <utility>
@@ -41,6 +43,8 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
+#ifdef USE_CUDF
+
 struct GPU_DATA {
    public:
     std::shared_ptr<cudf::table> table;
@@ -49,6 +53,12 @@ struct GPU_DATA {
     GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
         : table(t), schema(s) {}
 };
+
+#else
+
+struct GPU_DATA {};
+
+#endif
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
@@ -221,6 +231,7 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
+
 /**
  * @brief Get the streaming batch size from environment variable.
  * It looks up the environment variable dynamically to enable setting it
@@ -241,5 +252,7 @@ using PhysicalCpuGpuProcessBatch =
     std::variant<std::shared_ptr<PhysicalProcessBatch>,
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
 
+#ifdef USE_CUDF
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
+#endif

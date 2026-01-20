@@ -9,10 +9,12 @@
 std::variant<std::shared_ptr<PhysicalSink>, std::shared_ptr<PhysicalGPUSink>>
 ParquetWriteFunctionData::CreatePhysicalOperator(
     std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu) {
+#ifdef USE_CUDF
     if (run_on_gpu) {
         return std::make_shared<PhysicalGPUWriteParquet>(in_table_schema,
                                                          *this);
     }
+#endif
     return std::make_shared<PhysicalWriteParquet>(in_table_schema, *this);
 }
 

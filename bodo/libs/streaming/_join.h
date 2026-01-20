@@ -252,11 +252,6 @@ struct HashJoinMetrics : public JoinMetrics {
     // Time spent probing bloom filter
     time_t join_filter_bloom_filter_probe_time = 0;
     stat_t join_filter_bloom_filter_probe_nrows = 0;
-
-    // Time spent making cudf table from finalized build side.
-    time_t cudf_build_time = 0;
-    // Time spent calling cudf join.
-    time_t cudf_join_time = 0;
 };
 
 /**
@@ -683,8 +678,6 @@ class JoinState {
     cond_expr_fn_t cond_func;
     const bool build_table_outer;
     const bool probe_table_outer;
-    const std::vector<uint64_t> build_kept_cols;
-    const std::vector<uint64_t> probe_kept_cols;
     const bool force_broadcast;
     // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
@@ -759,12 +752,11 @@ class JoinState {
 
     JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
               const std::shared_ptr<bodo::Schema> probe_table_schema_,
-              uint64_t n_keys_, bool build_table_outer_,
-              bool probe_table_outer_, bool force_broadcast_,
-              cond_expr_fn_t cond_func_, bool build_parallel_,
-              bool probe_parallel_, int64_t output_batch_size_,
-              int64_t sync_iter_, int64_t op_id_, bool is_na_equal_ = false,
-              bool is_mark_join_ = false);
+              uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
+              bool probe_table_outer_, cond_expr_fn_t cond_func_,
+              bool build_parallel_, bool probe_parallel_,
+              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
+              bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     virtual ~JoinState() {}
 
@@ -944,8 +936,6 @@ class HashJoinState : public JoinState {
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
 
-    bool use_cudf = false;
-
     // Vector that stores an array for each equi-join key. Each set
     // stores the unique values encountered so far (as type int64_t). If
     // it ever goes above a certain threshold, replace with std::nullopt
@@ -967,15 +957,9 @@ class HashJoinState : public JoinState {
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
-                  bool is_na_equal_ = false, bool is_mark_join_ = false,
-                  bool _use_cudf = false);
+                  bool is_na_equal_ = false, bool is_mark_join_ = false);
 
-    ~HashJoinState() {
-        MPI_Comm_free(&this->shuffle_comm);
-        if (cudf_build_table) {
-            Py_DECREF(cudf_build_table);
-        }
-    }
+    ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
     /**
      * @brief Create a global bloom filter for this Hash Join
@@ -1234,8 +1218,6 @@ class HashJoinState : public JoinState {
 
     // Metrics for the query profile
     HashJoinMetrics metrics;
-
-    PyObject* cudf_build_table = nullptr;
 
    private:
     /**
