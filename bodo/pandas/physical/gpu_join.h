@@ -35,10 +35,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         assert(logical_join.join_type == duckdb::JoinType::INNER);
     }
 
-    /**
-     * @brief Physical Join constructor for cross join.
-     *
-     */
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
                     const std::shared_ptr<bodo::Schema> probe_table_schema)
@@ -46,6 +42,15 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         throw std::runtime_error("Not implemented.");
     }
 
+    /**
+     * @brief Determine output schema based on the logical
+     * operator and input schemas. Constructs the CudaHashJoin object.
+     *
+     * @param logical_join - the logical join operator
+     * @param conditions - the join conditions
+     * @param build_table_schema - the build table schema
+     * @param probe_table_schema - the probe table schema
+     */
     void buildProbeSchemas(
         duckdb::LogicalComparisonJoin& logical_join,
         duckdb::vector<duckdb::JoinCondition>& conditions,
@@ -173,7 +178,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     void FinalizeSink() override { cuda_join->FinalizeBuild(); }
 
     void FinalizeProcessBatch() override {
-        // throw std::runtime_error("Not implemented.");
+        throw std::runtime_error("Not implemented.");
     }
 
     /**
@@ -206,7 +211,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     }
 
     /**
-     * @brief GetResult - just for API compatability but should never be called
+     * @brief GetResult - just for API compatibility but should never be called
      */
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         // Join build doesn't return output results
