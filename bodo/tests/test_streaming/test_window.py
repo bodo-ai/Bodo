@@ -214,9 +214,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "count",
-            pd.array(
-                [0] * len(string_arr_all_null), dtype=pd.ArrowDtype(pa.large_string())
-            ),
+            pd.array([0] * len(string_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="count-string_all_null",
         )
     )
