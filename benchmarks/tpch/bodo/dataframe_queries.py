@@ -12,88 +12,64 @@ import bodo.pandas
 import bodo.spawn.spawner as spawner
 
 
-@functools.lru_cache
 def load_lineitem(data_folder: str, pd=bodo.pandas):
-    print("Loading lineitem")
     data_path = data_folder + "/lineitem.pq"
     df = pd.read_parquet(data_path)
     df["L_SHIPDATE"] = pd.to_datetime(df.L_SHIPDATE, format="%Y-%m-%d")
     df["L_RECEIPTDATE"] = pd.to_datetime(df.L_RECEIPTDATE, format="%Y-%m-%d")
     df["L_COMMITDATE"] = pd.to_datetime(df.L_COMMITDATE, format="%Y-%m-%d")
-    print("Done loading lineitem")
     return df
 
 
-@functools.lru_cache
 def load_part(data_folder: str, pd=bodo.pandas):
-    print("Loading part")
     data_path = data_folder + "/part.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading part")
     return df
 
 
-@functools.lru_cache
 def load_orders(data_folder: str, pd=bodo.pandas):
-    print("Loading orders")
     data_path = data_folder + "/orders.pq"
     df = pd.read_parquet(data_path)
     df["O_ORDERDATE"] = pd.to_datetime(df.O_ORDERDATE, format="%Y-%m-%d")
-    print("Done loading orders")
     return df
 
 
-@functools.lru_cache
 def load_customer(data_folder: str, pd=bodo.pandas):
-    print("Loading customer")
     data_path = data_folder + "/customer.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading customer")
     return df
 
 
-@functools.lru_cache
 def load_nation(data_folder: str, pd=bodo.pandas):
-    print("Loading nation")
     data_path = data_folder + "/nation.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading nation")
     return df
 
 
-@functools.lru_cache
 def load_region(data_folder: str, pd=bodo.pandas):
-    print("Loading region")
     data_path = data_folder + "/region.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading region")
     return df
 
 
-@functools.lru_cache
 def load_supplier(data_folder: str, pd=bodo.pandas):
-    print("Loading supplier")
     data_path = data_folder + "/supplier.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading supplier")
     return df
 
 
-@functools.lru_cache
 def load_partsupp(data_folder: str, pd=bodo.pandas):
-    print("Loading partsupp")
     data_path = data_folder + "/partsupp.pq"
     df = pd.read_parquet(data_path)
-    print("Done loading partsupp")
     return df
 
 
-def timethis(q: Callable):
+def timethis(q: Callable, name: str | None = None):
     @functools.wraps(q)
     def wrapped(*args, **kwargs):
         t = time.time()
         q(*args, **kwargs)
-        print(f"{q.__name__.upper()} Execution time (s): {time.time() - t:f}")
+        print(f"{name or q.__name__.upper()} Execution time (s): {time.time() - t:f}")
 
     return wrapped
 
@@ -935,33 +911,38 @@ def q22(customer, orders, pd):
     exec_func(tpch_q22(customer, orders, pd))
 
 
+def _load_args(query: int, root: str, scale_factor: float, backend):
+    args = []
+    for arg in _query_to_args[query]:
+        if arg == "scale_factor":
+            args.append(scale_factor)
+        elif arg == "pd":
+            args.append(backend)
+        else:
+            args.append(globals()[f"load_{arg}"](root, pd=backend))
+    return args
+
+
 def run_queries(root: str, queries: list[int], scale_factor: float, backend):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
     total_start = time.time()
-    print("Start data loading")
-    queries_to_args = {}
     for query in queries:
-        args = []
-        for arg in _query_to_args[query]:
-            if arg == "scale_factor":
-                args.append(scale_factor)
-            elif arg == "pd":
-                args.append(backend)
-            else:
-                args.append(globals()[f"load_{arg}"](root, pd=backend))
-        queries_to_args[query] = args
-    print(f"Data loading time (s): {time.time() - total_start}")
+        q = globals()[f"q{query:02}"]
 
-    total_start = time.time()
-    for query in queries:
-        query_func = globals()[f"q{query:02}"]
+        def query_func():
+            q(*_load_args(query, root, scale_factor, backend))
+
+        query_func = timethis(
+            query_func, name=f"Q{query:02} Execution time (including read_parquet) (s):"
+        )
+
         # Warm up run:
-        query_func(*queries_to_args[query])
+        query_func()
 
         # Second run for timing:
-        query_func(*queries_to_args[query])
+        query_func()
     print(f"Total query execution time (s): {time.time() - total_start}")
 
 
