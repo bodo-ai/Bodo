@@ -391,6 +391,7 @@ class JoinFilterColStats {
 #include <cstdint>
 #include <cudf/interop.hpp>
 #include <cudf/scalar/scalar.hpp>
+#include <cudf/table/table.hpp>
 #include <cudf/types.hpp>           // cudf::data_type, cudf::type_id
 #include <duckdb/common/types.hpp>  // duckdb::LogicalType, duckdb::LogicalTypeId
 struct GPU_DATA {
