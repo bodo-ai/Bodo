@@ -2,11 +2,12 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cudf/interop.hpp>
+#include <cudf/table/table.hpp>
 #include <memory>
 #include <typeinfo>
 #include <utility>
 
-#include "../_util.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
@@ -38,6 +39,15 @@ enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT = 0,
     HAVE_MORE_OUTPUT = 1,
     FINISHED = 2,
+};
+
+struct GPU_DATA {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::shared_ptr<arrow::Schema> schema;
+
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
+        : table(t), schema(s) {}
 };
 
 /**
@@ -211,7 +221,6 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
-
 /**
  * @brief Get the streaming batch size from environment variable.
  * It looks up the environment variable dynamically to enable setting it
@@ -231,3 +240,7 @@ using PhysicalCpuGpuSink = std::variant<std::shared_ptr<PhysicalSink>,
 using PhysicalCpuGpuProcessBatch =
     std::variant<std::shared_ptr<PhysicalProcessBatch>,
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
+
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
+std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);

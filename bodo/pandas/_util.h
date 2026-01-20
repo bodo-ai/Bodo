@@ -388,25 +388,11 @@ class JoinFilterColStats {
 };
 
 #ifdef USE_CUDF
+
 #include <cstdint>
-#include <cudf/interop.hpp>
 #include <cudf/scalar/scalar.hpp>
-#include <cudf/table/table.hpp>
 #include <cudf/types.hpp>           // cudf::data_type, cudf::type_id
 #include <duckdb/common/types.hpp>  // duckdb::LogicalType, duckdb::LogicalTypeId
-//
-struct GPU_DATA {
-   public:
-    std::shared_ptr<cudf::table> table;
-    std::shared_ptr<arrow::Schema> schema;
-
-    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
-        : table(std::move(t)), schema(std::move(s)) {}
-};
-
-GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
-std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
-std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 
 /**
  * @brief Map DuckDB LogicalType to cudf::data_type.
@@ -432,9 +418,5 @@ std::unique_ptr<cudf::scalar> make_invalid_like(cudf::scalar const &src);
  */
 std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
     const std::shared_ptr<arrow::Scalar> &s);
-
-#else
-
-struct GPU_DATA {};
 
 #endif

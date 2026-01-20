@@ -3,7 +3,7 @@
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/reduction.hpp>
-#include "../../pandas/_util.h"
+#include "../../pandas/physical/operator.h"
 
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
