@@ -740,8 +740,7 @@ cmake_print_variables(NO_HDF5)
 
 if (USE_CUDF)
     list(APPEND sources_list
-    "bodo/pandas/libcudf_hash_join.cpp"
-    "bodo/pandas/physical/gpu_expression.cpp",
+    "bodo/pandas/physical/gpu_expression.cpp"
     "bodo/libs/streaming/cuda_join.cpp")
 endif()
 
