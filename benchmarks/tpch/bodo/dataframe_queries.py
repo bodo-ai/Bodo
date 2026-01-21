@@ -69,7 +69,8 @@ def timethis(q: Callable, name: str | None = None):
     def wrapped(*args, **kwargs):
         t = time.time()
         q(*args, **kwargs)
-        print(f"{name or q.__name__.upper()} Execution time (s): {time.time() - t:f}")
+        msg = name or f"{q.__name__.upper()} Execution time (s):"
+        print(f"{msg} {time.time() - t:f}")
 
     return wrapped
 
