@@ -334,8 +334,11 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
-
+#ifdef USE_CUDF
 using join_state_t = std::variant<JoinState *, CudaHashJoin *>;
+#else
+using join_state_t = std::variant<JoinState *>;
+#endif
 /**
  * @brief Collect min/max statistics from join build tables for join filter
  * columns.

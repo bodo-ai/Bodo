@@ -1,6 +1,7 @@
 #pragma once
 #include <../../bodo/libs/_bodo_common.h>
 #include <arrow/scalar.h>
+#ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
 
@@ -81,3 +82,6 @@ struct CudaHashJoin {
         return min_max_stats;
     }
 };
+#else
+struct CudaHashJoin {};
+#endif
