@@ -694,11 +694,6 @@ set(sources_list
   "bodo/libs/_io_cpu_thread_pool.cpp"
 )
 
-if(USE_CUDF)
-  set(sources_list "${sources_list}"
-    "bodo/pandas/physical/gpu_expression.cpp")
-endif()
-
 if (BUILD_WITH_V8)
   set(sources_list "${sources_list}"
     "bodo/libs/_javascript_udf.cpp")
@@ -767,6 +762,7 @@ cmake_print_variables(NO_HDF5)
 if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/libcudf_hash_join.cpp"
+    "bodo/pandas/physical/gpu_expression.cpp",
     "bodo/libs/streaming/cuda_join.cpp")
 endif()
 
