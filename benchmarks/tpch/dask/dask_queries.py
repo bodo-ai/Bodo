@@ -8,25 +8,6 @@ from datetime import datetime, timedelta
 import dask.dataframe as dd
 from dask.distributed import Client
 
-# Cloud provider config
-env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2024.10.0"}
-
-ec2_config = {
-    # NOTE: Setting security = False to avoid large config size
-    # https://github.com/dask/dask-cloudprovider/issues/249
-    "security": False,
-    "n_workers": 4,
-    "scheduler_instance_type": "c6i.xlarge",
-    "worker_instance_type": "r6i.16xlarge",
-    "docker_image": "daskdev/dask:latest",
-    # Profile with AmazonS3FullAccess
-    "iam_instance_profile": {"Name": "dask-benchmark"},
-    # Region for accessing bodo-example-data
-    "region": "us-east-2",
-    "env_vars": env_vars,
-    "debug": True,
-}
-
 
 # Bodo Change: make all column names lower case, add extension parameter
 def _load_dataset(dataset_path, table_name, ext=".parquet"):
@@ -1320,9 +1301,6 @@ def get_query_func(q_num: int) -> Callable:
 
 def run_single_query(query_func, dataset_path, scale_factor) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
-    # Warm up run
-    query_func(dataset_path, scale_factor, ext=".pq").compute()
-
     start = time.time()
     query_func(dataset_path, scale_factor, ext=".pq").compute()
     return time.time() - start
@@ -1381,19 +1359,42 @@ def main():
     if use_cloudprovider:
         from dask_cloudprovider.aws import EC2Cluster
 
+        env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2025.10.0"}
+        ec2_config = {
+            # NOTE: Setting security = False to avoid large config size
+            # https://github.com/dask/dask-cloudprovider/issues/249
+            "security": False,
+            "n_workers": 4,
+            "scheduler_instance_type": "c6i.xlarge",
+            "worker_instance_type": "r6i.16xlarge",
+            "docker_image": "daskdev/dask:2025.12.0-py3.10",
+            # Region for accessing bodo-example-data
+            "region": "us-east-2",
+            "filesystem_size": 1000,
+            "env_vars": env_vars,
+            "debug": True,
+        }
+
         with EC2Cluster(**ec2_config) as cluster:
             with cluster.get_client() as client:
                 print("DASHBOARD LINK: ", client.dashboard_link)
+
+                # Running dummy job to warm-up cluster
+                client.submit(lambda: 1).result()
 
                 start = time.time()
                 for query in queries:
                     query_func = get_query_func(query)
 
-                    query_time = client.submit(
-                        run_single_query, query_func, dataset_path, scale_factor
-                    ).result(timeout=3600)
-
-                    print(f"Query {query} execution time: {query_time:.2f} seconds")
+                    try:
+                        print(f"Submitting query {query} at {datetime.now()}")
+                        query_time = client.submit(
+                            run_single_query, query_func, dataset_path, scale_factor
+                        ).result(timeout=3600)
+                        print(f"Query {query} execution time: {query_time:.2f} seconds")
+                    except Exception as e:
+                        print(f"Query {query} failed with an exception: {e}")
+                        client.restart()
 
                 total_time = time.time() - start
                 print(f"Total execution time: {total_time:.4f} seconds")

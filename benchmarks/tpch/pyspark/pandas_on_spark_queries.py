@@ -650,9 +650,6 @@ def run_queries(data_folder: str, queries: list[int], scale_factor: float = 1.0)
             print(f"Query {query:02} not implemented yet.")
             continue
 
-        # Warm up run
-        run_query_single(query_func, data_folder, scale_factor)
-
         t2 = time.time()
         run_query_single(query_func, data_folder, scale_factor)
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
