@@ -168,6 +168,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         // TODO[BSE-4820]: support joining on Indexes
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+        this->arrow_schema = this->output_schema->ToArrowSchema();
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
@@ -206,7 +207,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table),
-                                    this->getOutputSchema()->ToArrowSchema()};
+                                    this->arrow_schema};
         return {output_gpu_data, prev_op_result};
     }
 
@@ -235,6 +236,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
    private:
     std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 
     bool has_non_equi_cond;
     bool is_mark_join = false;

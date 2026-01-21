@@ -71,9 +71,27 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     auto [probe_indices_ptr, build_indices_ptr] =
         _join_handle->inner_join(probe_view.select(this->probe_key_indices));
 
+    cudf::table_view selected_probe_view =
+                         probe_chunk->select(this->probe_kept_cols.begin(),
+                                             this->probe_kept_cols.end()),
+                     cudf::table_view selected_build_view =
+                         _build_table->select(this->build_kept_cols.begin(),
+                                              this->build_kept_cols.end());
+
     // Check for empty result to avoid errors
     if (probe_indices_ptr->size() == 0) {
+        std::vector<std::unique_ptr<cudf::column>> final_columns;
+        for (auto& col : selected_probe_view->release()) {
+            final_columns.push_back(std::move(col));
+        }
+
+        // Move columns from build side
+        for (auto& col : selected_build_view->release()) {
+            final_columns.push_back(std::move(col));
+        }
+
         // Return empty table
+        return cudf::empty_like(cudf::table_view(final_columns));
     }
 
     // 2. Create column_views from the raw indices
@@ -94,13 +112,9 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     // Gather the actual data
     // This creates new tables containing only the matching rows
     std::unique_ptr<cudf::table> gathered_probe =
-        cudf::gather(probe_chunk->select(this->probe_kept_cols.begin(),
-                                         this->probe_kept_cols.end()),
-                     probe_idx_view);
+        cudf::gather(selected_probe_view probe_idx_view);
     std::unique_ptr<cudf::table> gathered_build =
-        cudf::gather(this->_build_table->select(this->build_kept_cols.begin(),
-                                                this->build_kept_cols.end()),
-                     build_idx_view);
+        cudf::gather(selected_build_view, build_idx_view);
 
     // Assemble the final result
     // We extract the columns from the gathered tables and combine them into one
