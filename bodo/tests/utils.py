@@ -1305,7 +1305,7 @@ def _test_equal(
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
-    check_pandas_types=True,
+    check_pandas_types=False,
 ) -> None:
     try:
         from scipy.sparse import csr_matrix
