@@ -224,30 +224,6 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
                                 std::shared_ptr<ExprGPUResult> then_res,
                                 std::shared_ptr<ExprGPUResult> else_res);
 
-#if 0
-/**
- * @brief Run arrow compute operation on unary Datum.
- *
- */
-arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
-                                    const std::string &comparator);
-
-/**
- * @brief Run arrow compute operation on two Datums.
- *
- */
-arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
-                                     arrow::Datum right_res,
-                                     const std::string &comparator);
-
-/**
- * @brief Run cast on arrow Datum.
- *
- */
-arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
-                                   const duckdb::LogicalType &return_type);
-#endif
-
 /**
  * @brief Physical expression tree node type for comparisons resulting in
  *        boolean arrays.

@@ -102,7 +102,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
         physical_op;
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
-        std::cout << "project gpu" << std::endl;
         physical_op = std::make_shared<PhysicalGPUProjection>(
             source_cols, op.expressions, in_table_schema);
     } else {

@@ -159,5 +159,25 @@ std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
     table = table->ReplaceSchemaMetadata(batch.schema->metadata());
     return table;
+#else
+OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
+                                          OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<std::shared_ptr<table_info>, OperatorResult>
+PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
+                                   OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+OperatorResult PhysicalGPUSink::ConsumeBatch(
+    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
 }
 #endif
