@@ -159,6 +159,7 @@ std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
     table = table->ReplaceSchemaMetadata(batch.schema->metadata());
     return table;
+}
 #else
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
