@@ -38,8 +38,11 @@ struct FilePart {
 
 class RankBatchGenerator {
    public:
-    RankBatchGenerator(std::string dataset_path, std::size_t target_rows)
-        : path_(std::move(dataset_path)), target_rows_(target_rows) {
+    RankBatchGenerator(std::string dataset_path, std::size_t target_rows,
+                       const std::vector<std::string> &_selected_columns)
+        : path_(std::move(dataset_path)),
+          target_rows_(target_rows),
+          selected_columns(_selected_columns) {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
         MPI_Comm_size(MPI_COMM_WORLD, &size_);
 
@@ -104,6 +107,9 @@ class RankBatchGenerator {
                             std::vector<int>{current_rg_}})
                         .build();
 
+                if (selected_columns.size() > 0) {
+                    reader_opts.set_columns(selected_columns);
+                }
                 auto result = cudf::io::read_parquet(reader_opts);
 
                 // result.tbl is typically a std::unique_ptr<cudf::table> or
@@ -268,6 +274,7 @@ class RankBatchGenerator {
 
     std::vector<std::string> files_;
     std::vector<FilePart> parts_;
+    const std::vector<std::string> &selected_columns;
 
     // current position
     int current_part_idx_{0};
@@ -320,6 +327,11 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
           selected_columns(selected_columns),
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
+
+        if (filter_exprs.filters.size() != 0) {
+            throw std::runtime_error(
+                "PhysicalGPUReadParquet(): filters not yet implemented");
+        }
 
         if (py_path && PyUnicode_Check(py_path)) {
             path = PyUnicode_AsUTF8(py_path);
@@ -454,6 +466,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         auto batch_size =
             get_streaming_batch_size();  // TO-DO different for GPU
 
-        batch_gen = std::make_shared<RankBatchGenerator>(path, batch_size);
+        batch_gen = std::make_shared<RankBatchGenerator>(
+            path, batch_size, output_schema->column_names);
     }
 };
