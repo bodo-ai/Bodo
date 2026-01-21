@@ -815,6 +815,10 @@ def test_to_double_scalars(spark_info, memory_leak_check):
     py_output = to_double_equiv(df["A"]).where(
         df["C"].astype(bool), to_double_equiv(df["B"])
     )
+    # Avoid NaN vs NA mismatch
+    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
+        pd.ArrowDtype(pa.float64())
+    )
     check_query(
         query,
         ctx,
@@ -885,6 +889,10 @@ def test_try_to_double_scalars(spark_info):
     query = "SELECT CASE WHEN TRY_TO_DOUBLE(c) = 1.0 THEN TRY_TO_DOUBLE(a) ELSE TRY_TO_DOUBLE(b) END FROM table1"
     py_output = to_double_equiv(df["A"]).where(
         df["C"].astype(bool), to_double_equiv(df["B"])
+    )
+    # Avoid NaN vs NA mismatch
+    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
+        pd.ArrowDtype(pa.float64())
     )
     check_query(
         query,
