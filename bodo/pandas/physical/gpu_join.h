@@ -178,9 +178,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     void FinalizeSink() override { cuda_join->FinalizeBuild(); }
 
-    void FinalizeProcessBatch() override {
-        throw std::runtime_error("Not implemented.");
-    }
+    void FinalizeProcessBatch() override {}
 
     /**
      * @brief process input tables to build side of join (populate the hash
