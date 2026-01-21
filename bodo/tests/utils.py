@@ -1321,6 +1321,12 @@ def _test_equal(
         py_out = pa.scalar(py_out)
 
     if isinstance(py_out, pd.Series):
+        from bodo.pandas.series import BodoSeries
+
+        if isinstance(bodo_out, BodoSeries):
+            # Avoid changing the plan of bodo_out
+            bodo_out = pd.Series(bodo_out)
+
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
             py_out.dtype, pd.ArrowDtype
         ):
@@ -1351,13 +1357,8 @@ def _test_equal(
                 np.float32,
                 np.float64,
             ):
-                from bodo.pandas.series import BodoSeries
-
                 py_out = py_out.astype(bodo_out.dtype)
                 # astype converts all NaNs to NAs so need to match it here
-                if isinstance(bodo_out, BodoSeries):
-                    # Avoid changing the plan of bodo_out
-                    bodo_out = pd.Series(bodo_out)
                 bodo_out = bodo_out.map(lambda a: pd.NA if np.isnan(a) else a)
 
             # Handle all-NA Pandas output stored as float NaNs
@@ -1426,12 +1427,18 @@ def _test_equal(
             check_categorical=False,
         )
     elif isinstance(py_out, pd.DataFrame):
+        from bodo.pandas.frame import BodoDataFrame
+
+        if isinstance(bodo_out, BodoDataFrame):
+            bodo_out = pd.DataFrame(bodo_out)
+
         if sort_output:
             py_out = sort_dataframe_values_index(py_out)
             bodo_out = sort_dataframe_values_index(bodo_out)
+
         if reset_index:
-            py_out.reset_index(inplace=True, drop=True)
-            bodo_out.reset_index(inplace=True, drop=True)
+            py_out = py_out.reset_index(drop=True)
+            bodo_out = bodo_out.reset_index(drop=True)
 
         # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
         # mismatch errors
