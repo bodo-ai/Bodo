@@ -1444,6 +1444,13 @@ def _test_equal(
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
+                # Convert nan to NA to previous Pandas behavior
+                bodo_out[bodo_out.columns[i]] = pd.array(
+                    bodo_out[bodo_out.columns[i]].map(
+                        lambda x: pd.NA if pd.isna(x) else x
+                    ),
+                    dtype=bodo_dtype,
+                )
 
         # Handle Arrow float types in Index
         if not isinstance(bodo_out.index, pd.MultiIndex):
