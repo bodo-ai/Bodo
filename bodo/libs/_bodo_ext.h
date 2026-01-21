@@ -38,7 +38,4 @@ PyMODINIT_FUNC PyInit_uuid_cpp(void);
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
 PyMODINIT_FUNC PyInit_plan_optimizer(void);
-#ifdef USE_CUDF
-PyMODINIT_FUNC PyInit_libcudf_hash_join(void);
-#endif
 }  // extern "C"

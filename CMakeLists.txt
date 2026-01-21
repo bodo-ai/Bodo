@@ -546,27 +546,6 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
-if (USE_CUDF)
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import pylibcudf, os; print(os.path.dirname(pylibcudf.__file__))" OUTPUT_VARIABLE PYLIBCUDF_BASE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "pylibcudf base dir: ${PYLIBCUDF_BASE_DIR}")
-  execute_process( COMMAND ${Python_EXECUTABLE} -c "import rmm, os; print(os.path.dirname(rmm.__file__))" OUTPUT_VARIABLE RMM_BASE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-  message(STATUS "rmm base dir: ${RMM_BASE_DIR}")
-
-add_custom_command(
-  OUTPUT bodo/pandas/libcudf_hash_join.cpp
-  DEPENDS bodo/pandas/libcudf_hash_join.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 -I "${PYLIBCUDF_BASE_DIR}" -I "${RMM_BASE_DIR}" --output-file "bodo/pandas/libcudf_hash_join.cpp" "bodo/pandas/libcudf_hash_join.pyx"
-  # Our use of libcudf's Cython puts libcudf_exception_handler in the code but it is unused so our
-  # compiler complains.  This is just a hack to make it appear as used.
-  COMMAND echo "static void * volatile __libcudf_exception_handler_ref = (void*)libcudf_exception_handler;" >> "bodo/pandas/libcudf_hash_join.cpp"
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/pandas/libcudf_hash_join.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/libcudf_hash_join.cpp"
-  COMMENT "Cythonizing Source bodo/pandas/libcudf_hash_join.pyx into bodo/pandas/libcudf_hash_join.cpp"
-)
-
-endif()
-
 
 # ---------------------- Native Target - crypto_funcs -----------------------
 
