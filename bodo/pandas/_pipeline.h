@@ -35,7 +35,7 @@ uint64_t getBatchRows(T &t) {
 #endif
             } else {
                 throw std::runtime_error(
-                    "Getting number of rows for not table_info for GPU_data.");
+                    "Unexpected type in getBatchRows");
             }
         },
         t);
