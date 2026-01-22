@@ -1180,7 +1180,7 @@ def test_max_min_tz_aware(memory_leak_check):
     Test max and min on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland"))
         + [None] * 5
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
@@ -1203,7 +1203,7 @@ def test_count_tz_aware(memory_leak_check):
     Test count and count(*) on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland"))
         + [None] * 5
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})

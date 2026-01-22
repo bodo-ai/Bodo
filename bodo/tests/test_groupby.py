@@ -7799,7 +7799,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
             "A": ["A", "B", "C", "D"] * 5,
             "B": pd.date_range(
                 start="1/1/2022",
-                freq="16D5H",
+                freq="16D5h",
                 periods=20,
                 tz="Poland",
             ).to_series(),
