@@ -390,7 +390,11 @@ def unbox_datetime_index(typ, val, c):
     if isinstance(typ.data, DatetimeArrayType):
         data_obj = c.pyapi.object_getattr_string(val, "array")
     else:
-        data_obj = c.pyapi.object_getattr_string(val, "values")
+        data_obj_us = c.pyapi.object_getattr_string(val, "values")
+        dtype_obj = c.pyapi.string_from_constant_string("datetime64[ns]")
+        data_obj = c.pyapi.call_method(data_obj_us, "astype", (dtype_obj,))
+        c.pyapi.decref(data_obj_us)
+        c.pyapi.decref(dtype_obj)
     data = c.pyapi.to_native_value(typ.data, data_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
@@ -662,8 +666,8 @@ def overload_pd_datetime_tz_convert(A, tz):
 class DatetimeIndexAttribute(AttributeTemplate):
     key = DatetimeIndexType
 
-    def resolve_values(self, ary):
-        return _dt_index_data_typ
+    def resolve_values(self, dt_index):
+        return dt_index.data
 
 
 @overload(pd.DatetimeIndex, no_unliteral=True, jit_options={"cache": True})
