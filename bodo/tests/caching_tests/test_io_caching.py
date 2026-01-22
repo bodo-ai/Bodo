@@ -104,7 +104,7 @@ def test_read_parquet_cache_fname_arg2(
         fname = datapath("int_nulls_single.pq")
 
     # Use py_output because we use the jit decorator directly
-    py_out = pd.read_parquet(fname)
+    py_out = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
