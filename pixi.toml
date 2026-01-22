@@ -81,6 +81,7 @@ pip = "*"
 numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=3.0.0"
+pytz = "*"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
