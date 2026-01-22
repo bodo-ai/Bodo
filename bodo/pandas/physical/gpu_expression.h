@@ -303,21 +303,6 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
-#if 0
-        arrow::Datum left_datum = children[0]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum right_datum = children[1]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum ret =
-            do_arrow_compute_binary(left_datum, right_datum, comparator);
-        // Pandas if either is NULL then result is false.
-        if (!ret.scalar()->is_valid) {
-            ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
-        }
-        return ret;
-#endif
     }
 
    protected:
@@ -424,7 +409,6 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPUConstantExpression::join_expr_internal unimplemented ");
-        // return arrow::Datum(constant);
     }
 
     friend std::ostream &operator<<(
@@ -470,25 +454,6 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
                                     void **null_bitmap, int64_t index) {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
-#if 0
-        cudf::column *sel_col = table[col_idx];
-        void *sel_data = data[col_idx];
-        std::unique_ptr<bodo::DataType> col_dt = sel_col->data_type();
-        std::shared_ptr<::arrow::DataType> arrow_dt = col_dt->ToArrowDataType();
-        int32_t dt_byte_width = arrow_dt->byte_width();
-        if (dt_byte_width <= 0) {
-            throw std::runtime_error(
-                "Non-fixed datatype byte width in PhysicalGPUColumnRefExpression "
-                "join_expr_internal.");
-        }
-        void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
-        arrow::Datum ret = ConvertToDatum(index_ptr, arrow_dt);
-        if (null_bitmap[col_idx] != nullptr &&
-            !GetBit((const uint8_t *)null_bitmap[col_idx], index)) {
-            ret = arrow::Datum(arrow::MakeNullScalar(ret.type()));
-        }
-        return ret;
-#endif
     }
 
     virtual arrow::Datum join_expr_internal(
@@ -497,15 +462,6 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
-#if 0
-        if (left_side) {
-            return join_expr_internal(left_table, left_data, left_null_bitmap,
-                                      left_index);
-        } else {
-            return join_expr_internal(right_table, right_data,
-                                      right_null_bitmap, right_index);
-        }
-#endif
     }
 
    protected:
@@ -581,20 +537,6 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
-#if 0
-        arrow::Datum left_datum = children[0]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum right_datum = children[1]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum ret =
-            do_arrow_compute_binary(left_datum, right_datum, comparator);
-        if (!ret.scalar()->is_valid) {
-            ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
-        }
-        return ret;
-#endif
     }
 
    protected:
@@ -738,12 +680,6 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
-#if 0
-        arrow::Datum left_datum = children[0]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_unary(left_datum, comparator);
-#endif
     }
 
    protected:
@@ -775,7 +711,7 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
 
     PhysicalGPUBinaryExpression(
         std::shared_ptr<PhysicalGPUExpression> left,
-        std::shared_ptr<PhysicalGPUExpression> right, std::string &opstr,
+        std::shared_ptr<PhysicalGPUExpression> right, const std::string &opstr,
         const std::shared_ptr<arrow::DataType> _result_type = nullptr)
         : result_type(_result_type) {
         children.push_back(left);
@@ -839,15 +775,6 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         int64_t left_index, int64_t right_index) {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
-#if 0
-        arrow::Datum left_datum = children[0]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum right_datum = children[1]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_binary(left_datum, right_datum, comparator);
-#endif
     }
 
    protected:
@@ -938,65 +865,7 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
           result_type(_result_type),
           cfunc_ptr(nullptr),
           init_state(nullptr) {
-        if (scalar_func_data.is_cfunc) {
-            this->cfunc_ptr = (table_udf_t)1;
-            PyObject *bodo_module =
-                PyImport_ImportModule("bodo.pandas.utils_jit");
-            if (!bodo_module) {
-                PyErr_Print();
-                throw std::runtime_error(
-                    "Failed to import bodo.pandas.utils module");
-            }
-            PyObject *future_args = scalar_func_data.args;
-            Py_XINCREF(future_args);
-            Py_INCREF(bodo_module);
-            // https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
-            PyThreadState *save = PyEval_SaveThread();
-
-            compile_future = std::async(
-                std::launch::async,
-                [bodo_module, future_args]() -> table_udf_t {
-                    // Ensure we hold the GIL in this thread.
-                    PyGILState_STATE gstate = PyGILState_Ensure();
-                    try {
-                        table_udf_t ptr = nullptr;
-
-                        PyObject *result = PyObject_CallMethod(
-                            bodo_module, "compile_cfunc", "O", future_args);
-                        if (!result) {
-                            PyErr_Print();
-                            Py_DECREF(bodo_module);
-                            Py_XDECREF(future_args);
-                            throw std::runtime_error(
-                                "Error calling compile_cfunc");
-                        }
-
-                        if (!PyLong_Check(result)) {
-                            Py_DECREF(result);
-                            Py_DECREF(bodo_module);
-                            Py_XDECREF(future_args);
-                            throw std::runtime_error(
-                                "Expected an integer from compile_cfunc");
-                        }
-
-                        ptr = reinterpret_cast<table_udf_t>(
-                            PyLong_AsLongLong(result));
-
-                        Py_DECREF(result);
-                        Py_DECREF(bodo_module);
-                        Py_XDECREF(future_args);
-                        PyGILState_Release(gstate);
-                        return ptr;
-                    } catch (...) {
-                        // Release GIL and DECREF args before propagating.
-                        PyGILState_Release(gstate);
-                        Py_DECREF(bodo_module);
-                        Py_XDECREF(future_args);
-                        throw;
-                    }
-                });
-            PyEval_RestoreThread(save);
-        }
+        throw std::runtime_error("PhysicalGPUUDFExpression unimplemented ");
     }
 
     virtual ~PhysicalGPUUDFExpression() {
@@ -1035,51 +904,3 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     table_udf_t cfunc_ptr;
     PyObject *init_state;
 };
-
-#if 0
-struct PhysicalGPUArrowExpressionMetrics {
-    using timer_t = MetricBase::TimerValue;
-    timer_t arrow_compute_time = 0;
-};
-/**
- * @brief Physical expression tree node type for Arrow Compute functions.
- *
- */
-class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
-   public:
-    PhysicalGPUArrowExpression(
-        std::vector<std::shared_ptr<PhysicalGPUExpression>> &children,
-        BodoScalarFunctionData &_scalar_func_data,
-        const std::shared_ptr<arrow::DataType> &_result_type)
-        : PhysicalGPUExpression(children),
-          scalar_func_data(_scalar_func_data),
-          result_type(_result_type) {}
-
-    /**
-     * @brief How to process this expression tree node.
-     *
-     */
-    std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch) override;
-
-    arrow::Datum join_expr_internal(cudf::column **left_table,
-                                    cudf::column **right_table, void **left_data,
-                                    void **right_data, void **left_null_bitmap,
-                                    void **right_null_bitmap,
-                                    int64_t left_index,
-                                    int64_t right_index) override {
-        throw std::runtime_error(
-            "PhysicalGPUArrowExpression::join_expr_internal unimplemented ");
-    }
-
-    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
-        metrics_out.push_back(
-            TimerMetric("arrow_compute_time", metrics.arrow_compute_time));
-    }
-
-   protected:
-    BodoScalarFunctionData scalar_func_data;
-    const std::shared_ptr<arrow::DataType> result_type;
-    PhysicalGPUArrowExpressionMetrics metrics;
-};
-#endif

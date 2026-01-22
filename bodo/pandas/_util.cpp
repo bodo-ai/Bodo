@@ -1062,22 +1062,23 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
         // String / text / blob
         case LogicalTypeId::VARCHAR:
         case LogicalTypeId::BLOB:
-        case LogicalTypeId::ENUM:
             return cudf::data_type{type_id::STRING};
+
+        case LogicalTypeId::TIMESTAMP_SEC:
+            return cudf::data_type{type_id::TIMESTAMP_SECONDS};
+
+        case LogicalTypeId::TIMESTAMP_MS:
+            return cudf::data_type{type_id::TIMESTAMP_MILLISECONDS};
+
+        case LogicalTypeId::TIMESTAMP:
+            return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
 
         case LogicalTypeId::TIMESTAMP_NS:
             return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
 
         // Date / Time / Interval
         case LogicalTypeId::DATE:
-            // Map DATE to TIMESTAMP_DAYS if your cudf supports it; otherwise
-            // use INT32/INT64.
-#if defined(CUDF_TYPE_TIMESTAMP_DAYS) || \
-    defined(CUDF_TYPE_TIMESTAMP_DAYS)  // placeholder guard
             return cudf::data_type{type_id::TIMESTAMP_DAYS};
-#else
-            return cudf::data_type{type_id::INT32};
-#endif
 
         case LogicalTypeId::TIME:
         case LogicalTypeId::INTERVAL:
@@ -1087,8 +1088,6 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
 
         // Fallback for unknown/unsupported types
         default:
-            // Choose a safe default (INT64) or throw/abort if you prefer strict
-            // behavior.
             throw std::runtime_error(
                 "duckdb_logicaltype_to_cudf unsupported LogicalType "
                 "conversion " +

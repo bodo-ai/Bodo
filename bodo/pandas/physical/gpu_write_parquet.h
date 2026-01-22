@@ -13,6 +13,7 @@
 #include "../libs/_table_builder.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
+#include "physical/write_parquet_utils.h"
 
 #include <cudf/concatenate.hpp>
 #include <cudf/io/parquet.hpp>
@@ -106,12 +107,12 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     // ConsumeBatch signature using GPU_DATA
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                 OperatorResult prev_op_result) override {
-        if (finished)
+        if (finished) {
             return OperatorResult::FINISHED;
+        }
 
-        auto incoming_tbl = input_batch.table;  // std::shared_ptr<cudf::table>
-        auto incoming_schema =
-            input_batch.schema;  // std::shared_ptr<arrow::Schema>
+        std::shared_ptr<cudf::table> incoming_tbl = input_batch.table;
+        std::shared_ptr<arrow::Schema> incoming_schema = input_batch.schema;
 
         // adopt or concatenate
         if (!buffer_table) {
@@ -136,9 +137,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         bool should_flush = is_last || (buffer_rows >= chunk_rows);
 
         if (should_flush && buffer_table && buffer_rows > 0) {
-            std::string fname_prefix = get_fname_prefix();
+            std::string fname_prefix = get_fname_prefix(iter);
             std::string out_path =
-                (fs::path(path) / (fname_prefix + "0.parquet")).string();
+                (fs::path(path) / (fname_prefix + ".parquet")).string();
 
             cudf::table_view bttv = buffer_table->view();
             cudf::io::table_input_metadata meta{bttv};
@@ -204,27 +205,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     }
 
    private:
-    // Same get_fname_prefix() logic as CPU writer to keep file ordering
-    // identical.
-    std::string get_fname_prefix() {
-        std::string base_prefix = "part-";
-
-        int MAX_ITER = 1000;
-        int n_max_digits = static_cast<int>(std::ceil(std::log10(MAX_ITER)));
-
-        // Number of prefix characters to add ("batch" number)
-        int n_prefix = (iter == 0) ? 0
-                                   : static_cast<int>(std::floor(
-                                         std::log(iter) / std::log(MAX_ITER)));
-
-        std::string iter_str = std::to_string(iter);
-        int n_zeros = ((n_prefix + 1) * n_max_digits) -
-                      static_cast<int>(iter_str.length());
-        iter_str = std::string(n_zeros, '0') + iter_str;
-
-        return base_prefix + std::string(n_prefix, 'b') + iter_str + "-";
-    }
-
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         metrics_out.emplace_back(
             StatMetric("max_buffer_rows", this->metrics.max_buffer_rows));

@@ -126,15 +126,9 @@ class RankBatchGenerator {
                 gpu_tables.push_back(std::move(tbl));
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
-                std::cerr << "[rank " << rank_ << "] Error reading row group "
-                          << current_rg_ << " from " << part.path << ": "
-                          << e.what() << "\n";
-                // treat as EOF for this rank to avoid infinite loop
-                ++current_part_idx_;
-                if (current_part_idx_ < static_cast<int>(parts_.size())) {
-                    current_rg_ = parts_[current_part_idx_].start_row_group;
-                }
-                break;
+                throw std::runtime_error(
+                    "PhysicalGPUReadParquet(): read_parquet failed " +
+                    part.path + " " + std::string(e.what()));
             }
 
             // advance to next row group in this part
@@ -232,8 +226,9 @@ class RankBatchGenerator {
         int rem = total_rg % size;
         int start = rank * base + std::min(rank, rem);
         int end = start + base + (rank < rem ? 1 : 0);
-        if (start >= end)
+        if (start >= end) {
             return result;
+        }
         result.push_back(FilePart{file, start, end});
         return result;
     }
