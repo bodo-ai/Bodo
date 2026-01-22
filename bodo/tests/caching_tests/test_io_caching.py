@@ -78,7 +78,7 @@ def test_read_parquet_cache_fname_arg(
     else:
         fname = datapath("int_nulls_single.pq")
 
-    py_out = impl(fname)
+    py_out = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
