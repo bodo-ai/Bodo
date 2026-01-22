@@ -694,7 +694,6 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -714,7 +713,6 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
     query = "Select NULLIF(1, A) from table1"
@@ -724,7 +722,6 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 

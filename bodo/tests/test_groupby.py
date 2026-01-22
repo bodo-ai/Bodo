@@ -3581,11 +3581,11 @@ def test_groupby_apply_global_dict(memory_leak_check):
         # array(string)
         pd.array(
             [
-                pd.array(["asfdav", None, "abc"], dtype="string[pyarrow]"),
-                pd.array(["1423", "aa3"], dtype="string[pyarrow]"),
-                pd.array(["!@#$"], dtype="string[pyarrow]"),
+                ["asfdav", None, "abc"],
+                ["1423", "aa3"],
+                ["!@#$"],
                 None,
-                pd.array(["0.9305", None], dtype="string[pyarrow]"),
+                ["0.9305", None],
             ],
             dtype=pd.ArrowDtype(pa.large_list(pa.string())),
         ),

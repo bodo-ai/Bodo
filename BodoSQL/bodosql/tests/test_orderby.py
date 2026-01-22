@@ -484,7 +484,6 @@ def test_orderby_nulls_first(null_ordering_table, spark_info, memory_leak_check)
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 
@@ -507,7 +506,6 @@ def test_orderby_nulls_last(null_ordering_table, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 
@@ -529,7 +527,6 @@ def test_orderby_nulls_first_last(null_ordering_table, spark_info, memory_leak_c
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 

@@ -1,7 +1,14 @@
 import pandas as pd
 import pytest
 from pandas.core.internals import SingleBlockManager
-from pandas.core.internals.array_manager import SingleArrayManager
+
+try:
+    from pandas.core.internals.array_manager import SingleArrayManager
+except ModuleNotFoundError:
+    # Pandas >= 3 does not have an array_manager module (uses BlockManager/SinglBlockManager).
+    class SingleArrayManager:
+        pass
+
 
 from bodo.pandas.series import BodoSeries
 from bodo.tests.test_lazy.utils import single_pandas_managers  # noqa
