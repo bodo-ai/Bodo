@@ -467,7 +467,7 @@ def test_aware_array_tz_naive_array_comparison(cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     arr1 = pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland").array
-    arr2 = pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30).values
+    arr2 = pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30).array
     py_output = pd.array(
         [cmp_op(arr1[i].tz_localize(None), arr2[i]) for i in range(len(arr1))]
     )
