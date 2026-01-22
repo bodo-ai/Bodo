@@ -2,14 +2,6 @@ import pandas as pd
 import pytest
 from pandas.core.internals import SingleBlockManager
 
-try:
-    from pandas.core.internals.array_manager import SingleArrayManager
-except ModuleNotFoundError:
-    # Pandas >= 3 does not have an array_manager module (uses BlockManager/SinglBlockManager).
-    class SingleArrayManager:
-        pass
-
-
 from bodo.pandas.series import BodoSeries
 from bodo.tests.test_lazy.utils import single_pandas_managers  # noqa
 from bodo.tests.utils import _test_equal
@@ -40,7 +32,7 @@ def test_pandas_series_lazy_manager_metadata_data(
     """
     lazy_manager, pandas_manager = single_pandas_managers
     assert isinstance(head_s._mgr, pandas_manager)
-    head_sam: SingleArrayManager = head_s._mgr
+    head_sam = head_s._mgr
 
     lsam = lazy_manager(
         [],
@@ -82,7 +74,7 @@ def test_pandas_series_lazy_manager_data_metadata(
     """
     lazy_manager, pandas_manager = single_pandas_managers
     assert isinstance(head_s._mgr, pandas_manager)
-    head_sam: SingleArrayManager = head_s._mgr
+    head_sam = head_s._mgr
 
     lsam = lazy_manager(
         [],
@@ -120,7 +112,7 @@ def test_bodo_series_lazy_manager_metadata_data(
     """
     lazy_manager, pandas_manager = single_pandas_managers
     assert isinstance(head_s._mgr, pandas_manager)
-    head_sam: SingleArrayManager = head_s._mgr
+    head_sam = head_s._mgr
 
     lsam = lazy_manager(
         [],
@@ -157,7 +149,7 @@ def test_bodo_series_lazy_manager_data_metadata(
     """
     lazy_manager, pandas_manager = single_pandas_managers
     assert isinstance(head_s._mgr, pandas_manager)
-    head_sam: SingleArrayManager = head_s._mgr
+    head_sam = head_s._mgr
 
     lsam = lazy_manager(
         [],
