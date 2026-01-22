@@ -390,11 +390,25 @@ def unbox_datetime_index(typ, val, c):
     if isinstance(typ.data, DatetimeArrayType):
         data_obj = c.pyapi.object_getattr_string(val, "array")
     else:
+        # Call A.values.astype('datetime64[ns]', copy=False)
         data_obj_us = c.pyapi.object_getattr_string(val, "values")
+        data_obj_us_astype = c.pyapi.object_getattr_string(data_obj_us, "astype")
         dtype_obj = c.pyapi.string_from_constant_string("datetime64[ns]")
-        data_obj = c.pyapi.call_method(data_obj_us, "astype", (dtype_obj,))
+        false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+        args = c.pyapi.tuple_pack([dtype_obj])
+        kws = c.pyapi.dict_pack(
+            [
+                ("copy", false_obj),
+            ]
+        )
+        data_obj = c.pyapi.call(data_obj_us_astype, args, kws)
         c.pyapi.decref(data_obj_us)
+        c.pyapi.decref(data_obj_us_astype)
         c.pyapi.decref(dtype_obj)
+        c.pyapi.decref(false_obj)
+        c.pyapi.decref(args)
+        c.pyapi.decref(kws)
+
     data = c.pyapi.to_native_value(typ.data, data_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
