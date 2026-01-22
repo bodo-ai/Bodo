@@ -532,8 +532,8 @@ void parallel_in_order_write(
     int64_t buff_size = count * elem_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
-              "parallel_in_order_write: MPI error on MPI_Errhandler_set:");
+    CHECK_MPI(MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+              "parallel_in_order_write: MPI error on MPI_Comm_set_errhandler:");
 
     if (fs_option == Bodo_Fs::s3) {
         int size_tag = 1;

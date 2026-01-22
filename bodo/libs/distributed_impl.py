@@ -81,7 +81,7 @@ c_gatherv = types.ExternalFunction(
 
 # sendbuff, sendcounts, displs, recvbuf, recv_count, dtype
 c_scatterv = types.ExternalFunction(
-    "c_scatterv",
+    "c_scatterv_py_entry",
     types.void(
         types.voidptr,
         types.voidptr,

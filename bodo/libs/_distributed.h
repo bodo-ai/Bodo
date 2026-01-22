@@ -1,15 +1,25 @@
 #pragma once
 
 #include <Python.h>
+#include <mpi.h>
 #include <stdbool.h>
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <span>
 #include <vector>
 
 #include "_bodo_common.h"
 #include "_mpi.h"
+
+#ifndef MPI_VERSION
+#define BODO_MPI_HAS_LARGE_COUNT 0
+#elif MPI_VERSION >= 4
+#define BODO_MPI_HAS_LARGE_COUNT 1
+#else
+#define BODO_MPI_HAS_LARGE_COUNT 0
+#endif
 
 // Helper macro to make an MPI call that returns an error code. In case of an
 // error, this raises a runtime_error (with MPI error details).
@@ -122,9 +132,10 @@ static void c_gatherv(void* send_data, int64_t sendcount, void* recv_data,
                       int64_t* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root,
                       int64_t comm_ptr = 0) __UNUSED__;
-static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
-                       void* recv_data, MPI_Count recv_count, int typ_enum,
-                       int root, int64_t comm_ptr) __UNUSED__;
+static void c_scatterv_py_entry(void* send_data, MPI_Count* sendcounts,
+                                MPI_Aint* displs, void* recv_data,
+                                MPI_Count recv_count, int typ_enum, int root,
+                                int64_t comm_ptr) __UNUSED__;
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
@@ -863,31 +874,79 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
     return;
 }
 
+template <typename T>
+static inline int downcast_int_or_fail(T val) {
+    if (val > std::numeric_limits<int>::max()) {
+        // TODO: enhance error message ?
+        throw std::runtime_error("Value too large to downcast to int");
+    }
+    return static_cast<int>(val);
+}
+
+template <typename T>
+static inline std::vector<int> downcast_int_arr_or_fail(T* val, size_t n) {
+    std::vector<int> result(n);
+    for (size_t i = 0; i < n; ++i) {
+        result[i] = downcast_int_or_fail(val[i]);
+    }
+    return result;
+}
+
 // Count and displacement types for MPI_gatherv_c/scatterv_c
 static_assert(sizeof(MPI_Count) == sizeof(int64_t));
 static_assert(sizeof(MPI_Aint) == sizeof(int64_t));
+
+static int MPI_Gengatherv(const void* sendbuf, int64_t sendcount,
+                          MPI_Datatype sendtype, void* recvbuf,
+                          const int64_t* recvcounts, const int64_t* displs,
+                          MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
+                          bool all_gather) {
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+    const MPI_Count* mpi_recv_counts =
+        reinterpret_cast<const MPI_Count*>(recvcounts);
+    const MPI_Aint* mpi_displs = reinterpret_cast<const MPI_Aint*>(displs);
+    if (all_gather) {
+        return MPI_Allgatherv_c(sendbuf, sendcount, recvtype, recvbuf,
+                                mpi_recv_counts, mpi_displs, recvtype, comm);
+    } else {
+        return MPI_Gatherv_c(sendbuf, sendcount, recvtype, recvbuf,
+                             mpi_recv_counts, mpi_displs, recvtype, root_pe,
+                             comm);
+    }
+#else
+    int npes;
+    MPI_Comm_size(MPI_COMM_WORLD, &npes);
+    if (root_pe == MPI_ROOT) {
+        CHECK_MPI(MPI_Comm_remote_size(comm, &npes),
+                  "c_scatter: MPI error on MPI_Comm_remote_size:");
+    }
+    int sendcount_int = downcast_int_or_fail(sendcount);
+    auto recv_counts_ints = downcast_int_arr_or_fail(recvcounts, npes);
+    auto displs_ints = downcast_int_arr_or_fail(displs, npes);
+    if (all_gather) {
+        return MPI_Allgatherv(sendbuf, sendcount_int, recvtype, recvbuf,
+                              recv_counts_ints.data(), displs_ints.data(),
+                              recvtype, comm);
+    } else {
+        return MPI_Gatherv(sendbuf, sendcount_int, recvtype, recvbuf,
+                           recv_counts_ints.data(), displs_ints.data(),
+                           recvtype, root_pe, comm);
+    }
+#endif
+}
 
 static void c_gatherv(void* send_data, int64_t sendcount, void* recv_data,
                       int64_t* recv_counts, int64_t* displs, int typ_enum,
                       bool allgather, int root, int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Count* mpi_recv_counts = reinterpret_cast<MPI_Count*>(recv_counts);
-    MPI_Aint* mpi_displs = reinterpret_cast<MPI_Aint*>(displs);
     MPI_Comm comm = MPI_COMM_WORLD;
     if (comm_ptr != 0) {
         comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
-    if (allgather) {
-        CHECK_MPI(MPI_Allgatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                                   mpi_recv_counts, mpi_displs, mpi_typ, comm),
-                  "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
-    } else {
-        CHECK_MPI(
-            MPI_Gatherv_c(send_data, sendcount, mpi_typ, recv_data,
-                          mpi_recv_counts, mpi_displs, mpi_typ, root, comm),
-            "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
-    }
-    return;
+    CHECK_MPI(
+        MPI_Gengatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
+                       displs, mpi_typ, root, comm, allgather),
+        "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
 }
 
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
@@ -900,17 +959,43 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
 }
 
 static void c_scatterv(void* send_data, MPI_Count* sendcounts, MPI_Aint* displs,
-                       void* recv_data, MPI_Count recv_count, int typ_enum,
-                       int root, int64_t comm_ptr) {
+                       void* recv_data, MPI_Count recv_count,
+                       MPI_Datatype mpi_typ, int root, MPI_Comm comm) {
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+    CHECK_MPI(MPI_Scatterv_c(send_data, sendcounts, displs, mpi_typ, recv_data,
+                             recv_count, mpi_typ, root, comm),
+              "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
+#else
+    int npes;
+    MPI_Comm_size(MPI_COMM_WORLD, &npes);
+    if (root == MPI_ROOT) {
+        CHECK_MPI(MPI_Comm_remote_size(comm, &npes),
+                  "c_scatter: MPI error on MPI_Comm_remote_size:");
+    }
+
+    int recv_count_int = downcast_int_or_fail(recv_count);
+    auto sendcounts_ints = downcast_int_arr_or_fail(sendcounts, npes);
+    auto displs_ints = downcast_int_arr_or_fail(displs, npes);
+
+    CHECK_MPI(
+        MPI_Scatterv(send_data, sendcounts_ints.data(), displs_ints.data(),
+                     mpi_typ, recv_data, recv_count_int, mpi_typ, root, comm),
+        "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
+#endif
+}
+
+static void c_scatterv_py_entry(void* send_data, MPI_Count* sendcounts,
+                                MPI_Aint* displs, void* recv_data,
+                                MPI_Count recv_count, int typ_enum, int root,
+                                int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     MPI_Comm comm = MPI_COMM_WORLD;
     // Use provided comm pointer if available (0 means not provided)
     if (comm_ptr != 0) {
         comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
-    CHECK_MPI(MPI_Scatterv_c(send_data, sendcounts, displs, mpi_typ, recv_data,
-                             recv_count, mpi_typ, root, comm),
-              "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
+    c_scatterv(send_data, sendcounts, displs, recv_data, recv_count, mpi_typ,
+               root, comm);
 }
 
 /**

@@ -143,24 +143,6 @@ int MPI_Gengather(void *sendbuf, int sendcount, MPI_Datatype sendtype,
     }
 }
 
-int MPI_Gengatherv(const void *sendbuf, int64_t sendcount,
-                   MPI_Datatype sendtype, void *recvbuf,
-                   const int64_t *recvcounts, const int64_t *displs,
-                   MPI_Datatype recvtype, int root_pe, MPI_Comm comm,
-                   bool all_gather) {
-    const MPI_Aint *mpi_displs = reinterpret_cast<const MPI_Aint *>(displs);
-    const MPI_Count *mpi_recvcounts =
-        reinterpret_cast<const MPI_Count *>(recvcounts);
-    if (all_gather) {
-        return MPI_Allgatherv_c(sendbuf, sendcount, sendtype, recvbuf,
-                                mpi_recvcounts, mpi_displs, recvtype, comm);
-    } else {
-        return MPI_Gatherv_c(sendbuf, sendcount, sendtype, recvbuf,
-                             mpi_recvcounts, mpi_displs, recvtype, root_pe,
-                             comm);
-    }
-}
-
 std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                          bool all_gather, bool is_parallel,
                                          int mpi_root, int n_pes, int myrank,
@@ -635,23 +617,17 @@ std::shared_ptr<array_info> scatter_array(
             out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
                                             0, num_categories);
 
-            CHECK_MPI(
-                MPI_Scatterv_c(send_ptr, send_count_bytes.data(),
-                               send_disp_bytes.data(), mpi_typ,
-                               out_arr->data1(), n_recv_bytes, mpi_typ,
-                               mpi_root, comm),
-                "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+            c_scatterv(send_ptr, send_count_bytes.data(),
+                       send_disp_bytes.data(), out_arr->data1(), n_recv_bytes,
+                       mpi_typ, mpi_root, comm);
 
         } else {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
             out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
                                             0, num_categories);
             char *data1_ptr = out_arr->data1();
-            CHECK_MPI(
-                MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
-                               rows_disps.data(), mpi_typ, data1_ptr, n_loc,
-                               mpi_typ, mpi_root, comm),
-                "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+            c_scatterv(in_arr->data1(), send_counts.data(), rows_disps.data(),
+                       data1_ptr, n_loc, mpi_typ, mpi_root, comm);
         }
         // Set scale and precision for decimal type
         if (dtype == Bodo_CTypes::DECIMAL) {
@@ -664,14 +640,10 @@ std::shared_ptr<array_info> scatter_array(
                                         num_categories);
         char *data1_ptr = out_arr->data1();
         char *data2_ptr = out_arr->data2();
-        CHECK_MPI(MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
-                                 rows_disps.data(), mpi_typ, data1_ptr, n_loc,
-                                 mpi_typ, mpi_root, comm),
-                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
-        CHECK_MPI(MPI_Scatterv_c(in_arr->data2(), send_counts.data(),
-                                 rows_disps.data(), mpi_typ, data2_ptr, n_loc,
-                                 mpi_typ, mpi_root, comm),
-                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(in_arr->data1(), send_counts.data(), rows_disps.data(),
+                   data1_ptr, n_loc, mpi_typ, mpi_root, comm);
+        c_scatterv(in_arr->data2(), send_counts.data(), rows_disps.data(),
+                   data2_ptr, n_loc, mpi_typ, mpi_root, comm);
 
     } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -712,22 +684,17 @@ std::shared_ptr<array_info> scatter_array(
 
         // Scatter string lengths
         std::vector<uint32_t> recv_arr_lens(n_loc);
-        CHECK_MPI(
-            MPI_Scatterv_c(send_arr_lens.data(), send_counts.data(),
-                           rows_disps.data(), mpi_typ32, recv_arr_lens.data(),
-                           n_loc, mpi_typ32, mpi_root, comm),
-            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(send_arr_lens.data(), send_counts.data(), rows_disps.data(),
+                   recv_arr_lens.data(), n_loc, mpi_typ32, mpi_root, comm);
         convert_len_arr_to_offset(recv_arr_lens.data(),
                                   (offset_t *)out_arr->data2(),
                                   (size_t)out_arr->length);
         recv_arr_lens.clear();
 
         // Scatter string characters
-        CHECK_MPI(
-            MPI_Scatterv_c(in_arr->data1(), send_counts_chars.data(),
-                           rows_disps_chars.data(), mpi_typ8, out_arr->data1(),
-                           n_loc_chars, mpi_typ8, mpi_root, comm),
-            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(in_arr->data1(), send_counts_chars.data(),
+                   rows_disps_chars.data(), out_arr->data1(), n_loc_chars,
+                   mpi_typ8, mpi_root, comm);
     } else if (arr_type == bodo_array_type::DICT) {
         // broadcast the dictionary data (string array)
         std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
@@ -748,14 +715,10 @@ std::shared_ptr<array_info> scatter_array(
                                         num_categories);
         char *data1_ptr = out_arr->data1();
         char *data2_ptr = out_arr->data2();
-        CHECK_MPI(MPI_Scatterv_c(in_arr->data1(), send_counts.data(),
-                                 rows_disps.data(), utc_mpi_typ, data1_ptr,
-                                 n_loc, utc_mpi_typ, mpi_root, comm),
-                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
-        CHECK_MPI(MPI_Scatterv_c(in_arr->data2(), send_counts.data(),
-                                 rows_disps.data(), offset_mpi_typ, data2_ptr,
-                                 n_loc, offset_mpi_typ, mpi_root, comm),
-                  "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(in_arr->data1(), send_counts.data(), rows_disps.data(),
+                   data1_ptr, n_loc, utc_mpi_typ, mpi_root, comm);
+        c_scatterv(in_arr->data2(), send_counts.data(), rows_disps.data(),
+                   data2_ptr, n_loc, offset_mpi_typ, mpi_root, comm);
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
 
@@ -795,11 +758,8 @@ std::shared_ptr<array_info> scatter_array(
 
         // Scatter string lengths
         std::vector<uint32_t> recv_arr_lens(n_loc);
-        CHECK_MPI(
-            MPI_Scatterv_c(send_arr_lens.data(), send_counts.data(),
-                           rows_disps.data(), mpi_typ32, recv_arr_lens.data(),
-                           n_loc, mpi_typ32, mpi_root, comm),
-            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(send_arr_lens.data(), send_counts.data(), rows_disps.data(),
+                   recv_arr_lens.data(), n_loc, mpi_typ32, mpi_root, comm);
         convert_len_arr_to_offset(recv_arr_lens.data(),
                                   (offset_t *)out_arr->data1(),
                                   (size_t)out_arr->length);
@@ -851,11 +811,8 @@ std::shared_ptr<array_info> scatter_array(
                 tmp_null_bytes);
         }
 
-        CHECK_MPI(
-            MPI_Scatterv_c(send_ptr, send_count_bytes.data(),
-                           send_disp_bytes.data(), mpi_typ, null_bitmask_o,
-                           n_recv_bytes, mpi_typ, mpi_root, comm),
-            "_distributed.cpp::c_scatterv: MPI error on MPI_Scatterv:");
+        c_scatterv(send_ptr, send_count_bytes.data(), send_disp_bytes.data(),
+                   null_bitmask_o, n_recv_bytes, mpi_typ, mpi_root, comm);
     }
 
     return out_arr;
@@ -1379,7 +1336,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, c_gather_scalar);
     SetAttrStringFromVoidPtr(m, c_gatherv);
     SetAttrStringFromVoidPtr(m, c_allgatherv);
-    SetAttrStringFromVoidPtr(m, c_scatterv);
+    SetAttrStringFromVoidPtr(m, c_scatterv_py_entry);
     SetAttrStringFromVoidPtr(m, c_bcast);
     SetAttrStringFromVoidPtr(m, broadcast_array_py_entry);
     SetAttrStringFromVoidPtr(m, broadcast_table_py_entry);
