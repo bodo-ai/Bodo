@@ -377,10 +377,7 @@ def test_tz_array_date_scalar_comparison(sample_tz, cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     d_range = pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=sample_tz)
-    if sample_tz is None:
-        arr = d_range.values
-    else:
-        arr = d_range.array
+    arr = d_range.array
     d = datetime.date(2022, 4, 4)
     # Use the casting for the generated output.
     d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
@@ -415,10 +412,7 @@ def test_tz_array_date_array_comparison(sample_tz, cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     d_range = pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=sample_tz)
-    if sample_tz is None:
-        arr1 = d_range.values
-    else:
-        arr1 = d_range.array
+    arr1 = d_range.array
     arr2 = (
         pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz=sample_tz)
         .to_series()
@@ -445,10 +439,7 @@ def test_tz_array_date_series_comparison(sample_tz, cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     d_range = pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=sample_tz)
-    if sample_tz is None:
-        arr = d_range.values
-    else:
-        arr = d_range.array
+    arr = d_range.array
     S = (
         pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz=sample_tz)
         .to_series()
