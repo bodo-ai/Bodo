@@ -1720,7 +1720,13 @@ def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        check_func(impl, (fname, fname), check_dtype=False)
+        out = pd.read_parquet(fname, dtype_backend="pyarrow")
+        check_func(
+            impl,
+            (fname, fname),
+            check_dtype=False,
+            py_output=(out.head(4), out.head(5)),
+        )
 
         if not bodo.test_dataframe_library_enabled:
             check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
