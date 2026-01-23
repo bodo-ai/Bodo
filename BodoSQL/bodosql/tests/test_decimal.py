@@ -611,15 +611,18 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         "TABLE1": pd.DataFrame(
             {
                 "I": int_data,
-                "D": pa.array(
-                    [
-                        Decimal("0"),
-                        Decimal("1"),
-                        Decimal("2.5"),
-                        Decimal("3"),
-                        Decimal("10.25"),
-                    ],
-                    type=pa.decimal128(4, 2),
+                "D": pd.array(
+                    pa.array(
+                        [
+                            Decimal("0"),
+                            Decimal("1"),
+                            Decimal("2.5"),
+                            Decimal("3"),
+                            Decimal("10.25"),
+                        ],
+                        type=pa.decimal128(4, 2),
+                    ),
+                    dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
                 ),
             }
         )
@@ -630,7 +633,9 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"RES": result}),
+        expected_output=pd.DataFrame(
+            {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+        ),
     )
 
 
