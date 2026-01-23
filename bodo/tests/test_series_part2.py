@@ -57,7 +57,8 @@ def test_series_map_dict_arg(S, d):
     def test_impl(S, d):
         return S.map(d)
 
-    check_func(test_impl, (S, d), check_dtype=False)
+    py_output = S.map(d)
+    check_func(test_impl, (S, d), check_dtype=False, py_output=py_output)
 
 
 @pytest.mark.slow
