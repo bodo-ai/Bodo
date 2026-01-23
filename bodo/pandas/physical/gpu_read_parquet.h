@@ -50,7 +50,6 @@ class RankBatchGenerator {
         MPI_Comm_size(MPI_COMM_WORLD, &size_);
 
         files_ = list_parquet_files(path_);
-        std::cout << "rbg " << path_ << " " << files_.size() << std::endl;
         if (files_.empty()) {
             // nothing to do
             parts_ = {};
