@@ -478,7 +478,7 @@ def test_tz_sub_month_end(representative_tz, memory_leak_check):
     check_func(impl, (ts, offset))
 
 
-@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+@pytest.mark.parametrize("freq", ["D", "h", "min", "s", "ms", "us", "ns"])
 def test_timestamp_freq_methods(freq, representative_tz, memory_leak_check):
     """Tests the timestamp freq methods with various frequencies"""
 
