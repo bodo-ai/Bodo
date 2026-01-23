@@ -21,6 +21,7 @@
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
 
+#include <glob.h>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -49,6 +50,7 @@ class RankBatchGenerator {
         MPI_Comm_size(MPI_COMM_WORLD, &size_);
 
         files_ = list_parquet_files(path_);
+        std::cout << "rbg " << path_ << " " << files_.size() << std::endl;
         if (files_.empty()) {
             // nothing to do
             parts_ = {};
@@ -199,10 +201,25 @@ class RankBatchGenerator {
             std::sort(out.begin(), out.end());
             return out;
         }
-        // treat as glob or single file fallback: try path as file
         if (fs::exists(p)) {
             out.push_back(p.string());
         }
+        if (path.find('*') != std::string::npos ||
+            path.find('?') != std::string::npos ||
+            path.find('[') != std::string::npos) {
+            // Handle globs.
+
+            glob_t g;
+            if (glob(path.c_str(), 0, NULL, &g) == 0) {
+                for (size_t i = 0; i < g.gl_pathc; i++) {
+                    out.push_back(g.gl_pathv[i]);
+                }
+            }
+            globfree(&g);
+            std::sort(out.begin(), out.end());
+            return out;
+        }
+
         return out;
     }
 
