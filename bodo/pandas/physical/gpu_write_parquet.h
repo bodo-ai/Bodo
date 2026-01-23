@@ -18,6 +18,8 @@
 #include <cudf/concatenate.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
+#include <cudf/lists/lists_column_view.hpp>
+#include <cudf/strings/strings_column_view.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 
@@ -45,8 +47,8 @@ struct PhysicalGPUWriteParquetMetrics {
 /// Mirrors the CPU writer in write_parquet.h but accepts GPU_DATA as input
 /// (GPU_DATA == std::pair<std::unique_ptr<cudf::table>,
 /// std::shared_ptr<arrow::Schema>>). Accumulates incoming GPU tables into an
-/// internal buffer and only emits a parquet file part when the accumulated row
-/// count exceeds `chunk_rows` or when the stream is finished. File names are
+/// internal buffer and only emits a parquet file part when the accumulated
+/// bytes exceeds `chunk_bytes` or when the stream is finished. File names are
 /// generated using the same get_fname_prefix() logic as the CPU writer so parts
 /// are lexicographically ordered.
 class PhysicalGPUWriteParquet : public PhysicalGPUSink {
@@ -78,10 +80,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
           arrow_schema(std::move(bind_data.arrow_schema)),
           is_last_state(std::make_shared<IsLastState>()),
           finished(false),
-          // Interpret the configured chunk threshold as a row count threshold.
-          // The existing CPU writer uses get_parquet_chunk_size() for bytes;
-          // here we reuse the same configuration entry but treat it as rows.
-          chunk_rows(static_cast<int64_t>(get_parquet_chunk_size())) {
+          chunk_bytes(static_cast<int64_t>(get_parquet_chunk_size())) {
         time_pt start_init = start_timer();
 
         recreate_output_dir(this->path);
@@ -103,6 +102,72 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     }
 
     virtual ~PhysicalGPUWriteParquet() = default;
+
+    size_t column_bytes(const cudf::column_view &col) {
+        size_t total = 0;
+
+        // null mask
+        if (col.nullable()) {
+            total += cudf::bitmask_allocation_size_bytes(col.size());
+        }
+
+        // FIXED-WIDTH TYPES
+        if (cudf::is_fixed_width(col.type())) {
+            total += col.size() * cudf::size_of(col.type());
+            return total;
+        }
+
+        // STRINGS
+        if (col.type().id() == cudf::type_id::STRING) {
+            cudf::strings_column_view scv(col);
+
+            // offsets buffer
+            total += scv.offsets().size() * sizeof(int32_t);
+
+            // chars buffer (requires a stream)
+            total += scv.chars_size(rmm::cuda_stream_default);
+
+            return total;
+        }
+
+        // LISTS
+        if (col.type().id() == cudf::type_id::LIST) {
+            cudf::lists_column_view lcv(col);
+
+            // offsets buffer
+            total += lcv.offsets().size() * sizeof(int32_t);
+
+            // recurse into child column
+            total += column_bytes(lcv.child());
+
+            return total;
+        }
+
+        // STRUCTS
+        if (col.type().id() == cudf::type_id::STRUCT) {
+            for (int i = 0; i < col.num_children(); ++i) {
+                total += column_bytes(col.child(i));
+            }
+            return total;
+        }
+
+        // fallback
+        return total;
+    }
+
+    size_t table_bytes(const cudf::table_view &tv) {
+        size_t total = 0;
+        for (auto const &col : tv) {
+            total += column_bytes(col);
+        }
+        return total;
+    }
+
+    size_t row_size_bytes(const cudf::table_view &tv) {
+        if (tv.num_rows() == 0)
+            return 0;
+        return table_bytes(tv) / tv.num_rows();
+    }
 
     // ConsumeBatch signature using GPU_DATA
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
@@ -134,7 +199,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         // decide flush by rows
         bool is_last = (prev_op_result == OperatorResult::FINISHED);
-        bool should_flush = is_last || (buffer_rows >= chunk_rows);
+        size_t row_size = row_size_bytes(buffer_table->view());
+        size_t buffer_bytes = buffer_rows * row_size;
+        bool should_flush = is_last || (buffer_bytes >= chunk_bytes);
 
         if (should_flush && buffer_table && buffer_rows > 0) {
             std::string fname_prefix = get_fname_prefix(iter);
@@ -251,8 +318,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     const std::shared_ptr<IsLastState> is_last_state;
     bool finished;
     std::vector<std::string> column_names;
-    // chunk_rows is the row-count threshold for emitting a parquet part.
-    const int64_t chunk_rows;
+    const uint64_t chunk_bytes;
     int64_t iter = 0;
 
     PhysicalGPUWriteParquetMetrics metrics;
