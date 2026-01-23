@@ -965,6 +965,9 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
         if arr_type == types.Array(types.bool_, 1, "C"):
             arr_type = bodo.types.boolean_array_type
 
+        if arr_type == types.Array(types.NPDatetime("us"), 1, "C"):
+            arr_type = bodo.types.DatetimeArrayType(None)
+
         # We make all Series data arrays contiguous during unboxing to avoid type errors
         # see test_df_query_stringliteral_expr
         if isinstance(arr_type, types.Array):

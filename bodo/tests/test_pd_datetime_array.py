@@ -125,22 +125,6 @@ def test_pd_tz_df_constant_lowering(arr, memory_leak_check):
     check_func(test_impl, (), dist_test=False)
 
 
-@pytest.mark.skip(reason="Constructor not implemented yet")
-@pytest.mark.parametrize("values", _dt_arrs)
-@pytest.mark.parametrize(
-    "dtype",
-    [
-        pytest.param(pd.DatetimeTZDtype(tz=timezone), id=timezone)
-        for timezone in _timezones
-    ],
-)
-def test_pd_datetime_arr_constructor(values, dtype, memory_leak_check):
-    def test_impl(values, dtype):
-        return pd.arrays.DatetimeArray(values, dtype=dtype)
-
-    check_func(test_impl, (values, dtype))
-
-
 @pytest.mark.skip(reason="Construction from `pd.array` not implemented yet")
 @pytest.mark.parametrize(
     "timestamp_list",

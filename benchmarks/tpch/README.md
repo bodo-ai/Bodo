@@ -55,12 +55,12 @@ This section describes how to reproduce benchmark results for both single node a
 
 | Package      | Version      |
 |----------------|----------------|
-| bodo   | 2025.12   |
+| bodo   | 2025.12.2   |
 | bodosdk | 2.3.2 |
 | polars | 1.35.2 |
 | pandas | 2.3.3 |
 | duckdb | 1.4.2 |
-| dask   | 2025.11.0 |
+| dask   | 2025.12.0 |
 | dask-cloudprovider  | 2025.9.0 |
 | PySpark  | 3.5.5 |
 <!-- TODO: Daft -->
@@ -160,7 +160,7 @@ terraform apply \
 This will run the script and write logs to an S3 bucket. You can either view the logs in the AWS console or copy them directly using the following scripts:
 
 ``` shell
-./wait_for_steps.sh
+./wait_for_step.sh
 
 aws s3 cp s3://"$(terraform output --json | jq -r '.s3_bucket_id.value')"/logs/"$(terraform output --json | jq -r '.emr_cluster_id.value')" ./emr-logs --recursive --region "$(terraform output --json | jq -r '.emr_cluster_region.value')"
 

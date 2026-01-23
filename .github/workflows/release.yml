@@ -61,7 +61,7 @@ jobs:
   bodo-conda-platform:
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
-      python-version: '3.14'
+      python-version: '3.13'
       platform-build: true
       is-release: ${{ github.event_name == 'release' }}
       os: ubuntu-latest

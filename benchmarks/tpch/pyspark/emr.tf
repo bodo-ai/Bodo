@@ -69,7 +69,7 @@ resource "aws_emr_cluster" "emr_cluster" {
     instance_count = 3
 
     ebs_config {
-      size                 = "40"
+      size                 = "300"
       type                 = "gp3"
       volumes_per_instance = 1
     }
