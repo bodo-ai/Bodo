@@ -3013,7 +3013,15 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
                     ),
                 }
             ),
-            pd.DataFrame({0: [1, 2], 1: [None, Decimal("0.45")]}),
+            pd.DataFrame(
+                {
+                    0: [1, 2],
+                    1: pd.array(
+                        [None, Decimal("0.45")],
+                        dtype=pd.ArrowDtype(pa.decimal128(23, 13)),
+                    ),
+                }
+            ),
             id="group-of-nulls",
         ),
         pytest.param(
@@ -3575,7 +3583,10 @@ def test_decimal_median_error(arr, error_msg, spark_info):
                 }
             ),
             "ABS(D1)",
-            pd.array([None, None, None, None, None]),
+            pd.array(
+                [None, None, None, None, None],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
             id="all-none-values",
         ),
         pytest.param(
