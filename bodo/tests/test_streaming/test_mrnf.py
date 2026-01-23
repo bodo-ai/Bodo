@@ -654,6 +654,7 @@ def test_mrnf_no_order(memory_leak_check):
         return x.iloc[0]
 
     expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[["A", "B"]]
 
     _test_mrnf_helper(
         df,
