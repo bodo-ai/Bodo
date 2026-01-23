@@ -216,8 +216,22 @@ def test_join(decimal_arr_value, memory_leak_check):
     # double the size of the input array to avoid issues on 3 processes
     decimal_arr_value = np.concatenate((decimal_arr_value, decimal_arr_value))
     n = len(decimal_arr_value)
-    df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
-    df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
+    df1 = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": pd.array(
+                decimal_arr_value, dtype=pd.ArrowDtype(pa.decimal128(38, 18))
+            ),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": np.arange(n) + 3,
+            "C": pd.array(
+                decimal_arr_value, dtype=pd.ArrowDtype(pa.decimal128(38, 18))
+            ),
+        }
+    )
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
