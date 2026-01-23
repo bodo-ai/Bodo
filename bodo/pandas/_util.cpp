@@ -1074,6 +1074,7 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
 
         case LogicalTypeId::TIMESTAMP_NS:
+        case LogicalTypeId::TIMESTAMP_TZ:
             return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
 
         // Date / Time / Interval

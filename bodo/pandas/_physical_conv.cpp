@@ -100,6 +100,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::variant<std::shared_ptr<PhysicalProjection>,
                  std::shared_ptr<PhysicalGPUProjection>>
         physical_op;
+#else
+    std::variant<std::shared_ptr<PhysicalProjection>> physical_op;
+#endif
+
+#ifdef USE_CUDF
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         physical_op = std::make_shared<PhysicalGPUProjection>(
@@ -108,14 +113,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
         physical_op = std::make_shared<PhysicalProjection>(
             source_cols, op.expressions, in_table_schema);
     }
+#else
+    physical_op = std::make_shared<PhysicalProjection>(
+        source_cols, op.expressions, in_table_schema);
+#endif
     std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
                physical_op);
-#else
-    std::shared_ptr<PhysicalProjection> physical_op =
-        std::make_shared<PhysicalProjection>(source_cols, op.expressions,
-                                             in_table_schema);
-    this->active_pipeline->AddOperator(physical_op);
-#endif
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {

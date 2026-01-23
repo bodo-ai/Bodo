@@ -191,8 +191,10 @@ class RankBatchGenerator {
                 if (!entry.is_regular_file())
                     continue;
                 auto ext = entry.path().extension().string();
-                if (ext == ".parquet" || ext == ".PARQUET")
+                if (ext == ".parquet" || ext == ".PARQUET" || ext == ".pq" ||
+                    ext == ".PQ") {
                     out.push_back(entry.path().string());
+                }
             }
             std::sort(out.begin(), out.end());
             return out;
