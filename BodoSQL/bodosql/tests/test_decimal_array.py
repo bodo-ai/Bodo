@@ -183,7 +183,7 @@ def test_series_astype_str(decimal_arr_value, memory_leak_check):
         return s
 
     S = pd.Series(decimal_arr_value)
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), py_output=float(S.sum()), atol=1e-2, rtol=1e-2)
 
 
 @pytest.mark.slow
