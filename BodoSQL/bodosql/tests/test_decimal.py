@@ -2898,7 +2898,9 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame({"RES": answer}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(answer, dtype="string[pyarrow]")}
+            ),
             sort_output=False,
             check_dtype=False,
         )
