@@ -36,7 +36,10 @@ import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pd_timestamp_tz_naive_type,
+)
 from bodo.ir.unsupported_method_template import (
     overload_unsupported_attribute,
     overload_unsupported_method,
@@ -45,7 +48,7 @@ from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, PandasDatetimeTZDtype
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
@@ -4539,6 +4542,8 @@ def overload_index_map(I, mapper, na_action=None):
         dtype = pd_timestamp_tz_naive_type
     if dtype == types.NPTimedelta("ns"):
         dtype = pd_timedelta_type
+    if isinstance(dtype, PandasDatetimeTZDtype):
+        dtype = PandasTimestampType(dtype.tz)
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
         dtype = dtype.elem_type
 
