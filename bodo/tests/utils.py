@@ -1374,6 +1374,10 @@ def _test_equal(
                     name=py_out.name,
                 )
 
+            # Convert to pyarrow binary dtype
+            if pa.types.is_binary(pa_type) or pa.types.is_large_binary(pa_type):
+                py_out = py_out.astype(bodo_out.dtype)
+
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1457,6 +1461,15 @@ def _test_equal(
                         lambda x: pd.NA if pd.isna(x) else x
                     ),
                     dtype=bodo_dtype,
+                )
+
+            # Convert binary columns to pyarrow binary dtype
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_binary(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
 
         # Handle Arrow float types in Index
