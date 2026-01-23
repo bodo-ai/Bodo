@@ -28,23 +28,33 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 # Build Commands
-[tasks.build-bodo-cudf]
+[tasks.build-bodo-in-default-cuda]
 cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.USE_CUDF=ON"
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-[tasks.build-bodo-cudf.env]  # SCcache Envs
+[tasks.build-bodo-in-default-cuda.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf]
+depends-on = [
+  { task = "build-bodo-in-default-cuda", environment = "default-cuda" }
+]
+
+[tasks.build-bodo-san-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-san-in-default-cuda.env]  # SCcache Envs
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-san]
-cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-[tasks.build-bodo-cudf-san.env]  # SCcache Envs
-SCCACHE_BUCKET = "engine-codebuild-cache"
-SCCACHE_REGION = "us-east-2"
-SCCACHE_S3_USE_SSL = "true"
-SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+depends-on = [
+  { task = "build-bodo-san-in-default-cuda", environment = "default-cuda" }
+]
 
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
@@ -89,7 +99,6 @@ macos = "12.0"
 [dependencies]
 pip = "*"
 # Core Python Deps
-#numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
 fsspec = ">=2021.09"
@@ -310,7 +319,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge" } }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
