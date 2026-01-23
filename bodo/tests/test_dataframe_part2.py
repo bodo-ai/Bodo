@@ -644,7 +644,7 @@ def test_df_apply_name_datetime_index(memory_leak_check):
         return df.apply(lambda x: x.name.value, axis=1)
 
     df = pd.DataFrame(
-        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="H")
+        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="h")
     )
 
     check_func(test_impl, (df,))
