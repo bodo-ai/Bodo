@@ -4257,7 +4257,9 @@ def test_merge_partial_distributed(memory_leak_check):
     bodo_impl = bodo.jit(distributed_block={"df1", "df3"})(test_impl)
     df3_bodo1 = bodo_impl(bdf1, df2)
     df3_bodo2 = (
-        bodo.gatherv(df3_bodo1).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
+        bodo.libs.distributed_api.gatherv(df3_bodo1)
+        .sort_values(by=["A", "C", "D"])
+        .reset_index(drop=True)
     )
     df3_pd = test_impl(df1, df2).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
     if bodo.get_rank() == 0:

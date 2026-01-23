@@ -108,50 +108,6 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
     }
 }
 
-#if 0
-arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
-                                     arrow::Datum right_res,
-                                     const std::string& comparator) {
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {left_res, right_res});
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_binary: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return cmp_res.ValueOrDie();
-}
-
-arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
-                                    const std::string& comparator) {
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {left_res});
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_unary: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return cmp_res.ValueOrDie();
-}
-
-arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
-                                   const duckdb::LogicalType& return_type) {
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type);
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return cmp_res.ValueOrDie();
-}
-#endif
-
 GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
                                 std::shared_ptr<ExprGPUResult> then_res,
                                 std::shared_ptr<ExprGPUResult> else_res) {
@@ -366,11 +322,6 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
 
                 if (!scalar_func_data.arrow_func_name.empty()) {
                     throw std::runtime_error("Unimplemented");
-                    /*
-                    return std::static_pointer_cast<PhysicalGPUExpression>(
-                        std::make_shared<PhysicalGPUArrowExpression>(
-                            phys_children, scalar_func_data, result_type));
-                    */
                 } else if (scalar_func_data.args) {
                     return std::static_pointer_cast<PhysicalGPUExpression>(
                         std::make_shared<PhysicalGPUUDFExpression>(
@@ -483,143 +434,7 @@ std::shared_ptr<ExprGPUResult> PhysicalGPUUDFExpression::ProcessBatch(
     GPU_DATA input_batch) {
     throw std::runtime_error(
         "PhysicalGPUUDFExpression::ProcessBatch unimplemented ");
-#if 0
-This is some example cudf code we may want to adapt eventually.
-#include <cudf/column/column_view.hpp>
-#include <cudf/transform.hpp>  // check your libcudf include path
-#include <cudf/types.hpp>
-#include <memory>
-#include <string>
-
-// input_col is a cudf::column_view you already have
-std::string cuda_udf = R"(
-extern "C" __device__ int my_udf(int x) {
-  return x * 2; // example: double each element
 }
-)";
-
-cudf::data_type out_type{cudf::type_id::INT32};
-
-// single-column overload (some versions accept column_view directly)
-auto out_col = cudf::transform(input_col, cuda_udf, out_type, /*is_ptx=*/false);
-// out_col is std::unique_ptr<cudf::column>
-End of cudf example code.
-
-    //----------------------------------------------
-    std::vector<GPU_COLUMN> child_results;
-    std::vector<std::string> column_names;
-
-    // All the sources of the UDF will be separate projections.
-    // Create each one of them here.
-    for (const auto& child : children) {
-        std::shared_ptr<ExprGPUResult> child_res =
-            child->ProcessBatch(input_batch);
-
-        std::shared_ptr<ArrayExprGPUResult> child_as_array =
-            std::dynamic_pointer_cast<ArrayExprGPUResult>(child_res);
-        std::shared_ptr<ScalarExprGPUResult> child_as_scalar =
-            std::dynamic_pointer_cast<ScalarExprGPUResult>(child_res);
-
-        if (child_as_array) {
-            child_results.emplace_back(child_as_array->result);
-            column_names.emplace_back(child_as_array->column_name);
-        } else if (child_as_scalar) {
-            child_results.emplace_back(child_as_scalar->result);
-            column_names.emplace_back("scalar");
-        } else {
-            throw std::runtime_error(
-                "Child of UDF did not return an array or scalar.");
-        }
-    }
-    // Put them all back together for the UDF to process.
-    GPU_DATA udf_input = std::make_shared<table_info>(
-        child_results, column_names, input_batch->metadata);
-
-    // Actually run the UDF.
-    GPU_DATA udf_output;
-    if (cfunc_ptr) {
-        if (cfunc_ptr == (table_udf_t)1) {
-            PyThreadState* save = PyEval_SaveThread();
-            cfunc_ptr = compile_future.get();
-            PyEval_RestoreThread(save);
-        }
-        time_pt start_init_time = start_timer();
-        udf_output = runCfuncScalarFunction(udf_input, cfunc_ptr);
-        this->metrics.udf_execution_time += end_timer(start_init_time);
-    } else {
-        auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
-            runPythonScalarFunction(udf_input, result_type,
-                                    scalar_func_data.args,
-                                    scalar_func_data.has_state, init_state);
-        udf_output = out_temp;
-        // Update the metrics.
-        this->metrics.cpp_to_py_time += cpp_to_py_time;
-        this->metrics.udf_execution_time += udf_time;
-        this->metrics.py_to_cpp_time += py_to_cpp_time;
-    }
-
-    return std::make_shared<ArrayExprGPUResult>(udf_output->columns[0],
-                                             udf_output->column_names[0]);
-#endif
-}
-
-#if 0
-std::shared_ptr<ExprGPUResult> PhysicalGPUArrowExpression::ProcessBatch(
-    GPU_DATA input_batch) {
-    std::shared_ptr<ExprGPUResult> res = children[0]->ProcessBatch(input_batch);
-    GPU_COLUMN result;
-    time_pt start_init_time = start_timer();
-    std::shared_ptr
-    if (scalar_func_data.arrow_func_name == "date") {
-        // The Arrow compute equivalent of Series.dt.date() is year_month_day,
-        // which returns a struct. To match the output dtype of Pandas, we Cast
-        // to Date32 instead.
-        auto cast_res = do_cudf_compute_cast(res, duckdb::LogicalType::DATE);
-
-        std::visit([&](auto &vres) {
-            using U = std::decay_t<decltype(vres)>;
-            if constexpr (std::is_same_v<U, GPU_COLUMN>) {
-                result = std::move(vres);
-            } else if constexpr (std::is_same_v<U, GPU_SCALAR>) {
-                throw std::runtime_error(
-                    "Got scalar type in PhysicalGPUArrowExpression.");
-            } else {
-                throw std::runtime_error(
-                    "Got unknown type in PhysicalGPUArrowExpression.");
-            }
-        }, cast_res);
-    } else if (scalar_func_data.arrow_func_name == "match_substring_regex") {
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                "match_substring_regex args not a 1-element tuple.");
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject* py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                "match_substring_regex args element is not a Python string.");
-        }
-
-        // Convert to UTF‑8 C string
-        const char* c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                "match_substring_regex error extracting Python string.");
-        }
-
-        arrow::compute::MatchSubstringOptions opts(c_str);
-        result = do_cudf_compute_unary(res, scalar_func_data.arrow_func_name,
-                                        &opts);
-    } else {
-        result = do_cudf_compute_unary(res, scalar_func_data.arrow_func_name);
-    }
-    this->metrics.arrow_compute_time += end_timer(start_init_time);
-    return std::make_shared<ArrayExprGPUResult>(result, "Arrow Scalar");
-}
-#endif
 
 bool PhysicalGPUExpression::join_expr(cudf::column** left_table,
                                       cudf::column** right_table,
@@ -628,24 +443,6 @@ bool PhysicalGPUExpression::join_expr(cudf::column** left_table,
                                       void** right_null_bitmap,
                                       int64_t left_index, int64_t right_index) {
     throw std::runtime_error("PhysicalGPUExpression::join_expr unimplemented ");
-#if 0
-    arrow::Datum res = cur_join_expr->join_expr_internal(
-        left_table, right_table, left_data, right_data, left_null_bitmap,
-        right_null_bitmap, left_index, right_index);
-    if (!res.is_scalar()) {
-        throw std::runtime_error("join_expr_internal did not return scalar.");
-    }
-    if (res.scalar()->type->id() != arrow::Type::BOOL) {
-        throw std::runtime_error("join_expr_internal did not return bool.");
-    }
-    auto bool_scalar =
-        std::dynamic_pointer_cast<arrow::BooleanScalar>(res.scalar());
-    if (bool_scalar && bool_scalar->is_valid) {
-        return bool_scalar->value;
-    } else {
-        throw std::runtime_error("join_expr_internal bool is null or invalid.");
-    }
-#endif
 }
 
 void PhysicalGPUExpression::join_expr_batch(
@@ -654,16 +451,6 @@ void PhysicalGPUExpression::join_expr_batch(
     uint8_t* match_arr, int64_t left_index_start, int64_t left_index_end,
     int64_t right_index_start, int64_t right_index_end) {
     throw std::runtime_error("PhysicalGPUExpression::join_expr unimplemented ");
-#if 0
-    for (int64_t j = right_index_start; j < right_index_end; j++) {
-        for (int64_t i = left_index_start; i < left_index_end; i++) {
-            SetBitTo(match_arr,
-                     (i - left_index_start) + (j - right_index_start),
-                     join_expr(left_table, right_table, left_data, right_data,
-                               left_null_bitmap, right_null_bitmap, i, j));
-        }
-    }
-#endif
 }
 
 PhysicalGPUExpression* PhysicalGPUExpression::cur_join_expr = nullptr;

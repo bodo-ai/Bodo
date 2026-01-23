@@ -1086,22 +1086,23 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
         // String / text / blob
         case LogicalTypeId::VARCHAR:
         case LogicalTypeId::BLOB:
-        case LogicalTypeId::ENUM:
             return cudf::data_type{type_id::STRING};
+
+        case LogicalTypeId::TIMESTAMP_SEC:
+            return cudf::data_type{type_id::TIMESTAMP_SECONDS};
+
+        case LogicalTypeId::TIMESTAMP_MS:
+            return cudf::data_type{type_id::TIMESTAMP_MILLISECONDS};
+
+        case LogicalTypeId::TIMESTAMP:
+            return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
 
         case LogicalTypeId::TIMESTAMP_NS:
             return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
 
         // Date / Time / Interval
         case LogicalTypeId::DATE:
-            // Map DATE to TIMESTAMP_DAYS if your cudf supports it; otherwise
-            // use INT32/INT64.
-#if defined(CUDF_TYPE_TIMESTAMP_DAYS) || \
-    defined(CUDF_TYPE_TIMESTAMP_DAYS)  // placeholder guard
             return cudf::data_type{type_id::TIMESTAMP_DAYS};
-#else
-            return cudf::data_type{type_id::INT32};
-#endif
 
         case LogicalTypeId::TIME:
         case LogicalTypeId::INTERVAL:
@@ -1111,8 +1112,6 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
 
         // Fallback for unknown/unsupported types
         default:
-            // Choose a safe default (INT64) or throw/abort if you prefer strict
-            // behavior.
             throw std::runtime_error(
                 "duckdb_logicaltype_to_cudf unsupported LogicalType "
                 "conversion " +
@@ -1371,4 +1370,75 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
             throw std::runtime_error("Unsupported Arrow scalar type");
     }
 }
+
+// Convert Arrow type → cuDF type
+cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
+    using arrow::Type;
+    using cudf::type_id;
+
+    switch (t->id()) {
+        case Type::BOOL:
+            return cudf::data_type{type_id::BOOL8};
+        case Type::INT8:
+            return cudf::data_type{type_id::INT8};
+        case Type::INT16:
+            return cudf::data_type{type_id::INT16};
+        case Type::INT32:
+            return cudf::data_type{type_id::INT32};
+        case Type::INT64:
+            return cudf::data_type{type_id::INT64};
+        case Type::UINT8:
+            return cudf::data_type{type_id::UINT8};
+        case Type::UINT16:
+            return cudf::data_type{type_id::UINT16};
+        case Type::UINT32:
+            return cudf::data_type{type_id::UINT32};
+        case Type::UINT64:
+            return cudf::data_type{type_id::UINT64};
+        case Type::FLOAT:
+            return cudf::data_type{type_id::FLOAT32};
+        case Type::DOUBLE:
+            return cudf::data_type{type_id::FLOAT64};
+        case Type::STRING:
+            return cudf::data_type{type_id::STRING};
+
+        case Type::TIMESTAMP: {
+            auto unit =
+                std::static_pointer_cast<arrow::TimestampType>(t)->unit();
+            switch (unit) {
+                case arrow::TimeUnit::SECOND:
+                    return cudf::data_type{type_id::TIMESTAMP_SECONDS};
+                case arrow::TimeUnit::MILLI:
+                    return cudf::data_type{type_id::TIMESTAMP_MILLISECONDS};
+                case arrow::TimeUnit::MICRO:
+                    return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
+                case arrow::TimeUnit::NANO:
+                    return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
+                default:
+                    throw std::runtime_error(
+                        "Unsupported Arrow timestamp unit");
+            }
+        }
+
+        default:
+            throw std::runtime_error("Unsupported Arrow type");
+    }
+}
+
+// Build empty cuDF table from Arrow schema
+std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
+    const std::shared_ptr<arrow::Schema> &schema) {
+    std::vector<std::unique_ptr<cudf::column>> cols;
+    cols.reserve(schema->num_fields());
+
+    for (int i = 0; i < schema->num_fields(); ++i) {
+        auto field = schema->field(i);
+        auto dtype = arrow_to_cudf_type(field->type());
+        cols.push_back(std::make_unique<cudf::column>(
+            dtype, 0, rmm::device_buffer{}, rmm::device_buffer{}, 0));
+    }
+
+    return std::make_unique<cudf::table>(std::move(cols));
+}
+
 #endif

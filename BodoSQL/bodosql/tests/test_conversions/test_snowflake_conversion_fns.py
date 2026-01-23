@@ -4,6 +4,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
@@ -204,7 +205,7 @@ def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_ch
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) or np.isinf(x) else bool(x)
         )
-    py_output = pd.DataFrame({"A": py_output})
+    py_output = pd.DataFrame({"A": py_output.astype(pd.ArrowDtype(pa.bool_()))})
     check_query(
         query,
         ctx,
@@ -393,7 +394,7 @@ def test_timestamp_to_char(memory_leak_check):
     """simplest test for TO_CHAR on timezone-naive timestamps"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5H15T45S").to_series()
+    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5h15min45s").to_series()
     df = pd.DataFrame({"A": dt_series})
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 
@@ -713,13 +714,25 @@ def to_double_equiv(arr):
     def _conv_to_double(x):
         """Converts an array of values to double"""
         if pd.isna(x):
-            return np.nan
+            return None
         try:
-            return np.float64(x)
+            return str(np.float64(x))
         except Exception:
-            return np.nan
+            return None
 
-    return arr.apply(_conv_to_double)
+    out_arr = arr.apply(_conv_to_double)
+    # Workaround Int NA being passed as NaN
+    if arr.dtype == pd.Int64Dtype():
+        out_arr = out_arr.map(lambda x: None if x == "nan" else x)
+    # Workaround float64 NA ambiguity
+    if arr.dtype == np.float64:
+        out_arr = arr.map(lambda x: str(x))
+    # Make sure NaNs are preserved correctly in Arrow conversion
+    out_arr = pa.compute.cast(
+        out_arr.astype(pd.ArrowDtype(pa.large_string())).array._pa_array,
+        pa.float64(),
+    )
+    return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
 
 
 def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
@@ -727,7 +740,7 @@ def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"A": to_double_equiv(arr).astype("float64")})
+    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
     check_query(
         query,
         ctx,
@@ -802,6 +815,10 @@ def test_to_double_scalars(spark_info, memory_leak_check):
     py_output = to_double_equiv(df["A"]).where(
         df["C"].astype(bool), to_double_equiv(df["B"])
     )
+    # Avoid NaN vs NA mismatch
+    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
+        pd.ArrowDtype(pa.float64())
+    )
     check_query(
         query,
         ctx,
@@ -872,6 +889,10 @@ def test_try_to_double_scalars(spark_info):
     query = "SELECT CASE WHEN TRY_TO_DOUBLE(c) = 1.0 THEN TRY_TO_DOUBLE(a) ELSE TRY_TO_DOUBLE(b) END FROM table1"
     py_output = to_double_equiv(df["A"]).where(
         df["C"].astype(bool), to_double_equiv(df["B"])
+    )
+    # Avoid NaN vs NA mismatch
+    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
+        pd.ArrowDtype(pa.float64())
     )
     check_query(
         query,

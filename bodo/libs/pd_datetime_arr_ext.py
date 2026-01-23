@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import operator
+import zoneinfo
 from typing import Any
 
 import numba
@@ -60,7 +61,13 @@ class PandasDatetimeTZDtype(types.Type):
 
     def __init__(self, tz):
         if isinstance(
-            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+            tz,
+            (
+                pytz._FixedOffset,
+                pytz.tzinfo.BaseTzInfo,
+                datetime.timezone,
+                zoneinfo.ZoneInfo,
+            ),
         ):
             tz = get_tz_type_info(tz)
 
@@ -141,6 +148,8 @@ def get_tz_type_info(tz_type):
         tz_val = "UTC"
     elif isinstance(tz_type, datetime.timezone):
         tz_val = pd.Timedelta(tz_type.utcoffset(None)).value
+    elif isinstance(tz_type, zoneinfo.ZoneInfo):
+        tz_val = tz_type.key
     elif isinstance(tz_type, pytz._FixedOffset):
         # If we have a fixed offset represent it as an integer
         # offset in ns.
@@ -187,7 +196,13 @@ class DatetimeArrayType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, tz):
         if isinstance(
-            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+            tz,
+            (
+                pytz._FixedOffset,
+                pytz.tzinfo.BaseTzInfo,
+                datetime.timezone,
+                zoneinfo.ZoneInfo,
+            ),
         ):
             tz = get_tz_type_info(tz)
 
@@ -239,9 +254,6 @@ make_attribute_wrapper(DatetimeArrayType, "null_bitmap", "_null_bitmap")
 
 @typeof_impl.register(pd.arrays.DatetimeArray)
 def typeof_pd_datetime_array(val, c):
-    if val.tz is not None and val.dtype.unit != "ns":
-        raise BodoError("Timezone-aware datetime data requires 'ns' units")
-
     return DatetimeArrayType(val.tz)
 
 

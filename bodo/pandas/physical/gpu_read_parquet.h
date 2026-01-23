@@ -39,10 +39,12 @@ struct FilePart {
 class RankBatchGenerator {
    public:
     RankBatchGenerator(std::string dataset_path, std::size_t target_rows,
-                       const std::vector<std::string> &_selected_columns)
+                       const std::vector<std::string> &_selected_columns,
+                       std::shared_ptr<arrow::Schema> _arrow_schema)
         : path_(std::move(dataset_path)),
           target_rows_(target_rows),
-          selected_columns(_selected_columns) {
+          selected_columns(_selected_columns),
+          arrow_schema(_arrow_schema) {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
         MPI_Comm_size(MPI_COMM_WORLD, &size_);
 
@@ -71,12 +73,12 @@ class RankBatchGenerator {
     std::pair<std::unique_ptr<cudf::table>, bool> next() {
         if (parts_.empty()) {
             // nothing assigned to this rank
-            return {std::make_unique<cudf::table>(cudf::table_view{}), true};
+            return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         // If we've exhausted all parts, signal EOF
         if (current_part_idx_ >= static_cast<int>(parts_.size())) {
-            return {std::make_unique<cudf::table>(cudf::table_view{}), true};
+            return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         std::vector<std::unique_ptr<cudf::table>> gpu_tables;
@@ -126,15 +128,9 @@ class RankBatchGenerator {
                 gpu_tables.push_back(std::move(tbl));
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
-                std::cerr << "[rank " << rank_ << "] Error reading row group "
-                          << current_rg_ << " from " << part.path << ": "
-                          << e.what() << "\n";
-                // treat as EOF for this rank to avoid infinite loop
-                ++current_part_idx_;
-                if (current_part_idx_ < static_cast<int>(parts_.size())) {
-                    current_rg_ = parts_[current_part_idx_].start_row_group;
-                }
-                break;
+                throw std::runtime_error(
+                    "PhysicalGPUReadParquet(): read_parquet failed " +
+                    part.path + " " + std::string(e.what()));
             }
 
             // advance to next row group in this part
@@ -233,8 +229,9 @@ class RankBatchGenerator {
         int rem = total_rg % size;
         int start = rank * base + std::min(rank, rem);
         int end = start + base + (rank < rem ? 1 : 0);
-        if (start >= end)
+        if (start >= end) {
             return result;
+        }
         result.push_back(FilePart{file, start, end});
         return result;
     }
@@ -276,6 +273,7 @@ class RankBatchGenerator {
     std::vector<std::string> files_;
     std::vector<FilePart> parts_;
     const std::vector<std::string> &selected_columns;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 
     // current position
     int current_part_idx_{0};
@@ -468,6 +466,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             get_streaming_batch_size();  // TO-DO different for GPU
 
         batch_gen = std::make_shared<RankBatchGenerator>(
-            path, batch_size, output_schema->column_names);
+            path, batch_size, output_schema->column_names, arrow_schema);
     }
 };

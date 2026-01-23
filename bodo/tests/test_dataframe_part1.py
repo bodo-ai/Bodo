@@ -795,7 +795,7 @@ def test_rebalance_simple(data, memory_leak_check):
             data_chunk
         )
         assert len(res) == 5
-        res = bodo.gatherv(res)
+        res = bodo.libs.distributed_api.gatherv(res)
         if bodo.get_rank() == 0:
             if isinstance(data, pd.DataFrame):
                 pd.testing.assert_frame_equal(data, res, check_column_type=False)
@@ -832,7 +832,7 @@ def test_random_shuffle(seed, data, memory_leak_check):
         # assert that data has been balanced across ranks
         assert len(res) == 50
 
-        res = bodo.gatherv(res)
+        res = bodo.libs.distributed_api.gatherv(res)
         if bodo.get_rank() == 0:
             try:
                 _test_equal(res, data, sort_output=False)
@@ -901,7 +901,7 @@ def test_rebalance_group(data, memory_leak_check):
             assert len(res) == 5
         else:
             assert len(res) == 0
-        res = bodo.gatherv(res)
+        res = bodo.libs.distributed_api.gatherv(res)
         if bodo.get_rank() == 0:
             if isinstance(data, pd.DataFrame):
                 pd.testing.assert_frame_equal(data, res, check_column_type=False)
@@ -923,10 +923,10 @@ def test_rebalance():
     elist = [4 + prev_siz + x for x in range(n)]
     flist = [prev_siz + x for x in range(n)]
     df_in = pd.DataFrame({"A": elist}, index=flist)
-    df_in_merge = bodo.gatherv(df_in)
+    df_in_merge = bodo.libs.distributed_api.gatherv(df_in)
     # Direct calling the function
     df_out = bodo.libs.distributed_api.rebalance(df_in)
-    df_out_merge = bodo.gatherv(df_out)
+    df_out_merge = bodo.libs.distributed_api.gatherv(df_out)
     pd.testing.assert_frame_equal(df_in_merge, df_out_merge, check_column_type=False)
 
     # The distributed case
@@ -937,9 +937,9 @@ def test_rebalance():
         f
     )
     df_out_dist = bodo_dist(df_in)
-    df_out_dist_merge = bodo.gatherv(df_out_dist)
+    df_out_dist_merge = bodo.libs.distributed_api.gatherv(df_out_dist)
     df_len_dist = pd.DataFrame({"A": [len(df_out_dist)]})
-    df_len_dist_merge = bodo.gatherv(df_len_dist)
+    df_len_dist_merge = bodo.libs.distributed_api.gatherv(df_len_dist)
     if bodo.get_rank() == 0:
         delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min()
         assert delta_size <= 1

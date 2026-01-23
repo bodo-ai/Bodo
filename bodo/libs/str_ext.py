@@ -1006,3 +1006,23 @@ def overload_get_unicode_or_numpy_data(val):  # pragma: no cover
     if isinstance(val, types.Array):
         return lambda val: val.ctypes  # pragma: no cover
     raise BodoError(f"Internal Error: Expected String or Numpy Array, found {val}")
+
+
+@overload_method(types.UnicodeType, "removesuffix")
+def overload_str_removesuffix(s, suffix):
+    def impl(s, suffix):  # pragma: no cover
+        if s.endswith(suffix):
+            return s[: len(s) - len(suffix)]
+        return s
+
+    return impl
+
+
+@overload_method(types.UnicodeType, "removeprefix")
+def overload_str_removeprefix(s, prefix):
+    def impl(s, prefix):  # pragma: no cover
+        if s.startswith(prefix):
+            return s[len(prefix) :]
+        return s
+
+    return impl

@@ -10,7 +10,12 @@ import pytest
 from numba.core.errors import TypingError  # noqa TID253
 
 import bodo
-from bodo.tests.utils import check_func, pytest_mark_spawn_mode, temp_env_override
+from bodo.tests.utils import (
+    _test_equal,
+    check_func,
+    pytest_mark_spawn_mode,
+    temp_env_override,
+)
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = [pytest.mark.test_docs]
@@ -54,7 +59,7 @@ def test_quickstart_local_python_df():
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out, check_dtype=False)
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
@@ -84,7 +89,7 @@ def test_quickstart_local_python_jit():
         pd.DataFrame({"C": S}).to_parquet(output_df_path)
         pandas_out = pd.read_parquet(output_df_path)
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    _test_equal(bodo_out, pandas_out)
 
 
 @pytest.mark.iceberg
@@ -104,7 +109,7 @@ def test_quickstart_local_iceberg_df():
     df.to_iceberg("test_table", location="./iceberg_warehouse")
 
     out_df = pd.read_iceberg("test_table", location="./iceberg_warehouse")
-    pd.testing.assert_frame_equal(out_df, df)
+    _test_equal(out_df, df)
 
 
 @pytest.mark.iceberg
@@ -140,7 +145,7 @@ def test_quickstart_local_iceberg_jit():
             return df
 
         out_df = example_read_iceberg()
-        pd.testing.assert_frame_equal(out_df, input_df)
+        _test_equal(out_df, input_df)
 
 
 @pytest.fixture(scope="module")
@@ -188,9 +193,7 @@ def test_devguide_transform(devguide_df_path):
         pandas_out = pd.read_parquet(output_df_path)
 
     bodo_out["A"] = bodo_out["A"].astype("datetime64[ns]")
-    pd.testing.assert_frame_equal(
-        bodo_out, pandas_out, check_exact=False, check_dtype=False
-    )
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
@@ -204,7 +207,7 @@ def test_devguide_parallel1(devguide_df_path):
         bodo_out = bodo.jit(spawn=True)(load_data_bodo)(devguide_df_path)
         pandas_out = load_data_bodo(devguide_df_path)
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    _test_equal(bodo_out, pandas_out)
 
 
 @pytest_mark_spawn_mode
@@ -229,9 +232,7 @@ def test_devguide_parallel2(devguide_df_path):
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
 
-    pd.testing.assert_frame_equal(
-        bodo_out, pandas_out, check_exact=False, check_dtype=False
-    )
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
