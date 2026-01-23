@@ -725,7 +725,9 @@ def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_che
             None,
             check_dtype=False,
             check_names=False,
-            expected_output=pd.DataFrame({"RES": result}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+            ),
             sort_output=False,
         )
 
@@ -801,7 +803,9 @@ def test_float_to_decimal(float_data, prec, scale, result, use_case, memory_leak
             None,
             check_dtype=False,
             check_names=False,
-            expected_output=pd.DataFrame({"RES": result}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+            ),
             sort_output=False,
             convert_columns_decimal=["RES"] if use_case else None,
         )
