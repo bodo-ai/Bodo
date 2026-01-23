@@ -391,6 +391,11 @@ class JoinFilterColStats {
 #include <cudf/types.hpp>           // cudf::data_type, cudf::type_id
 #include <duckdb/common/types.hpp>  // duckdb::LogicalType, duckdb::LogicalTypeId
 
+#include <cudf/column/column.hpp>
+#include <cudf/table/table.hpp>
+
+#include <arrow/api.h>
+
 /**
  * @brief Map DuckDB LogicalType to cudf::data_type.
  *
@@ -422,5 +427,10 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
     rmm::cuda_stream_view stream = cudf::get_default_stream(),
     rmm::device_async_resource_ref mr =
         cudf::get_current_device_resource_ref());
+
+std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
+    const std::shared_ptr<arrow::Schema> &schema);
+
+cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t);
 
 #endif

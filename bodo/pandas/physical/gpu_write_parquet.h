@@ -160,6 +160,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
                 builder.compression(static_cast<cudf::io::compression_type>(
                     pq_compression_from_string(compression)));
             } catch (...) {
+                throw std::runtime_error(
+                    "PhysicalGPUWriteParquet(): pq_compression_from_string "
+                    "failed.");
             }
 
             auto options = builder.build();
