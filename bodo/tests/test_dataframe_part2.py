@@ -677,7 +677,7 @@ def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
     """
 
     def impl(df):
-        return df.apply(lambda x: (x[0], x[2], x[1]), axis=1)
+        return df.apply(lambda x: (x.iloc[0], x.iloc[2], x.iloc[1]), axis=1)
 
     df = pd.DataFrame(
         {"A": np.arange(10), "C": np.arange(10, 20), "B": np.arange(20, 30)}
