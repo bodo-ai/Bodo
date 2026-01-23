@@ -616,6 +616,7 @@ def test_data_col_correctness(memory_leak_check):
         return x.sort_values(by="C", ascending=True, na_position="last").iloc[0]
 
     expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[["A", "B", "C"]]
 
     _test_mrnf_helper(
         df,
