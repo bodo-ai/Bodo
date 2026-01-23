@@ -1515,7 +1515,9 @@ def _test_equal(
         and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
-        py_out = _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype).to_pandas()
+        py_out = pd.Series(
+            _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype), dtype=bodo_out.dtype
+        )
         bodo_out = pd.Series(bodo_out)
         if sort_output:
             py_out = py_out.sort_values().reset_index(drop=True)
