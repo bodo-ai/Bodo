@@ -889,10 +889,7 @@ if(USE_CUDF)
   add_library(libkvikio SHARED IMPORTED)
   set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
   # cudart
-  # Ask Python where site‑packages is
-  execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import sysconfig; print(sysconfig.get_paths()['purelib'])" OUTPUT_VARIABLE PY_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-  set(CUDA_RUNTIME_DIR "${PY_SITE_PACKAGES}/nvidia/cu13/lib")
-  find_library(LIBCUDART_LIB NAMES libcudart.so.13 PATHS "${CUDA_RUNTIME_DIR}" NO_DEFAULT_PATH)
+  find_library(LIBCUDART_LIB NAMES libcudart.so.13)
   get_filename_component(LIBCUDART_LIBDIR "${LIBCUDART_LIB}" DIRECTORY)
   message(STATUS "libcudart lib: ${LIBCUDART_LIB} libdir: ${LIBCUDART_LIBDIR}")
   add_library(libcudart SHARED IMPORTED)
