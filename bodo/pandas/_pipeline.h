@@ -34,8 +34,7 @@ uint64_t getBatchRows(T &t) {
                 ret = vt.table->num_rows();
 #endif
             } else {
-                throw std::runtime_error(
-                    "Unexpected type in getBatchRows");
+                throw std::runtime_error("Unexpected type in getBatchRows");
             }
         },
         t);
