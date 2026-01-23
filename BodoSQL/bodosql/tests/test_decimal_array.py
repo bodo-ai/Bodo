@@ -5655,6 +5655,7 @@ def test_decimal_to_str_scalar(scalar, expected, memory_leak_check):
     check_func(impl, (scalar,), py_output=expected)
 
 
+@pytest.mark.skip(reason="TODO: fix comparison issue in testing function")
 @pytest.mark.parametrize(
     "df, expected",
     [
