@@ -334,7 +334,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
             "select * from table1 where coalesce(A, current_date()) > '2015-01-01'"
         )
 
-    df = pd.read_parquet(filename)
+    df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = df[
         df.A.fillna(pd.Timestamp.now().date()) > pd.to_datetime("2015-01-01").date()
     ]
