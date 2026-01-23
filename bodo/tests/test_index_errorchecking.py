@@ -1085,7 +1085,7 @@ def test_tdi_init_kwd_err():
     from bodo.utils.typing import BodoError
 
     def impl():
-        pd.TimedeltaIndex(np.arange(100), unit="s")
+        pd.TimedeltaIndex(np.arange(100))
 
     err_msg = (
         ".*"
