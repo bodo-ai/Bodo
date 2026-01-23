@@ -890,7 +890,7 @@ if(USE_CUDF)
   set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
 
   # cudart
-  find_library(LIBCUDART_LIB NAMES libcudart.so)
+  find_library(LIBCUDART_LIB NAMES libcudart.so.13)
   get_filename_component(LIBCUDART_LIBDIR "${LIBCUDART_LIB}" DIRECTORY)
   message(STATUS "libcudart lib: ${LIBCUDART_LIB} libdir: ${LIBCUDART_LIBDIR}")
   add_library(libcudart SHARED IMPORTED)
