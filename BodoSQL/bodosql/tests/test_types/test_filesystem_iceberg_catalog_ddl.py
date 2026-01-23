@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -385,14 +386,16 @@ def test_describe_table(
                 "TYPE": ["BIGINT"],
                 "KIND": ["COLUMN"],
                 "NULL?": ["Y"],
-                "DEFAULT": [None],
+                "DEFAULT": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
                 "PRIMARY_KEY": ["N"],
                 "UNIQUE_KEY": ["N"],
-                "CHECK": [None],
-                "EXPRESSION": [None],
-                "COMMENT": [None],
-                "POLICY NAME": [None],
-                "PRIVACY DOMAIN": [None],
+                "CHECK": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "EXPRESSION": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "COMMENT": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "POLICY NAME": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "PRIVACY DOMAIN": pd.array(
+                    [None], dtype=pd.ArrowDtype(pa.large_string())
+                ),
             }
         )
         assert_equal_par(bodo_output, expected_output)
