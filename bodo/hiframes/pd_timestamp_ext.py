@@ -1629,8 +1629,17 @@ def td64_hash(val):
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer"""
 
-    def codegen(context, builder, sig, args):
-        return args[0]
+    if val == pd_timedelta_type:
+
+        def codegen(context, builder, sig, args):
+            timedelta = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return timedelta.value
+    else:
+
+        def codegen(context, builder, sig, args):
+            return args[0]
 
     return types.int64(val), codegen
 

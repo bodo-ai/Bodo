@@ -280,7 +280,9 @@ def is_dt64_series_typ(t):
 
 
 def is_timedelta64_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.NPTimedelta("ns")
+    return isinstance(t, SeriesType) and (
+        t.dtype == types.NPTimedelta("ns") or t.data == bodo.types.timedelta_array_type
+    )
 
 
 def is_datetime_date_series_typ(t):

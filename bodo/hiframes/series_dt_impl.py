@@ -924,7 +924,7 @@ def create_bin_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
             and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = lhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1006,7 +1006,7 @@ def create_cmp_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
             and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = lhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
