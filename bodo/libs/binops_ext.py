@@ -723,7 +723,9 @@ def sub_datetime_and_timedeltas(lhs, rhs):
     td_cond = (is_timedelta_type(lhs) or lhs == datetime_datetime_type) and (
         is_timedelta_type(rhs)
     )
-    array_cond = lhs == timedelta_array_type and rhs == datetime_timedelta_type
+    array_cond = (lhs == timedelta_array_type and rhs == datetime_timedelta_type) or (
+        lhs == datetime_timedelta_type and rhs == timedelta_array_type
+    )
 
     return td_cond or array_cond
 

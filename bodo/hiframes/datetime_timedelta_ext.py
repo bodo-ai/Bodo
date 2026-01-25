@@ -615,6 +615,23 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
 
         return impl
 
+    # timedelta - datetime_timedelta_array
+    if lhs == datetime_timedelta_type and rhs == timedelta_array_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            in_arr = rhs
+            numba.parfors.parfor.init_prange()
+            n = len(in_arr)
+            A = alloc_timedelta_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                    continue
+                A[i] = lhs - in_arr[i]
+            return A
+
+        return impl
+
 
 def overload_mul_operator_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and isinstance(rhs, types.Integer):
