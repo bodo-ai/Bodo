@@ -459,12 +459,12 @@ def array_agg_distinct_func(group):
         )["A"]
         as_str[sorted_col_without_na.apply(lambda x: len(x) == 0)] = "<EMPTY>"
         mask = as_str != as_str.shift(1)
-        return sorted_col_without_na[mask].values
+        return sorted_col_without_na[mask].array
     else:
         order = group["data"].set_axis(range(len(group)))
         order = order.sort_values(ascending=True, na_position="last").index
         col = group["data"].iloc[order]
-        return col.dropna().drop_duplicates().values
+        return col.dropna().drop_duplicates().array
 
 
 def test_array_agg_distinct(array_agg_data, memory_leak_check):
