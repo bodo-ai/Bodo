@@ -390,7 +390,7 @@ def array_agg_func(group):
     order = order.sort_values(ascending=True, na_position="last").index
     col = group["data"].iloc[order]
     col = col.dropna()
-    return col.values
+    return col.array
 
 
 def test_array_agg_regular(array_agg_data, memory_leak_check):
