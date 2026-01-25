@@ -607,6 +607,9 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
             n = len(in_arr)
             A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                    continue
                 A[i] = in_arr[i] - rhs
             return A
 
