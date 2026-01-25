@@ -1849,9 +1849,9 @@ def test_timedelta_td64_ops(cmp_op, memory_leak_check):
     func = generate_comparison_ops_func(cmp_op)
     val1 = pd.Timedelta(days=1, seconds=42)
     val2 = pd.Timedelta(weeks=-2, days=11, microseconds=42)
-    check_func(func, (val1, val1.to_numpy()))
-    check_func(func, (val1.to_numpy(), val2))
-    check_func(func, (val2, val1.to_numpy()))
+    check_func(func, (val1, val1.to_numpy().astype("timedelta64[ns]")))
+    check_func(func, (val1.to_numpy().astype("timedelta64[ns]"), val2))
+    check_func(func, (val2, val1.to_numpy().astype("timedelta64[ns]")))
 
 
 @pytest.mark.slow
