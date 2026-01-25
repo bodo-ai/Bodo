@@ -1182,6 +1182,16 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
+        if (
+            rhs.fn == operator.sub
+            and typ1 == datetime_timedelta_type
+            and typ2 == timedelta_array_type
+        ):
+            impl = bodo.hiframes.datetime_timedelta_ext.overload_sub_operator_datetime_timedelta(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
         # categorical array comparison
         if rhs.fn in (operator.eq, operator.ne) and isinstance(
             typ1, CategoricalArrayType
