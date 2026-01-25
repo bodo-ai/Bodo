@@ -183,7 +183,7 @@ def test_datetime_operations(memory_leak_check):
             None,
             datetime.timedelta(2, 2, 2),
         )
-    )
+    ).astype("timedelta64[ns]")
     check_func(test_sub, (tdS, dt_td))
     check_func(test_sub, (dt_td, tdS))
     check_func(test_sub, (S, tdS))
