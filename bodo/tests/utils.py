@@ -1207,13 +1207,22 @@ def sort_dataframe_values_index(df):
 
     # Sort only works on hashable datatypes
     # Thus we convert (non-hashable) list-like types to (hashable) tuples
-    df = df.map(
-        lambda x: (
-            tuple(x)
-            if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
-            else x
+    # NOTE: avoiding df updates if not necessary since Pandas converts data types in map
+    if (
+        df.dtypes.map(lambda x: x == np.object_).any()
+        and df.map(
+            lambda x: isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
         )
-    )
+        .any()
+        .any()
+    ):
+        df = df.map(
+            lambda x: (
+                tuple(x)
+                if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
+                else x
+            )
+        )
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(df.index.dtype, pd.ArrowDtype):

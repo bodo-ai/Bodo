@@ -145,7 +145,7 @@ def get_random_col(col_type: str, nrows: int) -> pd.Series:
     return s
 
 
-@pytest.mark.skip(reason="TODO: fix testing comparison issues with nulls")
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "mrnf_sort_col_asc",
     [
@@ -289,6 +289,7 @@ def test_mrnf_basic(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "mrnf_col_inds_keep",
     [
@@ -396,6 +397,7 @@ def test_mrnf_skipped_cols(mrnf_col_inds_keep, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data_col",
     [
