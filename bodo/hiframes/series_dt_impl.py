@@ -142,7 +142,8 @@ def create_date_field_overload(field):
             else:
                 func_text += "        out_arr[i] = ts." + field + "\n"
         else:
-            func_text += f"        out_arr[i] = arr[i].{field}\n"
+            call_parans = "()" if field == "weekday" else ""
+            func_text += f"        out_arr[i] = arr[i].{field}{call_parans}\n"
 
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
