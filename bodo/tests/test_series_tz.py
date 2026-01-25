@@ -104,7 +104,7 @@ def test_series_array_different_tz_unsupported(cmp_op, memory_leak_check):
         .reset_index(drop=True)
     )
     arr1 = (
-        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30).to_series().values
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30).to_series().array
     )
     # Check that comparison is not support between tz-aware and naive
     with pytest.raises(
