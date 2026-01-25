@@ -240,7 +240,8 @@ def test_dt64_sub_output(memory_leak_check):
             ]
         )
     )
-    check_func(impl, (S1, S2), check_dtype=False)
+    py_output = (S2 - S1).dt.days.astype("Int64")
+    check_func(impl, (S1, S2), check_dtype=False, py_output=py_output)
 
 
 @pytest.mark.slow
