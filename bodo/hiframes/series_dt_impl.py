@@ -616,7 +616,7 @@ def create_timedelta_freq_overload(method):
                 "bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp"
             )
             back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_dt64"
-        if is_tz_aware or (S_dt.stype.dtype == bodo.types.pd_timedelta_type):
+        if is_tz_aware:
             func_text += f"        B[i] = A[i].{method}(freq)\n"
         else:
             func_text += f"        B[i] = {back_convert}({front_convert}(A[i]).{method}(freq).value)\n"

@@ -1556,7 +1556,7 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
 
 @numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    """Converts numpy.timedelta64 to datetime.timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
     n_day = n_int64 // (86400 * 1000000000)
     res1 = n_int64 - n_day * 86400 * 1000000000
@@ -1566,11 +1566,22 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     return datetime.timedelta(n_day, n_sec, n_microsec)
 
 
-@numba.njit(cache=True, no_cpython_wrapper=True)
-def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to pd.Timedelta"""
-    n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
-    return pd.Timedelta(n_int64)
+def convert_numpy_timedelta64_to_pd_timedelta(td64):  # pragma: no cover
+    return td64
+
+
+@overload(convert_numpy_timedelta64_to_pd_timedelta, jit_options={"cache": True})
+def overload_convert_numpy_timedelta64_to_pd_timedelta(td64):
+    """Converts numpy.timedelta64 to pd.Timedelta"""
+
+    if td64 == bodo.types.pd_timedelta_type:
+        return lambda td64: td64  # pragma: no cover
+
+    def impl(td64):  # pragma: no cover
+        n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(td64)
+        return pd.Timedelta(n_int64)
+
+    return impl
 
 
 @intrinsic
