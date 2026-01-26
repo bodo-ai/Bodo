@@ -2356,7 +2356,7 @@ def test_datetime_index_set(memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     bodo_func(dt_df)
-    dt_df["std"] = pd.DatetimeIndex(dt_df["str_date"])
+    dt_df["std"] = pd.DatetimeIndex(dt_df["str_date"]).values.astype("datetime64[ns]")
     allequal = dt_df["std"].equals(dt_df["bodo"])
     assert allequal == True
 
