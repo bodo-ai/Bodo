@@ -868,7 +868,7 @@ def test_datetime_boxing(memory_leak_check):
 
     # test series(datetime.date)
     S = pd.Series(pd.date_range("2017-01-03", "2017-01-17").date)
-    S[10] = None
+    S[10] = pd.NA
     check_func(test_impl, (S,))
 
 
