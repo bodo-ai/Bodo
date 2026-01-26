@@ -140,7 +140,6 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            BODO_VENDOR_MPI4PY=1
             BODO_WINDOWS_BUILD_TYPE="Release"
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
@@ -175,8 +174,7 @@ jobs:
             sccache --show-stats &&
             delvewheel repair --exclude impi.dll --exclude msmpi.dll
             --exclude arrow.dll --exclude arrow_acero.dll --exclude arrow_dataset.dll --exclude arrow_python.dll
-            --exclude parquet.dll -v -w {dest_dir} {wheel} && 
-            python buildscripts/bodo/pip/windows/patch_bodo_for_pip.py -p {dest_dir}
+            --exclude parquet.dll -v -w {dest_dir} {wheel}
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
@@ -184,9 +182,7 @@ jobs:
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
             -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
             -e libarrow_substrait -e libparquet
-            --require-archs {delocate_archs} -v {wheel} &&
-            python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} &&
-            mv {wheel} {dest_dir}
+            --require-archs {delocate_archs} -v {wheel} && mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
             auditwheel -v repair
