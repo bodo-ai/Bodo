@@ -1679,7 +1679,9 @@ def series_str_dt64_astype(data):  # pragma: no cover
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
         # formats, see test_dt64_str_astype
-        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values
+        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values.astype(
+            np.dtype("datetime64[ns]")
+        )
     return res
 
 
