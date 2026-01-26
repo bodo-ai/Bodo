@@ -2147,9 +2147,15 @@ def overload_fix_arr_dtype(
 
     # Pandas currently only supports dt64/td64 -> int64
     if (nb_dtype == types.int64) and (
-        data.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
+        data.dtype
+        in [
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
+            bodo.types.pd_timedelta_type,
+        ]
         or data_is_tz_aware
     ):
+        unbox_value = data_is_tz_aware or data.dtype == bodo.types.pd_timedelta_type
 
         def impl_datelike_to_integer(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2161,7 +2167,7 @@ def overload_fix_arr_dtype(
                 if bodo.libs.array_kernels.isna(data, i):
                     bodo.libs.array_kernels.setna(A, i)
                 else:
-                    if data_is_tz_aware:
+                    if unbox_value:
                         A[i] = np.int64(data[i].value)
                     else:
                         A[i] = np.int64(data[i])
