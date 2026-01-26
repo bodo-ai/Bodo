@@ -76,7 +76,7 @@ for i, m in enumerate(modules):
     # pytest then out of memory won't tell you which test failed.
     cmd = [
         "mpiexec",
-        "-prepend-rank",
+        "-tag-output",
         "-n",
         str(num_processes),
         "pytest",
