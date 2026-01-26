@@ -965,12 +965,16 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
         if arr_type == types.Array(types.bool_, 1, "C"):
             arr_type = bodo.types.boolean_array_type
 
-        # Avoid microsecond datetime64 arrays
-        if arr_type == types.Array(types.NPDatetime("us"), 1, "C"):
+        # Make sure datetime64 arrays are ns
+        if isinstance(arr_type, types.Array) and isinstance(
+            arr_type.dtype, types.NPDatetime
+        ):
             arr_type = bodo.types.DatetimeArrayType(None)
 
-        # Avoid microsecond timedelta64 arrays
-        if arr_type == types.Array(types.NPTimedelta("us"), 1, "C"):
+        # Make sure timedelta64 arrays are ns
+        if isinstance(arr_type, types.Array) and isinstance(
+            arr_type.dtype, types.NPTimedelta
+        ):
             arr_type = bodo.types.timedelta_array_type
 
         # We make all Series data arrays contiguous during unboxing to avoid type errors
