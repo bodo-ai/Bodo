@@ -1969,7 +1969,9 @@ def overload_to_datetime(
         return impl_date_arr
 
     # return DatetimeIndex if input is array(dt64)
-    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
+    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C") or isinstance(
+        arg_a, bodo.types.DatetimeArrayType
+    ):
         return (
             lambda arg_a,
             errors="raise",

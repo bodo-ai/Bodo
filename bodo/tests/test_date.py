@@ -1913,7 +1913,11 @@ def test_pd_to_datetime(memory_leak_check):
             [None, datetime.date(2019, 3, 3)],
         )
     )
-    check_func(test_input, (date_arr,))
+    check_func(
+        test_input,
+        (date_arr,),
+        py_output=pd.to_datetime(date_arr).astype("datetime64[ns]"),
+    )
 
     date_scalar = datetime.date(2023, 4, 18)
     check_func(test_input, (date_scalar,))
@@ -1926,7 +1930,7 @@ def test_pd_to_datetime(memory_leak_check):
     S = pd.Series(
         ["2017-03-03", "2017-04-04", "2017-04-04", None, "2018-01-01", "2017-03-03"]
     ).astype("category")
-    check_func(test_input, (S,))
+    check_func(test_input, (S,), py_output=pd.to_datetime(S).astype("datetime64[ns]"))
 
     # TODO: Support following inputs
     # df = pd.DataFrame({'year': [2015, 2016], 'month': [2, 3], 'day': [4, 5]})
