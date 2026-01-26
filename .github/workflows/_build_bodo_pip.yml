@@ -194,7 +194,8 @@ jobs:
             --exclude libaws-checksums.so.1.0.0 --exclude libaws-c-compression.so.1.0.0
             --exclude libaws-c-sdkutils.so.1.0.0 --exclude libaws-c-common.so.1
             --exclude libs2n.so.1
-            --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir}
+            --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir} &&
+            python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
           CIBW_BUILD: ${{ env.CIBW_BUILD }}
 
       - uses: actions/upload-artifact@v4
