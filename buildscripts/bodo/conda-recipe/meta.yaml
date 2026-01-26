@@ -68,6 +68,7 @@ requirements:
     - zstd
     - cloudpickle >=3.0
     - psutil
+    - pytz
 
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
