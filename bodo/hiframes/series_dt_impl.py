@@ -321,7 +321,11 @@ def create_series_dt_df_output_overload(attr):
                 "microseconds",
                 "nanoseconds",
             ]
-            convert = "convert_numpy_timedelta64_to_pd_timedelta"
+            convert = (
+                "convert_numpy_timedelta64_to_pd_timedelta"
+                if S_dt.stype.dtype == types.NPTimedelta("ns")
+                else ""
+            )
             int_type = "np.empty(n, np.int64)"
             attr_call = attr
         elif attr == "isocalendar":
