@@ -2079,7 +2079,7 @@ def test_pd_to_timedelta_int_scalar(memory_leak_check):
     """Test pd.to_timedelta()"""
 
     def impl(a):
-        return pd.to_timedelta(a, "L")
+        return pd.to_timedelta(a, "ms")
 
     check_func(impl, (100,))
 
