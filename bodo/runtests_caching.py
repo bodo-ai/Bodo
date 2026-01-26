@@ -163,6 +163,7 @@ if __name__ == "__main__":
     # run tests with pytest
     cmd = [
         "mpiexec",
+        "-tag-output",
         "-oversubscribe",
         "-n",
         str(num_processes),
@@ -203,6 +204,7 @@ if __name__ == "__main__":
         )
     cmd = [
         "mpiexec",
+        "-tag-output",
         "-oversubscribe",
         "-n",
         str(num_processes),
