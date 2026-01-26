@@ -1591,7 +1591,7 @@ def test_dt_ceil_timestamp_others(series_value_no_bad_dates, memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -1611,7 +1611,7 @@ def test_dt_floor_timestamp_others(series_value_no_bad_dates, memory_leak_check)
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -1624,7 +1624,7 @@ def test_timestamp_floor_edgecase(memory_leak_check):
         return ts.floor(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1637,7 +1637,7 @@ def test_timestamp_ceil_edgecase(memory_leak_check):
         return ts.ceil(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1650,7 +1650,7 @@ def test_timestamp_round_edgecase(memory_leak_check):
         return ts.round(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1670,7 +1670,7 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
     def impl(S, freq):
         return S.dt.round(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -2214,7 +2214,7 @@ def test_dt_ceil_timedelta_others(memory_leak_check):
         return S.dt.ceil(freq)
 
     S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
@@ -2237,7 +2237,7 @@ def test_dt_floor_timedelta_others(memory_leak_check):
         return S.dt.floor(freq)
 
     S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
@@ -2260,7 +2260,7 @@ def test_dt_round_timedelta_others(memory_leak_check):
         return S.dt.round(freq)
 
     S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
