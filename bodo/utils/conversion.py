@@ -2252,7 +2252,9 @@ def overload_convert_to_dt64ns(data):
             bodo.utils.conversion.NS_DTYPE
         )  # pragma: no cover
 
-    if is_np_arr_typ(data, types.NPDatetime("ns")):
+    if is_np_arr_typ(data, types.NPDatetime("ns")) or isinstance(
+        data, bodo.types.DatetimeArrayType
+    ):
         return lambda data: data  # pragma: no cover
 
     if is_str_arr_type(data):
