@@ -2528,12 +2528,12 @@ def overload_freq_methods(method):
         )
         freq_conditions = [
             "freq == 'D'",
-            "freq == 'H'",
-            "freq == 'min' or freq == 'T'",
-            "freq == 'S'",
-            "freq == 'ms' or freq == 'L'",
-            "freq == 'U' or freq == 'us'",
-            "freq == 'N'",
+            "freq == 'h'",
+            "freq == 'min'",
+            "freq == 's'",
+            "freq == 'ms'",
+            "freq == 'us'",
+            "freq == 'ns'",
         ]
         unit_values = [
             24 * 60 * 60 * 1000000 * 1000,
