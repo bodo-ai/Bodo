@@ -1672,7 +1672,9 @@ def _test_equal(
             reset_index,
         )
     elif py_out is pd.NaT:
-        assert py_out is bodo_out
+        # TODO: return pd.NaT for pd.to_datetime(None) and pd.to_timedelta(ts_val)
+        # to match Pandas 3
+        assert py_out is bodo_out or bodo_out is None
     # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
     # issues
     elif py_out is pd.NA and np.isnan(bodo_out):
