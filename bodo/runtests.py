@@ -77,6 +77,7 @@ for i, m in enumerate(modules):
     cmd = [
         "mpiexec",
         "-tag-output",
+        "-oversubscribe",
         "-n",
         str(num_processes),
         "pytest",
