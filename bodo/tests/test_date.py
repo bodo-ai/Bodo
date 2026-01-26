@@ -1259,7 +1259,7 @@ def test_dt64_astype_int64(memory_leak_check):
             np.datetime64("2021-03-03"),
         ]
         * 4
-    )
+    ).astype("datetime64[ns]")
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S,))
 
