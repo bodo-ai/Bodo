@@ -903,6 +903,7 @@ static inline std::vector<int> downcast_int_arr_or_fail(T* val, size_t n,
     return result;
 }
 
+#if BODO_MPI_HAS_LARGE_COUNT == 0
 /**
  * @brief Get the size of comm based on root.
  *
@@ -917,6 +918,7 @@ static int get_comm_size(int root, MPI_Comm comm) {
     }
     return npes;
 }
+#endif
 
 // Count and displacement types for MPI_gatherv_c/scatterv_c
 static_assert(sizeof(MPI_Count) == sizeof(int64_t));

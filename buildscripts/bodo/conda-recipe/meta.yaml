@@ -65,6 +65,7 @@ requirements:
     - numba >=0.62,<0.64
     - mpich  # [not win and not osx]
     - requests
+    - pytz
     - zstd
     - cloudpickle >=3.0
     - psutil

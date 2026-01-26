@@ -161,7 +161,12 @@ if __name__ == "__main__":
     ]
 
     # run tests with pytest
-    cmd = ["mpiexec", "-n", str(num_processes)] + pytest_cmd_not_cached_flag
+    cmd = [
+        "mpiexec",
+        "-oversubscribe",
+        "-n",
+        str(num_processes),
+    ] + pytest_cmd_not_cached_flag
 
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
@@ -196,7 +201,12 @@ if __name__ == "__main__":
         pytest_cmd_yes_cached_flag.append(
             f"--test-run-title={pipeline_name}",
         )
-    cmd = ["mpiexec", "-n", str(num_processes)] + pytest_cmd_yes_cached_flag
+    cmd = [
+        "mpiexec",
+        "-oversubscribe",
+        "-n",
+        str(num_processes),
+    ] + pytest_cmd_yes_cached_flag
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
     rc = p.wait()
