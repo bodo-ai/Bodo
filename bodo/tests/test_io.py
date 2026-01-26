@@ -181,7 +181,7 @@ def test_to_csv_na_rep_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, na_rep="-1")
 
     df = pd.DataFrame({"A": np.arange(10)}, dtype="Int64")
-    df["A"][0] = None
+    df.loc[0, "A"] = None
 
     check_to_csv_string_output(df, impl_none)
     check_CSV_write(impl, df)
