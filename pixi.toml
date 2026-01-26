@@ -125,7 +125,7 @@ aws-sdk-cpp = "*"
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = "*", build = "*mpi_openmpi_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = "*", build = "*mpi_impi_*" }
 
@@ -254,12 +254,10 @@ fastapi = "*"
 httpie = "*"
 
 # MPI Handling
-# Restricted to match Intel MPI. Upgrade with IMPI.
-# Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
 openmpi = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
-openmpi = { version = "*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
@@ -268,8 +266,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # # Want to use Intel MPI on platform, so use "external_*"
 # # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-# dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
-dependencies = { openmpi = "*" }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]

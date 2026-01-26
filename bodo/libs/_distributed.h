@@ -986,7 +986,7 @@ static int MPI_Genscatterv(void* send_data, MPI_Count* sendcounts,
                            MPI_Comm comm) {
 #if BODO_MPI_HAS_LARGE_COUNT == 1
     return MPI_Scatterv_c(send_data, sendcounts, displs, mpi_typ, recv_data,
-                          recv_count, mpi_typ, root, comm)
+                          recv_count, mpi_typ, root, comm);
 #else
     int npes = get_comm_size(root, comm);
     int recv_count_int = downcast_int_or_fail(recv_count, __func__);

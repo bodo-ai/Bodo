@@ -7,7 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24",
     "pyarrow>=22.0,<22.1",
-    "mpi4py>=4.0,<4.1",
+    "mpi4py>=4.0",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -46,6 +46,7 @@ dependencies = [
     "requests",
     "cloudpickle>=3.0",
     "psutil",
+    "openmpi; sys_platform == 'darwin'",
     "impi-rt; sys_platform == 'win32'",
 ]
 
