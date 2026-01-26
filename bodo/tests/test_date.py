@@ -2019,7 +2019,7 @@ def test_pd_to_timedelta_int_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
     def impl(a):
-        return pd.to_timedelta(a, "U")
+        return pd.to_timedelta(a, "us")
 
     arr1 = pd.arrays.IntegerArray(
         np.array([115, 314, 0, 410214, 15] * 5, np.int64),
@@ -2027,8 +2027,12 @@ def test_pd_to_timedelta_int_arr(memory_leak_check):
     )
 
     arr2 = np.array([115, 314, 0, 410214, 15] * 5)
-    check_func(impl, (arr1,))
-    check_func(impl, (arr2,))
+    check_func(
+        impl, (arr1,), py_output=pd.to_timedelta(arr1, "us").astype("timedelta64[ns]")
+    )
+    check_func(
+        impl, (arr2,), py_output=pd.to_timedelta(arr2, "us").astype("timedelta64[ns]")
+    )
 
 
 @pytest.mark.slow
