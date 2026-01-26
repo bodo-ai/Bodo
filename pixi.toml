@@ -26,6 +26,8 @@ SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+[tasks.build-bodo.target.win.env]
+MPICH2_MISSING_MPI3 = "1"
 
 # Build Commands
 [tasks.build-bodo-cudf-in-default-cuda]
