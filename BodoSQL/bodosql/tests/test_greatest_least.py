@@ -304,7 +304,7 @@ def test_greatest_tz_aware_columns(
                 start="3/1/2022", freq="4H", periods=30, tz=representative_tz
             ),
             "B": pd.date_range(
-                start="2/18/2022", freq="1D5H", periods=30, tz=representative_tz
+                start="2/18/2022", freq="1D5h", periods=30, tz=representative_tz
             ),
             "C": pd.date_range(
                 start="1/1/2022", freq="5D", periods=30, tz=representative_tz
