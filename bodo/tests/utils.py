@@ -1504,6 +1504,15 @@ def _test_equal(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
 
+            # Avoid integer type mismatch due to NA/nan conversions in BodoSQL expected output
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_integer(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.object_, np.float64)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
         # Handle Arrow float types in Index
         if not isinstance(bodo_out.index, pd.MultiIndex):
             index_dtype = bodo_out.index.dtype
