@@ -160,7 +160,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "min",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="min-int32_all_null",
         )
     )
@@ -168,7 +168,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "max",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="max-int32_all_null",
         )
     )
@@ -176,7 +176,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "count",
-            pd.array([0] * len(int32_arr_all_null)),
+            pd.array([0] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="count-int32_all_null",
         )
     )
@@ -184,7 +184,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "sum",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="sum-int32_all_null",
         )
     )
@@ -192,7 +192,10 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "min",
-            pd.array([None] * len(string_arr_all_null)),
+            pd.array(
+                [None] * len(string_arr_all_null),
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="min-string_all_null",
         )
     )
@@ -200,7 +203,10 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "max",
-            pd.array([None] * len(string_arr_all_null)),
+            pd.array(
+                [None] * len(string_arr_all_null),
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="max-string_all_null",
         )
     )
@@ -208,7 +214,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "count",
-            pd.array([0] * len(string_arr_all_null)),
+            pd.array([0] * len(string_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="count-string_all_null",
         )
     )
@@ -1885,11 +1891,11 @@ def test_ntile(memory_leak_check):
         pytest.param(
             None,
             pd.array(
-                ({x: x} for x in [40, 50, 60, 70, 80, 90]),
+                [{x: x} for x in [40, 50, 60, 70, 80, 90]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             pd.array(
-                (None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]),
+                [None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             id="map_null",

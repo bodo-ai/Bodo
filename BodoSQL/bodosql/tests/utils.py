@@ -36,6 +36,7 @@ from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
+    _test_equal,
     gen_unique_table_id,
 )
 from bodo.tests.utils_jit import reduce_sum
@@ -72,7 +73,6 @@ def check_query(
     convert_columns_decimal: list[str] | None = None,
     convert_input_to_nullable_float: bool = True,
     convert_expected_output_to_nullable_float: bool = True,
-    convert_float_nan: bool = False,
     convert_columns_bool: list[str] | None = None,
     convert_columns_tz_naive: list[str] | None = None,
     return_codegen: bool = False,
@@ -163,10 +163,6 @@ def check_query(
 
         convert_expected_output_to_nullable_float: Convert float columns in expected
             output to nullable float if the nullable float global flag is enabled.
-
-        convert_float_nan: Convert NaN values in float columns to None.
-            This is used when Spark and Bodo will have different output
-            types.
 
         convert_columns_bool: Convert NaN values to None by setting datatype
             to boolean.
@@ -422,8 +418,6 @@ def check_query(
             }
         if convert_expected_output_to_nullable_float:
             expected_output = _convert_float_to_nullable_float(expected_output)
-        if convert_float_nan:
-            expected_output = convert_spark_nan_none(expected_output)
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
 
@@ -1317,17 +1311,35 @@ def _test_equal_guard(
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
+    # Handle binary ArrowDtype comparison
+    for i, (bodo_dtype, py_dtype) in enumerate(
+        zip(bodosql_output.dtypes, expected_output.dtypes)
+    ):
+        if isinstance(bodo_dtype, pd.ArrowDtype) and (
+            pa.types.is_binary(bodo_dtype.pyarrow_dtype)
+            or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
+        ):
+            expected_output[expected_output.columns[i]] = pd.array(
+                expected_output[expected_output.columns[i]], dtype=bodo_dtype
+            )
+
+    # Convert datetime64[us] to datetime64[ns] for comparison
+    for i, dtype in enumerate(expected_output.dtypes):
+        if dtype == np.dtype("datetime64[us]"):
+            expected_output[expected_output.columns[i]] = expected_output[
+                expected_output.columns[i]
+            ].astype("datetime64[ns]")
+
     # No need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
     if bodo.get_size() == 1:
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
@@ -1337,11 +1349,10 @@ def _test_equal_guard(
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
@@ -1411,15 +1422,6 @@ def convert_spark_timedelta(df, columns):
     return df
 
 
-def convert_spark_nan_none(df):
-    """
-    Function the converts Float NaN values to None. This is used because Spark
-    may convert nullable integers to floats.
-    """
-    df = df.astype(object).where(pd.notnull(df), None)
-    return df
-
-
 def convert_nullable_object(df):
     """
     Function the converts a DataFrame with a nullable column to an
@@ -1432,7 +1434,6 @@ def convert_nullable_object(df):
             (
                 pd.core.arrays.integer.IntegerDtype,
                 pd.core.arrays.boolean.BooleanDtype,
-                pd.StringDtype,
             ),
         )
         for x in df.dtypes
@@ -1444,7 +1445,6 @@ def convert_nullable_object(df):
                 (
                     pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
-                    pd.StringDtype,
                 ),
             ):
                 S = df.iloc[:, i]

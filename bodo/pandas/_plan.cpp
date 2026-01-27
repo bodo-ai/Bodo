@@ -1845,5 +1845,11 @@ void cpp_table_delete(int64_t cpp_table) {
     delete table;
 }
 
+bool g_use_cudf;
+
+void set_use_cudf(bool use_cudf) { g_use_cudf = use_cudf; }
+
+bool get_use_cudf() { return g_use_cudf; }
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

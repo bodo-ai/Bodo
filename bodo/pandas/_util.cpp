@@ -1,10 +1,12 @@
 #include "_util.h"
 #include <arrow/api.h>
+#include <arrow/c/bridge.h>
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
 #include <arrow/scalar.h>
+#include <arrow/table.h>
 #include <arrow/type_fwd.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
@@ -927,25 +929,47 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
 
 std::optional<JoinFilterColStats::col_min_max_t>
 JoinFilterColStats::col_stats_collector::collect_min_max() const {
-    std::unique_ptr<bodo::DataType> dt =
-        join_state->build_table_schema->column_types[build_key_col]->copy();
-    const auto &col_min_max = join_state->min_max_values[build_key_col];
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return std::visit(
+        [&](const auto &join_state)
+            -> std::optional<JoinFilterColStats::col_min_max_t> {
+            using T = std::decay_t<decltype(join_state)>;
+            if constexpr (std::is_same_v<T, JoinState *>) {
+                std::unique_ptr<bodo::DataType> dt =
+                    join_state->build_table_schema->column_types[build_key_col]
+                        ->copy();
+                const auto &col_min_max =
+                    join_state->min_max_values[build_key_col];
+                arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
 
-    if (!col_min_max.has_value()) {
-        return std::nullopt;
-    }
+                if (!col_min_max.has_value()) {
+                    return std::nullopt;
+                }
 
-    std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
-        bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
-        dt->timezone, time_unit, false, bodo::default_buffer_memory_manager());
+                std::shared_ptr<arrow::Array> arrow_array = bodo_array_to_arrow(
+                    bodo::BufferPool::DefaultPtr(), col_min_max.value(), false,
+                    dt->timezone, time_unit, false,
+                    bodo::default_buffer_memory_manager());
 
-    std::shared_ptr<arrow::Scalar> min_scalar =
-        arrow_array->GetScalar(0).ValueOrDie();
-    std::shared_ptr<arrow::Scalar> max_scalar =
-        arrow_array->GetScalar(1).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> min_scalar =
+                    arrow_array->GetScalar(0).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> max_scalar =
+                    arrow_array->GetScalar(1).ValueOrDie();
 
-    return std::make_optional<col_min_max_t>(min_scalar, max_scalar);
+                return std::make_optional<col_min_max_t>(min_scalar,
+                                                         max_scalar);
+            } else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
+                std::shared_ptr<arrow::Table> min_max_values =
+                    join_state->get_min_max_stats()[build_key_col];
+
+                std::shared_ptr<arrow::Scalar> min_scalar =
+                    min_max_values->column(0)->GetScalar(0).ValueOrDie();
+                std::shared_ptr<arrow::Scalar> max_scalar =
+                    min_max_values->column(1)->GetScalar(0).ValueOrDie();
+                return std::make_optional<col_min_max_t>(min_scalar,
+                                                         max_scalar);
+            }
+        },
+        join_state);
 }
 
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
@@ -969,7 +993,7 @@ JoinFilterColStats::collect_all() {
                 std::to_string(join_id));
         }
 
-        JoinState *join_state = join_state_it->second;
+        join_state_t join_state = join_state_it->second;
         for (size_t i = 0; i < col_info.filter_columns.size(); ++i) {
             if (col_info.filter_columns[i] < 0) {
                 continue;
@@ -1019,3 +1043,403 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     }
     return filters;
 }
+
+#ifdef USE_CUDF
+
+cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
+    using cudf::type_id;
+    using duckdb::LogicalTypeId;
+
+    auto id = dtype.id();
+
+    switch (id) {
+        // Boolean
+        case LogicalTypeId::BOOLEAN:
+            return cudf::data_type{type_id::BOOL8};
+
+        // Signed integers
+        case LogicalTypeId::TINYINT:
+            return cudf::data_type{type_id::INT8};
+        case LogicalTypeId::SMALLINT:
+            return cudf::data_type{type_id::INT16};
+        case LogicalTypeId::INTEGER:
+            return cudf::data_type{type_id::INT32};
+        case LogicalTypeId::BIGINT:
+            return cudf::data_type{type_id::INT64};
+
+        // Unsigned integers
+        case LogicalTypeId::UTINYINT:
+            return cudf::data_type{type_id::UINT8};
+        case LogicalTypeId::USMALLINT:
+            return cudf::data_type{type_id::UINT16};
+        case LogicalTypeId::UINTEGER:
+            return cudf::data_type{type_id::UINT32};
+        case LogicalTypeId::UBIGINT:
+            return cudf::data_type{type_id::UINT64};
+
+        // Floating point
+        case LogicalTypeId::FLOAT:
+            return cudf::data_type{type_id::FLOAT32};
+        case LogicalTypeId::DOUBLE:
+            return cudf::data_type{type_id::FLOAT64};
+
+        // String / text / blob
+        case LogicalTypeId::VARCHAR:
+        case LogicalTypeId::BLOB:
+            return cudf::data_type{type_id::STRING};
+
+        case LogicalTypeId::TIMESTAMP_SEC:
+            return cudf::data_type{type_id::TIMESTAMP_SECONDS};
+
+        case LogicalTypeId::TIMESTAMP_MS:
+            return cudf::data_type{type_id::TIMESTAMP_MILLISECONDS};
+
+        case LogicalTypeId::TIMESTAMP:
+            return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
+
+        case LogicalTypeId::TIMESTAMP_NS:
+        case LogicalTypeId::TIMESTAMP_TZ:
+            return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
+
+        // Date / Time / Interval
+        case LogicalTypeId::DATE:
+            return cudf::data_type{type_id::TIMESTAMP_DAYS};
+
+        case LogicalTypeId::TIME:
+        case LogicalTypeId::INTERVAL:
+            // Represent as 64-bit integer (nanoseconds/microseconds depending
+            // on your convention)
+            return cudf::data_type{type_id::INT64};
+
+        // Fallback for unknown/unsupported types
+        default:
+            throw std::runtime_error(
+                "duckdb_logicaltype_to_cudf unsupported LogicalType "
+                "conversion " +
+                std::to_string(static_cast<int>(id)));
+    }
+}
+
+std::unique_ptr<cudf::scalar> make_invalid_like(
+    cudf::scalar const &src, rmm::cuda_stream_view stream,
+    rmm::device_async_resource_ref mr) {
+    cudf::data_type t = src.type();
+
+    switch (t.id()) {
+        // **numeric types**
+        case cudf::type_id::INT8:
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false);
+        case cudf::type_id::INT16:
+            return std::make_unique<cudf::numeric_scalar<int16_t>>(0, false);
+        case cudf::type_id::INT32:
+            return std::make_unique<cudf::numeric_scalar<int32_t>>(0, false);
+        case cudf::type_id::INT64:
+            return std::make_unique<cudf::numeric_scalar<int64_t>>(0, false);
+        case cudf::type_id::UINT8:
+            return std::make_unique<cudf::numeric_scalar<uint8_t>>(0, false);
+        case cudf::type_id::UINT16:
+            return std::make_unique<cudf::numeric_scalar<uint16_t>>(0, false);
+        case cudf::type_id::UINT32:
+            return std::make_unique<cudf::numeric_scalar<uint32_t>>(0, false);
+        case cudf::type_id::UINT64:
+            return std::make_unique<cudf::numeric_scalar<uint64_t>>(0, false);
+        case cudf::type_id::FLOAT32:
+            return std::make_unique<cudf::numeric_scalar<float>>(0.f, false);
+        case cudf::type_id::FLOAT64:
+            return std::make_unique<cudf::numeric_scalar<double>>(0.0, false);
+
+        // **bool**
+        case cudf::type_id::BOOL8:
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(
+                static_cast<int8_t>(false), false);
+
+        // **string**
+        case cudf::type_id::STRING:
+            return std::make_unique<cudf::string_scalar>("", false);
+
+        // **timestamps**
+        case cudf::type_id::TIMESTAMP_SECONDS:
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_s>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::TIMESTAMP_MILLISECONDS:
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::TIMESTAMP_MICROSECONDS:
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::TIMESTAMP_NANOSECONDS:
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                static_cast<int64_t>(0), false, stream, mr);
+
+        default:
+            throw std::runtime_error(
+                "Unsupported cudf::type_id in make_invalid_like");
+    }
+}
+
+std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
+    const std::shared_ptr<arrow::Scalar> &s, rmm::cuda_stream_view stream,
+    rmm::device_async_resource_ref mr) {
+    if (!s) {
+        throw std::runtime_error("Null arrow::Scalar pointer");
+    }
+
+    // Null scalar: produce a null cudf scalar of the same logical type
+    if (!s->is_valid) {
+        // Use Arrow type to pick cudf type
+        auto t = s->type;
+
+        switch (t->id()) {
+            case arrow::Type::INT8:
+                return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false);
+            case arrow::Type::INT16:
+                return std::make_unique<cudf::numeric_scalar<int16_t>>(0,
+                                                                       false);
+            case arrow::Type::INT32:
+                return std::make_unique<cudf::numeric_scalar<int32_t>>(0,
+                                                                       false);
+            case arrow::Type::INT64:
+                return std::make_unique<cudf::numeric_scalar<int64_t>>(0,
+                                                                       false);
+
+            case arrow::Type::UINT8:
+                return std::make_unique<cudf::numeric_scalar<uint8_t>>(0,
+                                                                       false);
+            case arrow::Type::UINT16:
+                return std::make_unique<cudf::numeric_scalar<uint16_t>>(0,
+                                                                        false);
+            case arrow::Type::UINT32:
+                return std::make_unique<cudf::numeric_scalar<uint32_t>>(0,
+                                                                        false);
+            case arrow::Type::UINT64:
+                return std::make_unique<cudf::numeric_scalar<uint64_t>>(0,
+                                                                        false);
+
+            case arrow::Type::FLOAT:
+                return std::make_unique<cudf::numeric_scalar<float>>(0.f,
+                                                                     false);
+            case arrow::Type::DOUBLE:
+                return std::make_unique<cudf::numeric_scalar<double>>(0.0,
+                                                                      false);
+
+            case arrow::Type::BOOL:
+                return std::make_unique<cudf::numeric_scalar<int8_t>>(
+                    static_cast<int8_t>(false), false);
+
+            case arrow::Type::STRING:
+                return std::make_unique<cudf::string_scalar>("", false);
+            case arrow::Type::BINARY:
+                return std::make_unique<cudf::string_scalar>("", false);
+
+            case arrow::Type::DATE32: {
+                using rep = cudf::timestamp_D::rep;
+                return std::make_unique<
+                    cudf::timestamp_scalar<cudf::timestamp_D>>(rep{0}, false,
+                                                               stream, mr);
+            }
+
+            case arrow::Type::DATE64: {
+                using rep = cudf::timestamp_ms::rep;
+                return std::make_unique<
+                    cudf::timestamp_scalar<cudf::timestamp_ms>>(rep{0}, false,
+                                                                stream, mr);
+            }
+
+            case arrow::Type::TIMESTAMP: {
+                auto ts = std::static_pointer_cast<arrow::TimestampType>(t);
+                switch (ts->unit()) {
+                    case arrow::TimeUnit::SECOND:
+                        return std::make_unique<
+                            cudf::timestamp_scalar<cudf::timestamp_s>>(
+                            static_cast<int64_t>(0), false, stream, mr);
+                    case arrow::TimeUnit::MILLI:
+                        return std::make_unique<
+                            cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                            static_cast<int64_t>(0), false, stream, mr);
+                    case arrow::TimeUnit::MICRO:
+                        return std::make_unique<
+                            cudf::timestamp_scalar<cudf::timestamp_us>>(
+                            static_cast<int64_t>(0), false, stream, mr);
+                    case arrow::TimeUnit::NANO:
+                        return std::make_unique<
+                            cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                            static_cast<int64_t>(0), false, stream, mr);
+                    default:
+                        throw std::runtime_error(
+                            "Unsupported unit for timestamp conversion");
+                }
+            }
+
+            default:
+                throw std::runtime_error(
+                    "Unsupported Arrow type for null scalar");
+        }
+    }
+
+    // Non-null scalars
+    switch (s->type->id()) {
+        // ---------------- PRIMITIVES ----------------
+        case arrow::Type::INT8:
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(
+                std::static_pointer_cast<arrow::Int8Scalar>(s)->value, true);
+
+        case arrow::Type::INT16:
+            return std::make_unique<cudf::numeric_scalar<int16_t>>(
+                std::static_pointer_cast<arrow::Int16Scalar>(s)->value, true);
+
+        case arrow::Type::INT32:
+            return std::make_unique<cudf::numeric_scalar<int32_t>>(
+                std::static_pointer_cast<arrow::Int32Scalar>(s)->value, true);
+
+        case arrow::Type::INT64:
+            return std::make_unique<cudf::numeric_scalar<int64_t>>(
+                std::static_pointer_cast<arrow::Int64Scalar>(s)->value, true);
+
+        case arrow::Type::UINT8:
+            return std::make_unique<cudf::numeric_scalar<uint8_t>>(
+                std::static_pointer_cast<arrow::UInt8Scalar>(s)->value, true);
+
+        case arrow::Type::UINT16:
+            return std::make_unique<cudf::numeric_scalar<uint16_t>>(
+                std::static_pointer_cast<arrow::UInt16Scalar>(s)->value, true);
+
+        case arrow::Type::UINT32:
+            return std::make_unique<cudf::numeric_scalar<uint32_t>>(
+                std::static_pointer_cast<arrow::UInt32Scalar>(s)->value, true);
+
+        case arrow::Type::UINT64:
+            return std::make_unique<cudf::numeric_scalar<uint64_t>>(
+                std::static_pointer_cast<arrow::UInt64Scalar>(s)->value, true);
+
+        case arrow::Type::FLOAT:
+            return std::make_unique<cudf::numeric_scalar<float>>(
+                std::static_pointer_cast<arrow::FloatScalar>(s)->value, true);
+
+        case arrow::Type::DOUBLE:
+            return std::make_unique<cudf::numeric_scalar<double>>(
+                std::static_pointer_cast<arrow::DoubleScalar>(s)->value, true);
+
+        case arrow::Type::BOOL:
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(
+                static_cast<int8_t>(
+                    std::static_pointer_cast<arrow::BooleanScalar>(s)->value),
+                true);
+
+        // ---------------- STRINGS / BINARY ----------------
+        case arrow::Type::STRING: {
+            auto ss = std::static_pointer_cast<arrow::StringScalar>(s);
+            return std::make_unique<cudf::string_scalar>(ss->value->ToString(),
+                                                         true);
+        }
+
+        case arrow::Type::BINARY: {
+            auto bs = std::static_pointer_cast<arrow::BinaryScalar>(s);
+            return std::make_unique<cudf::string_scalar>(bs->value->ToString(),
+                                                         true);
+        }
+
+        // ---------------- TIMESTAMPS ----------------
+        case arrow::Type::TIMESTAMP: {
+            auto ts = std::static_pointer_cast<arrow::TimestampScalar>(s);
+            auto ttype =
+                std::static_pointer_cast<arrow::TimestampType>(s->type);
+
+            switch (ttype->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    return std::make_unique<
+                        cudf::timestamp_scalar<cudf::timestamp_s>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
+                case arrow::TimeUnit::MILLI:
+                    return std::make_unique<
+                        cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
+                case arrow::TimeUnit::MICRO:
+                    return std::make_unique<
+                        cudf::timestamp_scalar<cudf::timestamp_us>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
+                case arrow::TimeUnit::NANO:
+                    return std::make_unique<
+                        cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                        static_cast<int64_t>(ts->value), true, stream, mr);
+                default:
+                    throw std::runtime_error(
+                        "Unsupported unit for timestamp conversion");
+            }
+        }
+
+        default:
+            throw std::runtime_error("Unsupported Arrow scalar type");
+    }
+}
+
+// Convert Arrow type → cuDF type
+cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
+    using arrow::Type;
+    using cudf::type_id;
+
+    switch (t->id()) {
+        case Type::BOOL:
+            return cudf::data_type{type_id::BOOL8};
+        case Type::INT8:
+            return cudf::data_type{type_id::INT8};
+        case Type::INT16:
+            return cudf::data_type{type_id::INT16};
+        case Type::INT32:
+            return cudf::data_type{type_id::INT32};
+        case Type::INT64:
+            return cudf::data_type{type_id::INT64};
+        case Type::UINT8:
+            return cudf::data_type{type_id::UINT8};
+        case Type::UINT16:
+            return cudf::data_type{type_id::UINT16};
+        case Type::UINT32:
+            return cudf::data_type{type_id::UINT32};
+        case Type::UINT64:
+            return cudf::data_type{type_id::UINT64};
+        case Type::FLOAT:
+            return cudf::data_type{type_id::FLOAT32};
+        case Type::DOUBLE:
+            return cudf::data_type{type_id::FLOAT64};
+        case Type::STRING:
+            return cudf::data_type{type_id::STRING};
+
+        case Type::TIMESTAMP: {
+            auto unit =
+                std::static_pointer_cast<arrow::TimestampType>(t)->unit();
+            switch (unit) {
+                case arrow::TimeUnit::SECOND:
+                    return cudf::data_type{type_id::TIMESTAMP_SECONDS};
+                case arrow::TimeUnit::MILLI:
+                    return cudf::data_type{type_id::TIMESTAMP_MILLISECONDS};
+                case arrow::TimeUnit::MICRO:
+                    return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
+                case arrow::TimeUnit::NANO:
+                    return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
+                default:
+                    throw std::runtime_error(
+                        "Unsupported Arrow timestamp unit");
+            }
+        }
+
+        default:
+            throw std::runtime_error("Unsupported Arrow type");
+    }
+}
+
+// Build empty cuDF table from Arrow schema
+std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
+    const std::shared_ptr<arrow::Schema> &schema) {
+    std::vector<std::unique_ptr<cudf::column>> cols;
+    cols.reserve(schema->num_fields());
+
+    for (int i = 0; i < schema->num_fields(); ++i) {
+        auto field = schema->field(i);
+        auto dtype = arrow_to_cudf_type(field->type());
+        cols.push_back(std::make_unique<cudf::column>(
+            dtype, 0, rmm::device_buffer{}, rmm::device_buffer{}, 0));
+    }
+
+    return std::make_unique<cudf::table>(std::move(cols));
+}
+
+#endif

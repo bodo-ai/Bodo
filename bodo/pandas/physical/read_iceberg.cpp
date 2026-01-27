@@ -22,7 +22,7 @@ PhysicalReadIceberg::PhysicalReadIceberg(
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
       join_filter_col_stats(std::move(join_filter_col_stats)),
-      out_metadata(std::make_shared<TableMetadata>(
+      out_metadata(std::make_shared<bodo::TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
       out_column_names(
