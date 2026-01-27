@@ -1477,12 +1477,13 @@ def _test_equal(
                     dtype=bodo_dtype,
                 )
 
-            # Convert string/binary columns to pyarrow dtype
+            # Convert string/binary/date columns to pyarrow dtype
             if isinstance(bodo_dtype, pd.ArrowDtype) and (
                 pa.types.is_binary(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_string(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_large_string(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
             ):
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
