@@ -17,6 +17,9 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = 
 
 default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
 
+#[environments.pip-cpp-win.env]
+#MPICH2_MISSING_MPI3 = "1"
+
 # Build Commands
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
@@ -172,8 +175,6 @@ nccl = ">=2.18"
 numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
-[feature.cudf.pypi-dependencies]
-cudf-cu13 = "==25.12"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
@@ -312,7 +313,7 @@ mpich = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "*"
+impi-devel = "2021.14.1.*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
