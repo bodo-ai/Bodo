@@ -1227,7 +1227,8 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     """
     Test that the window-output-redistribution works as expected.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.utils.typing import ColNamesMetaType, MetaType
 
     comm = MPI.COMM_WORLD

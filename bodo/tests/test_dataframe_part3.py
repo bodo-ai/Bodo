@@ -9,13 +9,13 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba import types  # noqa TID253
 from pandas.core.dtypes.common import is_list_like
 
 import bodo
 import bodo.tests
 import bodo.tests.utils
-from bodo.mpi4py import MPI
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,

@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import types
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,

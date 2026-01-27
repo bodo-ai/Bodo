@@ -411,7 +411,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         Tuple[str, Dict[str, Any], str]: Returns the generated func_text, a dictionary
             containing the lowered global variables and the SQL plan.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

@@ -5,10 +5,10 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.tests.user_logging_utils import (
     check_logger_msg,

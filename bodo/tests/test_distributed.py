@@ -10,12 +10,12 @@ import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.spawn.spawner
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa

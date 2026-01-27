@@ -17,10 +17,10 @@ from time import sleep
 
 import pandas as pd
 import pyarrow as pa
+from mpi4py import MPI
 from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
-from bodo.mpi4py import MPI
 
 
 class CommandType(str, Enum):

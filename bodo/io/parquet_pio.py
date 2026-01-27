@@ -18,6 +18,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+from mpi4py import MPI
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -26,7 +27,6 @@ from bodo.io.fs_io import (
     getfs,
     parse_fpath,
 )
-from bodo.mpi4py import MPI
 
 if pt.TYPE_CHECKING:
     import pyarrow.compute as pc
@@ -1106,9 +1106,9 @@ def _add_categories_to_pq_dataset(pq_dataset):
     as '_category_info' attribute
     """
     import pyarrow as pa
+    from mpi4py import MPI
 
     import bodo
-    from bodo.mpi4py import MPI
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
@@ -1255,7 +1255,7 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> s
       of values.
       If the ratio is less than READ_STR_AS_DICT_THRESHOLD we read as DICT.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

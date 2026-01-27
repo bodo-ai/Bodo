@@ -120,20 +120,13 @@ jobs:
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: >
             pip install delvewheel && 
-            if exist "{package}\bodo\mpi4py\_vendored_mpi4py" rmdir /s /q "{package}\bodo\mpi4py\_vendored_mpi4py" && 
             if exist "{package}\build" rmdir /s /q "{package}\build"
           CIBW_BEFORE_BUILD_MACOS: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
           CIBW_BEFORE_BUILD_LINUX: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
-            pip install mpich --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache

@@ -20,11 +20,11 @@ from collections import deque
 import cloudpickle
 import pandas as pd
 import psutil
+from mpi4py import MPI
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
 import bodo.user_logging
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,

@@ -2,6 +2,7 @@
 
 import numba
 import numpy as np
+from mpi4py import MPI
 from numba.core import types
 
 import bodo
@@ -36,7 +37,6 @@ from bodo.libs.str_arr_ext import (
     get_bit_bitmap,
     string_array_type,
 )
-from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,

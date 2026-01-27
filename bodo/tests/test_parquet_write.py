@@ -14,6 +14,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import pytz
+from mpi4py import MPI
 
 import bodo
 from bodo.tests.conftest import DataPath
@@ -156,7 +157,7 @@ def check_write_func(
     ),
 )
 def test_semi_structured_data(df, tmp_path):
-    comm = bodo.mpi4py.MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD
     tmp_path = comm.bcast(tmp_path if bodo.get_rank() == 0 else None, root=0)
     check_write_func(
         lambda df, path: df.to_parquet(path),
@@ -1105,7 +1106,7 @@ def test_streaming_parquet_write_rep(memory_leak_check):
 def test_to_pq_multiIdx(tmp_path, memory_leak_check):
     """Test to_parquet with MultiIndexType"""
     np.random.seed(0)
-    comm = bodo.mpi4py.MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD
     tmp_path = comm.bcast(tmp_path if bodo.get_rank() == 0 else None, root=0)
 
     arrays = [
@@ -1129,7 +1130,7 @@ def test_to_pq_multiIdx(tmp_path, memory_leak_check):
 def test_to_pq_multiIdx_no_name(tmp_path, memory_leak_check):
     """Test to_parquet with MultiIndexType with no name at 1 level"""
     np.random.seed(0)
-    comm = bodo.mpi4py.MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD
     tmp_path = comm.bcast(tmp_path if bodo.get_rank() == 0 else None, root=0)
 
     arrays = [
