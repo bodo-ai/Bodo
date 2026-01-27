@@ -1389,8 +1389,13 @@ def _test_equal(
                 or pa.types.is_large_string(pa_type)
                 or pa.types.is_binary(pa_type)
                 or pa.types.is_large_binary(pa_type)
+                or pa.types.is_date32(pa_type)
             ):
                 py_out = py_out.astype(bodo_out.dtype)
+
+            # Pandas boolean output may have False instead of NA
+            if pa.types.is_boolean(pa_type):
+                bodo_out = bodo_out.fillna(False)
 
         if sort_output:
             py_out = sort_series_values_index(py_out)
