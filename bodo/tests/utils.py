@@ -1494,6 +1494,14 @@ def _test_equal(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
 
+            # Convert object boolean arrays to pyarrow dtype (used in BodoSQL expected output)
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_boolean(bodo_dtype.pyarrow_dtype) and py_dtype == np.object_
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
         # Handle Arrow float types in Index
         if not isinstance(bodo_out.index, pd.MultiIndex):
             index_dtype = bodo_out.index.dtype
