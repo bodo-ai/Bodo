@@ -1912,9 +1912,8 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     data_arrs = tuple(data_arrs)
 
     if df_type.is_table_format:
-        table = context.get_constant_generic(
-            builder, df_type.table_type, Table(data_arrs)
-        )
+        table = Table(data_arrs)
+        table = context.get_constant_generic(builder, bodo.typeof(table), table)
         data_tup = lir.Constant.literal_struct([table])
     else:
         # not using get_constant_generic for tuple directly since Numba's tuple lowering
