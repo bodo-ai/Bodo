@@ -5,6 +5,7 @@ import random
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 import pytz
 
@@ -594,7 +595,7 @@ def test_datetime_comparisons_datetime_datetime(is_slow_run, memory_leak_check):
         dtype="datetime64[ns]",
         freq=None,
     )
-    S = pd.Series(Srange)
+    S = pd.Series(Srange).astype(pd.ArrowDtype(pa.timestamp("ns")))
     check_func(test_ge, (S, t))
     if is_slow_run:
         return
