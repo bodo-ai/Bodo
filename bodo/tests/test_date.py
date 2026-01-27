@@ -764,8 +764,8 @@ def test_datetime_comparisons_datetime_list(is_slow_run, memory_leak_check):
         dtype="datetime64[ns]",
         freq=None,
     )
-    S1 = pd.Series(Srange1)
-    S2 = pd.Series(Srange2)
+    S1 = pd.Series(Srange1).astype(pd.ArrowDtype(pa.timestamp("ns")))
+    S2 = pd.Series(Srange2).astype(pd.ArrowDtype(pa.timestamp("ns")))
     check_func(test_ge, (S1, S2))
     if is_slow_run:
         return
