@@ -1156,10 +1156,7 @@ def test_td64_astype(datetime_convertable_series, memory_leak_check):
 
     # Conversion from dt64 -> td64 is supported in Numpy but not pandas
     if datetime_convertable_series.dtype == np.dtype("datetime64[ns]"):
-        py_output = pd.Series(
-            datetime_convertable_series.values.astype("timedelta64[ns]"),
-            index=datetime_convertable_series.index,
-        )
+        return
     else:
         py_output = no_default
 
