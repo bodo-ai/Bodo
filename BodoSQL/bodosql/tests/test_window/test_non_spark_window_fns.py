@@ -59,7 +59,7 @@ def test_conditional_event_pure(memory_leak_check):
                 ),
                 "TIMESTAMP_LTZ": pd.Series(
                     [
-                        pd.Timestamp(f"201{y}-01-01", tz="US/PACIFIC")
+                        pd.Timestamp(f"201{y}-01-01", tz="US/Pacific")
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
                     ]
                 ),
