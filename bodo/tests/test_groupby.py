@@ -7208,7 +7208,7 @@ def test_head(memory_leak_check):
                     Decimal("4.3"),
                     Decimal("0"),
                 ]
-            ),
+            ).astype(pd.ArrowDtype(pa.decimal128(38, 18))),
             "C": pd.date_range(start="2018-04-24", end="2018-04-29", periods=7),
             "D": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
             "F": [
