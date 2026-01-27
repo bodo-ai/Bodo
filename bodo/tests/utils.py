@@ -1394,7 +1394,7 @@ def _test_equal(
                 py_out = py_out.astype(bodo_out.dtype)
 
             # Pandas boolean output may have False instead of NA
-            if pa.types.is_boolean(pa_type):
+            if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
                 bodo_out = bodo_out.fillna(False)
 
         if sort_output:
