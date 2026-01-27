@@ -1390,6 +1390,7 @@ def _test_equal(
                 or pa.types.is_binary(pa_type)
                 or pa.types.is_large_binary(pa_type)
                 or pa.types.is_date32(pa_type)
+                or pa.types.is_null(pa_type)
             ):
                 py_out = py_out.astype(bodo_out.dtype)
 
@@ -1489,6 +1490,7 @@ def _test_equal(
                 or pa.types.is_string(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_large_string(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_null(bodo_dtype.pyarrow_dtype)
             ):
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
