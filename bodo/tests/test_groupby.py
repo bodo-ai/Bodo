@@ -98,7 +98,7 @@ from bodo.tests.utils import (
                                 ),
                                 pd.Series(data=[None], index=[4]),
                             ]
-                        ),
+                        ).astype("datetime64[ns]"),
                         ordered=True,
                     ),
                     "D": pd.Categorical(
@@ -107,7 +107,7 @@ from bodo.tests.utils import (
                                 pd.Series(pd.timedelta_range(start="1 day", periods=4)),
                                 pd.Series(data=[None], index=[4]),
                             ]
-                        ),
+                        ).astype("timedelta64[ns]"),
                         ordered=True,
                     ),
                     "E": pd.Categorical([None, 4.3, 9.5, None, 7.2], ordered=True),
