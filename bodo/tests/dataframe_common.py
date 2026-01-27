@@ -32,13 +32,17 @@ df_value_params = [
                         ),
                         pd.Series(data=[None], index=[4]),
                     ]
-                ).astype("category"),
+                )
+                .astype("datetime64[ns]")
+                .astype("category"),
                 "D": pd.concat(
                     [
                         pd.Series(pd.timedelta_range(start="1 day", periods=4)),
                         pd.Series(data=[None], index=[4]),
                     ]
-                ).astype("category"),
+                )
+                .astype("timedelta64[ns]")
+                .astype("category"),
             }
         ),
         marks=pytest.mark.skipif(
