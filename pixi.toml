@@ -308,7 +308,7 @@ openmpi = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "2021.14.1.*"
+impi-devel = "*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
