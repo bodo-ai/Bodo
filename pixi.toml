@@ -264,8 +264,8 @@ impi-devel = "*"
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
-# # Want to use Intel MPI on platform, so use "external_*"
-# # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
+# Want to use Intel MPI on platform, so use "external_*"
+# https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
 dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
