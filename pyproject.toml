@@ -40,6 +40,7 @@ dependencies = [
     "pyarrow>=22.0,<22.1",
     "numba>=0.62,<0.64",
     "pandas>=2.2",
+    "pytz",
     "numpy>=1.24",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",

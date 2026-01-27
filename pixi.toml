@@ -6,15 +6,16 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["py314", "rcpp", "dev", "local-mpi"],          solve-group = "314" }
-azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure"], solve-group = "314" }
+default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
+azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["py313", "rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
+platform =     { features = ["py313", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
+default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
 
 # Build Commands
 [tasks.build-bodo]
@@ -25,6 +26,35 @@ SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+# Build Commands
+[tasks.build-bodo-cudf-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -ve . --config-settings=cmake.define.USE_CUDF=ON"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-cudf-in-default-cuda.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf]
+depends-on = [
+  { task = "build-bodo-cudf-in-default-cuda", environment = "default-cuda" }
+]
+
+[tasks.build-bodo-cudf-san-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-cudf-san-in-default-cuda.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-san]
+depends-on = [
+  { task = "build-bodo-cudf-san-in-default-cuda", environment = "default-cuda" }
+]
 
 [tasks.build-bodo-debug]
 cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
@@ -69,10 +99,8 @@ macos = "12.0"
 [dependencies]
 pip = "*"
 # Core Python Deps
-numba = ">=0.62,<0.64.0"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -112,9 +140,38 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
+libutf8proc = "*"
+
+# Features
+[feature.py314.dependencies]
+python = "3.14.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+
+[feature.cpu.dependencies]
+numba = ">=0.62,<0.64.0"
+pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+
+[feature.cpu.target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
 pyarrow-core = { version = "==22.0.0", channel = "bodo.ai" }
 libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+
+[feature.cudf]
+platforms = ["linux-64"]
+channels = ["rapidsai", "nvidia", "conda-forge"]
+
+[feature.cudf.dependencies]
+cuda-toolkit = "13.*"
+cuda-version = "13.*"
+rmm = ">=25.12"
+librmm = ">=25.12"
+cudf = ">=25.12"
+nccl = ">=2.18"
+numba = ">=0.60,<0.62.0"
+pyarrow = "21.0.*"
+libarrow = "21.0.*"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
@@ -211,14 +268,6 @@ openai = "*"
 # - pip:
 #   - horovod
 
-[feature.py314.dependencies]
-python = "3.14.*"
-
-# The platform uses Python 3.13 to be compatible with conda in the base environment.
-# TODO: Update platform environment to use Python 3.14 once conda is compatible with it.
-[feature.py313.dependencies]
-python = "3.13.*"
-
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
@@ -261,14 +310,14 @@ mpich = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "*"
+impi-devel = "2021.14.1.*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge" } }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]

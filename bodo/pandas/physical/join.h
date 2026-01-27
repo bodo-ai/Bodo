@@ -313,7 +313,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         // We designate empty metadata to indicate generating a trivial
         // RangeIndex.
         // TODO[BSE-4820]: support joining on Indexes
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
         if (this->output_schema->column_names.size() != n_op_out_cols) {
             throw std::runtime_error(

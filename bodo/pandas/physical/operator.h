@@ -1,10 +1,17 @@
 #pragma once
 
+#include <arrow/c/bridge.h>
+#include <arrow/table.h>
+#ifdef USE_CUDF
+#include <cudf/interop.hpp>
+#include <cudf/table/table.hpp>
+#endif
 #include <memory>
 #include <typeinfo>
 #include <utility>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
 
 /// Specifies physical operator types in the execution pipeline:
@@ -16,22 +23,40 @@ enum class OperatorType : uint8_t {
     SOURCE,
     SINK,
     SOURCE_AND_SINK,
+    GPU_SOURCE,
+    GPU_SINK,
+    GPU_SOURCE_AND_SINK,
 };
 
 /// Specifies the status of the physical operator in the execution:
-/// 1. NEED_MORE_INPUT means the operator is ready for additional input
-/// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
+/// 0. NEED_MORE_INPUT means the operator is ready for additional input
+/// 1. HAVE_MORE_OUTPUT means the operator can produce more output without
 /// additional input.
-/// 3. FINISHED means the operator is done executing.
+/// 2. FINISHED means the operator is done executing.
 // This is passed across operators and the pipeline terminates when the sink
 // operator returns this status.
 // DuckDB's description for background (Bodo's
 // semantics is different per above): https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
-    NEED_MORE_INPUT,
-    HAVE_MORE_OUTPUT,
-    FINISHED,
+    NEED_MORE_INPUT = 0,
+    HAVE_MORE_OUTPUT = 1,
+    FINISHED = 2,
 };
+
+#ifdef USE_CUDF
+struct GPU_DATA {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::shared_ptr<arrow::Schema> schema;
+
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
+        : table(t), schema(s) {}
+};
+#else
+
+struct GPU_DATA {};
+
+#endif
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
@@ -92,6 +117,10 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result) = 0;
+
+    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                        OperatorResult prev_op_result);
+
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
 
@@ -113,6 +142,9 @@ class PhysicalProcessBatch : public PhysicalOperator {
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) = 0;
 
+    virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result);
+
     virtual void FinalizeProcessBatch() = 0;
 
     /**
@@ -124,6 +156,80 @@ class PhysicalProcessBatch : public PhysicalOperator {
 };
 
 /**
+ * @brief Base class for operators that produce batches at the start of
+ * pipelines.
+ *
+ */
+class PhysicalGPUSource : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SOURCE;
+    }
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatch() = 0;
+
+    // Constructor is always required for initialization
+    // We should have a separate Finalize step that can throw an exception
+    // as well as the destructor for cleanup
+    virtual void FinalizeSource() = 0;
+
+    /**
+     * @brief Get the physical schema of the source data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+};
+
+/**
+ * @brief Base class for operators that consume batches at the end of pipelines.
+ *
+ */
+class PhysicalGPUSink : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SINK;
+    }
+
+    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                        OperatorResult prev_op_result) = 0;
+
+    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                        OperatorResult prev_op_result);
+
+    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    GetResult() = 0;
+
+    virtual void FinalizeSink() = 0;
+};
+
+/**
+ * @brief Base class for operators that both consume and produce batches in the
+ * middle of pipelines.
+ *
+ */
+class PhysicalGPUProcessBatch : public PhysicalOperator {
+   public:
+    OperatorType operator_type() const override {
+        return OperatorType::GPU_SOURCE_AND_SINK;
+    }
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result) = 0;
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+};
+/**
  * @brief Get the streaming batch size from environment variable.
  * It looks up the environment variable dynamically to enable setting it
  * in tests during runtime.
@@ -134,3 +240,17 @@ int get_streaming_batch_size();
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size();
+
+using PhysicalCpuGpuSource = std::variant<std::shared_ptr<PhysicalSource>,
+                                          std::shared_ptr<PhysicalGPUSource>>;
+using PhysicalCpuGpuSink = std::variant<std::shared_ptr<PhysicalSink>,
+                                        std::shared_ptr<PhysicalGPUSink>>;
+using PhysicalCpuGpuProcessBatch =
+    std::variant<std::shared_ptr<PhysicalProcessBatch>,
+                 std::shared_ptr<PhysicalGPUProcessBatch>>;
+
+#ifdef USE_CUDF
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
+std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
+#endif
