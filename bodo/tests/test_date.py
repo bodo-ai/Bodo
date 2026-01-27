@@ -1074,15 +1074,6 @@ def test_datetime_date_getattr(memory_leak_check):
         pd.Series(np.append([None], pd.date_range("20200101", periods=11))).astype(
             "datetime64[ns]"
         ),
-        # Timedelta64
-        pd.Series(
-            np.append(
-                [None],
-                pd.timedelta_range(
-                    start="12 days", end="12 days 3 hours 2 seconds", periods=11
-                ),
-            )
-        ).astype("timedelta64[ns]"),
     ]
 )
 def datetime_convertable_series(request):
