@@ -17,9 +17,6 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = 
 
 default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
 
-#[environments.pip-cpp-win.env]
-#MPICH2_MISSING_MPI3 = "1"
-
 # Build Commands
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
