@@ -276,7 +276,7 @@ def test_get_path(
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["TABLE1"].B] = None
+        expected_output[1] = expected_output[1].where(~ctx["TABLE1"].B, None)
     check_query(
         query,
         ctx,
