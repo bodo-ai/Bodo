@@ -894,8 +894,8 @@ static inline int downcast_int_or_fail(T val, const char* func) {
  *
  */
 template <typename T>
-static inline std::vector<int> downcast_int_arr_or_fail(T* val, size_t n,
-                                                        const char* func) {
+[[maybe_unused]] static std::vector<int> downcast_int_arr_or_fail(
+    T* val, size_t n, const char* func) {
     std::vector<int> result(n);
     for (size_t i = 0; i < n; ++i) {
         result[i] = downcast_int_or_fail(val[i], func);
@@ -903,12 +903,11 @@ static inline std::vector<int> downcast_int_arr_or_fail(T* val, size_t n,
     return result;
 }
 
-#if BODO_MPI_HAS_LARGE_COUNT == 0
 /**
  * @brief Get the size of comm based on root.
  *
  */
-static int get_comm_size(int root, MPI_Comm comm) {
+[[maybe_unused]] static int get_comm_size(int root, MPI_Comm comm) {
     int npes;
     MPI_Comm_size(MPI_COMM_WORLD, &npes);
     if (root == MPI_ROOT) {
@@ -918,7 +917,6 @@ static int get_comm_size(int root, MPI_Comm comm) {
     }
     return npes;
 }
-#endif
 
 // Count and displacement types for MPI_gatherv_c/scatterv_c
 static_assert(sizeof(MPI_Count) == sizeof(int64_t));
@@ -943,10 +941,10 @@ static int MPI_Gengatherv(const void* sendbuf, int64_t sendcount,
     }
 #else
     int npes = get_comm_size(root_pe, comm);
-    int sendcount_int = downcast_int_or_fail(sendcount, __func__);
+    int sendcount_int = downcast_int_or_fail(sendcount, "MPI_Gengatherv");
     auto recv_counts_ints =
-        downcast_int_arr_or_fail(recvcounts, npes, __func__);
-    auto displs_ints = downcast_int_arr_or_fail(displs, npes, __func__);
+        downcast_int_arr_or_fail(recvcounts, npes, "MPI_Gengatherv");
+    auto displs_ints = downcast_int_arr_or_fail(displs, npes, "MPI_Gengatherv");
     if (all_gather) {
         return MPI_Allgatherv(sendbuf, sendcount_int, recvtype, recvbuf,
                               recv_counts_ints.data(), displs_ints.data(),
@@ -991,9 +989,10 @@ static int MPI_Genscatterv(void* send_data, MPI_Count* sendcounts,
                           recv_count, mpi_typ, root, comm);
 #else
     int npes = get_comm_size(root, comm);
-    int recv_count_int = downcast_int_or_fail(recv_count, __func__);
-    auto sendcounts_ints = downcast_int_arr_or_fail(sendcounts, npes, __func__);
-    auto displs_ints = downcast_int_arr_or_fail(displs, npes, __func__);
+    int recv_count_int = downcast_int_or_fail(recv_count, "MPI_Scatterv");
+    auto sendcounts_ints =
+        downcast_int_arr_or_fail(sendcounts, npes, "MPI_Scatterv");
+    auto displs_ints = downcast_int_arr_or_fail(displs, npes, "MPI_Scatterv");
 
     return MPI_Scatterv(send_data, sendcounts_ints.data(), displs_ints.data(),
                         mpi_typ, recv_data, recv_count_int, mpi_typ, root,
