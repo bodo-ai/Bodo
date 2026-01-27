@@ -181,6 +181,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
+option(USE_CUDF "Enable CUDF mode" OFF)
+if(USE_CUDF)
+    add_compile_definitions(USE_CUDF=1)
+endif()
 
 # ----------------------- Apply Compiler Flags -----------------------
 message(STATUS "\n*** Apply Compiler Flags for Targets")
@@ -708,6 +712,12 @@ else()
 endif()
 cmake_print_variables(NO_HDF5)
 
+if (USE_CUDF)
+    list(APPEND sources_list
+    "bodo/pandas/physical/gpu_expression.cpp"
+    "bodo/libs/streaming/cuda_join.cpp")
+endif()
+
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
@@ -827,6 +837,66 @@ else()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 
+if(USE_CUDF)
+  message(STATUS "Configuring for cudf.")
+  execute_process( COMMAND "${Python_EXECUTABLE}" -c "import os, pathlib; \ root = os.environ.get('CONDA_PREFIX', ''); \ matches = list(pathlib.Path(root).rglob('cuda_runtime.h')); \ print(matches[0].parent if matches else '')" OUTPUT_VARIABLE CUDA_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
+
+  target_include_directories(ext BEFORE PRIVATE
+    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
+  )
+
+  # RMM library defines
+  find_path(RMM_INCLUDE_DIR NAMES rmm/cuda_stream_view.hpp)
+  find_library(RMM_LIB NAMES librmm.so)
+  get_filename_component(RMM_LIBDIR "${RMM_LIB}" DIRECTORY)
+  message(STATUS "RMM include: ${RMM_INCLUDE_DIR} lib: ${RMM_LIBDIR}")
+  add_library(rmm SHARED IMPORTED)
+  set_target_properties(rmm PROPERTIES IMPORTED_LOCATION "${RMM_LIB}")
+  # Rapids logger defines
+  find_path(RAPIDS_LOGGER_INCLUDE_DIR NAMES rapids_logger/log_levels.h)
+  find_library(RL_LIB NAMES librapids_logger.so)
+  get_filename_component(RL_LIBDIR "${RL_LIB}" DIRECTORY)
+  message(STATUS "RapidsLogger include: ${RAPIDS_LOGGER_INCLUDE_DIR} lib: ${RL_LIBDIR}")
+  add_library(rapids_logger SHARED IMPORTED)
+  set_target_properties(rapids_logger PROPERTIES IMPORTED_LOCATION "${RL_LIB}")
+  # libcudf defines
+  find_path(LIBCUDF_INCLUDE_DIR NAMES cudf/types.hpp)
+  find_library(LIBCUDF_LIB NAMES libcudf.so)
+  get_filename_component(LIBCUDF_LIBDIR "${LIBCUDF_LIB}" DIRECTORY)
+  message(STATUS "libcudf include: ${LIBCUDF_INCLUDE_DIR} lib: ${LIBCUDF_LIB}")
+  add_library(libcudf SHARED IMPORTED)
+  set_target_properties(libcudf PROPERTIES IMPORTED_LOCATION "${LIBCUDF_LIB}")
+  # libkvikio defines
+  find_library(LIBKVIKIO_LIB NAMES libkvikio.so)
+  get_filename_component(LIBKVIKIO_LIBDIR "${LIBKVIKIO_LIB}" DIRECTORY)
+  message(STATUS "libkvikio lib: ${LIBKVIKIO_LIB} libdir: ${LIBKVIKIO_LIBDIR}")
+  add_library(libkvikio SHARED IMPORTED)
+  set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
+
+  # cudart
+  find_library(LIBCUDART_LIB NAMES libcudart.so.13)
+  get_filename_component(LIBCUDART_LIBDIR "${LIBCUDART_LIB}" DIRECTORY)
+  message(STATUS "libcudart lib: ${LIBCUDART_LIB} libdir: ${LIBCUDART_LIBDIR}")
+  add_library(libcudart SHARED IMPORTED)
+  set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
+
+  # RPATH
+  set_target_properties(ext PROPERTIES
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
+  )
+
+  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
+  message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
+  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart
+  # Force the linker to include libkvikio even if no symbols are used directly
+      "-Wl,--no-as-needed"
+      libkvikio
+      "-Wl,--as-needed")
+endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
 # set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")

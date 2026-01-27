@@ -1574,9 +1574,9 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<table_info> out_table =
         std::make_shared<table_info>(out_arrs);
     out_table->column_names = table->ColumnNames();
-    out_table->metadata =
-        std::make_shared<TableMetadata>(table->schema()->metadata()->keys(),
-                                        table->schema()->metadata()->values());
+    out_table->metadata = std::make_shared<bodo::TableMetadata>(
+        table->schema()->metadata()->keys(),
+        table->schema()->metadata()->values());
     return out_table;
 }
 

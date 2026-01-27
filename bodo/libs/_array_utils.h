@@ -1186,14 +1186,16 @@ void DEBUG_PrintSetOfColumn(
  * @brief Print the contents of a table to the output stream.
  * See DEBUG_PrintSetOfColumn for more details
  */
-void DEBUG_PrintTable(std::ostream& os, table_info* table);
+void DEBUG_PrintTable(std::ostream& os, const table_info* table,
+                      bool print_column_names = false);
 
 /**
  * @brief Print the contents of a table to the output stream.
  * See DEBUG_PrintSetOfColumn for more details
  */
 void DEBUG_PrintTable(std::ostream& os,
-                      const std::shared_ptr<const table_info>& table);
+                      const std::shared_ptr<const table_info>& table,
+                      bool print_column_names = false);
 
 /**
  * @brief Prints contents of a std::unordered_map to the output stream.
