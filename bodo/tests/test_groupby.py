@@ -629,16 +629,19 @@ def test_kurtosis_skew(df, memory_leak_check):
     # A function that simulates the aggregation above since kurtosis is not
     # natively supported in groupby.aggs
     def py_impl(df):
-        result = df.groupby(["A"], as_index=False, dropna=False).apply(
-            lambda group: pd.DataFrame(
-                {
-                    "A": [group["A"].iloc[0]],
-                    "out_1": group["B"].kurtosis(),
-                    "out_2": group["B"].skew(),
-                }
+        result = (
+            df.groupby(["A"], as_index=True, dropna=False)
+            .apply(
+                lambda group: pd.DataFrame(
+                    {
+                        "out_1": [group["B"].kurtosis()],
+                        "out_2": [group["B"].skew()],
+                    }
+                )
             )
+            .droplevel(1)
+            .reset_index()
         )
-        result.index = result.index.droplevel(1)
         return result
 
     answer = py_impl(df)
