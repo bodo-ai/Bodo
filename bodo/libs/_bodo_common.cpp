@@ -852,8 +852,12 @@ void Schema::append_schema(std::unique_ptr<Schema>&& other_schema) {
     for (auto& col_name : other_schema->column_names) {
         this->column_names.push_back(std::move(col_name));
     }
-    this->metadata = std::make_shared<TableMetadata>(
-        this->metadata->append(*other_schema->metadata));
+    if (this->metadata) {
+        this->metadata = std::make_shared<TableMetadata>(
+            this->metadata->append(*other_schema->metadata));
+    } else {
+        this->metadata = other_schema->metadata;
+    }
 }
 size_t Schema::ncols() const { return this->column_types.size(); }
 
