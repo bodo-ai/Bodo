@@ -713,6 +713,7 @@ _numba_to_sql_column_type_map = {
     types.float64: SqlTypeEnum.Float64.value,
     types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
+    bodo.types.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.types.string_type: SqlTypeEnum.String.value,
     bodo.types.bytes_type: SqlTypeEnum.Binary.value,
