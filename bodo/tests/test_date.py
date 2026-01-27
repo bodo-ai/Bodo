@@ -1959,7 +1959,7 @@ def test_pd_to_timedelta_datetime_td_arr(memory_leak_check):
         datetime.timedelta(days=5, seconds=4, weeks=4),
         [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 10,
     )
-    check_func(impl, (arr,))
+    check_func(impl, (arr,), py_output=pd.to_timedelta(arr).astype("timedelta64[ns]"))
 
 
 @pytest.mark.slow
