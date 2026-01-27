@@ -117,13 +117,50 @@ class Executor {
     // construction. Executor only active for one plan execution so ctes cleaned
     // up by destructor.
     std::map<duckdb::idx_t, CTEInfo> ctes;
+    std::map<void *, bool> run_on_gpu;
+
+   private:
+    void partition_internal(duckdb::LogicalOperator &op,
+                            std::map<void *, bool> &run_on_gpu) {
+        // This is just a quick hack of converting things we know will work
+        // with no regard to whether it is beneficial or not.  Tons of
+        // more work is required here.
+        for (auto &child : op.children) {
+            partition_internal(*child, run_on_gpu);
+        }
+        if (get_use_cudf()) {
+            if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET ||
+                (op.type ==
+                     duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN &&
+                 op.Cast<duckdb::LogicalComparisonJoin>().join_type ==
+                     duckdb::JoinType::INNER) ||
+                op.type == duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE ||
+                op.type == duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
+                run_on_gpu[&op] = true;
+            } else {
+                run_on_gpu[&op] = false;
+            }
+        } else {
+            // Run on CPU always if CUDF not enabled.
+            run_on_gpu[&op] = false;
+        }
+    }
 
    public:
+    std::map<void *, bool> partition_to_gpu(
+        std::unique_ptr<duckdb::LogicalOperator> &plan) {
+        std::map<void *, bool> run_on_gpu;
+        partition_internal(*plan, run_on_gpu);
+        return run_on_gpu;
+    }
+
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
         QueryProfileCollector::Default().Init();
+        // Partition between CPU and GPU.
+        run_on_gpu = partition_to_gpu(plan);
         // Convert the logical plan to a physical plan
-        PhysicalPlanBuilder builder(ctes);
+        PhysicalPlanBuilder builder(ctes, run_on_gpu);
         builder.Visit(*plan);
 
         // Write finalizes the active pipeline but others need result collection
@@ -166,6 +203,42 @@ class Executor {
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
         QueryProfileCollector::Default().Finalize(0);
-        return pipelines.back()->GetResult();
+        std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
+                     std::variant<GPU_DATA, PyObject *>>
+            gr_res = pipelines.back()->GetResult();
+        std::variant<std::shared_ptr<table_info>, PyObject *> ret;
+        std::visit(
+            [&](auto &vres) {
+                using T = std::decay_t<decltype(vres)>;
+                if constexpr (std::is_same_v<
+                                  T, std::variant<GPU_DATA, PyObject *>>) {
+#ifdef USE_CUDF
+                    std::visit(
+                        [&](auto &gpu_var) {
+                            using U = std::decay_t<decltype(gpu_var)>;
+                            if constexpr (std::is_same_v<U, GPU_DATA>) {
+                                ret = convertGPUToTable(gpu_var);
+                            } else {
+                                ret = gpu_var;
+                            }
+                        },
+                        vres);
+#endif
+                } else if constexpr (std::is_same_v<
+                                         T, std::variant<
+                                                std::shared_ptr<table_info>,
+                                                PyObject *>>) {
+                    std::visit(
+                        [&](auto &table_or_pyobject_var) {
+                            ret = table_or_pyobject_var;
+                        },
+                        vres);
+                } else {
+                    static_assert(sizeof(T) == 0,
+                                  "Unexpected GetResult() alternative.");
+                }
+            },
+            gr_res);
+        return ret;
     }
 };

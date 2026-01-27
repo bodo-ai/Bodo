@@ -6,6 +6,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/streaming/_join.h"
 #include "_plan.h"
+#include "_util.h"
 #include "operator.h"
 
 struct PhysicalJoinFilterMetrics {
@@ -26,7 +27,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     explicit PhysicalJoinFilter(
         bodo::LogicalJoinFilter& logical_filter,
         std::shared_ptr<bodo::Schema>& input_schema,
-        std::shared_ptr<std::unordered_map<int, JoinState*>>&
+        std::shared_ptr<std::unordered_map<int, join_state_t>>&
             join_filter_states)
         : filter_ids(std::move(logical_filter.filter_ids)),
           filter_columns(std::move(logical_filter.filter_columns)),
@@ -59,7 +60,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 input_schema->column_names[i]);
         }
 
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
         this->can_apply_bloom_filters.reserve(this->filter_columns.size());
@@ -131,36 +132,52 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 continue;
             }
 
-            JoinState* join_state_ = (*join_filter_states)[filter_id];
-            if (join_state_->IsNestedLoopJoin()) {
-                continue;
-            }
-            HashJoinState* join_state = (HashJoinState*)join_state_;
+            join_state_t join_state_ = (*join_filter_states)[filter_id];
+            // GPU Joins don't create bloom filters so only run against
+            // CPU JoinStates
+            std::visit(
+                [&](const auto& join_state) {
+                    if constexpr (std::is_same_v<
+                                      std::decay_t<decltype(join_state)>,
+                                      JoinState*>) {
+                        if (join_state->IsNestedLoopJoin()) {
+                            return;
+                        }
+                        HashJoinState* hash_join_state =
+                            (HashJoinState*)join_state;
 
-            applied_any_filter =
-                applied_any_filter ||
-                join_state->RuntimeFilter(input_batch, row_bitmask,
-                                          this->filter_columns[i],
-                                          this->is_first_locations[i]);
+                        applied_any_filter = applied_any_filter ||
+                                             hash_join_state->RuntimeFilter(
+                                                 input_batch, row_bitmask,
+                                                 this->filter_columns[i],
+                                                 this->is_first_locations[i]);
 
-            if (this->materialize_after_each_filter && applied_any_filter) {
-                input_batch = RetrieveTable(input_batch, row_bitmask);
-                // Reset the bitmask for the next filter
-                // we could potentially do something smarter here if
-                // row_bitmask's length is way bigger than input batch by only
-                // resetting the first input_batch->nrows() bits and then
-                // resetting the whole thing at the end but this should be good
-                // enough for now, we don't always want to do that because it's
-                // an extra reset
-                memset(
-                    row_bitmask
-                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
-                    0xff, arrow::bit_util::BytesForBits(row_bitmask->length));
+                        if (this->materialize_after_each_filter &&
+                            applied_any_filter) {
+                            input_batch =
+                                RetrieveTable(input_batch, row_bitmask);
+                            // Reset the bitmask for the next filter
+                            // we could potentially do something smarter here if
+                            // row_bitmask's length is way bigger than input
+                            // batch by only resetting the first
+                            // input_batch->nrows() bits and then resetting the
+                            // whole thing at the end but this should be good
+                            // enough for now, we don't always want to do that
+                            // because it's an extra reset
+                            memset(
+                                row_bitmask
+                                    ->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                            uint8_t*>(),
+                                0xff,
+                                arrow::bit_util::BytesForBits(
+                                    row_bitmask->length));
 
-                applied_any_filter = false;
-            }
+                            applied_any_filter = false;
+                        }
+                    }
+                },
+                join_state_);
         }
-
         if (applied_any_filter) {
             input_batch = RetrieveTable(input_batch, row_bitmask);
             // Reset the bitmask for the next batch
@@ -208,7 +225,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
-    std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
+    std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states;
 
     PhysicalJoinFilterMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
