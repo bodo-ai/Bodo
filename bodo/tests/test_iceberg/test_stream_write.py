@@ -310,8 +310,8 @@ def test_iceberg_write_with_comment_and_properties(
             df = convert_non_pandas_columns(df)
             py_out = convert_non_pandas_columns(py_out)
         passed = _test_equal_guard(
-            df,
             py_out,
+            df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -362,8 +362,8 @@ def test_iceberg_write_basic_rep(
 
     if comm.Get_rank() == 0:
         passed = _test_equal_guard(
-            df,
             py_out,
+            df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
