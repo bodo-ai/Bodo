@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import torch
-
-from bodo.mpi4py import MPI
+from mpi4py import MPI
 
 
 class BodoDistributedSampler(torch.utils.data.Sampler):

@@ -23,11 +23,11 @@ import adlfs
 import pandas as pd
 import psutil
 import pytest
+from mpi4py import MPI
 from numba.core.runtime import rtsys  # noqa TID253
 
 import bodo
 import bodo.user_logging
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
 

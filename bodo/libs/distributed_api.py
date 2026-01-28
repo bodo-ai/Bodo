@@ -29,6 +29,8 @@ import bodo
 # Import compiler
 import bodo.decorators  # isort:skip # noqa
 
+from mpi4py import MPI
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
@@ -64,7 +66,6 @@ from bodo.libs.str_arr_ext import (
     set_bit_to,
     string_array_type,
 )
-from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -709,9 +710,10 @@ def copy_gathered_null_bytes(
 
 def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=None):
     """Gathers data from all ranks to root."""
+    from mpi4py import MPI
+
     import bodo.libs.distributed_impl
     from bodo.libs.distributed_impl import gatherv_impl_wrapper
-    from bodo.mpi4py import MPI
 
     if allgather and comm is not None:
         raise BodoError("gatherv(): allgather flag not supported in intercomm case")
@@ -1037,7 +1039,7 @@ def allgatherv_overload(data, warn_if_rep=True, root=DEFAULT_ROOT):
 def _bcast_dtype(data, root=DEFAULT_ROOT, comm=None):
     """broadcast data type from rank 0 using mpi4py"""
     try:
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
     except ImportError:  # pragma: no cover
         raise BodoError("mpi4py is required for scatterv")
 
@@ -1296,9 +1298,10 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks should just pass None.
     """
+    from mpi4py import MPI
+
     import bodo.libs.distributed_impl
     from bodo.libs.distributed_impl import scatterv_impl
-    from bodo.mpi4py import MPI
 
     rank = bodo.libs.distributed_api.get_rank()
     if rank != DEFAULT_ROOT and data is not None:  # pragma: no cover
@@ -2571,7 +2574,7 @@ def dist_permutation_array_index(
 
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     rank = bodo.libs.distributed_api.get_rank()
     # make sure all ranks receive proper data type as input

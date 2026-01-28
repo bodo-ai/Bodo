@@ -31,13 +31,13 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import ir, types  # noqa TID253
 from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.pandas as bodo_pd
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
 from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
@@ -2575,7 +2575,7 @@ def _check_typing_issues(val):
     """Raises an error if there is a typing issue for value 'val'.
     Runs bodo typing on value and converts warnings to errors.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     try:

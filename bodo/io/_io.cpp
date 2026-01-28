@@ -246,9 +246,10 @@ void file_read_parallel(const char* file_name, char* buff, int64_t start,
             delete f_reader;
         } else {
             // posix
-            CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
-                      "_io.cpp::file_read_parallel: MPI error on "
-                      "MPI_Errhandler_set:");
+            CHECK_MPI(
+                MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+                "_io.cpp::file_read_parallel: MPI error on "
+                "MPI_Comm_set_errhandler:");
 
             MPI_File fh;
             CHECK_MPI(
@@ -345,9 +346,9 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         char err_string[MPI_MAX_ERROR_STRING];
         err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
         int err_len, err_class;
-        CHECK_MPI(
-            MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
-            "_io.cpp::file_write_parallel: MPI error on MPI_Errhandler_set:");
+        CHECK_MPI(MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+                  "_io.cpp::file_write_parallel: MPI error on "
+                  "MPI_Comm_set_errhandler:");
 
         int ierr;
         bool throw_error = false;

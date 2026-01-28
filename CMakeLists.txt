@@ -351,20 +351,6 @@ endif()
 
 cmake_print_variables(MPI_INCLUDE_DIR)
 
-# Vendor MPI4Py
-if(DEFINED ENV{BODO_VENDOR_MPI4PY} AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  message(STATUS "Copying MPI4Py to Source Directory")
-  # Extract the location of the site-packages directory containing mpi4py
-  execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" -c "import mpi4py; print(mpi4py.__path__[0])"
-    OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-  file(GLOB MPI4PY_CONTENTS "${MPI4PY_PACKAGE_DIR}/*")
-  file(COPY ${MPI4PY_CONTENTS} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
-endif()
-
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PyArrowHelpers)
 setup_pyarrow_dirs()
@@ -398,7 +384,7 @@ python_add_library(csv_json_reader
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(csv_json_reader PRIVATE arrow arrow_python ${MPI_LIBRARIES})
+target_link_libraries(csv_json_reader PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------

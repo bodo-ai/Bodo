@@ -6,6 +6,7 @@ import warnings
 import numba
 import numpy as np
 import sklearn.metrics
+from mpi4py import MPI
 from numba.core import types
 from numba.extending import overload
 from sklearn.exceptions import UndefinedMetricWarning
@@ -13,7 +14,6 @@ from sklearn.utils.validation import column_or_1d
 
 import bodo
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,

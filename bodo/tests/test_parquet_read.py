@@ -944,7 +944,7 @@ def test_read_partitions_cat_ordering(memory_leak_check):
 @pytest_mark_not_df_lib
 @pytest.mark.parametrize("test_tz", [True, False])
 def test_partition_cols(test_tz: bool, memory_leak_check):
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

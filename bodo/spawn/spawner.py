@@ -20,11 +20,11 @@ from collections import deque
 import cloudpickle
 import pandas as pd
 import psutil
+from mpi4py import MPI
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
 import bodo.user_logging
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -95,7 +95,10 @@ def get_num_workers():
     with no_stdin():
         if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
             n_pes = int(n_pes_env)
-        elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
+        # UNIVERSE_SIZE is set too conservatively in Open MPI by default
+        elif MPI.get_vendor()[0] != "Open MPI" and (
+            universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE)
+        ):
             n_pes = universe_size
         elif cpu_count := psutil.cpu_count(logical=False):
             n_pes = cpu_count

@@ -7,6 +7,8 @@ import pytest
 import bodo
 
 import bodo.decorators  # isort:skip # noqa
+from mpi4py import MPI
+
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     get_op_pool_bytes_allocated,
@@ -16,7 +18,6 @@ from bodo.libs.streaming.groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
 from bodo.utils.typing import ColNamesMetaType, MetaType
 

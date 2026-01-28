@@ -5,6 +5,7 @@ import sys
 import numba
 import numpy as np
 import sklearn.cluster
+from mpi4py import MPI
 from numba.extending import (
     overload,
     overload_method,
@@ -12,7 +13,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs.distributed_api import get_host_ranks
-from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 
 this_module = sys.modules[__name__]

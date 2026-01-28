@@ -9,6 +9,7 @@ on:
         options:
         - ubuntu-latest
         - windows-latest
+        - macos-latest
 
 # Limit CI to cancel previous runs in the same PR
 concurrency:

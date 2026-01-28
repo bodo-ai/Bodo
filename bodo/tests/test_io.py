@@ -2706,7 +2706,8 @@ def check_CSV_write(
     bodo_filename="bodo_out.csv",
     read_impl=None,
 ):
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils_jit import reduce_sum
 
     comm = MPI.COMM_WORLD

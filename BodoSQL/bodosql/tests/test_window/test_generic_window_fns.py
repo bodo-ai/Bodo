@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     pytest_mark_multi_rank_nightly,
     pytest_slow_unless_window,
@@ -627,7 +627,8 @@ def test_simple_sum(df, spark_info, capfd):
 )
 def test_simple_count(df, spark_info, capfd):
     """Verifies that the correct path is taken for COUNT"""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -672,7 +673,8 @@ def test_simple_count(df, spark_info, capfd):
 )
 def test_simple_count_star(partition_col, spark_info, capfd):
     """Verifies that the correct path is taken for COUNT(*)"""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -718,7 +720,8 @@ def test_simple_count_star(partition_col, spark_info, capfd):
 )
 def test_multiple_sum_count(spark_info, capfd):
     """Verifies that the correct path is taken for SUM/COUNT when called multiple times"""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -1201,7 +1204,8 @@ def test_countstar_over_blank(capfd):
 )
 def test_multiple_over_blank(capfd):
     """Checks that multiple FUNC(X) OVER () work properly and takes the correct codepath"""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     df = pd.DataFrame(
