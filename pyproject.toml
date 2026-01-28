@@ -48,6 +48,7 @@ dependencies = [
     "cloudpickle>=3.0",
     "psutil",
     "mpi4py>=4.1",
+    # Linux uses MPICH, which is vendored as part of the bodo package
     "openmpi; sys_platform == 'darwin'",
     "impi-rt; sys_platform == 'win32'",
 ]
