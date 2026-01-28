@@ -955,6 +955,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (2, 1),
             (2, 2),
             (2, 3),
+            (3, 0),
         ), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
