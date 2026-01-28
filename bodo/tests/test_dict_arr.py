@@ -832,8 +832,9 @@ def test_str_find(test_unicode_dict_str_arr, memory_leak_check, method):
     from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     func_dict = {
-        "find": pd.Series(test_unicode_dict_str_arr).str.find,
-        "rfind": pd.Series(test_unicode_dict_str_arr).str.rfind,
+        # NOTE: convert to object to avoid Pandas PyArrow string bugs
+        "find": pd.Series(test_unicode_dict_str_arr).astype(object).str.find,
+        "rfind": pd.Series(test_unicode_dict_str_arr).astype(object).str.rfind,
     }
     func_text = (
         "def impl1(A):\n"
