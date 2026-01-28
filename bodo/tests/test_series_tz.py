@@ -305,7 +305,7 @@ def test_series_shift(memory_leak_check, sample_tz):
     check_func(impl2, (S, shift_amount, fill_value))
 
 
-@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+@pytest.mark.parametrize("freq", ["D", "h", "min", "s", "ms", "us", "ns"])
 def test_series_dt_freq_methods(freq, representative_tz, memory_leak_check):
     """Tests the Series.dt freq methods with various frequencies"""
 
