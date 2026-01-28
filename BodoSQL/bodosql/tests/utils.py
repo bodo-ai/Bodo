@@ -1245,18 +1245,24 @@ def _check_query_equal(
 
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
+    new_cols = []
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
+        new_cols.append(bodosql_output.iloc[:, i])
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
             try:
                 # Cast to regular string array to avoid dictionary issues.
                 result = pa.compute.cast(arr._pa_array, pa.string()).to_pandas()
-                # Workaround Pandas 2 Arrow setitem error by setting to an int first
-                bodosql_output.iloc[:, i] = 3
-                bodosql_output.iloc[:, i] = result
+                new_cols[-1] = result.astype(object)
             except Exception:
                 pass
+
+    bodosql_output = (
+        pd.concat(new_cols, axis=1)
+        .set_axis(bodosql_output.columns, axis=1)
+        .set_index(bodosql_output.index)
+    )
 
     # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
     bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
