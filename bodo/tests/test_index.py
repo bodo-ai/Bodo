@@ -1673,9 +1673,13 @@ def test_index_copy(index, memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pd.date_range(start="2018-04-14", end="2018-04-24", periods=10),
+        pd.date_range(start="2018-04-14", end="2018-04-24", periods=10).astype(
+            "datetime64[ns]"
+        ),
         pytest.param(
-            pd.date_range(start="2018-04-24", end="2018-04-30", periods=10, name="A"),
+            pd.date_range(
+                start="2018-04-24", end="2018-04-30", periods=10, name="A"
+            ).astype("datetime64[ns]"),
             marks=pytest.mark.slow,
         ),
     ]
