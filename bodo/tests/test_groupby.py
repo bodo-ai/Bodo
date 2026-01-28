@@ -8319,7 +8319,10 @@ def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["1", "1", "2", "2", "4", "4"],
-            "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+            "B": pd.array(
+                [["1"], ["1"], ["2"], ["3"], ["4"], ["4"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [1, 2, 3, 4, 5, 5],
         }
     )
@@ -8327,7 +8330,10 @@ def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
     expected = pd.DataFrame(
         {
             "A": ["1", "2", "2", "4"],
-            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "B": pd.array(
+                [["1"], ["2"], ["3"], ["4"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [3, 3, 4, 10],
         }
     )
