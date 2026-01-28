@@ -7920,11 +7920,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
                         dtype=pd.ArrowDtype(
                             pa.struct(
                                 [
-                                    pa.field("X", pa.string()),
-                                    pa.field("Y", pa.large_list(pa.float64())),
-                                    pa.field(
-                                        "Z", pa.large_list(pa.large_list(pa.int64()))
-                                    ),
+                                    pa.field("Q", pa.large_list(pa.string())),
                                     pa.field(
                                         "W",
                                         pa.struct(
@@ -7934,7 +7930,11 @@ def test_tz_aware_gb_apply(memory_leak_check):
                                             ]
                                         ),
                                     ),
-                                    pa.field("Q", pa.large_list(pa.string())),
+                                    pa.field("X", pa.string()),
+                                    pa.field("Y", pa.large_list(pa.float64())),
+                                    pa.field(
+                                        "Z", pa.large_list(pa.large_list(pa.int64()))
+                                    ),
                                 ]
                             )
                         ),
