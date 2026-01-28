@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
@@ -50,7 +50,7 @@ jobs:
       skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           fetch-depth: "0"
@@ -66,7 +66,7 @@ jobs:
               - '!docs/**'
 
       # Fetch the PR branch for the commit history
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .
@@ -107,7 +107,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Build from Source
         uses: ./.github/actions/build-source
         with:
@@ -115,7 +115,7 @@ jobs:
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
         if: ${{ runner.os != 'Windows' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
@@ -253,17 +253,17 @@ jobs:
     if: success() || failure()
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.14
       # Get all source code for mapping coverage to LOC
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           # Disable shallow clones for better coverage reporting
           fetch-depth: 0
       # Download timing and coverage info
       - name: Download Timings
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           merge-multiple: true
 
@@ -289,7 +289,7 @@ jobs:
           cp coverage.xml outputs/coverage.xml
           cp .coverage outputs/.coverage
       - name: Upload Combined
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-durations
           path: outputs/
