@@ -453,8 +453,8 @@ def test_iceberg_write_part_sort(
 
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
