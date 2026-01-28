@@ -3173,7 +3173,7 @@ def _get_pd_dtype_str(t):
     it's not fully consistent for read_csv(), since datetime64 requires 'datetime64[ns]'
     instead of 'str'
     """
-    if t.dtype == types.NPDatetime("ns"):
+    if t.dtype == types.NPDatetime("ns") or isinstance(t, bodo.types.DatetimeArrayType):
         return "'datetime64[ns]'"
 
     return bodo.ir.csv_ext._get_pd_dtype_str(t)
@@ -5791,7 +5791,6 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
 
 
 @overload(pd.read_excel, no_unliteral=True)
-@overload(bd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,
     sheet_name=0,
@@ -5811,7 +5810,6 @@ def overload_read_excel(
     na_filter=True,
     verbose=False,
     parse_dates=False,
-    date_parser=None,
     date_format=None,
     thousands=None,
     decimal=".",
@@ -5861,7 +5859,6 @@ def impl(
     na_filter=True,
     verbose=False,
     parse_dates=False,
-    date_parser=None,
     date_format=None,
     thousands=None,
     decimal='.',
@@ -5890,7 +5887,6 @@ def impl(
             na_filter=na_filter,
             verbose=verbose,
             parse_dates={parse_dates_const},
-            date_parser=pd._libs.lib.no_default,
             date_format=date_format,
             thousands=thousands,
             decimal=decimal,

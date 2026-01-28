@@ -1414,6 +1414,7 @@ def test_excel1(datapath, memory_leak_check):
         (2, 1),
         (2, 2),
         (2, 3),
+        (3, 0),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)
