@@ -95,6 +95,7 @@ def get_num_workers():
     with no_stdin():
         if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
             n_pes = int(n_pes_env)
+        # UNIVERSE_SIZE is set too conservatively in Open MPI by default
         elif MPI.get_vendor()[0] != "Open MPI" and (
             universe_size := MPI.Comm.Get_attr(MPI.UNIVERSE_SIZE)
         ):
