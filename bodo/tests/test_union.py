@@ -567,16 +567,19 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
+                    "b": pd.array(
                         [
-                            1,
-                        ],
-                        [3],
-                        None,
-                        [4, 5, None],
-                        [6, 7, 8, 9],
-                    ]
-                    * 10,
+                            [
+                                1,
+                            ],
+                            [3],
+                            None,
+                            [4, 5, None],
+                            [6, 7, 8, 9],
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                    ),
                 }
             ),
             False,
@@ -586,14 +589,24 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        {"1": 38.7, "2": "xyz"},
-                        {"1": 11.0, "2": "pqr"},
-                        None,
-                        {"1": 329.1, "2": "abc"},
-                        {"1": 329.1, "2": "abc"},
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            {"1": 38.7, "2": "xyz"},
+                            {"1": 11.0, "2": "pqr"},
+                            None,
+                            {"1": 329.1, "2": "abc"},
+                            {"1": 329.1, "2": "abc"},
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("1", pa.float64()),
+                                    pa.field("2", pa.string()),
+                                ]
+                            )
+                        ),
+                    ),
                 }
             ),
             False,
@@ -633,7 +646,10 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [[[1, 2]], [[3, 4]], [[2, 9]]] * 16 + [[[]], None],
+                    "b": pd.array(
+                        [[[1, 2]], [[3, 4]], [[2, 9]]] * 16 + [[[]], None],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
+                    ),
                 }
             ),
             False,
@@ -643,20 +659,32 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
+                    "b": pd.array(
                         [
-                            {"1": 38.7, "2": "xyz"},
-                            {"1": 11.0, "2": "pqr"},
-                        ],
-                        [
-                            {"1": 38.7, "2": "xyz"},
-                            {"1": 11.0, "2": "pqr"},
-                        ],
-                        None,
-                        [{"1": 2819.2, "2": "abc"}],
-                        None,
-                    ]
-                    * 10,
+                            [
+                                {"1": 38.7, "2": "xyz"},
+                                {"1": 11.0, "2": "pqr"},
+                            ],
+                            [
+                                {"1": 38.7, "2": "xyz"},
+                                {"1": 11.0, "2": "pqr"},
+                            ],
+                            None,
+                            [{"1": 2819.2, "2": "abc"}],
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(
+                                pa.struct(
+                                    [
+                                        pa.field("1", pa.float64()),
+                                        pa.field("2", pa.string()),
+                                    ]
+                                )
+                            )
+                        ),
+                    ),
                 }
             ),
             False,
@@ -666,14 +694,19 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        [{"1": 38.7, "2": 33.2}, None],
-                        [{"3": 11.0}],
-                        [{"abc": 398.21, "jakasf": None}],
-                        [],
-                        None,
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            [{"1": 38.7, "2": 33.2}, None],
+                            [{"3": 11.0}],
+                            [{"abc": 398.21, "jakasf": None}],
+                            [],
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.map_(pa.string(), pa.float64()))
+                        ),
+                    ),
                 }
             ),
             True,
@@ -705,14 +738,21 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        {"1": "38.7", "2": "33.2"},
-                        {"1": "11.0", "2": "oarnsio"},
-                        {"1": "398.21", "2": "pqr"},
-                        None,
-                        None,
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            {"1": "38.7", "2": "33.2"},
+                            {"1": "11.0", "2": "oarnsio"},
+                            {"1": "398.21", "2": "pqr"},
+                            None,
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("1", pa.string()), pa.field("2", pa.string())]
+                            )
+                        ),
+                    ),
                 }
             ),
             False,

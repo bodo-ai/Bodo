@@ -1556,7 +1556,7 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
 
 @numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    """Converts numpy.timedelta64 to datetime.timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
     n_day = n_int64 // (86400 * 1000000000)
     res1 = n_int64 - n_day * 86400 * 1000000000
@@ -1566,11 +1566,22 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     return datetime.timedelta(n_day, n_sec, n_microsec)
 
 
-@numba.njit(cache=True, no_cpython_wrapper=True)
-def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to pd.Timedelta"""
-    n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
-    return pd.Timedelta(n_int64)
+def convert_numpy_timedelta64_to_pd_timedelta(td64):  # pragma: no cover
+    return td64
+
+
+@overload(convert_numpy_timedelta64_to_pd_timedelta, jit_options={"cache": True})
+def overload_convert_numpy_timedelta64_to_pd_timedelta(td64):
+    """Converts numpy.timedelta64 to pd.Timedelta"""
+
+    if td64 == bodo.types.pd_timedelta_type:
+        return lambda td64: td64  # pragma: no cover
+
+    def impl(td64):  # pragma: no cover
+        n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(td64)
+        return pd.Timedelta(n_int64)
+
+    return impl
 
 
 @intrinsic
@@ -1629,8 +1640,17 @@ def td64_hash(val):
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer"""
 
-    def codegen(context, builder, sig, args):
-        return args[0]
+    if val == pd_timedelta_type:
+
+        def codegen(context, builder, sig, args):
+            timedelta = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return timedelta.value
+    else:
+
+        def codegen(context, builder, sig, args):
+            return args[0]
 
     return types.int64(val), codegen
 
@@ -1670,7 +1690,9 @@ def series_str_dt64_astype(data):  # pragma: no cover
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
         # formats, see test_dt64_str_astype
-        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values
+        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values.astype(
+            np.dtype("datetime64[ns]")
+        )
     return res
 
 
@@ -1958,7 +1980,9 @@ def overload_to_datetime(
         return impl_date_arr
 
     # return DatetimeIndex if input is array(dt64)
-    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
+    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C") or isinstance(
+        arg_a, bodo.types.DatetimeArrayType
+    ):
         return (
             lambda arg_a,
             errors="raise",
@@ -2519,12 +2543,12 @@ def overload_freq_methods(method):
         )
         freq_conditions = [
             "freq == 'D'",
-            "freq == 'H'",
-            "freq == 'min' or freq == 'T'",
-            "freq == 'S'",
-            "freq == 'ms' or freq == 'L'",
-            "freq == 'U' or freq == 'us'",
-            "freq == 'N'",
+            "freq == 'h'",
+            "freq == 'min'",
+            "freq == 's'",
+            "freq == 'ms'",
+            "freq == 'us'",
+            "freq == 'ns'",
         ]
         unit_values = [
             24 * 60 * 60 * 1000000 * 1000,

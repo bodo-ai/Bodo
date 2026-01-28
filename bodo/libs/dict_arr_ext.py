@@ -435,7 +435,7 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     indices and data arrays.
     """
     if isinstance(pyval, pd.arrays.ArrowStringArray):
-        pyval = pyval._data
+        pyval = pyval._pa_array.combine_chunks()
         if isinstance(pyval, pa.ChunkedArray):
             pyval = pyval.combine_chunks()
     else:

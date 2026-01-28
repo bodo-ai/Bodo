@@ -982,7 +982,8 @@ def _gen_read_csv_objmode(
     else:
         func_text += "    arrs = []\n"
         func_text += "    for i in range(df.shape[1]):\n"
-        func_text += "      arrs.append(df.iloc[:, i].values)\n"
+        func_text += "      arr = df.iloc[:, i].values\n"
+        func_text += "      arrs.append(arr.astype('datetime64[ns]') if arr.dtype == 'datetime64[us]' else arr)\n"
         # Bodo preserves all of the original types needed at typing in col_typs
         func_text += f"    T = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
     return func_text

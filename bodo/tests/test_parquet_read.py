@@ -377,7 +377,12 @@ def test_pq_arrow_array_random():
 
                 write_file(df)
             bodo.barrier()
-            check_func(test_impl, (fname,), check_dtype=False)
+            check_func(
+                test_impl,
+                (fname,),
+                check_dtype=False,
+                py_output=pd.read_parquet(fname, dtype_backend="pyarrow"),
+            )
 
     for df in [df_work1, df_work2, df_work3, df_work4, df_work5, df_work6, df_work7]:
         process_df(df)
@@ -1715,7 +1720,13 @@ def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        check_func(impl, (fname, fname), check_dtype=False)
+        out = pd.read_parquet(fname, dtype_backend="pyarrow")
+        check_func(
+            impl,
+            (fname, fname),
+            check_dtype=False,
+            py_output=(out.head(4), out.head(5)),
+        )
 
         if not bodo.test_dataframe_library_enabled:
             check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")

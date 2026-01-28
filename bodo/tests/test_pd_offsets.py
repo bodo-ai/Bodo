@@ -137,7 +137,7 @@ def test_week_add_timestamp_arr_with_tz(
         return val1 + val2
 
     arr = pd.date_range(
-        start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+        start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
     ).array
     check_func(test_impl, (week_value, arr))
     check_func(test_impl, (arr, week_value))

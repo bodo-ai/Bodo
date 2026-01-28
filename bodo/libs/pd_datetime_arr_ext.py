@@ -720,7 +720,9 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType + Scalar tz-aware or date
         if isinstance(lhs, DatetimeArrayType) and (
-            isinstance(rhs, PandasTimestampType) or rhs == bodo.types.datetime_date_type
+            isinstance(rhs, PandasTimestampType)
+            or rhs == bodo.types.datetime_date_type
+            or (rhs == bodo.types.datetime64ns)
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -738,7 +740,9 @@ def create_cmp_op_overload_arr(op):
 
         # Scalar tz-aware or date + DatetimeArrayType.
         elif (
-            isinstance(lhs, PandasTimestampType) or lhs == bodo.types.datetime_date_type
+            isinstance(lhs, PandasTimestampType)
+            or lhs == bodo.types.datetime_date_type
+            or (lhs == bodo.types.datetime64ns)
         ) and isinstance(rhs, DatetimeArrayType):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover

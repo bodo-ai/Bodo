@@ -246,7 +246,7 @@ def array_op_min(arr):  # pragma: no cover
 
 @overload(array_op_min)
 def overload_array_op_min(arr):
-    if arr.dtype == bodo.types.timedelta64ns:
+    if arr.dtype in (bodo.types.timedelta64ns, bodo.types.pd_timedelta_type):
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -374,7 +374,7 @@ def array_op_max(arr):  # pragma: no cover
 
 @overload(array_op_max, jit_options={"cache": True})
 def overload_array_op_max(arr):
-    if arr.dtype == bodo.types.timedelta64ns:
+    if arr.dtype in (bodo.types.timedelta64ns, bodo.types.pd_timedelta_type):
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()

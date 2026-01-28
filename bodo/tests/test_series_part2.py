@@ -57,7 +57,8 @@ def test_series_map_dict_arg(S, d):
     def test_impl(S, d):
         return S.map(d)
 
-    check_func(test_impl, (S, d), check_dtype=False)
+    py_output = S.map(d)
+    check_func(test_impl, (S, d), check_dtype=False, py_output=py_output)
 
 
 @pytest.mark.slow
@@ -75,7 +76,12 @@ def test_series_map_none(S, memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: 2 * a if a > 2 else None)
 
-    check_func(test_impl, (S,), check_dtype=False)
+    check_func(
+        test_impl,
+        (S,),
+        check_dtype=False,
+        py_output=S.map(lambda a: 2 * a if a > 2 else None),
+    )
 
 
 @pytest.mark.df_lib

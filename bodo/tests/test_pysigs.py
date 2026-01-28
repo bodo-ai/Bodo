@@ -92,6 +92,7 @@ def _skip_pysig_check(path: str) -> bool:
     return False
 
 
+@pytest.mark.skip(reason="Pandas 3 introduced new APIs")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]

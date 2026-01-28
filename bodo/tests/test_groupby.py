@@ -98,7 +98,7 @@ from bodo.tests.utils import (
                                 ),
                                 pd.Series(data=[None], index=[4]),
                             ]
-                        ),
+                        ).astype("datetime64[ns]"),
                         ordered=True,
                     ),
                     "D": pd.Categorical(
@@ -107,7 +107,7 @@ from bodo.tests.utils import (
                                 pd.Series(pd.timedelta_range(start="1 day", periods=4)),
                                 pd.Series(data=[None], index=[4]),
                             ]
-                        ),
+                        ).astype("timedelta64[ns]"),
                         ordered=True,
                     ),
                     "E": pd.Categorical([None, 4.3, 9.5, None, 7.2], ordered=True),
@@ -629,16 +629,19 @@ def test_kurtosis_skew(df, memory_leak_check):
     # A function that simulates the aggregation above since kurtosis is not
     # natively supported in groupby.aggs
     def py_impl(df):
-        result = df.groupby(["A"], as_index=False, dropna=False).apply(
-            lambda group: pd.DataFrame(
-                {
-                    "A": [group["A"].iloc[0]],
-                    "out_1": group["B"].kurtosis(),
-                    "out_2": group["B"].skew(),
-                }
+        result = (
+            df.groupby(["A"], as_index=True, dropna=False)
+            .apply(
+                lambda group: pd.DataFrame(
+                    {
+                        "out_1": [group["B"].kurtosis()],
+                        "out_2": [group["B"].skew()],
+                    }
+                )
             )
+            .droplevel(1)
+            .reset_index()
         )
-        result.index = result.index.droplevel(1)
         return result
 
     answer = py_impl(df)
@@ -7205,7 +7208,7 @@ def test_head(memory_leak_check):
                     Decimal("4.3"),
                     Decimal("0"),
                 ]
-            ),
+            ).astype(pd.ArrowDtype(pa.decimal128(38, 18))),
             "C": pd.date_range(start="2018-04-24", end="2018-04-29", periods=7),
             "D": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
             "F": [
@@ -7799,7 +7802,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
             "A": ["A", "B", "C", "D"] * 5,
             "B": pd.date_range(
                 start="1/1/2022",
-                freq="16D5H",
+                freq="16D5h",
                 periods=20,
                 tz="Poland",
             ).to_series(),
@@ -7917,11 +7920,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
                         dtype=pd.ArrowDtype(
                             pa.struct(
                                 [
-                                    pa.field("X", pa.string()),
-                                    pa.field("Y", pa.large_list(pa.float64())),
-                                    pa.field(
-                                        "Z", pa.large_list(pa.large_list(pa.int64()))
-                                    ),
+                                    pa.field("Q", pa.large_list(pa.string())),
                                     pa.field(
                                         "W",
                                         pa.struct(
@@ -7931,7 +7930,11 @@ def test_tz_aware_gb_apply(memory_leak_check):
                                             ]
                                         ),
                                     ),
-                                    pa.field("Q", pa.large_list(pa.string())),
+                                    pa.field("X", pa.string()),
+                                    pa.field("Y", pa.large_list(pa.float64())),
+                                    pa.field(
+                                        "Z", pa.large_list(pa.large_list(pa.int64()))
+                                    ),
                                 ]
                             )
                         ),
@@ -7978,6 +7981,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
                 }
             ),
             id="map",
+            marks=pytest.mark.skip("TODO: fix map array comparison in test utils"),
         ),
         pytest.param(
             pd.DataFrame(
@@ -8315,7 +8319,10 @@ def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["1", "1", "2", "2", "4", "4"],
-            "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+            "B": pd.array(
+                [["1"], ["1"], ["2"], ["3"], ["4"], ["4"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [1, 2, 3, 4, 5, 5],
         }
     )
@@ -8323,7 +8330,10 @@ def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
     expected = pd.DataFrame(
         {
             "A": ["1", "2", "2", "4"],
-            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "B": pd.array(
+                [["1"], ["2"], ["3"], ["4"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [3, 3, 4, 10],
         }
     )

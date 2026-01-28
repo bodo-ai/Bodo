@@ -854,7 +854,7 @@ def test_1D_Var_alloc3():
             # parfor init block, with parfor stop variable already transformed
             D = pd.Series(np.empty(n))
             for i in bodo.prange(n):
-                D.values[i] = C.values[i] + 1.0
+                D.iloc[i] = C.values[i] + 1.0
         return D
 
     bodo_func = bodo.jit(distributed_block={"A", "B", "D"})(impl1)

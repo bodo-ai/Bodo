@@ -100,6 +100,71 @@ if pandas_version < (3, 0):
 
     pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
+else:
+    # Bodo change: allow dictionary-encoded string arrays
+    def ArrowStringArray__init__(self, values, *, dtype=None) -> None:
+        import pyarrow.compute as pc
+        from pandas._libs import (
+            missing as libmissing,
+        )
+        from pandas.core.arrays.string_ import (
+            StringDtype,
+        )
+        from pandas.core.arrays.string_arrow import (
+            _check_pyarrow_available,
+            _is_string_view,
+        )
+
+        _check_pyarrow_available()
+        if isinstance(values, (pa.Array, pa.ChunkedArray)) and (
+            pa.types.is_string(values.type) or _is_string_view(values.type)
+            # Bodo change: allow dictionary-encoded string arrays
+            # or (
+            #     pa.types.is_dictionary(values.type)
+            #     and (
+            #         pa.types.is_string(values.type.value_type)
+            #         or pa.types.is_large_string(values.type.value_type)
+            #         or _is_string_view(values.type.value_type)
+            #     )
+            # )
+        ):
+            values = pc.cast(values, pa.large_string())
+
+        super(pd.core.arrays.string_arrow.ArrowStringArray, self).__init__(values)
+
+        if dtype is None:
+            dtype = StringDtype(storage="pyarrow", na_value=libmissing.NA)
+        self._dtype = dtype
+
+        # Bodo change: allow dictionary-encoded string arrays
+        if not (
+            pa.types.is_large_string(self._pa_array.type)
+            or (
+                pa.types.is_dictionary(self._pa_array.type)
+                and (
+                    pa.types.is_string(self._pa_array.type.value_type)
+                    or pa.types.is_large_string(self._pa_array.type.value_type)
+                    or _is_string_view(self._pa_array.type.value_type)
+                )
+            )
+        ):
+            raise ValueError(
+                "ArrowStringArray requires a PyArrow (chunked) array of "
+                "large_string type"
+            )
+
+    if _check_pandas_change:
+        lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "5ca54168210292bd5d20a27b9fd40f28d54f7afb63a8468db2630ca33e84dc2c"
+        ):  # pragma: no cover
+            warnings.warn(
+                "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
+            )
+
+    pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
+
 
 @classmethod
 def _concat_same_type(cls, to_concat):

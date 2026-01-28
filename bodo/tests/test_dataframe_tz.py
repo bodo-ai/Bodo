@@ -38,7 +38,7 @@ def test_pd_concat_df(memory_leak_check):
     S1 = (
         pd.date_range(
             start="1/1/2022",
-            freq="16D5H",
+            freq="16D5h",
             periods=30,
             tz="Poland",
         )
@@ -46,7 +46,7 @@ def test_pd_concat_df(memory_leak_check):
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
         .to_series()
         .reset_index(drop=True)
     )
@@ -84,7 +84,7 @@ def test_df_dtypes(memory_leak_check, representative_tz_or_none):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz_or_none
+                start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz_or_none
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
@@ -105,7 +105,7 @@ def test_df_dtypes_astype(memory_leak_check, representative_tz_or_none):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz_or_none
+                start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz_or_none
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
@@ -126,7 +126,7 @@ def test_pd_concat_dataframe_error(memory_leak_check):
     S1 = (
         pd.date_range(
             start="1/1/2022",
-            freq="16D5H",
+            freq="16D5h",
             periods=30,
             tz="Poland",
         )
@@ -134,12 +134,12 @@ def test_pd_concat_dataframe_error(memory_leak_check):
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
         .to_series()
         .reset_index(drop=True)
     )
     S3 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30)
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30)
         .to_series()
         .reset_index(drop=True)
     )
@@ -188,7 +188,7 @@ def test_tz_aware_unsupported(memory_leak_check):
         bodo.jit(impl)(
             pd.date_range(
                 start="1/1/2022",
-                freq="16D5H",
+                freq="16D5h",
                 periods=30,
                 tz="Poland",
             ).to_series(),

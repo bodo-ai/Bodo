@@ -181,7 +181,7 @@ def test_to_csv_na_rep_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, na_rep="-1")
 
     df = pd.DataFrame({"A": np.arange(10)}, dtype="Int64")
-    df["A"][0] = None
+    df.loc[0, "A"] = None
 
     check_to_csv_string_output(df, impl_none)
     check_CSV_write(impl, df)
@@ -955,6 +955,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (2, 1),
             (2, 2),
             (2, 3),
+            (3, 0),
         ), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
@@ -1413,6 +1414,7 @@ def test_excel1(datapath, memory_leak_check):
         (2, 1),
         (2, 2),
         (2, 3),
+        (3, 0),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)

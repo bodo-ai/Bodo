@@ -3623,7 +3623,7 @@ def test_tz_aware_month_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3785,7 +3785,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
             ).to_series()
         }
     )
@@ -3800,7 +3800,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3819,7 +3819,7 @@ def test_tz_aware_next_day(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Africa/Casablanca"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Africa/Casablanca"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -3844,7 +3844,7 @@ def test_tz_aware_next_day_case(
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Europe/Berlin"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Europe/Berlin"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,
@@ -3870,7 +3870,7 @@ def test_tz_aware_previous_day(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -3895,7 +3895,7 @@ def test_tz_aware_previous_day_case(
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Pacific/Honolulu"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Pacific/Honolulu"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,
@@ -3921,7 +3921,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None] * 2,
@@ -3942,7 +3942,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None] * 2,
@@ -3967,7 +3967,7 @@ def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -3991,7 +3991,7 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -4024,7 +4024,7 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -4053,7 +4053,7 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -4086,7 +4086,7 @@ def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -4118,7 +4118,7 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
                 )
             )
             + [None, None],
@@ -4156,7 +4156,7 @@ def test_tz_aware_subdate_integer(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],
@@ -4182,7 +4182,7 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],
@@ -4211,7 +4211,7 @@ def test_tz_aware_subdate_interval_day(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],
@@ -4238,7 +4238,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],
@@ -4271,7 +4271,7 @@ def test_tz_aware_subdate_interval_month(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],
@@ -4295,7 +4295,7 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022", freq="16D5h", periods=30, tz="US/Pacific"
                 )
             )
             + [None, None],

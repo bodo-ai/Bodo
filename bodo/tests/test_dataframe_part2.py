@@ -644,7 +644,7 @@ def test_df_apply_name_datetime_index(memory_leak_check):
         return df.apply(lambda x: x.name.value, axis=1)
 
     df = pd.DataFrame(
-        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="H")
+        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="h")
     )
 
     check_func(test_impl, (df,))
@@ -677,7 +677,7 @@ def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
     """
 
     def impl(df):
-        return df.apply(lambda x: (x[0], x[2], x[1]), axis=1)
+        return df.apply(lambda x: (x.iloc[0], x.iloc[2], x.iloc[1]), axis=1)
 
     df = pd.DataFrame(
         {"A": np.arange(10), "C": np.arange(10, 20), "B": np.arange(20, 30)}
@@ -1765,7 +1765,7 @@ def test_column_list_getitem1(memory_leak_check):
         {
             "A": [1.1, 2.3, np.nan, 1.7, 3.6] * 2,
             "A2": [3, 1, 2, 3, 5] * 2,
-            "B": [True, False, None, False, True] * 2,
+            "B": pd.array([True, False, None, False, True] * 2, dtype="boolean"),
             "C": ["AA", "C", None, "ABC", ""] * 2,
         },
         index=[3, 1, 2, 4, 0] * 2,

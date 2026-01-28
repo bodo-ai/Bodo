@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -1046,7 +1047,9 @@ def permute_df_and_answer(df, answer):
                             [13.0] * 15, [-1], list(range(12))
                         ),
                         "AGG_OUTPUT_3": pd.Series([3.0] * 12 + [6.5] * 3),
-                        "AGG_OUTPUT_4": pd.Series([74.0] * 12 + [None] * 3),
+                        "AGG_OUTPUT_4": pd.array(
+                            [74.0] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.float64())
+                        ),
                     }
                 ),
             ),
@@ -1222,12 +1225,19 @@ def permute_df_and_answer(df, answer):
                             [None] * 12 + [-6] * 3, dtype=pd.Int32Dtype()
                         ),
                         "AGG_OUTPUT_1": pd.Series([True] * 15, dtype=np.bool_),
-                        "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
+                        "AGG_OUTPUT_2": pd.array(
+                            [Decimal("16")] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+                        ),
                         "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
                         "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [bodo.types.Time(microsecond=1)] * 12
-                        + [None] * 3,
-                        "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
+                        "AGG_OUTPUT_5": pd.array(
+                            [bodo.types.Time(microsecond=1)] * 12 + [None] * 3,
+                            pd.ArrowDtype(pa.time64("ns")),
+                        ),
+                        "AGG_OUTPUT_6": pd.array(
+                            ["AB"] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.string())
+                        ),
                     }
                 ),
             ),
@@ -1309,7 +1319,8 @@ def permute_df_and_answer(df, answer):
                             [
                                 None if i % 7 == 5 else Decimal(2 ** (4 - i % 8))
                                 for i in range(15)
-                            ]
+                            ],
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
                         ),
                         "AGG_OUTPUT_3": [None] * 2
                         + list("AAAALPHATH")
@@ -1341,7 +1352,10 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_1": pd.Series(
                             [5.5] * 12 + [None] * 3, dtype=np.float32
                         ),
-                        "AGG_OUTPUT_2": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                        "AGG_OUTPUT_2": pd.array(
+                            [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.date32()),
+                        ),
                         "AGG_OUTPUT_3": ["LMNO"] * 12 + ["OP"] * 3,
                     }
                 ),
@@ -1374,15 +1388,26 @@ def permute_df_and_answer(df, answer):
                             ],
                             dtype=pd.BooleanDtype(),
                         ),
-                        "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                        "AGG_OUTPUT_1": pd.array(
+                            [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+                        ),
                         # This answer is identical to the input column
-                        "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else bodo.types.Time(microsecond=10**i)
-                            for i in range(15)
-                        ],
-                        "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
-                        + ["LMNO"] * 3
-                        + [None] * 6,
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                None
+                                if i % 8 == 4
+                                else bodo.types.Time(microsecond=10**i)
+                                for i in range(15)
+                            ],
+                            dtype=pd.ArrowDtype(pa.time64("ns")),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
+                            + ["LMNO"] * 3
+                            + [None] * 6,
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
                     }
                 ),
             ),
@@ -1466,20 +1491,23 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            0.011057,
-                            0.019656,
-                            0.030713,
-                            0.044226,
-                            0.060197,
-                            0.078624,
-                            0.099509,
-                            0.122850,
-                            0.148649,
-                            0.176904,
-                            0.207617,
-                        ]
-                        + [None] * 4,
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                0.011057,
+                                0.019656,
+                                0.030713,
+                                0.044226,
+                                0.060197,
+                                0.078624,
+                                0.099509,
+                                0.122850,
+                                0.148649,
+                                0.176904,
+                                0.207617,
+                            ]
+                            + [None] * 4,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),
