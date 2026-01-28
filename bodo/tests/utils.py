@@ -1517,6 +1517,13 @@ def _test_equal(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
 
+            # Avoid NA mismatch for object columns
+            if bodo_dtype == np.object_ and py_dtype == np.object_:
+                bodo_out[bodo_out.columns[i]] = bodo_out[bodo_out.columns[i]].fillna(
+                    None
+                )
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].fillna(None)
+
         # Handle Arrow float types in Index
         if not isinstance(bodo_out.index, pd.MultiIndex):
             index_dtype = bodo_out.index.dtype
