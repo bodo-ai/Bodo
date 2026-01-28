@@ -347,7 +347,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                                             std::to_string(i));
             }
         }
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
@@ -385,7 +385,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
             Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
-        out_schema->metadata = std::make_shared<TableMetadata>(
+        out_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
 

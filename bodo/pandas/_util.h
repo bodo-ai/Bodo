@@ -8,6 +8,7 @@
 #include <variant>
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_join.h"
+#include "../libs/streaming/cuda_join.h"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/planner/column_binding.hpp"
@@ -333,6 +334,11 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
+#ifdef USE_CUDF
+using join_state_t = std::variant<JoinState *, CudaHashJoin *>;
+#else
+using join_state_t = std::variant<JoinState *>;
+#endif
 /**
  * @brief Collect min/max statistics from join build tables for join filter
  * columns.
@@ -345,12 +351,12 @@ class JoinFilterColStats {
     // Helper struct to collect min/max for a specific join filter column
     struct col_stats_collector {
         int64_t build_key_col;
-        JoinState *join_state;
+        join_state_t join_state;
         std::optional<col_min_max_t> collect_min_max() const;
     };
 
     // Map of join IDs to their corresponding JoinState pointers
-    const std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map;
+    const std::shared_ptr<std::unordered_map<int, join_state_t>> join_state_map;
 
     // Runtime join filter program state to know what columns to collect stats
     // for and the associated join id
@@ -365,7 +371,7 @@ class JoinFilterColStats {
 
    public:
     JoinFilterColStats(
-        std::shared_ptr<std::unordered_map<int, JoinState *>> join_state_map,
+        std::shared_ptr<std::unordered_map<int, join_state_t>> join_state_map,
         JoinFilterProgramState rtjf_state_map)
         : join_state_map(std::move(join_state_map)),
           join_filter_program_state(std::move(rtjf_state_map)) {}
@@ -383,3 +389,54 @@ class JoinFilterColStats {
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
 };
+
+#ifdef USE_CUDF
+
+#include <cstdint>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/types.hpp>           // cudf::data_type, cudf::type_id
+#include <duckdb/common/types.hpp>  // duckdb::LogicalType, duckdb::LogicalTypeId
+
+#include <cudf/column/column.hpp>
+#include <cudf/table/table.hpp>
+
+#include <arrow/api.h>
+
+/**
+ * @brief Map DuckDB LogicalType to cudf::data_type.
+ *
+ * @param dtype the DuckDB type
+ * @return cudf::data_type the corresponding cudf type
+ */
+cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype);
+
+/**
+ * @brief Create invalid cudf scalar from a valid one.
+ *
+ * @param src the valid cudf scalar input
+ * @return cudf::scalar the output cudf scalar with valid bit off
+ */
+std::unique_ptr<cudf::scalar> make_invalid_like(
+    cudf::scalar const &src,
+    rmm::cuda_stream_view stream = cudf::get_default_stream(),
+    rmm::device_async_resource_ref mr =
+        cudf::get_current_device_resource_ref());
+
+/**
+ * @brief Convert arrow scalar to cudf scalar.
+ *
+ * @param s the input arrow scalar
+ * @return cudf::scalar the output cudf scalar
+ */
+std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
+    const std::shared_ptr<arrow::Scalar> &s,
+    rmm::cuda_stream_view stream = cudf::get_default_stream(),
+    rmm::device_async_resource_ref mr =
+        cudf::get_current_device_resource_ref());
+
+std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
+    const std::shared_ptr<arrow::Schema> &schema);
+
+cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t);
+
+#endif

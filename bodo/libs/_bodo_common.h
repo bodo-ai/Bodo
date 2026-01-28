@@ -562,6 +562,7 @@ inline std::string GetArrType_as_string(int8_t arr_type) {
         static_cast<bodo_array_type::arr_type_enum>(arr_type));
 }
 
+namespace bodo {
 /**
  * @brief Table metadata similar to Arrow's:
  * https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/cpp/src/arrow/util/key_value_metadata.h#L36
@@ -572,9 +573,15 @@ inline std::string GetArrType_as_string(int8_t arr_type) {
 struct TableMetadata {
     const std::vector<std::string> keys;
     const std::vector<std::string> values;
-};
 
-namespace bodo {
+    /**
+     * @brief Construct a new Table Metadata object by appending another
+     * TableMetadata to this one.
+     * @param other Other TableMetadata to append
+     * @return TableMetadata New TableMetadata object
+     */
+    TableMetadata append(TableMetadata const& other) const;
+};
 
 /**
  * @brief Wrapper class for uniquely identifying the type of a Bodo Array.
@@ -839,6 +846,9 @@ struct Schema {
     /// @brief Convert from an Arrow schema to a Bodo schema
     static std::shared_ptr<Schema> FromArrowSchema(
         std::shared_ptr<::arrow::Schema> schema);
+
+    // @brief Deep copy of the Schema
+    std::unique_ptr<Schema> copy() const;
 };
 
 }  // namespace bodo
@@ -1809,7 +1819,7 @@ struct mpi_str_comm_info {
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
     std::vector<std::string> column_names;
-    std::shared_ptr<TableMetadata> metadata;
+    std::shared_ptr<bodo::TableMetadata> metadata;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
@@ -1827,11 +1837,11 @@ struct table_info {
         : columns(_columns), _nrows(nrows) {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
                         std::vector<std::string> column_names,
-                        std::shared_ptr<TableMetadata> metadata)
+                        std::shared_ptr<bodo::TableMetadata> metadata)
         : columns(_columns), column_names(column_names), metadata(metadata) {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
                         uint64_t nrows, std::vector<std::string> column_names,
-                        std::shared_ptr<TableMetadata> metadata)
+                        std::shared_ptr<bodo::TableMetadata> metadata)
         : columns(_columns),
           column_names(column_names),
           metadata(metadata),

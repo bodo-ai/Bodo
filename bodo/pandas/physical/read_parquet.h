@@ -59,9 +59,9 @@ class PhysicalReadParquet : public PhysicalSource {
         // of dataframe later)
         std::shared_ptr<arrow::Schema> arrow_schema =
             unwrap_schema(pyarrow_schema);
-        this->out_metadata =
-            std::make_shared<TableMetadata>(arrow_schema->metadata()->keys(),
-                                            arrow_schema->metadata()->values());
+        this->out_metadata = std::make_shared<bodo::TableMetadata>(
+            arrow_schema->metadata()->keys(),
+            arrow_schema->metadata()->values());
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
 
@@ -167,7 +167,7 @@ class PhysicalReadParquet : public PhysicalSource {
 
     // Column names and metadata (Pandas Index info) used for dataframe
     // construction
-    std::shared_ptr<TableMetadata> out_metadata;
+    std::shared_ptr<bodo::TableMetadata> out_metadata;
     std::vector<std::string> out_column_names;
 
    private:

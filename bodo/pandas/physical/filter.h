@@ -49,7 +49,7 @@ class PhysicalFilter : public PhysicalProcessBatch {
                 "Filter output schema has different number of columns than "
                 "LogicalFilter");
         }
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
