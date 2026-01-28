@@ -186,7 +186,7 @@ def check_table_comment(
     df = spark.sql(f"DESCRIBE TABLE hadoop_prod.{db_schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if column_comments is None or i >= 2:
-            assert df.iloc[i]["comment"] is None, (
+            assert pd.isna(df.iloc[i]["comment"]), (
                 f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
             )
         else:
