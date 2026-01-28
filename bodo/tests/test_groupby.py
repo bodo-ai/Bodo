@@ -7981,6 +7981,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
                 }
             ),
             id="map",
+            marks=pytest.mark.skip("TODO: fix map array comparison in test utils"),
         ),
         pytest.param(
             pd.DataFrame(
