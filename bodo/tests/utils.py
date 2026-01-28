@@ -1169,7 +1169,7 @@ def sort_series_values_index(S):
     # Replace PyArrow strings with regular strings since Arrow doesn't support sort for
     # dict(large_string)
     if S1.dtype == pd.StringDtype("pyarrow"):
-        S1 = S1.astype("string")
+        S1 = S1.astype(object)
     return S1.sort_values(kind="mergesort")
 
 
