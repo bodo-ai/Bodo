@@ -1496,9 +1496,10 @@ def _test_equal(
                 or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_null(bodo_dtype.pyarrow_dtype)
             ):
-                py_out[py_out.columns[i]] = pd.array(
-                    py_out[py_out.columns[i]], dtype=bodo_dtype
-                )
+                in_arr = py_out[py_out.columns[i]]
+                # Avoid np.nan in object arrays which causes PyArrow errors
+                in_arr = in_arr.fillna(None) if in_arr.dtype == np.object_ else in_arr
+                py_out[py_out.columns[i]] = pd.array(in_arr, dtype=bodo_dtype)
 
             # Convert object boolean arrays to pyarrow dtype (used in BodoSQL expected output)
             if isinstance(bodo_dtype, pd.ArrowDtype) and (
