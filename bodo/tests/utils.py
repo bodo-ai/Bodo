@@ -1151,7 +1151,7 @@ def _test_equal_guard(
 # We need to sort the index and values for effective comparison
 def sort_series_values_index(S):
     if S.index.dtype == pd.StringDtype("pyarrow"):
-        S.index = S.index.astype("string")
+        S.index = S.index.astype(object)
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(S.index.dtype, pd.ArrowDtype):
