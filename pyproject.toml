@@ -7,7 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24",
     "pyarrow>=22.0,<22.1",
-    "mpi4py>=4.0,<4.1",
+    "mpi4py>=4.1",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -47,6 +47,9 @@ dependencies = [
     "requests",
     "cloudpickle>=3.0",
     "psutil",
+    "mpi4py>=4.1",
+    # Linux uses MPICH, which is vendored as part of the bodo package
+    "openmpi; sys_platform == 'darwin'",
     "impi-rt; sys_platform == 'win32'",
 ]
 
@@ -289,7 +292,9 @@ done
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
 set -exo pipefail
-BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
+
+# OpenMPI requires mpiexec on macOS CI.
+BODO_NUM_WORKERS=2 mpiexec -n 1 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
 LIB_WHITELIST="^(libc\\+\\+|libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkrb5support|libkrb5|libnghttp2|libssh2|libssl|libsz|libzstd|libz|libaws-.*)(\\.[0-9]+)*\\.dylib$"

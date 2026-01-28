@@ -180,7 +180,7 @@ boost-cpp = "*"
 aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
-hdf5 = { version = "*", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 [feature.rcpp.target.linux.dependencies]
 hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
@@ -303,14 +303,12 @@ fastapi = "*"
 httpie = "*"
 
 # MPI Handling
-# Restricted to match Intel MPI. Upgrade with IMPI.
-# Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "*" }
+openmpi = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "2021.14.1.*"
+impi-devel = "*"
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]

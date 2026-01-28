@@ -9,6 +9,7 @@
 
 #include <mpi.h>
 
+#ifndef OPEN_MPI
 #define NODISCARD(fn) [[nodiscard]] decltype(fn) fn
 
 NODISCARD(MPI_Abort);
@@ -589,3 +590,4 @@ NODISCARD(MPI_Win_unlock_all);
 NODISCARD(MPI_Win_wait);
 NODISCARD(MPI_Wtick);
 NODISCARD(MPI_Wtime);
+#endif

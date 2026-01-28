@@ -94,6 +94,7 @@ cat <<EOF
  */
 
 #include <mpi.h>
+#ifndef OPEN_MPI
 #define NODISCARD(fn) [[nodiscard]] decltype(fn) fn
 
 EOF
@@ -101,3 +102,5 @@ EOF
 for mpi_method in $(filtered_mpi_methods); do
   echo "NODISCARD($mpi_method);"
 done
+
+echo "#endif"
