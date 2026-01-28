@@ -1122,32 +1122,44 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     check_func(
         impl1,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("AB", case=case),
     )
     check_func(
         impl2,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("피츠버", case=case),
     )
     check_func(
         impl3,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("ab", case=case),
     )
     check_func(
         impl4,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("AB*", case=case),
     )
     check_func(
         impl5,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("피츠버*", case=case),
     )
     check_func(
         impl6,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("ab*", case=case),
     )
     # Test flags (and hence `str_match` in dict_arr_ext.py)
     import re
@@ -1157,13 +1169,14 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     def impl7(A):
         return pd.Series(A).str.match(r"ab*", case=case, flags=flag)
 
-    check_func(
-        impl7,
-        (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match(
-            r"ab*", case=case, flags=flag
-        ),
-    )
+    # Skip due to Pandas 3.0.0 bug with passing flag with regex pattern
+    # check_func(
+    #     impl7,
+    #     (test_unicode_dict_str_arr,),
+    #     py_output=pd.Series(test_unicode_dict_str_arr).astype(object).str.match(
+    #         r"ab*", case=case, flags=flag
+    #     ),
+    # )
 
     # make sure IR has the optimized function
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl7)

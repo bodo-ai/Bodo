@@ -1383,7 +1383,7 @@ def _test_equal(
                     name=py_out.name,
                 )
 
-            # Convert to pyarrow string/binary dtype
+            # Convert to pyarrow string/binary/date/null dtype
             if (
                 pa.types.is_string(pa_type)
                 or pa.types.is_large_string(pa_type)
@@ -1397,6 +1397,10 @@ def _test_equal(
             # Pandas boolean output may have False instead of NA
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
                 bodo_out = bodo_out.fillna(False)
+
+            # Handle NA/nan mismatch
+            if pa.types.is_boolean(pa_type) and py_out.dtype == np.object_:
+                py_out = py_out.astype(bodo_out.dtype)
 
         if sort_output:
             py_out = sort_series_values_index(py_out)
