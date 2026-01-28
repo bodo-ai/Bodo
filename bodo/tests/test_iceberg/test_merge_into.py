@@ -3,9 +3,9 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,

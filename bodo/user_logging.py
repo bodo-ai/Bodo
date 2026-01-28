@@ -111,7 +111,7 @@ def log_message(header, msg, *args, **kws):
     """
     # NOTE: avoiding bodo.get_rank() which uses the compiler to allow using the logger
     # inside the compiler
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     # Avoid putting a mutable value as a default argument.
     if MPI.COMM_WORLD.Get_rank() == 0:

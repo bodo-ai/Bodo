@@ -195,7 +195,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     """
     A helper function used to test json write correctness
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

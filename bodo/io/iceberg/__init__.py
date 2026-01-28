@@ -14,11 +14,11 @@ import typing as pt
 import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as ds
+from mpi4py import MPI
 
 import bodo
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
-from bodo.mpi4py import MPI
 
 from .common import (
     ICEBERG_FIELD_ID_MD_KEY,

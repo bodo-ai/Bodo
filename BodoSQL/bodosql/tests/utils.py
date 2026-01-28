@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pyspark
 import sqlglot
+from mpi4py import MPI
 from pyspark.sql.types import (
     ByteType,
     DayTimeIntervalType,
@@ -32,7 +33,6 @@ from pyspark.sql.types import (
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
