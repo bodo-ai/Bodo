@@ -5,6 +5,7 @@
 #include <thrust/transform.h>
 #include <cassert>
 #include <cudf/column/column_factories.hpp>
+#include <cudf/contiguous_split.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/hashing.hpp>
 #include <cudf/partitioning.hpp>
@@ -13,7 +14,6 @@
 #include <rmm/device_uvector.hpp>
 #include "../libs/_distributed.h"
 #include "_utils.h"
-#include "vendored/simd-block-fixed-fpp.h"
 
 GpuShuffleManager::GpuShuffleManager() {
     // Create a subcommunicator with only ranks that have GPUs assigned
@@ -64,7 +64,29 @@ void GpuShuffleManager::initialize_nccl() {
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices) {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return {};
+    }
+    // Hash partition the table
+    auto [partitioned_table, partition_sizes] =
+        hash_partition_table(table, partition_indices, n_ranks);
+    // Pack the tables for sending
+    std::vector<cudf::packed_table> packed_tables = cudf::contiguous_split(
+        partitioned_table->view(), partition_sizes, stream);
+    for (size_t i = 0; i < packed_tables.size(); ++i) {
+        shuffle_packed_table(nccl_comm, stream, packed_tables[i], i);
+    }
+    // Receive the tables from all ranks
+    for (size_t i = 0; i < n_ranks; ++i) {
+        packed_tables[i] = receive_packed_table(nccl_comm, stream, i);
+    }
     std::vector<std::unique_ptr<cudf::table>> received_tables(n_ranks);
+    // Unpack the received tables
+    for (size_t i = 0; i < n_ranks; ++i) {
+        received_tables[i] = std::make_unique<cudf::table>(
+            cudf::unpack_table(packed_tables[i], stream));
+    }
+
     return received_tables;
 }
 
@@ -123,6 +145,14 @@ MPI_Comm get_gpu_mpi_comm() {
         return MPI_COMM_NULL;
     }
     return gpu_comm;
+}
+
+void shuffle_packed_table(ncclComm_t comm, cudaStream_t stream,
+                          cudf::packed_table& packed_table, int dest_rank) {}
+
+cudf::packed_table receive_packed_table(ncclComm_t comm, cudaStream_t stream,
+                                        int src_rank) {
+    return cudf::packed_table{};
 }
 
 // #endif // USE_CUDF
