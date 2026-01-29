@@ -3637,7 +3637,7 @@ def test_tz_aware_month_case(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pytest.param(("US/Pacific", "1/1/2023", "H"), id="pacific-by_hour"),
+        pytest.param(("US/Pacific", "1/1/2023", "h"), id="pacific-by_hour"),
         pytest.param(("GMT", "1/1/2021", "49MIN"), id="gmt-by_49_minutes"),
         pytest.param(
             ("Australia/Sydney", "1/1/2027", "W"),
@@ -3703,12 +3703,11 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
         }
     )
     if case:
-        py_output["w"][~large_tz_df["B"]] = None
-        py_output["q"][~large_tz_df["B"]] = None
-        py_output["d"][~large_tz_df["B"]] = None
-        py_output["m"][~large_tz_df["B"]] = None
-        py_output["m2"][~large_tz_df["B"]] = None
-
+        py_output["w"] = py_output["w"].where(large_tz_df["B"], None)
+        py_output["q"] = py_output["q"].where(large_tz_df["B"], None)
+        py_output["d"] = py_output["d"].where(large_tz_df["B"], None)
+        py_output["m"] = py_output["m"].where(large_tz_df["B"], None)
+        py_output["m2"] = py_output["m2"].where(large_tz_df["B"], None)
     check_query(
         query,
         ctx,
