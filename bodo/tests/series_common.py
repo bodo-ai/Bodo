@@ -166,7 +166,9 @@ series_val_params = [
                 pd.Series(pd.date_range(start="1/1/2018", end="1/10/2018", periods=9)),
                 pd.Series([None]),
             ]
-        ).astype("category"),
+        )
+        .astype("datetime64[ns]")
+        .astype("category"),
         id="categorical_timestamp",
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
@@ -179,7 +181,9 @@ series_val_params = [
                 pd.Series(pd.timedelta_range(start="1 day", periods=9)),
                 pd.Series([None]),
             ]
-        ).astype(pd.CategoricalDtype(ordered=True)),
+        )
+        .astype("timedelta64[ns]")
+        .astype(pd.CategoricalDtype(ordered=True)),
         id="categorical_timestamp_ordered",
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
