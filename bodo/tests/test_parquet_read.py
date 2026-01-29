@@ -165,10 +165,10 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         df = pd.DataFrame(
             {
                 "A": pd.date_range(
-                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+                    "2018-04-09", periods=50, freq="2D1h", tz="America/Los_Angeles"
                 ),
-                "B": pd.date_range("2018-04-09", periods=50, freq="2D1H"),
-                "C": pd.date_range("2018-04-09", periods=50, freq="2D1H", tz="Poland"),
+                "B": pd.date_range("2018-04-09", periods=50, freq="2D1h"),
+                "C": pd.date_range("2018-04-09", periods=50, freq="2D1h", tz="Poland"),
                 "D": pd.date_range(
                     "2018-04-09", periods=50, freq="5001ns"
                 ),  # Force timestamp64 as NS
