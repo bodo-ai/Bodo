@@ -955,7 +955,7 @@ def test_to_pq_nulls_in_dict(memory_leak_check):
                         for col in part_cols:
                             df[col] = df[col].astype(py_output[col].dtype)
                             if col == "S":
-                                df[col][df[col] == "null"] = None
+                                df[col] = df[col].where(df[col] != "null", None)
                         # Need to re-arrange the column order since partition columns are put at the end after reading
                         df = df[list(py_output.columns)]
                     passed = _test_equal_guard(
