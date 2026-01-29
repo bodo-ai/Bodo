@@ -386,6 +386,14 @@ def create_overload_arith_op(op):
                 lhs, rhs
             )
 
+        if op == operator.sub and (
+            isinstance(lhs, bodo.types.DatetimeArrayType)
+            or isinstance(rhs, bodo.types.DatetimeArrayType)
+        ):
+            return bodo.libs.pd_datetime_arr_ext.overload_sub_operator_datetime_arr(
+                lhs, rhs
+            )
+
         # Start of Misc Operations
 
         # add operator
