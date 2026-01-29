@@ -133,7 +133,7 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["TABLE1"].B] = None
+        expected_output[1] = expected_output[1].where(~ctx["TABLE1"].B, None)
     check_query(
         query,
         ctx,
@@ -352,7 +352,7 @@ def test_get_path_on_incorrect_variant_types(
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["TABLE1"].B] = None
+        expected_output[1] = expected_output[1].where(~ctx["TABLE1"].B, None)
     check_query(
         query,
         ctx,
