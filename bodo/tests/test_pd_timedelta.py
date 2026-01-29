@@ -381,8 +381,17 @@ def test_pd_timedelta_floordiv_int(timedelta_value, memory_leak_check):
     def test_impl(a, b):
         return a // b
 
-    check_func(test_impl, (timedelta_value, 3))
-    check_func(test_impl, (timedelta_value, -4))
+    # NOTE: pandas 3 floor division loses accuracy for some cases looks like
+    check_func(
+        test_impl,
+        (timedelta_value, 3),
+        py_output=pd.Timedelta(timedelta_value.value // 3),
+    )
+    check_func(
+        test_impl,
+        (timedelta_value, -4),
+        py_output=pd.Timedelta(timedelta_value.value // -4),
+    )
 
 
 @pytest.mark.slow
@@ -393,8 +402,16 @@ def test_pd_timedelta_floordiv_int_literal(timedelta_value, memory_leak_check):
     def test_impl2(val):
         return val // -4
 
-    check_func(test_impl1, (timedelta_value,))
-    check_func(test_impl2, (timedelta_value,))
+    check_func(
+        test_impl1,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value // 3),
+    )
+    check_func(
+        test_impl2,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value // -4),
+    )
 
 
 def test_pd_timedelta_floordiv_tds(memory_leak_check):
