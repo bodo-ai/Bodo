@@ -888,9 +888,7 @@ def test_tz_to_parquet(memory_leak_check):
     passed = 1
     if bodo.get_rank() == 0:
         try:
-            result = cast_dt64_to_ns(
-                pd.read_parquet(output_filename, dtype_backend="pyarrow")
-            )
+            result = pd.read_parquet(output_filename, dtype_backend="pyarrow")
             passed = _test_equal_guard(result, py_output)
             # Check the metadata. We want to verify that columns A and C
             # have the correct pandas type, numpy types, and metadata because
@@ -913,9 +911,9 @@ def test_tz_to_parquet(memory_leak_check):
                     f"incorrect metadata field for column {col_name}"
                 )
                 fields = list(metadata_field.items())
-                assert fields == [("timezone", result.dtypes[col_index].tz.zone)], (
-                    f"incorrect metadata field for column {col_name}"
-                )
+                assert fields == [
+                    ("timezone", result.dtypes.iloc[col_index].pyarrow_dtype.tz)
+                ], f"incorrect metadata field for column {col_name}"
         except Exception:
             passed = 0
         finally:
