@@ -1753,7 +1753,7 @@ def test_object_insert_case(df, answer, memory_leak_check):
     query = "SELECT CASE WHEN B THEN NULL ELSE OBJECT_INSERT(D, 'b', V) END FROM TABLE1"
     ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({0: answer})
-    expected_output[0][ctx["TABLE1"].B] = None
+    expected_output[0] = expected_output[0].where(~ctx["TABLE1"].B, None)
     check_query(
         query,
         ctx,
