@@ -68,7 +68,7 @@ def test_limit_tz_aware(representative_tz, memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                "2022/1/1", periods=30, freq="6D5H", tz=representative_tz
+                "2022/1/1", periods=30, freq="6D5h", tz=representative_tz
             ),
             "B": pd.date_range("2022/1/1", periods=30, freq="11D", tz="UTC"),
             "C": pd.date_range(
