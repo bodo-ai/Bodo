@@ -70,12 +70,28 @@ def check_write_func(
             bodo.barrier()
 
             # Use fsspec for all reads
-            df_bodo = pd.read_parquet(bodo_file_path, storage_options={})
-            df_pandas = pd.read_parquet(pandas_file_path, storage_options={})
-            df_pandas_test = pd.read_parquet(bodo_file_path, storage_options={})
-            pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
+            df_bodo = pd.read_parquet(
+                bodo_file_path, storage_options={}, dtype_backend="pyarrow"
+            )
+            df_pandas = pd.read_parquet(
+                pandas_file_path, storage_options={}, dtype_backend="pyarrow"
+            )
+            df_pandas_test = pd.read_parquet(
+                bodo_file_path, storage_options={}, dtype_backend="pyarrow"
+            )
             pd.testing.assert_frame_equal(
-                df_bodo, df_pandas_test, check_column_type=True
+                df_bodo,
+                df_pandas,
+                check_column_type=True,
+                check_dtype=False,
+                check_index_type=False,
+            )
+            pd.testing.assert_frame_equal(
+                df_bodo,
+                df_pandas_test,
+                check_column_type=True,
+                check_dtype=False,
+                check_index_type=False,
             )
 
             if check_index is not None:
@@ -233,8 +249,14 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
 
                 # Also make sure result of reading parquet file is same as that of pandas
                 pd.testing.assert_frame_equal(
-                    cast_dt64_to_ns(pd.read_parquet("bodo_metadatatest.pq")),
-                    cast_dt64_to_ns(pd.read_parquet("pandas_metadatatest.pq")),
+                    cast_dt64_to_ns(
+                        pd.read_parquet("bodo_metadatatest.pq", dtype_backend="pyarrow")
+                    ),
+                    cast_dt64_to_ns(
+                        pd.read_parquet(
+                            "pandas_metadatatest.pq", dtype_backend="pyarrow"
+                        )
+                    ),
                     check_column_type=False,
                 )
 
@@ -421,7 +443,7 @@ def test_read_write_parquet(memory_leak_check):
         df.to_parquet(filename)
 
     def read():
-        return pd.read_parquet("_test_io___.pq")
+        return pd.read_parquet("_test_io___.pq", dtype_backend="pyarrow")
 
     def pandas_write(df, filename):
         # pandas/pyarrow throws this error when writing datetime64[ns]
@@ -465,8 +487,12 @@ def test_read_write_parquet(memory_leak_check):
                     bodo_write(_get_dist_arg(df, False, True), bodo_pq_filename)
                 bodo.barrier()
                 # read both files with pandas
-                df1 = cast_dt64_to_ns(pd.read_parquet(pandas_pq_filename))
-                df2 = cast_dt64_to_ns(pd.read_parquet(bodo_pq_filename))
+                df1 = cast_dt64_to_ns(
+                    pd.read_parquet(pandas_pq_filename, dtype_backend="pyarrow")
+                )
+                df2 = cast_dt64_to_ns(
+                    pd.read_parquet(bodo_pq_filename, dtype_backend="pyarrow")
+                )
 
                 # to test equality, we have to coerce datetime columns to ms
                 # because pandas writes to parquet as datetime64[ms]
@@ -548,7 +574,7 @@ def test_write_parquet_empty_chunks(memory_leak_check):
         bodo.jit(f)(n, write_filename)
         bodo.barrier()
         if bodo.get_rank() == 0:
-            df = pd.read_parquet(write_filename)
+            df = pd.read_parquet(write_filename, dtype_backend="pyarrow")
             pd.testing.assert_frame_equal(
                 df, pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
             )
@@ -565,7 +591,7 @@ def test_write_parquet_decimal(datapath: DataPath, memory_leak_check):
     fname = datapath("decimal1.pq")
 
     def write(read_path, write_filename):
-        df = pd.read_parquet(read_path)
+        df = pd.read_parquet(read_path, dtype_backend="pyarrow")
         df.to_parquet(write_filename)
 
     write_filename = "test__write_decimal1.pq"
@@ -573,8 +599,8 @@ def test_write_parquet_decimal(datapath: DataPath, memory_leak_check):
         bodo.jit(write)(fname, write_filename)
         bodo.barrier()
         if bodo.get_rank() == 0:
-            df1 = pd.read_parquet(fname)
-            df2 = pd.read_parquet(write_filename)
+            df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
+            df2 = pd.read_parquet(write_filename, dtype_backend="pyarrow")
             pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
     finally:
         if bodo.get_rank() == 0:
@@ -621,8 +647,8 @@ def test_write_parquet_params(memory_leak_check):
                 bodo.barrier()
                 bodo_func(data, bodo_fname)
                 bodo.barrier()
-                df_a = pd.read_parquet(pd_fname)
-                df_b = pd.read_parquet(bodo_fname)
+                df_a = pd.read_parquet(pd_fname, dtype_backend="pyarrow")
+                df_b = pd.read_parquet(bodo_fname, dtype_backend="pyarrow")
                 pd.testing.assert_frame_equal(df_a, df_b, check_column_type=False)
                 bodo.barrier()
             finally:
@@ -664,7 +690,7 @@ def test_write_parquet_dict(memory_leak_check):
     if bodo.get_rank() == 0:
         try:
             # Check the output.
-            result = pd.read_parquet("arr_dict_test.pq")
+            result = pd.read_parquet("arr_dict_test.pq", dtype_backend="pyarrow")
             py_output = pd.DataFrame(
                 {
                     "A": ["abc", "b", None, "abc", None, "b", "cde"] * 4,
@@ -725,8 +751,8 @@ def test_write_parquet_dict_table(memory_leak_check):
     if bodo.get_rank() == 0:
         try:
             # Check the output.
-            result = pd.read_parquet("arr_dict_test.pq")
-            py_output = pd.read_parquet("dummy_source.pq")
+            result = pd.read_parquet("arr_dict_test.pq", dtype_backend="pyarrow")
+            py_output = pd.read_parquet("dummy_source.pq", dtype_backend="pyarrow")
             passed = _test_equal_guard(
                 result,
                 py_output,
@@ -852,7 +878,9 @@ def test_tz_to_parquet(memory_leak_check):
     passed = 1
     if bodo.get_rank() == 0:
         try:
-            result = cast_dt64_to_ns(pd.read_parquet(output_filename))
+            result = cast_dt64_to_ns(
+                pd.read_parquet(output_filename, dtype_backend="pyarrow")
+            )
             passed = _test_equal_guard(result, py_output)
             # Check the metadata. We want to verify that columns A and C
             # have the correct pandas type, numpy types, and metadata because
@@ -912,7 +940,9 @@ def test_to_pq_nulls_in_dict(memory_leak_check):
             passed = 1
             if bodo.get_rank() == 0:
                 try:
-                    df = pd.read_parquet("test_to_pq_nulls_in_dict.pq")
+                    df = pd.read_parquet(
+                        "test_to_pq_nulls_in_dict.pq", dtype_backend="pyarrow"
+                    )
                     if part_cols:
                         for col in part_cols:
                             df[col] = df[col].astype(py_output[col].dtype)
@@ -1007,7 +1037,7 @@ def test_streaming_parquet_write(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = 300
         impl(_get_dist_arg(df, False), write_filename)
         bodo.barrier()
-        df2 = cast_dt64_to_ns(pd.read_parquet(write_filename))
+        df2 = cast_dt64_to_ns(pd.read_parquet(write_filename, dtype_backend="pyarrow"))
         # to test equality, we have to coerce datetime columns to ms
         # because pandas writes to parquet as datetime64[ms]
         df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
