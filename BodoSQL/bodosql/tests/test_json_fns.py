@@ -1662,7 +1662,7 @@ def test_object_insert_update_key(
                         [{"a": i} for i in range(50)] + [None, {"a": None}],
                         dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
                     ),
-                    "B": list(range(50)) + [51, None],
+                    "B": pd.Series(list(range(50)) + [51, None], dtype="Int64"),
                 }
             ),
             pd.Series(
