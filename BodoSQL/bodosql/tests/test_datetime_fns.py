@@ -3763,10 +3763,10 @@ def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
         }
     )
     if case:
-        py_output["dow"][~large_tz_df["B"]] = None
-        py_output["dowiso"][~large_tz_df["B"]] = None
-        py_output["dom"][~large_tz_df["B"]] = None
-        py_output["doy"][~large_tz_df["B"]] = None
+        py_output["dow"] = py_output["dow"].where(large_tz_df["B"], None)
+        py_output["dowiso"] = py_output["dowiso"].where(large_tz_df["B"], None)
+        py_output["dom"] = py_output["dom"].where(large_tz_df["B"], None)
+        py_output["doy"] = py_output["doy"].where(large_tz_df["B"], None)
 
     check_query(
         query,
