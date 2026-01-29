@@ -11,23 +11,27 @@
 #include <cudf/partitioning.hpp>
 #include <cudf/table/table_view.hpp>
 #include <cudf/utilities/default_stream.hpp>
+#include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 #include "../libs/_distributed.h"
 #include "_utils.h"
+#include "cuda_runtime_api.h"
 
-GpuShuffleManager::GpuShuffleManager() {
+GpuShuffleManager::GpuShuffleManager()
+    : gpu_id(get_gpu_id()),
+      cuda_device_raii(rmm::cuda_set_device_raii(gpu_id)) {
     // Create a subcommunicator with only ranks that have GPUs assigned
-    mpi_comm = get_gpu_mpi_comm();
+    this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
 
     // Get rank and size
-    MPI_Comm_rank(mpi_comm, &rank);
-    MPI_Comm_size(mpi_comm, &n_ranks);
+    MPI_Comm_rank(mpi_comm, &this->rank);
+    MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    cudaStreamCreate(&stream);
+    cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking);
 
     // Initialize NCCL
     initialize_nccl();
@@ -61,11 +65,11 @@ void GpuShuffleManager::initialize_nccl() {
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
 
-std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::shuffle_table(
+void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices) {
     if (mpi_comm == MPI_COMM_NULL) {
-        return {};
+        return;
     }
     // Hash partition the table
     auto [partitioned_table, partition_sizes] =
@@ -73,22 +77,38 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::shuffle_table(
     // Pack the tables for sending
     std::vector<cudf::packed_table> packed_tables = cudf::contiguous_split(
         partitioned_table->view(), partition_sizes, stream);
-    for (size_t i = 0; i < packed_tables.size(); ++i) {
-        shuffle_packed_table(nccl_comm, stream, packed_tables[i], i);
-    }
-    // Receive the tables from all ranks
-    for (size_t i = 0; i < n_ranks; ++i) {
-        packed_tables[i] = receive_packed_table(nccl_comm, stream, i);
-    }
-    std::vector<std::unique_ptr<cudf::table>> received_tables(n_ranks);
-    // Unpack the received tables
-    for (size_t i = 0; i < n_ranks; ++i) {
-        received_tables[i] = std::make_unique<cudf::table>(
-            cudf::unpack_table(packed_tables[i], stream));
+
+    GpuShuffle(std::move(packed_tables), mpi_comm, nccl_comm, stream,
+               this->rank);
+}
+
+std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
+    std::vector<std::unique_ptr<cudf::table>> received_tables;
+    for (GpuShuffle& shuffle : this->inflight_shuffles) {
+        std::optional<cudf::table_view> progress_res = shuffle.progress();
+        // This makes a copy, not sure how to avoid it, we get packed_columns
+        // back after the shuffle which have internal buffers that own the data
+        // and only supports creating a cudf::table_view. I can't find a way to
+        // move those buffers into a cudf::table without copying.
+        if (progress_res.has_value()) {
+            received_tables.push_back(
+                std::make_unique<cudf::table>(progress_res.value()));
+        }
     }
 
+    // Remove completed shuffles
+    size_t i = 0;
+    while (i < this->inflight_shuffles.size()) {
+        if (this->inflight_shuffles[i].state == GpuShuffleState::COMPLETED) {
+            this->inflight_shuffles.erase(this->inflight_shuffles.begin() + i);
+        } else {
+            i++;
+        }
+    }
     return received_tables;
 }
+
+std::optional<cudf::table_view> GpuShuffle::progress() { return std::nullopt; }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
@@ -132,10 +152,9 @@ int get_cluster_cuda_device_count() {
     return device_count;
 }
 
-MPI_Comm get_gpu_mpi_comm() {
+MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
     MPI_Comm gpu_comm;
     int has_gpu = 0;
-    rmm::cuda_device_id gpu_id = get_gpu_id();
     if (gpu_id.value() >= 0) {
         has_gpu = 1;
     }
@@ -145,14 +164,6 @@ MPI_Comm get_gpu_mpi_comm() {
         return MPI_COMM_NULL;
     }
     return gpu_comm;
-}
-
-void shuffle_packed_table(ncclComm_t comm, cudaStream_t stream,
-                          cudf::packed_table& packed_table, int dest_rank) {}
-
-cudf::packed_table receive_packed_table(ncclComm_t comm, cudaStream_t stream,
-                                        int src_rank) {
-    return cudf::packed_table{};
 }
 
 // #endif // USE_CUDF
