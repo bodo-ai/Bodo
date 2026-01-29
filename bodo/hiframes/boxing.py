@@ -378,6 +378,7 @@ _one_to_one_type_to_enum_map: dict[types.Type, int] = {
     types.float64: SeriesDtypeEnum.Float64.value,
     types.NPDatetime("ns"): SeriesDtypeEnum.NP_Datetime64ns.value,
     types.NPTimedelta("ns"): SeriesDtypeEnum.NP_Timedelta64ns.value,
+    bodo.types.pd_timedelta_type: SeriesDtypeEnum.NP_Timedelta64ns.value,
     types.bool_: SeriesDtypeEnum.Bool.value,
     types.int16: SeriesDtypeEnum.Int16.value,
     types.uint16: SeriesDtypeEnum.UInt16.value,

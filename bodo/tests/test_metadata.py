@@ -222,6 +222,11 @@ def check_series_typing_metadata(orig_series, output_series):
         if isinstance(orig_arr_type, bodo.types.IntegerArrayType)
         else orig_arr_type.dtype
     )
+    orig_dtype = (
+        numba.core.types.NPTimedelta("ns")
+        if orig_dtype == bodo.types.pd_timedelta_type
+        else orig_dtype
+    )
     return (
         hasattr(output_series, "_bodo_meta")
         and "type_metadata" in output_series._bodo_meta
