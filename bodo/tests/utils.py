@@ -1498,6 +1498,15 @@ def _test_equal(
                     bodo_out[bodo_out.columns[i]], dtype=py_dtype
                 )
 
+            # Handle categorical mismatch in pd.read_parquet(fname, dtype_backend="pyarrow")
+            if isinstance(bodo_dtype, pd.CategoricalDtype) and not isinstance(
+                py_dtype, pd.CategoricalDtype
+            ):
+                bodo_out[bodo_out.columns[i]] = bodo_out[bodo_out.columns[i]].astype(
+                    object
+                )
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(object)
+
             # Convert string/binary/date columns to pyarrow dtype
             if isinstance(bodo_dtype, pd.ArrowDtype) and (
                 pa.types.is_binary(bodo_dtype.pyarrow_dtype)
