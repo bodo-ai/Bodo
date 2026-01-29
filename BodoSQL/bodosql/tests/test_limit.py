@@ -74,7 +74,7 @@ def test_limit_tz_aware(representative_tz, memory_leak_check):
             "C": pd.date_range(
                 "2022/1/1",
                 periods=30,
-                freq="1H",
+                freq="1h",
             ),
         }
     )

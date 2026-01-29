@@ -131,10 +131,10 @@ def make_tz_aware_df(tz):
     """
     # Note: B's and A's will overlap.
     tz_aware_data = {
-        "A": list(pd.date_range(start="1/1/2022", freq="4D7H", periods=30, tz=tz))
+        "A": list(pd.date_range(start="1/1/2022", freq="4D7h", periods=30, tz=tz))
         + [None] * 4,
         "B": [None] * 14
-        + list(pd.date_range(start="1/1/2022", freq="12D21H", periods=20, tz=tz)),
+        + list(pd.date_range(start="1/1/2022", freq="12D21h", periods=20, tz=tz)),
     }
     return pd.DataFrame(data=tz_aware_data)
 

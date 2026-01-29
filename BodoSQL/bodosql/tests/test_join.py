@@ -423,7 +423,7 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                    start="1/1/2022", freq="4D7h", periods=30, tz=representative_tz
                 )
             )
             + [None] * 4,
@@ -431,14 +431,14 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
             "B": [None] * 14
             + list(
                 pd.date_range(
-                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                    start="1/1/2022", freq="12D21h", periods=20, tz=representative_tz
                 )
             ),
             "C": pd.date_range(
-                start="3/1/2022", freq="1H", periods=34, tz=representative_tz
+                start="3/1/2022", freq="1h", periods=34, tz=representative_tz
             ),
             "D": pd.date_range(
-                start="1/1/2022", freq="14D20T", periods=34, tz=representative_tz
+                start="1/1/2022", freq="14D20min", periods=34, tz=representative_tz
             ),
         }
     )

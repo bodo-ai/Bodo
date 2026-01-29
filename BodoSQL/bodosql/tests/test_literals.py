@@ -27,7 +27,7 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture(
     params=[
         ("1 DAY", pd.Timedelta(1, "D")),
-        ("1 HOUR", pd.Timedelta(1, "H")),
+        ("1 HOUR", pd.Timedelta(1, "h")),
         ("1 MINUTE", pd.Timedelta(1, "m")),
         ("1 SECOND", pd.Timedelta(1, "s")),
         ("'1 MILLISECOND'", pd.Timedelta(1, "ms")),

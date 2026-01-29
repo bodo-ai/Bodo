@@ -3562,7 +3562,7 @@ def test_tz_aware_day_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="145D27H37T48S", periods=30, tz="Poland"
+                start="1/1/2022", freq="145D27h37min48s", periods=30, tz="Poland"
             ).to_series(),
             "B": [True, False] * 15,
         }
