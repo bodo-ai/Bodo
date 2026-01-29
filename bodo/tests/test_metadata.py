@@ -40,7 +40,11 @@ def test_metadata_typemaps():
     )
 
     for key, val in _one_to_one_type_to_enum_map.items():
-        assert _one_to_one_enum_to_type_map[val] == key
+        assert (
+            _one_to_one_enum_to_type_map[val] == bodo.types.timedelta64ns
+            if key == bodo.types.pd_timedelta_type
+            else key
+        )
 
     for key, val in _one_to_one_enum_to_type_map.items():
         assert _one_to_one_type_to_enum_map[val] == key
