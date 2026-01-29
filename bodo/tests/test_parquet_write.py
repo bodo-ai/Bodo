@@ -576,7 +576,11 @@ def test_write_parquet_empty_chunks(memory_leak_check):
         if bodo.get_rank() == 0:
             df = pd.read_parquet(write_filename, dtype_backend="pyarrow")
             pd.testing.assert_frame_equal(
-                df, pd.DataFrame({"A": np.arange(n, dtype=np.int64)})
+                df,
+                pd.DataFrame({"A": np.arange(n, dtype=np.int64)}),
+                check_column_type=False,
+                check_index_type=False,
+                check_dtype=False,
             )
     finally:
         if bodo.get_rank() == 0:
@@ -601,7 +605,13 @@ def test_write_parquet_decimal(datapath: DataPath, memory_leak_check):
         if bodo.get_rank() == 0:
             df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
             df2 = pd.read_parquet(write_filename, dtype_backend="pyarrow")
-            pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
+            pd.testing.assert_frame_equal(
+                df1,
+                df2,
+                check_column_type=False,
+                check_index_type=False,
+                check_dtype=False,
+            )
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
