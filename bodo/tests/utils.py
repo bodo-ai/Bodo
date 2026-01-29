@@ -3497,7 +3497,9 @@ def cast_dt64_to_ns(df):
     from pandas.api.types import is_datetime64_any_dtype
 
     for c in df.columns:
-        if is_datetime64_any_dtype(df[c]):
+        if is_datetime64_any_dtype(df[c]) and not isinstance(
+            df[c].dtype, pd.ArrowDtype
+        ):
             if isinstance(df[c].dtype, pd.DatetimeTZDtype):
                 df[c] = df[c].astype(pd.DatetimeTZDtype(tz=df[c].dtype.tz))
             else:
