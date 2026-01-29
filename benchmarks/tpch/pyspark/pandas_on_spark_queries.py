@@ -552,7 +552,7 @@ def tpch_q13(data_folder: str, scale_factor: float = 1.0):
 
     agg1 = jn1.groupby("C_CUSTKEY").agg(C_COUNT=("O_ORDERKEY", "count")).reset_index()
 
-    agg2 = agg1.groupby("C_COUNT").agg(CUSTDIST=("C_CUSTKEY", "count"))
+    agg2 = agg1.groupby("C_COUNT")["C_CUSTKEY"].size().rename("CUSTDIST")
 
     result_df = agg2.reset_index().sort_values(
         by=["CUSTDIST", "C_COUNT"],
