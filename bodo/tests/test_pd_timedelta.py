@@ -705,7 +705,7 @@ def test_pd_timedelta_range():
     for test in tests:
         actual = bodo.jit(test)()
         expected = test()
-        pd.testing.assert_index_equal(actual, expected)
+        pd.testing.assert_index_equal(actual, expected.astype("timedelta64[ns]"))
 
 
 def test_pd_timedelta_mult_int_series(
