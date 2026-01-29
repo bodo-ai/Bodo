@@ -60,19 +60,6 @@ def load_partsupp(data_folder: str):
     return df
 
 
-def register_sql_tables(spark, root, scale, names, ext=".pq"):
-    """Register parquet tables as temp views in Spark SQL"""
-    multipart_tables = {"lineitem", "orders", "customer", "part", "partsupp"}
-    if scale > 100:
-        multipart_tables.add("supplier")
-
-    for name in names:
-        glob_str = "/*.pq" if name in multipart_tables else ""
-        table_path = f"{root}/{name}{ext}{glob_str}"
-        df = spark.read.parquet(table_path)
-        df.createOrReplaceTempView(name)
-
-
 def tpch_q01(data_folder: str, scale_factor: float = 1.0):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/dask/q1.py
