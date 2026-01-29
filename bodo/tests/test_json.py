@@ -63,7 +63,7 @@ def test_json_read_df(datapath, memory_leak_check):
             orient="records",
             lines=True,
             dtype={
-                "one": np.float32,
+                "one": "Float64",
                 "two": str,
                 "three": "bool",
                 "four": np.float32,
