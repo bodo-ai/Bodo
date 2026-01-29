@@ -1454,9 +1454,7 @@ class TimedeltaIndexTypeModel(models.StructModel):
 @typeof_impl.register(pd.TimedeltaIndex)
 def typeof_timedelta_index(val, c):
     # keep string literal value in type since reset_index() may need it
-    return TimedeltaIndexType(
-        get_val_type_maybe_str_literal(val.name), bodo.typeof(val.values)
-    )
+    return TimedeltaIndexType(get_val_type_maybe_str_literal(val.name))
 
 
 @box(TimedeltaIndexType)
@@ -1495,12 +1493,30 @@ def box_timedelta_index(typ, val, c):
 @unbox(TimedeltaIndexType)
 def unbox_timedelta_index(typ, val, c):
     # get data and name attributes
-    # TODO: use to_numpy()
-    values_obj = c.pyapi.object_getattr_string(val, "values")
-    data = c.pyapi.to_native_value(typ.data, values_obj).value
+
+    # Call A.values.astype('timedelta64[ns]', copy=False)
+    data_obj_us = c.pyapi.object_getattr_string(val, "values")
+    data_obj_us_astype = c.pyapi.object_getattr_string(data_obj_us, "astype")
+    dtype_obj = c.pyapi.string_from_constant_string("timedelta64[ns]")
+    false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+    args = c.pyapi.tuple_pack([dtype_obj])
+    kws = c.pyapi.dict_pack(
+        [
+            ("copy", false_obj),
+        ]
+    )
+    data_obj = c.pyapi.call(data_obj_us_astype, args, kws)
+    c.pyapi.decref(data_obj_us)
+    c.pyapi.decref(data_obj_us_astype)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(false_obj)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kws)
+
+    data = c.pyapi.to_native_value(typ.data, data_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
-    c.pyapi.decref(values_obj)
+    c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
 
     # create index struct
