@@ -2891,6 +2891,7 @@ class UntypedPass:
             "engine",
             "columns",
             "storage_options",
+            "dtype_backend",
             "_bodo_chunksize",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
