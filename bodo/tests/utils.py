@@ -1479,12 +1479,23 @@ def _test_equal(
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
-                # Convert nan to NA to previous Pandas behavior
+                # Convert nan to NA to match previous Pandas behavior
                 bodo_out[bodo_out.columns[i]] = pd.array(
                     bodo_out[bodo_out.columns[i]].map(
                         lambda x: pd.NA if pd.isna(x) else x
                     ),
                     dtype=bodo_dtype,
+                )
+
+            # Pandas pd.read_parquet(fname, dtype_backend="pyarrow") may create float
+            # data with NAs that don't match Bodo
+            if (
+                isinstance(py_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(py_dtype.pyarrow_dtype)
+                and bodo_dtype in (np.float32, np.float64)
+            ):
+                bodo_out[bodo_out.columns[i]] = pd.array(
+                    bodo_out[bodo_out.columns[i]], dtype=py_dtype
                 )
 
             # Convert string/binary/date columns to pyarrow dtype

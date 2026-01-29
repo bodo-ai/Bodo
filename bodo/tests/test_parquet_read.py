@@ -81,7 +81,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (datapath(fname),))
 
