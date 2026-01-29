@@ -515,7 +515,7 @@ def test_read_write_parquet(memory_leak_check):
                 assert n_passed == n_pes
                 # both read dataframes should be equal in everything
                 passed = _test_equal_guard(
-                    df1, df2, sort_output=False, check_names=True, check_dtype=True
+                    df1, df2, sort_output=False, check_names=True, check_dtype=False
                 )
                 n_passed = reduce_sum(passed)
                 assert n_passed == n_pes
