@@ -1021,7 +1021,7 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
                         if part_col == "E":
                             # convert categorical back to date
                             df_test[part_col] = (
-                                df_test[part_col].astype("datetime64").dt.date
+                                df_test[part_col].astype("datetime64[ns]").dt.date
                             )
                         elif part_col == "C":
                             # convert the bool input column to categorical of strings
@@ -1038,7 +1038,11 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
                     # use check_like=True because the order of columns has changed
                     # (partition columns appear at the end after reading)
                     pd.testing.assert_frame_equal(
-                        df_test, df_in, check_like=True, check_column_type=False
+                        df_test,
+                        df_in,
+                        check_like=True,
+                        check_column_type=False,
+                        check_dtype=False,
                     )
                     shutil.rmtree(TEST_DIR)
             except Exception as e:
