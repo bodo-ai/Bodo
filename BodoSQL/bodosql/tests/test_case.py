@@ -266,7 +266,7 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     query = "Select Case WHEN B THEN A END as output FROM table1"
     ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
-    expected_output[~df.B] = None
+    expected_output = expected_output.where(df.B, None)
     check_query(
         query, ctx, None, expected_output=expected_output, session_tz=representative_tz
     )
