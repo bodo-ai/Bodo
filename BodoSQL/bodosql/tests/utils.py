@@ -1246,15 +1246,20 @@ def _check_query_equal(
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
     new_cols = []
+    new_expected_cols = []
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
         new_cols.append(bodosql_output.iloc[:, i])
+        new_expected_cols.append(expected_output.iloc[:, i])
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
             try:
                 # Cast to regular string array to avoid dictionary issues.
                 result = pa.compute.cast(arr._pa_array, pa.string()).to_pandas()
-                new_cols[-1] = result.astype(object)
+                new_cols[-1] = result.astype(object).fillna(None)
+                new_expected_cols[-1] = (
+                    expected_output.iloc[:, i].astype(object).fillna(None)
+                )
             except Exception:
                 pass
 
@@ -1262,6 +1267,11 @@ def _check_query_equal(
         pd.concat(new_cols, axis=1)
         .set_axis(bodosql_output.columns, axis=1)
         .set_index(bodosql_output.index)
+    )
+    expected_output = (
+        pd.concat(new_expected_cols, axis=1)
+        .set_axis(expected_output.columns, axis=1)
+        .set_index(expected_output.index)
     )
 
     # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
