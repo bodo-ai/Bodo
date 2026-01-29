@@ -663,7 +663,7 @@ def test_pd_timedelta_range():
         return pd.timedelta_range(start="1 day", periods=4, closed="right")
 
     def test3():
-        return pd.timedelta_range(start="1 day", end="2 days", freq="6H")
+        return pd.timedelta_range(start="1 day", end="2 days", freq="6h")
 
     def test4():
         return pd.timedelta_range(start="1 day", end="5 days", periods=4)
