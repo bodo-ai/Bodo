@@ -36,7 +36,10 @@
             throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
                                      std::to_string(err_class) +              \
                                      std::string(" ") +                       \
-                                     std::string(err_msg, err_msg_len));      \
+                                     std::string(err_msg, err_msg_len) +      \
+                                     std::string(" ") +                       \
+                                     std::string(__FILE__) +                  \
+                                     std::to_string(__LINE__));               \
         }                                                                     \
     }
 

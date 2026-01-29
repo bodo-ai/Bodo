@@ -9,6 +9,7 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
+#include "../libs/gpu_utils.h"
 
 #include <mpi.h>
 
@@ -46,8 +47,18 @@ class RankBatchGenerator {
           target_rows_(target_rows),
           selected_columns(_selected_columns),
           arrow_schema(_arrow_schema) {
+
         MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
-        MPI_Comm_size(MPI_COMM_WORLD, &size_);
+        std::cout << "RANK " << rank_ << " GPU ID: " << get_gpu_id().value() << std::endl;
+
+        if (rank_ != 0) {
+            // no GPU assigned to this rank
+            rank_ = -1;
+            size_ = 0;
+            parts_ = {};
+            current_part_idx_ = 0;
+            return;
+        }
 
         files_ = list_parquet_files(path_);
         if (files_.empty()) {

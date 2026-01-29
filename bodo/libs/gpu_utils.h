@@ -98,25 +98,25 @@ int get_cluster_cuda_device_count();
  */
 MPI_Comm get_gpu_mpi_comm();
 
-/**
- * @brief Shuffle a packed_table to a destination rank using NCCL
- * @param comm NCCL communicator
- * @param stream CUDA stream
- * @param packed_table Packed table to send
- * @param dest_rank Destination rank
- */
-void shuffle_packed_table(ncclComm_t comm, cudaStream_t stream,
-                          cudf::packed_table& packed_table, int dest_rank);
+// /**
+//  * @brief Shuffle a packed_table to a destination rank using NCCL
+//  * @param comm NCCL communicator
+//  * @param stream CUDA stream
+//  * @param packed_table Packed table to send
+//  * @param dest_rank Destination rank
+//  */
+// void shuffle_packed_table(ncclComm_t comm, cudaStream_t stream,
+//                           cudf::packed_table& packed_table, int dest_rank);
 
-/**
- * @brief Receive a packed_table from a source rank using NCCL
- * @param comm NCCL communicator
- * @param stream CUDA stream
- * @param src_rank Source rank
- * @return Received packed table
- */
-cudf::packed_table receive_packed_table(ncclComm_t comm, cudaStream_t stream,
-                                        int src_rank);
+// /**
+//  * @brief Receive a packed_table from a source rank using NCCL
+//  * @param comm NCCL communicator
+//  * @param stream CUDA stream
+//  * @param src_rank Source rank
+//  * @return Received packed table
+//  */
+// cudf::packed_table receive_packed_table(ncclComm_t comm, cudaStream_t stream,
+//                                         int src_rank);
 
 // #else
 //// Empty implementation when CUDF is not available

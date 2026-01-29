@@ -729,7 +729,9 @@ cmake_print_variables(NO_HDF5)
 if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/physical/gpu_expression.cpp"
-    "bodo/libs/streaming/cuda_join.cpp")
+    "bodo/libs/streaming/cuda_join.cpp"
+    "bodo/libs/gpu_utils.cpp"
+    )
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")

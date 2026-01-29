@@ -61,34 +61,35 @@ void GpuShuffleManager::initialize_nccl() {
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
 
-std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::shuffle_table(
-    std::shared_ptr<cudf::table> table,
-    const std::vector<cudf::size_type>& partition_indices) {
-    if (mpi_comm == MPI_COMM_NULL) {
-        return {};
-    }
-    // Hash partition the table
-    auto [partitioned_table, partition_sizes] =
-        hash_partition_table(table, partition_indices, n_ranks);
-    // Pack the tables for sending
-    std::vector<cudf::packed_table> packed_tables = cudf::contiguous_split(
-        partitioned_table->view(), partition_sizes, stream);
-    for (size_t i = 0; i < packed_tables.size(); ++i) {
-        shuffle_packed_table(nccl_comm, stream, packed_tables[i], i);
-    }
-    // Receive the tables from all ranks
-    for (size_t i = 0; i < n_ranks; ++i) {
-        packed_tables[i] = receive_packed_table(nccl_comm, stream, i);
-    }
-    std::vector<std::unique_ptr<cudf::table>> received_tables(n_ranks);
-    // Unpack the received tables
-    for (size_t i = 0; i < n_ranks; ++i) {
-        received_tables[i] = std::make_unique<cudf::table>(
-            cudf::unpack_table(packed_tables[i], stream));
-    }
+// std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::shuffle_table(
+//     std::shared_ptr<cudf::table> table,
+//     const std::vector<cudf::size_type>& partition_indices) {
 
-    return received_tables;
-}
+    // if (mpi_comm == MPI_COMM_NULL) {
+    //     return {};
+    // }
+    // // Hash partition the table
+    // auto [partitioned_table, partition_sizes] =
+    //     hash_partition_table(table, partition_indices, n_ranks);
+    // // Pack the tables for sending
+    // std::vector<cudf::packed_table> packed_tables = cudf::contiguous_split(
+    //     partitioned_table->view(), partition_sizes, stream);
+    // for (size_t i = 0; i < packed_tables.size(); ++i) {
+    //     shuffle_packed_table(nccl_comm, stream, packed_tables[i], i);
+    // }
+    // // Receive the tables from all ranks
+    // for (size_t i = 0; i < n_ranks; ++i) {
+    //     packed_tables[i] = receive_packed_table(nccl_comm, stream, i);
+    // }
+    // std::vector<std::unique_ptr<cudf::table>> received_tables(n_ranks);
+    // // Unpack the received tables
+    // for (size_t i = 0; i < n_ranks; ++i) {
+    //     received_tables[i] = std::make_unique<cudf::table>(
+    //         cudf::unpack_table(packed_tables[i], stream));
+    // }
+
+    // return received_tables;
+// }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
