@@ -609,7 +609,7 @@ def test_timestampdiff_cols(
         {"A": table1.A, "B": table1.B, "RES": pd.Series(answers, dtype=pd.Int64Dtype())}
     )
     if has_case:
-        expected_output["RES"][table1.C] = None
+        expected_output["RES"] = expected_output["RES"].where(~table1.C, None)
     check_query(
         query,
         {"TABLE1": table1},
