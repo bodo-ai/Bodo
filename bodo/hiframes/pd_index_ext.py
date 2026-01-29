@@ -2300,16 +2300,18 @@ def box_period_index(typ, val, c):
     # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
     args = c.pyapi.tuple_pack([])
     kws = c.pyapi.dict_pack(
-        [("ordinal", data_obj), ("name", name_obj), ("freq", freq_obj)]
+        [("ordinals", data_obj), ("name", name_obj), ("freq", freq_obj)]
     )
     const_call = c.pyapi.object_getattr_string(class_obj, "PeriodIndex")
-    index_obj = c.pyapi.call(const_call, args, kws)
+    ord_call = c.pyapi.object_getattr_string(const_call, "from_ordinals")
+    index_obj = c.pyapi.call(ord_call, args, kws)
 
     c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(freq_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(ord_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
     c.context.nrt.decref(c.builder, typ, val)
