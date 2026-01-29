@@ -319,13 +319,13 @@ def gen_dataframe(num_elements, write_index):
         if dtype == "String":
             # missing values every 5 elements
             data = [str(x) * 3 if x % 5 != 0 else None for x in range(num_elements)]
-            df[col_name] = data
+            df[col_name] = pd.array(data, pd.ArrowDtype(pa.large_string()))
         elif dtype == "Binary":
             # missing values every 5 elements
             data = [
                 str(x).encode() * 3 if x % 5 != 0 else None for x in range(num_elements)
             ]
-            df[col_name] = data
+            df[col_name] = pd.array(data, pd.ArrowDtype(pa.large_binary()))
         elif dtype == "bool":
             data = [True if x % 2 == 0 else False for x in range(num_elements)]
             df[col_name] = np.array(data, dtype="bool")
@@ -352,14 +352,16 @@ def gen_dataframe(num_elements, write_index):
                 ]
                 * (num_elements // 8)
             )
-            df[col_name] = pd.Series(data, dtype=object)
+            df[col_name] = pd.Series(
+                data, dtype=pd.ArrowDtype(pa.decimal128(precision=38, scale=18))
+            )
         elif dtype == "Date":
             dates = pd.Series(
                 pd.date_range(
                     start="1998-04-24", end="1998-04-29", periods=num_elements
                 )
             )
-            df[col_name] = dates.dt.date
+            df[col_name] = pd.array(dates.dt.date, pd.ArrowDtype(pa.date32()))
         elif dtype == "Datetime":
             dates = pd.Series(
                 pd.date_range(
@@ -370,7 +372,7 @@ def gen_dataframe(num_elements, write_index):
                 # set some elements to NaT
                 dates[4] = None
                 dates[17] = None
-            df[col_name] = dates
+            df[col_name] = dates.astype("datetime64[ns]")
             df._datetime_col = col_name
         elif dtype == "nested_arrow0":
             # Disabling Nones because currently they very easily induce
@@ -1074,7 +1076,7 @@ def test_streaming_parquet_write_rep(memory_leak_check):
         bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = 300
         impl(df, write_filename)
         bodo.barrier()
-        df2 = cast_dt64_to_ns(pd.read_parquet(write_filename))
+        df2 = cast_dt64_to_ns(pd.read_parquet(write_filename, dtype_backend="pyarrow"))
         # to test equality, we have to coerce datetime columns to ms
         # because pandas writes to parquet as datetime64[ms]
         df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
