@@ -920,7 +920,7 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
             "s3://bodo-test/test_df_bodo_read.pq", dtype_backend="pyarrow"
         )
 
-    check_func(test_read, (), py_output=test_df)
+    check_func(test_read, (), py_output=test_df.convert_dtypes(dtype_backend="pyarrow"))
 
 
 def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -1164,7 +1164,11 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
         )
 
     check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
+    check_func(
+        test_read_infer_dtype,
+        (),
+        py_output=test_df.convert_dtypes(dtype_backend="pyarrow"),
+    )
 
 
 @pytest.mark.slow
