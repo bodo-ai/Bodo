@@ -99,7 +99,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
             join_filter_states,
         bool run_on_gpu) override;
 
-    bool canRunOnGPU(bool has_filters, bool has_limit) {
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
         return !has_filters && !has_limit;
     }
 
