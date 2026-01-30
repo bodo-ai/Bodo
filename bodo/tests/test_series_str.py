@@ -827,7 +827,7 @@ def test_find(test_unicode, memory_leak_check):
         return S.str.find("🍔")
 
     check_func(test_impl, (test_unicode,), check_dtype=False)
-    check_func(test_impl2, (test_unicode,), check_dtype=False)
+    check_func(test_impl2, (test_unicode.astype(object),), check_dtype=False)
 
 
 @pytest.mark.slow
