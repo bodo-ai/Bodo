@@ -351,7 +351,9 @@ def test_s3_read_json(
     fname_dir_multi = f"s3://{bucket_name}/example_multi.json"
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def test_impl_with_dtype(fname):
         return pd.read_json(
@@ -365,6 +367,7 @@ def test_s3_read_json(
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = test_impl(datapath("example.json"))
