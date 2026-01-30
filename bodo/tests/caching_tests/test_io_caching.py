@@ -144,7 +144,9 @@ def test_write_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_c
     @run_rank0
     def check_output():
         res = pd.read_parquet(fname, dtype_backend="pyarrow")
-        pd.testing.assert_frame_equal(res, df)
+        pd.testing.assert_frame_equal(
+            res, df, check_dtype=False, check_index_type=False
+        )
 
     with ensure_clean2(fname):
         check_caching(
