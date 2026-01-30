@@ -1136,6 +1136,7 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype():
@@ -1144,6 +1145,7 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},  # type: ignore
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -1160,9 +1162,13 @@ def test_s3_json_data_has_path(
     """
 
     def test_impl():
-        return pd.read_json("s3://bodo-test/path_example.json", lines=True)
+        return pd.read_json(
+            "s3://bodo-test/path_example.json", lines=True, dtype_backend="pyarrow"
+        )
 
-    py_output = pd.read_json(datapath("path_example.json"), lines=True)
+    py_output = pd.read_json(
+        datapath("path_example.json"), lines=True, dtype_backend="pyarrow"
+    )
     check_func(test_impl, (), py_output=py_output)
 
 
@@ -1284,6 +1290,7 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
             "s3://awsglue-datasets/examples/us-legislators/all/memberships.json",
             lines=True,
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         # returning subset of column only (there's 'nan' vs. nan issue)
         return df[["area_id", "on_behalf_of_id", "organization_id", "role"]]

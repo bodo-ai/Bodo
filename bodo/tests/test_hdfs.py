@@ -188,7 +188,9 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
     fname_dir_multi = hdfs_datapath("example_multi.json")
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def test_impl_with_dtype(fname):
         return pd.read_json(
@@ -202,6 +204,7 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = test_impl(datapath("example.json"))
@@ -725,6 +728,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -733,6 +737,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_seq.json")
@@ -751,6 +756,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -759,6 +765,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D.json")
@@ -777,6 +784,7 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -785,6 +793,7 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D_var.json")

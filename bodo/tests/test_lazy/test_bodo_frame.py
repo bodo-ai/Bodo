@@ -582,7 +582,9 @@ def test_json(collect_func):
 
     @bodo.jit(spawn=True)
     def _read_bodo_df(fname):
-        read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        read_df = pd.read_json(
+            path_or_buf=fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
         return read_df
 
     df = collect_func(0)

@@ -999,11 +999,11 @@ def test_json_sample_nrows_size(memory_leak_check):
 
     # negative values
     def impl1(fname):
-        return pd.read_json(fname, sample_nrows=-1)
+        return pd.read_json(fname, sample_nrows=-1, dtype_backend="pyarrow")
 
     # string
     def impl2(fname):
-        return pd.read_json(fname, sample_nrows="no thanks")
+        return pd.read_json(fname, sample_nrows="no thanks", dtype_backend="pyarrow")
 
     @bodo.jit
     def g(ilist):
@@ -1013,7 +1013,7 @@ def test_json_sample_nrows_size(memory_leak_check):
 
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_json(fname, sample_nrows=g(ilist))
+        return pd.read_json(fname, sample_nrows=g(ilist), dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -1076,7 +1076,9 @@ def test_read_json_sample_nrows_error(datapath):
     fname = datapath("large_data.json")
 
     def impl1():
-        return pd.read_json(fname, lines=True, orient="records")
+        return pd.read_json(
+            fname, lines=True, orient="records", dtype_backend="pyarrow"
+        )
 
     # 1st 100 rows for column a is integer, next 100 are floats
     with pytest.raises(

@@ -22,7 +22,9 @@ def test_read_json_hf(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_json(
-            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl", lines=True
+            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl",
+            lines=True,
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, ())

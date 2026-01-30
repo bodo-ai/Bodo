@@ -182,10 +182,14 @@ def test_read_json_cache_fname_arg(
     """
 
     def impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def impl2(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     fname1 = datapath("example.json")
     fname2 = datapath("example_single.json")  # directory with one json file

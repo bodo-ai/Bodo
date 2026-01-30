@@ -34,7 +34,7 @@ def test_json_column_pruning(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_json(fname, orient="records", lines=True)
+        df = pd.read_json(fname, orient="records", lines=True, dtype_backend="pyarrow")
         return df.two
 
     fname_file = datapath("example.json")

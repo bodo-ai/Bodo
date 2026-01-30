@@ -1460,7 +1460,7 @@ def test_file_not_found(memory_leak_check):
         return len(df)
 
     def test_json(fname):
-        df = pd.read_json(fname)
+        df = pd.read_json(fname, dtype_backend="pyarrow")
         return df.C
 
     _check_filenotfound("nofile.csv", test_csv)
@@ -2352,9 +2352,9 @@ def test_read_json_sample_nrows(datapath, memory_leak_check):
     fname = datapath("large_data.json")
 
     def impl1():
-        return pd.read_json(fname, sample_nrows=120)
+        return pd.read_json(fname, sample_nrows=120, dtype_backend="pyarrow")
 
-    py_df = pd.read_json(fname, lines=True, orient="records")
+    py_df = pd.read_json(fname, lines=True, orient="records", dtype_backend="pyarrow")
     check_func(impl1, (), py_output=py_df)
 
 
@@ -2877,7 +2877,9 @@ def test_json_non_constant_filepath_error(datapath):
     @bodo.jit
     def impl():
         for filepath in [f1]:
-            df = pd.read_json(filepath, orient="records", lines=True)
+            df = pd.read_json(
+                filepath, orient="records", lines=True, dtype_backend="pyarrow"
+            )
         return df
 
     @bodo.jit
@@ -2894,6 +2896,7 @@ def test_json_non_constant_filepath_error(datapath):
                     "four": float,
                     "five": str,
                 },
+                dtype_backend="pyarrow",
             )
         return df
 
@@ -2914,6 +2917,7 @@ def test_json_non_constant_filepath_error(datapath):
                 filepath,
                 orient="records",
                 lines=True,
+                dtype_backend="pyarrow",
             )
         return df
 
