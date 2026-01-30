@@ -887,7 +887,7 @@ def test_table_isna(method_name, datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     func_text = f"""def impl():
-        df = pd.read_csv({filename!r})
+        df = pd.read_csv({filename!r}, dtype_backend="pyarrow")
         df1 = df.{method_name}()
         return df1[["Column1", "Column3"]]
         """
@@ -920,7 +920,7 @@ def test_table_head_tail(method_name, datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     func_text = f"""def impl():
-        df = pd.read_csv({filename!r})
+        df = pd.read_csv({filename!r}, dtype_backend="pyarrow")
         df1 = df.{method_name}()
         return df1[["Column1", "Column3"]]
         """

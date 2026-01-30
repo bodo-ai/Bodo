@@ -79,9 +79,15 @@ def test_csv_infer_type_error(datapath):
         bodo.barrier()
         message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
         with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+            bodo.jit(
+                lambda: pd.read_csv(filepath, dtype_backend="pyarrow"),
+                all_returns_distributed=True,
+            )()
         with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
+            bodo.jit(
+                lambda: pd.read_csv(filepath, dtype_backend="pyarrow"),
+                distributed=False,
+            )()
 
 
 def test_bodo_upcast(datapath):
@@ -100,9 +106,14 @@ def test_bodo_upcast(datapath):
         bodo.barrier()
         message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
         with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+            bodo.jit(
+                lambda: pd.read_csv(filepath, dtype_backend="pyarrow"),
+                all_returns_distributed=True,
+            )()
         bodo.jit(
-            lambda: pd.read_csv(filepath, _bodo_upcast_to_float64=True),
+            lambda: pd.read_csv(
+                filepath, _bodo_upcast_to_float64=True, dtype_backend="pyarrow"
+            ),
             distributed=False,
         )()
 
@@ -291,7 +302,7 @@ def test_to_csv_quotechar_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, quoting=csv.QUOTE_ALL, quotechar="X")
 
     def read_impl(f_name):
-        return pd.read_csv(f_name, quotechar="X")
+        return pd.read_csv(f_name, quotechar="X", dtype_backend="pyarrow")
 
     df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
     check_to_csv_string_output(df, impl_none)
@@ -312,7 +323,7 @@ def test_to_csv_lineterminator_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, lineterminator="\t")
 
     def read_impl(f_name):
-        return pd.read_csv(f_name, lineterminator="\t")
+        return pd.read_csv(f_name, lineterminator="\t", dtype_backend="pyarrow")
 
     df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
     check_to_csv_string_output(df, impl_none)
@@ -378,7 +389,12 @@ def test_to_csv_doublequote_escapechar_kwd_args(memory_leak_check):
 
     def read_impl(f_name):
         return pd.read_csv(
-            f_name, doublequote=False, quotechar="a", sep="-", escapechar="E"
+            f_name,
+            doublequote=False,
+            quotechar="a",
+            sep="-",
+            escapechar="E",
+            dtype_backend="pyarrow",
         )
 
     df = pd.DataFrame({"A": ["a - a - a - a"] * 10})
@@ -397,7 +413,7 @@ def test_to_csv_decimal_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, decimal="_")
 
     def read_impl(f_name):
-        return pd.read_csv(f_name, decimal="_")
+        return pd.read_csv(f_name, decimal="_", dtype_backend="pyarrow")
 
     # This should generate floats with a large number of decimal places
     df = pd.DataFrame({"A": [x / 7 for x in range(10)]})
@@ -415,7 +431,7 @@ def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
 
     def test_impl(fname):
         dtype = {"B": "float64", "I_AM_A_MISSING_COLUMN": pd.Int32Dtype()}
-        return pd.read_csv(fname, dtype=dtype)
+        return pd.read_csv(fname, dtype=dtype, dtype_backend="pyarrow")
 
     # Set check_dtype=False for nullable differences
     check_func(test_impl, (fname,), check_dtype=False)
@@ -427,7 +443,7 @@ def test_read_csv_nonascii(datapath, memory_leak_check):
     fname = datapath("csv_data_nonascii1.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (fname,))
 
@@ -443,11 +459,18 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
     fname_gzipped = fname + ".gz"
 
     def impl():
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"], compression=None)
+        df = pd.read_csv(
+            fname, names=["A", "B", "C", "D"], compression=None, dtype_backend="pyarrow"
+        )
         return df.C
 
     def impl2():
-        df = pd.read_csv(fname_gzipped, names=["A", "B", "C", "D"], compression="gzip")
+        df = pd.read_csv(
+            fname_gzipped,
+            names=["A", "B", "C", "D"],
+            compression="gzip",
+            dtype_backend="pyarrow",
+        )
         return df.C
 
     check_func(impl, (), only_seq=True, check_dtype=False)
@@ -479,6 +502,7 @@ def test_csv_remove_col_keep_date(datapath, memory_leak_check):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
+            dtype_backend="pyarrow",
         )
         return df["C"]
 
@@ -497,6 +521,7 @@ def test_csv_usecols_parse_dates(datapath, memory_leak_check):
             dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
             usecols=["A", "C", "D"],
+            dtype_backend="pyarrow",
         )
         return df
 
@@ -510,28 +535,40 @@ def test_csv_usecols_names_args(datapath, memory_leak_check):
 
     # subset for both names and usecols
     def impl1(fname):
-        df = pd.read_csv(fname, names=["A", "B"], usecols=[0, 2])
+        df = pd.read_csv(
+            fname, names=["A", "B"], usecols=[0, 2], dtype_backend="pyarrow"
+        )
         return df
 
     check_func(impl1, (fname,))
 
     # all column names and subset for usecols
     def impl2(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C", "D", "E"], usecols=[0, 2, 3])
+        df = pd.read_csv(
+            fname,
+            names=["A", "B", "C", "D", "E"],
+            usecols=[0, 2, 3],
+            dtype_backend="pyarrow",
+        )
         return df
 
     check_func(impl2, (fname,))
 
     # colnames > usecols but usecols has duplicates
     def impl3(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C"], usecols=[0, 2, 1, 0, 1])
+        df = pd.read_csv(
+            fname,
+            names=["A", "B", "C"],
+            usecols=[0, 2, 1, 0, 1],
+            dtype_backend="pyarrow",
+        )
         return df
 
     check_func(impl3, (fname,))
 
     # few names + dtypes=None + usecols=None
     def impl4(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C"])
+        df = pd.read_csv(fname, names=["A", "B", "C"], dtype_backend="pyarrow")
         return df
 
     # Ignore index check See [BE-2596]
@@ -548,7 +585,9 @@ def test_csv_usecols_names_args(datapath, memory_leak_check):
 
     # colnames > usecols
     def impl6(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C", "D", "E"], usecols=[0])
+        df = pd.read_csv(
+            fname, names=["A", "B", "C", "D", "E"], usecols=[0], dtype_backend="pyarrow"
+        )
         return df
 
     check_func(impl6, (fname,))
@@ -563,7 +602,11 @@ def test_csv_bool1(datapath, memory_leak_check):
     def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
         return pd.read_csv(
-            fname, names=list(dtype.keys()), dtype=dtype, index_col=False
+            fname,
+            names=list(dtype.keys()),
+            dtype=dtype,
+            index_col=False,
+            dtype_backend="pyarrow",
         )
 
     # passing file name as argument to exercise value-based dispatch
@@ -584,7 +627,11 @@ def test_csv_int_na1(datapath, memory_leak_check):
     def test_impl(fname):
         dtype = {"A": "int", "B": "Int32"}
         return pd.read_csv(
-            fname, names=list(dtype.keys()), dtype=dtype, compression="infer"
+            fname,
+            names=list(dtype.keys()),
+            dtype=dtype,
+            compression="infer",
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname,))
@@ -615,7 +662,11 @@ def test_csv_int_na2(datapath, memory_leak_check):
     def test_impl(fname, compression):
         dtype = {"A": "int", "B": pd.Int32Dtype()}
         return pd.read_csv(
-            fname, names=list(dtype.keys()), dtype=dtype, compression=compression
+            fname,
+            names=list(dtype.keys()),
+            dtype=dtype,
+            compression=compression,
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname, "infer"))
@@ -634,7 +685,9 @@ def test_csv_float_na(datapath, memory_leak_check):
 
     def test_impl(fname):
         dtype = {"A": "float", "B": "Float32"}
-        return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
+        return pd.read_csv(
+            fname, names=list(dtype.keys()), dtype=dtype, dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, (fname,))
 
@@ -647,7 +700,13 @@ def test_csv_bool_na(datapath, memory_leak_check):
         # Pandas dtypes
         # see Pandas GH20591
         dtype = {"ind": "int32", "B": "bool"}
-        return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype, usecols=[0, 2])
+        return pd.read_csv(
+            fname,
+            names=list(dtype.keys()),
+            dtype=dtype,
+            usecols=[0, 2],
+            dtype_backend="pyarrow",
+        )
 
     check_func(test_impl, (fname,))
 
@@ -669,7 +728,7 @@ def test_csv_fname_comp(datapath, memory_leak_check):
     @bodo.jit
     def load_func(data_folder):
         fname = data_folder + "/csv_data1.csv"
-        return pd.read_csv(fname, header=None)
+        return pd.read_csv(fname, header=None, dtype_backend="pyarrow")
 
     data_folder = os.path.join("bodo", "tests", "data")
     # should not raise exception
@@ -696,7 +755,9 @@ def test_write_csv_parallel_unicode(memory_leak_check):
         if get_rank() == 0:
             test_impl(df, pd_fname)
             pd.testing.assert_frame_equal(
-                pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
+                pd.read_csv(hp_fname, dtype_backend="pyarrow"),
+                pd.read_csv(pd_fname, dtype_backend="pyarrow"),
+                check_column_type=False,
             )
 
 
@@ -894,7 +955,7 @@ def test_csv_double_box(datapath, memory_leak_check):
     fname = datapath("csv_data1.csv")
 
     def test_impl():
-        df = pd.read_csv(fname, header=None)
+        df = pd.read_csv(fname, header=None, dtype_backend="pyarrow")
         print(df)
         return df
 
@@ -909,7 +970,7 @@ def test_csv_header_none(datapath, memory_leak_check):
     fname = datapath("csv_data1.csv")
 
     def test_impl():
-        return pd.read_csv(fname, header=None)
+        return pd.read_csv(fname, header=None, dtype_backend="pyarrow")
 
     bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
     b_df = bodo_func()
@@ -928,7 +989,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
     fname = datapath("csv_data2.csv")
 
     def test_impl(fname, sep):
-        return pd.read_csv(fname, sep=sep)
+        return pd.read_csv(fname, sep=sep, dtype_backend="pyarrow")
 
     check_func(
         test_impl,
@@ -985,7 +1046,7 @@ def test_csv_int_none(datapath, memory_leak_check):
     """
 
     def test_impl(fname):
-        df = pd.read_csv(fname)
+        df = pd.read_csv(fname, dtype_backend="pyarrow")
         return df
 
     fname = datapath("csv_data_int_none.csv")
@@ -996,7 +1057,7 @@ def test_csv_dtype_col_ind(datapath, memory_leak_check):
     """Make sure integer column index works for referring to columns in 'dtype'"""
 
     def test_impl(fname):
-        df = pd.read_csv(fname, dtype={3: str})
+        df = pd.read_csv(fname, dtype={3: str}, dtype_backend="pyarrow")
         return df
 
     fname = datapath("csv_data_infer1.csv")
@@ -1007,7 +1068,7 @@ def test_csv_usecols_names(datapath, memory_leak_check):
     """test passing column names in usecols"""
 
     def test_impl(fname):
-        df = pd.read_csv(fname, usecols=["A", "B"])
+        df = pd.read_csv(fname, usecols=["A", "B"], dtype_backend="pyarrow")
         return df
 
     fname = datapath("csv_data_infer1.csv")
@@ -1018,7 +1079,7 @@ def test_csv_sep_whitespace(datapath, memory_leak_check):
     """test that using all whitespace"""
 
     def test_impl(fname):
-        df = pd.read_csv(fname, sep=r"\s+")
+        df = pd.read_csv(fname, sep=r"\s+", dtype_backend="pyarrow")
         return df
 
     fname = datapath("csv_data_infer1.csv")
@@ -1031,9 +1092,9 @@ def test_csv_spark_header(datapath, memory_leak_check):
     fname2 = datapath("example_multi.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
-    py_output = pd.read_csv(datapath("example.csv"))
+    py_output = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
     check_func(test_impl, (fname1,), py_output=py_output)
     check_func(test_impl, (fname2,), py_output=py_output)
 
@@ -1067,14 +1128,14 @@ def test_csv_spark_header(datapath, memory_leak_check):
 def test_csv_header_write_read(datapath, memory_leak_check):
     """Test writing and reading csv outputs containing headers"""
 
-    df = pd.read_csv(datapath("example.csv"))
+    df = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
     pd_fname = "pd_csv_header_test.csv"
 
     def write_impl(df, fname):
         df.to_csv(fname)
 
     def read_impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     if bodo.get_rank() == 0:
         write_impl(df, pd_fname)
@@ -1116,11 +1177,18 @@ def test_csv_cat1(datapath, memory_leak_check):
     def test_impl(fname):
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.dtype("int32"), "C2": ct_dtype, "C3": str}
-        df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+        df = pd.read_csv(
+            fname, names=["C1", "C2", "C3"], dtype=dtypes, dtype_backend="pyarrow"
+        )
         return df
 
     def test_impl2(fname):
-        df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=cat_csv_dtypes)
+        df = pd.read_csv(
+            fname,
+            names=["C1", "C2", "C3"],
+            dtype=cat_csv_dtypes,
+            dtype_backend="pyarrow",
+        )
         return df
 
     check_func(test_impl, (fname,))
@@ -1144,6 +1212,7 @@ def test_csv_date_col_name(datapath, memory_leak_check):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname,))
@@ -1167,6 +1236,7 @@ def test_csv_read_only_datetime1(datapath, memory_leak_check):
             fname,
             names=["A"],
             parse_dates=["A"],
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname,))
@@ -1190,6 +1260,7 @@ def test_csv_read_only_datetime2(datapath, memory_leak_check):
             fname,
             names=["A", "B"],
             parse_dates=[0, 1],
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname,))
@@ -1210,10 +1281,20 @@ def test_csv_dir_int_nulls_single(datapath, memory_leak_check):
     fname = datapath("int_nulls_single.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"}, header=None)
+        return pd.read_csv(
+            fname,
+            names=["A"],
+            dtype={"A": "Int32"},
+            header=None,
+            dtype_backend="pyarrow",
+        )
 
     py_output = pd.read_csv(
-        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"}, header=None
+        datapath("int_nulls.csv"),
+        names=["A"],
+        dtype={"A": "Int32"},
+        header=None,
+        dtype_backend="pyarrow",
     )
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1233,11 +1314,13 @@ def test_csv_dir_int_nulls_header_single(datapath, memory_leak_check):
     fname = datapath("int_nulls_header_single.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     # index_col = 0 because int_nulls.csv has index written
     # names=["A"] because int_nulls.csv does not have header
-    py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
+    py_output = pd.read_csv(
+        datapath("int_nulls.csv"), index_col=0, names=["A"], dtype_backend="pyarrow"
+    )
 
     check_func(test_impl, (fname,), py_output=py_output)
 
@@ -1260,12 +1343,14 @@ def test_csv_dir_int_nulls_multi(datapath, memory_leak_check):
             fname,
             names=["A"],
             dtype={"A": "Int32"},
+            dtype_backend="pyarrow",
         )
 
     py_output = pd.read_csv(
         datapath("int_nulls.csv"),
         names=["A"],
         dtype={"A": "Int32"},
+        dtype_backend="pyarrow",
     )
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1286,11 +1371,13 @@ def test_csv_dir_int_nulls_header_multi(datapath, memory_leak_check):
     fname = datapath("int_nulls_header_multi.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     # index_col = 0 because int_nulls.csv has index written
     # names=["A"] because int_nulls.csv does not have header
-    py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
+    py_output = pd.read_csv(
+        datapath("int_nulls.csv"), index_col=0, names=["A"], dtype_backend="pyarrow"
+    )
 
     check_func(test_impl, (fname,), py_output=py_output)
 
@@ -1313,12 +1400,14 @@ def test_csv_dir_str_arr_single(datapath, memory_leak_check):
             fname,
             names=["A", "B"],
             dtype={"A": str, "B": str},
+            dtype_backend="pyarrow",
         ).fillna("")
 
     py_output = pd.read_csv(
         datapath("str_arr.csv"),
         names=["A", "B"],
         dtype={"A": str, "B": str},
+        dtype_backend="pyarrow",
     ).fillna("")
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1342,12 +1431,14 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
             fname,
             names=["A", "B"],
             dtype={"A": str, "B": str},
+            dtype_backend="pyarrow",
         ).fillna("")
 
     py_output = pd.read_csv(
         datapath("str_arr.csv"),
         names=["A", "B"],
         dtype={"A": str, "B": str},
+        dtype_backend="pyarrow",
     ).fillna("")
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1432,7 +1523,9 @@ def test_csv_dtype_unicode(memory_leak_check):
     """
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A", "B", "C", "D"], dtype="unicode")
+        return pd.read_csv(
+            fname, names=["A", "B", "C", "D"], dtype="unicode", dtype_backend="pyarrow"
+        )
 
     fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
     check_func(test_impl, (fname,))
@@ -1452,7 +1545,7 @@ def test_file_not_found(memory_leak_check):
     """Test removal Pseduo-exception with FileNotFoundError"""
 
     def test_csv(fname):
-        df = pd.read_csv(fname)
+        df = pd.read_csv(fname, dtype_backend="pyarrow")
         return df.C
 
     def test_pq(fname):
@@ -1480,16 +1573,16 @@ def test_csv_relative_path(datapath, memory_leak_check):
     filename = os.path.join(".", "bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(filename)
+        return pd.read_csv(filename, dtype_backend="pyarrow")
 
     check_func(impl1, (), check_dtype=False)
 
     # Folder
     foldername = os.path.join(".", "bodo", "tests", "data", "example_multi.csv")
-    py_output = pd.read_csv(datapath("example.csv"))
+    py_output = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
 
     def impl1():
-        return pd.read_csv(foldername)
+        return pd.read_csv(foldername, dtype_backend="pyarrow")
 
     check_func(impl1, (), check_dtype=False, py_output=py_output)
 
@@ -1505,10 +1598,12 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
 
     # all string data as dict-encoded, dead column elimination
     def impl1(fname):
-        df = pd.read_csv(fname, _bodo_read_as_dict=["two", "five"])
+        df = pd.read_csv(
+            fname, _bodo_read_as_dict=["two", "five"], dtype_backend="pyarrow"
+        )
         return df[["two", "four", "five"]]
 
-    py_output = pd.read_csv(fname)[["two", "four", "five"]]
+    py_output = pd.read_csv(fname, dtype_backend="pyarrow")[["two", "four", "five"]]
     check_func(impl1, (fname,), py_output=py_output)
 
     stream = io.StringIO()
@@ -1519,10 +1614,10 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
 
     # only one string column as dict-encoded
     def impl2(fname):
-        df = pd.read_csv(fname, _bodo_read_as_dict=["two"])
+        df = pd.read_csv(fname, _bodo_read_as_dict=["two"], dtype_backend="pyarrow")
         return df[["one", "two", "five"]]
 
-    py_output = pd.read_csv(fname)[["one", "two", "five"]]
+    py_output = pd.read_csv(fname, dtype_backend="pyarrow")[["one", "two", "five"]]
     check_func(impl2, (fname,), py_output=py_output)
 
     stream = io.StringIO()
@@ -1535,7 +1630,7 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
     with pytest.raises(BodoError, match=r"must be a constant list of column names"):
 
         def impl4(fname):
-            df = pd.read_csv(fname, _bodo_read_as_dict=True)
+            df = pd.read_csv(fname, _bodo_read_as_dict=True, dtype_backend="pyarrow")
             return df
 
         bodo.jit(impl4)(fname)
@@ -1543,7 +1638,7 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
     with pytest.raises(BodoError, match=r"_bodo_read_as_dict is not in data columns"):
 
         def impl5(fname):
-            df = pd.read_csv(fname, _bodo_read_as_dict=["H"])
+            df = pd.read_csv(fname, _bodo_read_as_dict=["H"], dtype_backend="pyarrow")
             return df
 
         bodo.jit(impl5)(fname)
@@ -1551,7 +1646,7 @@ def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
     with pytest.raises(BodoError, match=r"is not a string column"):
 
         def impl6(fname):
-            df = pd.read_csv(fname, _bodo_read_as_dict=["one"])
+            df = pd.read_csv(fname, _bodo_read_as_dict=["one"], dtype_backend="pyarrow")
             return df
 
         bodo.jit(impl6)(fname)
@@ -1562,10 +1657,10 @@ def test_csv_glob(datapath, memory_leak_check):
     """Test pd.read_csv with glob pattern"""
 
     path = datapath("example_multi.csv") + "/*.csv"
-    py_output = pd.read_csv(datapath("example.csv"))
+    py_output = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
 
     def impl1(path):
-        return pd.read_csv(path)
+        return pd.read_csv(path, dtype_backend="pyarrow")
 
     check_func(impl1, (path,), check_dtype=False, py_output=py_output)
 
@@ -1575,10 +1670,10 @@ def test_csv_nested_dir(datapath, memory_leak_check):
     """Test pd.read_csv with nested directory of data files"""
 
     path = datapath("example_multi_nested.csv")
-    py_output = pd.read_csv(datapath("example.csv"))
+    py_output = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
 
     def impl1(path):
-        return pd.read_csv(path)
+        return pd.read_csv(path, dtype_backend="pyarrow")
 
     check_func(impl1, (path,), check_dtype=False, py_output=py_output, sort_output=True)
 
@@ -1589,7 +1684,7 @@ def test_csv_nrows(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, nrows=2)
+        return pd.read_csv(fname, nrows=2, dtype_backend="pyarrow")
 
     check_func(impl1, (), check_dtype=False)
 
@@ -1597,13 +1692,13 @@ def test_csv_nrows(memory_leak_check):
     nrows = 6
 
     def impl2():
-        return pd.read_csv(fname, nrows=nrows)
+        return pd.read_csv(fname, nrows=nrows, dtype_backend="pyarrow")
 
     check_func(impl2, (), check_dtype=False)
 
     # Test nrows + skiprows
     def impl3():
-        return pd.read_csv(fname, skiprows=2, nrows=4)
+        return pd.read_csv(fname, skiprows=2, nrows=4, dtype_backend="pyarrow")
 
     check_func(impl3, (), check_dtype=False)
 
@@ -1617,6 +1712,7 @@ def test_csv_nrows(memory_leak_check):
             dtype={"A": int, "B": float, "C": float, "D": int},
             nrows=2,
             skiprows=1,
+            dtype_backend="pyarrow",
         )
         return df.B.values
 
@@ -1631,7 +1727,7 @@ def test_csv_skiprows_var(memory_leak_check):
     skip = 3
 
     def impl_skip():
-        ans = pd.read_csv(fname, skiprows=skip)
+        ans = pd.read_csv(fname, skiprows=skip, dtype_backend="pyarrow")
         return ans
 
     check_func(impl_skip, (), check_dtype=False)
@@ -1645,7 +1741,12 @@ def test_csv_skiprows_var(memory_leak_check):
         df_all = []
         for i in range(4):
             df = pd.read_csv(
-                fname, skiprows=(i * nrows), nrows=nrows, names=colnames, dtype=str
+                fname,
+                skiprows=(i * nrows),
+                nrows=nrows,
+                names=colnames,
+                dtype=str,
+                dtype_backend="pyarrow",
             )
             df_all.append(df)
         return pd.concat(df_all)
@@ -1687,14 +1788,14 @@ def test_csv_chunksize_forloop(datapath, memory_leak_check):
 
     def impl1(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=3):
+        for val in pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow"):
             result = val["four"].max()
             total += result
         return total
 
     def impl2(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=100):
+        for val in pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow"):
             # Single chunk
             result = val["four"].max()
             total += result
@@ -1702,7 +1803,7 @@ def test_csv_chunksize_forloop(datapath, memory_leak_check):
 
     def impl3(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=1):
+        for val in pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow"):
             # Empty data on all ranks but 0
             result = val["four"].max()
             total += result
@@ -1722,7 +1823,9 @@ def test_csv_chunksize_index_col(datapath, memory_leak_check):
 
     def impl(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=3, index_col="four"):
+        for val in pd.read_csv(
+            fname, chunksize=3, index_col="four", dtype_backend="pyarrow"
+        ):
             total += val.index[-1]
         return total
 
@@ -1739,7 +1842,9 @@ def test_csv_chunksize_enumerate(datapath, memory_leak_check):
     def impl1(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow")
+        ):
             result = val["four"].max()
             total += result
             count_total += i
@@ -1748,7 +1853,9 @@ def test_csv_chunksize_enumerate(datapath, memory_leak_check):
     def impl2(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow")
+        ):
             # Single chunk
             result = val["four"].max()
             total += result
@@ -1758,7 +1865,9 @@ def test_csv_chunksize_enumerate(datapath, memory_leak_check):
     def impl3(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow")
+        ):
             # Empty data on all ranks but 0
             result = val["four"].max()
             total += result
@@ -1781,20 +1890,20 @@ def test_csv_chunksize_forloop_append(datapath, memory_leak_check):
 
     def impl1(fname):
         df_list = []
-        for val in pd.read_csv(fname, chunksize=3):
+        for val in pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow"):
             df_list.append(val)
         return pd.concat(df_list)
 
     def impl2(fname):
         df_list = []
-        for val in pd.read_csv(fname, chunksize=100):
+        for val in pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow"):
             # Single chunk
             df_list.append(val)
         return pd.concat(df_list)
 
     def impl3(fname):
         df_list = []
-        for val in pd.read_csv(fname, chunksize=1):
+        for val in pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow"):
             # Empty data on all ranks but 0
             df_list.append(val)
         return pd.concat(df_list)
@@ -1819,7 +1928,9 @@ def test_csv_chunksize_enumerate_append(datapath, memory_leak_check):
     def impl1(fname):
         df_list = []
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow")
+        ):
             df_list.append(val)
             count_total += i
         return (count_total, pd.concat(df_list))
@@ -1827,7 +1938,9 @@ def test_csv_chunksize_enumerate_append(datapath, memory_leak_check):
     def impl2(fname):
         df_list = []
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow")
+        ):
             # Single chunk
             df_list.append(val)
             count_total += i
@@ -1836,7 +1949,9 @@ def test_csv_chunksize_enumerate_append(datapath, memory_leak_check):
     def impl3(fname):
         df_list = []
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+        for i, val in enumerate(
+            pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow")
+        ):
             # Empty data on all ranks but 0
             df_list.append(val)
             count_total += i
@@ -1862,7 +1977,7 @@ def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
     def impl1(fname, n):
         total = 0.0
         for _ in range(n):
-            for val in pd.read_csv(fname, chunksize=3):
+            for val in pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow"):
                 result = val["four"].max()
                 total += result
         return total
@@ -1870,7 +1985,7 @@ def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
     def impl2(fname, n):
         total = 0.0
         for _ in range(n):
-            for val in pd.read_csv(fname, chunksize=100):
+            for val in pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow"):
                 # Single chunk
                 result = val["four"].max()
                 total += result
@@ -1879,7 +1994,7 @@ def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
     def impl3(fname, n):
         total = 0.0
         for _ in range(n):
-            for val in pd.read_csv(fname, chunksize=1):
+            for val in pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow"):
                 # Empty data on all ranks but 0
                 result = val["four"].max()
                 total += result
@@ -1903,7 +2018,9 @@ def test_csv_chunksize_enumerate_nested(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=3, dtype_backend="pyarrow")
+            ):
                 result = val["four"].max()
                 total += result
                 count_total += i
@@ -1913,7 +2030,9 @@ def test_csv_chunksize_enumerate_nested(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=100, dtype_backend="pyarrow")
+            ):
                 # Single chunk
                 result = val["four"].max()
                 total += result
@@ -1924,7 +2043,9 @@ def test_csv_chunksize_enumerate_nested(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=1, dtype_backend="pyarrow")
+            ):
                 # Empty data on all ranks but 0
                 result = val["four"].max()
                 total += result
@@ -1950,7 +2071,9 @@ def test_csv_chunksize_skiprows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=3, skiprows=5)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=3, skiprows=5, dtype_backend="pyarrow")
+            ):
                 result = val.iloc[:, 0].max()
                 total += result
                 count_total += i
@@ -1961,7 +2084,9 @@ def test_csv_chunksize_skiprows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=100, skiprows=5)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=100, skiprows=5, dtype_backend="pyarrow")
+            ):
                 # Single chunk
                 result = val.iloc[:, 0].max()
                 total += result
@@ -1973,7 +2098,9 @@ def test_csv_chunksize_skiprows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=1, skiprows=13)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=1, skiprows=13, dtype_backend="pyarrow")
+            ):
                 # Empty data on all ranks but 0
                 result = val.iloc[:, 0].max()
                 total += result
@@ -1999,7 +2126,9 @@ def test_csv_chunksize_nrows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=3, nrows=7)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=3, nrows=7, dtype_backend="pyarrow")
+            ):
                 result = val.iloc[:, 0].max()
                 total += result
                 count_total += i
@@ -2010,7 +2139,9 @@ def test_csv_chunksize_nrows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=100, nrows=5)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=100, nrows=5, dtype_backend="pyarrow")
+            ):
                 # Single chunk
                 result = val.iloc[:, 0].max()
                 total += result
@@ -2022,7 +2153,9 @@ def test_csv_chunksize_nrows(datapath, memory_leak_check):
         total = 0.0
         count_total = 0
         for _ in range(n):
-            for i, val in enumerate(pd.read_csv(fname, chunksize=1, nrows=3)):
+            for i, val in enumerate(
+                pd.read_csv(fname, chunksize=1, nrows=3, dtype_backend="pyarrow")
+            ):
                 # Empty data on all ranks but 0
                 result = val.iloc[:, 0].max()
                 total += result
@@ -2045,7 +2178,11 @@ def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
     def impl1(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=3, nrows=10, skiprows=5)):
+        for i, val in enumerate(
+            pd.read_csv(
+                fname, chunksize=3, nrows=10, skiprows=5, dtype_backend="pyarrow"
+            )
+        ):
             result = val.iloc[:, 0].max()
             total += result
             count_total += i
@@ -2055,7 +2192,11 @@ def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
     def impl2(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=100, skiprows=4, nrows=5)):
+        for i, val in enumerate(
+            pd.read_csv(
+                fname, chunksize=100, skiprows=4, nrows=5, dtype_backend="pyarrow"
+            )
+        ):
             # Single chunk
             result = val.iloc[:, 0].max()
             total += result
@@ -2066,7 +2207,11 @@ def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
     def impl3(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(pd.read_csv(fname, chunksize=1, nrows=10, skiprows=5)):
+        for i, val in enumerate(
+            pd.read_csv(
+                fname, chunksize=1, nrows=10, skiprows=5, dtype_backend="pyarrow"
+            )
+        ):
             # Empty data on all ranks but 0
             result = val.iloc[:, 0].max()
             total += result
@@ -2088,37 +2233,53 @@ def test_csv_skiprows_list_low_memory(datapath, memory_leak_check):
     # skiprows list
     # (include 1st row and case where rank's start_pos is inside a skipped row)
     def impl1(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[1, 5, 7, 12])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[1, 5, 7, 12], dtype_backend="pyarrow"
+        )
 
     check_func(impl1, (fname,))
 
     # skiprows > available rows
     def impl2(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[17, 20])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[17, 20], dtype_backend="pyarrow"
+        )
 
     check_func(impl2, (fname,))
 
     # skiprows list unordered and duplicated
     def impl3(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[13, 4, 12, 4, 13])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[13, 4, 12, 4, 13], dtype_backend="pyarrow"
+        )
 
     check_func(impl3, (fname,))
 
     # nrows + skiprows list (list has values in and out of nrows range)
     def impl4(fname):
-        return pd.read_csv(fname, low_memory=True, nrows=10, skiprows=[4, 7, 12])
+        return pd.read_csv(
+            fname,
+            low_memory=True,
+            nrows=10,
+            skiprows=[4, 7, 12],
+            dtype_backend="pyarrow",
+        )
 
     check_func(impl4, (fname,))
 
     # skiprows list with 0
     def impl5(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[0, 2, 3, 4, 5, 6])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[0, 2, 3, 4, 5, 6], dtype_backend="pyarrow"
+        )
 
     check_func(impl5, (fname,))
 
     # contiguous list
     def impl6(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[6, 7, 8])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[6, 7, 8], dtype_backend="pyarrow"
+        )
 
     check_func(impl6, (fname,))
 
@@ -2126,11 +2287,16 @@ def test_csv_skiprows_list_low_memory(datapath, memory_leak_check):
     # Note: Bodo's index is object while pandas is int64
     # check_dtype=False does not work index values are '0' vs. 0
     py_output = pd.read_csv(
-        fname, names=["0", "1", "2", "3", "4"], skiprows=[0, 2, 3, 7, 5, 9]
+        fname,
+        names=["0", "1", "2", "3", "4"],
+        skiprows=[0, 2, 3, 7, 5, 9],
+        dtype_backend="pyarrow",
     )
 
     def impl7(fname):
-        ans = pd.read_csv(fname, header=None, skiprows=[0, 2, 3, 7, 5, 9])
+        ans = pd.read_csv(
+            fname, header=None, skiprows=[0, 2, 3, 7, 5, 9], dtype_backend="pyarrow"
+        )
         return ans
 
     check_func(impl7, (fname,), py_output=py_output)
@@ -2146,25 +2312,29 @@ def test_csv_skiprows_list(datapath, memory_leak_check):
     # skiprows list
     # (include 1st row and case where rank's start_pos is inside a skipped row)
     def impl1(fname):
-        return pd.read_csv(fname, low_memory=True, skiprows=[1, 5, 7, 12])
+        return pd.read_csv(
+            fname, low_memory=True, skiprows=[1, 5, 7, 12], dtype_backend="pyarrow"
+        )
 
     check_func(impl1, (fname,))
 
     # skiprows > available rows
     def impl2(fname):
-        return pd.read_csv(fname, skiprows=[17, 20])
+        return pd.read_csv(fname, skiprows=[17, 20], dtype_backend="pyarrow")
 
     check_func(impl2, (fname,))
 
     # nrows + skiprows list (list has values in and out of nrows range)
     def impl3(fname):
-        return pd.read_csv(fname, nrows=10, skiprows=[4, 7, 12])
+        return pd.read_csv(
+            fname, nrows=10, skiprows=[4, 7, 12], dtype_backend="pyarrow"
+        )
 
     check_func(impl3, (fname,))
 
     # skiprows list with 0
     def impl4(fname):
-        return pd.read_csv(fname, skiprows=[0, 2, 3, 4, 5, 6])
+        return pd.read_csv(fname, skiprows=[0, 2, 3, 4, 5, 6], dtype_backend="pyarrow")
 
     check_func(impl4, (fname,))
 
@@ -2172,11 +2342,16 @@ def test_csv_skiprows_list(datapath, memory_leak_check):
     # Note: Bodo's index is object while pandas is int64
     # check_dtype=False does not work index values are '0' vs. 0
     py_output = pd.read_csv(
-        fname, names=["0", "1", "2", "3", "4"], skiprows=[0, 2, 3, 7, 5, 9]
+        fname,
+        names=["0", "1", "2", "3", "4"],
+        skiprows=[0, 2, 3, 7, 5, 9],
+        dtype_backend="pyarrow",
     )
 
     def impl5(fname):
-        ans = pd.read_csv(fname, header=None, skiprows=[0, 2, 3, 7, 5, 9])
+        ans = pd.read_csv(
+            fname, header=None, skiprows=[0, 2, 3, 7, 5, 9], dtype_backend="pyarrow"
+        )
         return ans
 
     check_func(impl5, (fname,), py_output=py_output)
@@ -2193,7 +2368,9 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # (include case where rank's chunk start_pos and end_pos is inside a skipped row)
     def impl1(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=5, skiprows=[4, 5, 7, 13]):
+        for val in pd.read_csv(
+            fname, chunksize=5, skiprows=[4, 5, 7, 13], dtype_backend="pyarrow"
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2203,7 +2380,9 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # list + chunksize (one chunk)
     def impl2(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=15, skiprows=[9, 4, 2, 10]):
+        for val in pd.read_csv(
+            fname, chunksize=15, skiprows=[9, 4, 2, 10], dtype_backend="pyarrow"
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2213,7 +2392,9 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # list + chunksize (only rank 0 gets the chunk)
     def impl3(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=1, skiprows=[4, 7]):
+        for val in pd.read_csv(
+            fname, chunksize=1, skiprows=[4, 7], dtype_backend="pyarrow"
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2223,7 +2404,13 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # list + nrows + chunksize (each rank gets a chunk)
     def impl4(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=3, nrows=12, skiprows=[2, 5, 8, 14]):
+        for val in pd.read_csv(
+            fname,
+            chunksize=3,
+            nrows=12,
+            skiprows=[2, 5, 8, 14],
+            dtype_backend="pyarrow",
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2233,7 +2420,13 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # list + nrows + chunksize (one chunk)
     def impl5(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=15, nrows=12, skiprows=[1, 4, 7, 13]):
+        for val in pd.read_csv(
+            fname,
+            chunksize=15,
+            nrows=12,
+            skiprows=[1, 4, 7, 13],
+            dtype_backend="pyarrow",
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2243,7 +2436,13 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     # list + nrows + chunksize (only rank 0 gets the chunk)
     def impl6(fname):
         total = 0.0
-        for val in pd.read_csv(fname, chunksize=1, nrows=6, skiprows=[14, 4, 9, 13]):
+        for val in pd.read_csv(
+            fname,
+            chunksize=1,
+            nrows=6,
+            skiprows=[14, 4, 9, 13],
+            dtype_backend="pyarrow",
+        ):
             result = val.iloc[:, 0].max()
             total += result
         return total
@@ -2260,13 +2459,13 @@ def test_csv_np_gt_rows(datapath, memory_leak_check):
     fname = datapath("small_data.csv")
 
     def impl1():
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     check_func(impl1, (), check_dtype=False)
 
     # Test usecols
     def impl2():
-        return pd.read_csv(fname, usecols=["A", "C"])
+        return pd.read_csv(fname, usecols=["A", "C"], dtype_backend="pyarrow")
 
     check_func(impl2, (), check_dtype=False)
 
@@ -2278,7 +2477,7 @@ def test_csv_escapechar(datapath, memory_leak_check):
     fname = datapath("escapechar_data.csv")
 
     def impl():
-        return pd.read_csv(fname, escapechar="\\")
+        return pd.read_csv(fname, escapechar="\\", dtype_backend="pyarrow")
 
     check_func(impl, (), check_dtype=False)
 
@@ -2301,6 +2500,7 @@ def test_csv_unsupported_arg_match(memory_leak_check):
             index_col=None,
             usecols=None,
             engine=None,
+            dtype_backend="pyarrow",
         )
 
     check_func(impl, (), check_dtype=False)
@@ -2317,7 +2517,7 @@ def test_csv_unsupported_kwarg_match(memory_leak_check):
     def impl():
         # comment is provided but not supported. It matches the default
         # so it should still work.
-        return pd.read_csv(fname, comment=None)
+        return pd.read_csv(fname, comment=None, dtype_backend="pyarrow")
 
     check_func(impl, (), check_dtype=False)
 
@@ -2334,9 +2534,9 @@ def test_read_csv_sample_nrows(datapath, memory_leak_check):
     fname = datapath("large_data.csv")
 
     def impl1():
-        return pd.read_csv(fname, sample_nrows=120)
+        return pd.read_csv(fname, sample_nrows=120, dtype_backend="pyarrow")
 
-    py_df = pd.read_csv(fname)
+    py_df = pd.read_csv(fname, dtype_backend="pyarrow")
     check_func(impl1, (), py_output=py_df)
 
 
@@ -2368,6 +2568,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": float, "D": int},
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True)
@@ -2377,7 +2578,9 @@ class TestIO(unittest.TestCase):
 
         def test_impl():
             dtype = {"A": int, "B": float, "C": float, "D": int}
-            return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
+            return pd.read_csv(
+                fname, names=list(dtype.keys()), dtype=dtype, dtype_backend="pyarrow"
+            )
 
         check_func(test_impl, (), only_seq=True)
 
@@ -2386,7 +2589,9 @@ class TestIO(unittest.TestCase):
 
         def test_impl():
             dtype = {"A": "int", "B": "float64", "C": "float", "D": "int64"}
-            return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
+            return pd.read_csv(
+                fname, names=list(dtype.keys()), dtype=dtype, dtype_backend="pyarrow"
+            )
 
         check_func(test_impl, (), only_seq=True)
 
@@ -2394,7 +2599,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
 
         def test_impl():
-            return pd.read_csv(fname)
+            return pd.read_csv(fname, dtype_backend="pyarrow")
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
 
@@ -2402,7 +2607,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
 
         def test_impl():
-            df = pd.read_csv(fname)
+            df = pd.read_csv(fname, dtype_backend="pyarrow")
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -2412,7 +2617,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
 
         def test_impl():
-            df = pd.read_csv(fname)
+            df = pd.read_csv(fname, dtype_backend="pyarrow")
             return df
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -2426,6 +2631,7 @@ class TestIO(unittest.TestCase):
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": float, "D": int},
                 skiprows=2,
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True)
@@ -2434,7 +2640,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
 
         def test_impl():
-            return pd.read_csv(fname, skiprows=2)
+            return pd.read_csv(fname, skiprows=2, dtype_backend="pyarrow")
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
 
@@ -2442,7 +2648,9 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
 
         def test_impl():
-            df = pd.read_csv(fname, skiprows=2, names=["A", "B", "C", "D"])
+            df = pd.read_csv(
+                fname, skiprows=2, names=["A", "B", "C", "D"], dtype_backend="pyarrow"
+            )
             return df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -2456,6 +2664,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": float, "D": int},
+                dtype_backend="pyarrow",
             )
             return df.B.values
 
@@ -2470,6 +2679,7 @@ class TestIO(unittest.TestCase):
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "D": int},
                 parse_dates=[2],
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True)
@@ -2482,6 +2692,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": str, "D": int},
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -2495,6 +2706,7 @@ class TestIO(unittest.TestCase):
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col="A",
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -2508,6 +2720,7 @@ class TestIO(unittest.TestCase):
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col=0,
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -2521,6 +2734,7 @@ class TestIO(unittest.TestCase):
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col=1,
+                dtype_backend="pyarrow",
             )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -2533,6 +2747,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": float, "D": int},
+                dtype_backend="pyarrow",
             )
             return (df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum())
 
@@ -2547,6 +2762,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["A", "B", "C", "D"],
                 dtype={"A": int, "B": float, "C": str, "D": int},
+                dtype_backend="pyarrow",
             )
             return (df.A.sum(), df.B.sum(), (df.C == "1966-11-13").sum(), df.D.sum())
 
@@ -2557,7 +2773,13 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
 
         def test_impl():
-            return pd.read_csv(fname, names=["C"], dtype={"C": float}, usecols=[2])
+            return pd.read_csv(
+                fname,
+                names=["C"],
+                dtype={"C": float},
+                usecols=[2],
+                dtype_backend="pyarrow",
+            )
 
         check_func(test_impl, (), only_seq=True)
 
@@ -2565,7 +2787,9 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
 
         def test_impl():
-            return pd.read_csv(fname, names=["B", "C"], usecols=[1, 2])
+            return pd.read_csv(
+                fname, names=["B", "C"], usecols=[1, 2], dtype_backend="pyarrow"
+            )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
 
@@ -2573,7 +2797,13 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data2.csv")
 
         def test_impl():
-            return pd.read_csv(fname, sep="|", names=["B", "C"], usecols=[1, 2])
+            return pd.read_csv(
+                fname,
+                sep="|",
+                names=["B", "C"],
+                usecols=[1, 2],
+                dtype_backend="pyarrow",
+            )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
 
@@ -2586,6 +2816,7 @@ class TestIO(unittest.TestCase):
                 fname,
                 names=["C1", "C2", "C3"],
                 dtype={"C1": int, "C2": ct_dtype, "C3": str},
+                dtype_backend="pyarrow",
             )
             return df
 
@@ -2595,7 +2826,9 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data_dtype1.csv")
 
         def test_impl():
-            df = pd.read_csv(fname, names=["C1", "C2"], dtype=np.float64)
+            df = pd.read_csv(
+                fname, names=["C1", "C2"], dtype=np.float64, dtype_backend="pyarrow"
+            )
             return df
 
         check_func(test_impl, (), only_seq=True)
@@ -2613,7 +2846,9 @@ class TestIO(unittest.TestCase):
             bodo.barrier()
             test_impl(data_structure, pd_fname)
             pd.testing.assert_frame_equal(
-                pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
+                pd.read_csv(hp_fname, dtype_backend="pyarrow"),
+                pd.read_csv(pd_fname, dtype_backend="pyarrow"),
+                check_column_type=False,
             )
 
     def test_write_dataframe_csv1(self):
@@ -2656,8 +2891,8 @@ class TestIO(unittest.TestCase):
             if get_rank() == 0:
                 test_impl(n, pd_fname)
                 pd.testing.assert_frame_equal(
-                    pd.read_csv(hp_fname),
-                    pd.read_csv(pd_fname),
+                    pd.read_csv(hp_fname, dtype_backend="pyarrow"),
+                    pd.read_csv(pd_fname, dtype_backend="pyarrow"),
                     check_column_type=False,
                 )
 
@@ -2695,8 +2930,8 @@ class TestIO(unittest.TestCase):
             if get_rank() == 0:
                 test_impl(n, pd_fname)
                 pd.testing.assert_frame_equal(
-                    pd.read_csv(hp_fname),
-                    pd.read_csv(pd_fname),
+                    pd.read_csv(hp_fname, dtype_backend="pyarrow"),
+                    pd.read_csv(pd_fname, dtype_backend="pyarrow"),
                     check_column_type=False,
                 )
 
@@ -2819,6 +3054,7 @@ def test_csv_non_constant_filepath_error(datapath):
         for filepath in [f1]:
             df = pd.read_csv(
                 filepath,
+                dtype_backend="pyarrow",
             )
         return df
 
@@ -2828,6 +3064,7 @@ def test_csv_non_constant_filepath_error(datapath):
             df = pd.read_csv(
                 filepath,
                 names=["A", "B", "C"],
+                dtype_backend="pyarrow",
             )
         return df
 
@@ -2841,6 +3078,7 @@ def test_csv_non_constant_filepath_error(datapath):
                     "B": str,
                     "C": str,
                 },
+                dtype_backend="pyarrow",
             )
         return df
 
@@ -2850,6 +3088,7 @@ def test_csv_non_constant_filepath_error(datapath):
                 filepath,
                 names=["A", "B", "C"],
                 dtype={"A": int, "B": str, "C": str},
+                dtype_backend="pyarrow",
             )
         return df
 

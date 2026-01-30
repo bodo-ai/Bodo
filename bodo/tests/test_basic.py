@@ -986,7 +986,7 @@ def test_pure_func(datapath):
 
     # csv read
     def impl11():
-        return pd.read_csv(fname_csv)
+        return pd.read_csv(fname_csv, dtype_backend="pyarrow")
 
     # csv write
     def impl12():

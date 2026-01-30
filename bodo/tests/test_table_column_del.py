@@ -156,7 +156,7 @@ def test_table_len_with_idx_col(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column0")
+        df = pd.read_csv(filename, index_col="Column0", dtype_backend="pyarrow")
         return len(df)
 
     check_func(impl, ())
@@ -1499,7 +1499,7 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl(n):
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         total = 0.0
         while n > 0:
@@ -1569,7 +1569,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column4")
+        df = pd.read_csv(filename, index_col="Column4", dtype_backend="pyarrow")
         return df.index
 
     check_func(impl, ())
@@ -1586,7 +1586,7 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
     try:
 
         def impl(source_filename, dest_filename):
-            df = pd.read_csv(source_filename)
+            df = pd.read_csv(source_filename, dtype_backend="pyarrow")
             df.to_parquet(dest_filename)
 
         def check_correctness(pandas_filename, bodo_filename):
@@ -1626,7 +1626,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column4")
+        df = pd.read_csv(filename, index_col="Column4", dtype_backend="pyarrow")
         return df.index
 
     check_func(impl, (), check_dtype=False)

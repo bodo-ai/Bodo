@@ -7270,7 +7270,7 @@ def test_head_idx(datapath, memory_leak_check):
     filename = datapath("example.csv")
 
     def impl1():
-        df = pd.read_csv(filename, index_col="two")
+        df = pd.read_csv(filename, index_col="two", dtype_backend="pyarrow")
         A = df.groupby("one").head(1)
         return A
 

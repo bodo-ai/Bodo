@@ -41,7 +41,9 @@ def test_read_csv_cache(fn_distribution, is_cached, datapath, memory_leak_check)
     fname = datapath("csv_data1.csv")
 
     def impl():
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"], compression=None)
+        df = pd.read_csv(
+            fname, names=["A", "B", "C", "D"], compression=None, dtype_backend="pyarrow"
+        )
         return df.C
 
     check_caching(impl, (), is_cached, fn_distribution)
@@ -160,10 +162,10 @@ def test_read_csv_cache_fname_arg(
     """
 
     def impl(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     def impl2(fname):
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     fname1 = datapath("example.csv")
     fname2 = datapath("example_multi.csv")  # directory of csv files

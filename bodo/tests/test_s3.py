@@ -92,6 +92,7 @@ def test_s3_csv_data1(
             fpath,
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "C": float, "D": int},
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
@@ -99,6 +100,7 @@ def test_s3_csv_data1(
         fname,
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "C": float, "D": int},
+        dtype_backend="pyarrow",
     )
 
     check_func(
@@ -140,6 +142,7 @@ def test_s3_csv_dir(
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
@@ -156,16 +159,24 @@ def test_s3_csv_data1_compressed(minio_server_with_s3_envs, s3_bucket, datapath)
 
     def test_impl_gzip():
         return pd.read_csv(
-            "s3://bodo-test/csv_data1.csv.gz", names=["A", "B", "C", "D"], header=None
+            "s3://bodo-test/csv_data1.csv.gz",
+            names=["A", "B", "C", "D"],
+            header=None,
+            dtype_backend="pyarrow",
         )
 
     def test_impl_bz2():
         return pd.read_csv(
-            "s3://bodo-test/csv_data1.csv.bz2", names=["A", "B", "C", "D"], header=None
+            "s3://bodo-test/csv_data1.csv.bz2",
+            names=["A", "B", "C", "D"],
+            header=None,
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
-    py_output = pd.read_csv(fname, names=["A", "B", "C", "D"], header=None)
+    py_output = pd.read_csv(
+        fname, names=["A", "B", "C", "D"], header=None, dtype_backend="pyarrow"
+    )
 
     check_func(test_impl_gzip, (), py_output=py_output, check_dtype=False)
     check_func(test_impl_bz2, (), py_output=py_output, check_dtype=False)
@@ -182,6 +193,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data_date1.csv")
@@ -190,6 +202,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
+        dtype_backend="pyarrow",
     )
     check_func(test_impl, (), py_output=py_output, convert_to_nullable_float=False)
 
@@ -938,6 +951,7 @@ def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
             "s3://bodo-test/test_df_bodo_read.csv",
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -967,6 +981,7 @@ def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
     def test_read():
         return pd.read_csv(
             "s3://bodo-test/test_df_bodo_read_header.csv",
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -1266,6 +1281,7 @@ def test_s3_csv_anon_public_dataset(memory_leak_check):
         df = pd.read_csv(
             "s3://databrew-public-datasets-us-east-1/resolution.csv",
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         return df
 

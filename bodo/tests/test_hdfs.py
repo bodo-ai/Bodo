@@ -139,6 +139,7 @@ def test_csv_data1(datapath, hdfs_datapath):
             hdfs_fname,
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "C": float, "D": int},
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
@@ -146,6 +147,7 @@ def test_csv_data1(datapath, hdfs_datapath):
         fname,
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "C": float, "D": int},
+        dtype_backend="pyarrow",
     )
 
     # Need check_dtype=False because of nullable floats
@@ -165,6 +167,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data_date1.csv")
@@ -173,6 +176,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
+        dtype_backend="pyarrow",
     )
 
     # Need check_dtype=False because of nullable floats
@@ -480,6 +484,7 @@ def test_hdfs_csv_read_seq(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -498,6 +503,7 @@ def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -516,6 +522,7 @@ def test_hdfs_csv_read_1D_var(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -530,7 +537,7 @@ def test_hdfs_csv_read_header_seq(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_seq.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -544,7 +551,7 @@ def test_hdfs_csv_read_header_1D(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_1D.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -558,7 +565,7 @@ def test_hdfs_csv_read_1D_header_var(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_1D_var.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 

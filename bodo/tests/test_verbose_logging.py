@@ -52,7 +52,7 @@ def test_csv_column_pruning(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"])
+        df = pd.read_csv(fname, names=["A", "B", "C", "D"], dtype_backend="pyarrow")
         return df.A
 
     fname_file = datapath("csv_data1.csv")
@@ -74,7 +74,9 @@ def test_csv_iterator_column_pruning(datapath, memory_leak_check):
     @bodo.jit
     def test_impl(fname):
         total_len = 0
-        for df in pd.read_csv(fname, names=["A", "B", "C", "D"], chunksize=7):
+        for df in pd.read_csv(
+            fname, names=["A", "B", "C", "D"], chunksize=7, dtype_backend="pyarrow"
+        ):
             total_len += len(df)
         return total_len
 

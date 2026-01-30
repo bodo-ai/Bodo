@@ -517,7 +517,7 @@ def test_csv(collect_func):
     with ensure_clean2(fname):
         bodo_df.to_csv(fname, index=False)
         assert bodo_df._lazy
-        read_df = pd.read_csv(fname)
+        read_df = pd.read_csv(fname, dtype_backend="pyarrow")
 
     pd.testing.assert_frame_equal(
         read_df,

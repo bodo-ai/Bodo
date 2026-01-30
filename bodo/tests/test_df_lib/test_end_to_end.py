@@ -2465,7 +2465,7 @@ def test_read_csv(datapath):
         date_path = datapath("csv_data_date1.csv")
 
         bodo_out = bd.read_csv(path)[["one", "four"]]
-        py_out = pd.read_csv(path)[["one", "four"]]
+        py_out = pd.read_csv(path, dtype_backend="pyarrow")[["one", "four"]]
 
     _test_equal(
         bodo_out,
@@ -2474,7 +2474,7 @@ def test_read_csv(datapath):
 
     with assert_executed_plan_count(0):
         bodo_out = bd.read_csv(path, usecols=[0, 3])
-        py_out = pd.read_csv(path, usecols=[0, 3])
+        py_out = pd.read_csv(path, usecols=[0, 3], dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -2484,7 +2484,7 @@ def test_read_csv(datapath):
     with assert_executed_plan_count(0):
         col_names = ["int0", "float0", "float1", "int1"]
         bodo_out = bd.read_csv(data1_path, names=col_names)
-        py_out = pd.read_csv(data1_path, names=col_names)
+        py_out = pd.read_csv(data1_path, names=col_names, dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -2494,7 +2494,9 @@ def test_read_csv(datapath):
     with assert_executed_plan_count(0):
         col_names = ["int0", "float0", "date0", "int1"]
         bodo_out = bd.read_csv(date_path, names=col_names, parse_dates=[2])
-        py_out = pd.read_csv(date_path, names=col_names, parse_dates=[2])
+        py_out = pd.read_csv(
+            date_path, names=col_names, parse_dates=[2], dtype_backend="pyarrow"
+        )
 
     _test_equal(
         bodo_out,
@@ -3328,7 +3330,7 @@ def test_series_reset_index_pipeline():
 
         with assert_executed_plan_count(0):
             bdf = bd.read_csv(csv_path)
-            pdf = pd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path, dtype_backend="pyarrow")
             bds = bdf.groupby("category")["value"].sum().reset_index()
             pds = pdf.groupby("category")["value"].sum().reset_index()
 
@@ -3387,7 +3389,7 @@ def test_dataframe_reset_index_pipeline():
 
         with assert_executed_plan_count(0):
             bdf = bd.read_csv(csv_path)
-            pdf = pd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path, dtype_backend="pyarrow")
 
             bdf = bdf.set_index(["Number", "Color"])
             pdf = pdf.set_index(["Number", "Color"])

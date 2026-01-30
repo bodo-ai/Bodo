@@ -3670,7 +3670,9 @@ def test_merge_cat_identical(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
     ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
     dtypes = {"C1": int, "C2": ct_dtype}
-    df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes, usecols=[0, 1])
+    df1 = pd.read_csv(
+        fname, names=["C1", "C2"], dtype=dtypes, usecols=[0, 1], dtype_backend="pyarrow"
+    )
     check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
@@ -3689,8 +3691,20 @@ def test_merge_cat_multi_cols(memory_leak_check):
     ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5", "t-"])
     ct_dtype2 = pd.CategoricalDtype(["A", "B", "C", "p"])
     dtypes = {"C1": ct_dtype1, "C2": ct_dtype2, "C3": str}
-    df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[0])
-    df2 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[1])
+    df1 = pd.read_csv(
+        fname,
+        names=["C1", "C2", "C3"],
+        dtype=dtypes,
+        skiprows=[0],
+        dtype_backend="pyarrow",
+    )
+    df2 = pd.read_csv(
+        fname,
+        names=["C1", "C2", "C3"],
+        dtype=dtypes,
+        skiprows=[1],
+        dtype_backend="pyarrow",
+    )
     # add extra rows to avoid empty output dataframes on 3 process test
     df3 = pd.DataFrame(
         {
@@ -3715,7 +3729,9 @@ def test_merge_cat1_inner(memory_leak_check):
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
-        df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+        df1 = pd.read_csv(
+            fname, names=["C1", "C2", "C3"], dtype=dtypes, dtype_backend="pyarrow"
+        )
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
         df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
@@ -3737,7 +3753,9 @@ def test_merge_cat1_right_2cols1(memory_leak_check):
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": int, "C2": ct_dtype}
-        df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
+        df1 = pd.read_csv(
+            fname, names=["C1", "C2"], dtype=dtypes, dtype_backend="pyarrow"
+        )
         n = len(df1)
         df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1", how="right")
@@ -3758,7 +3776,9 @@ def test_merge_cat1_right_2cols2(memory_leak_check):
 
     def test_impl():
         dtypes = {"C1": int, "C2": str}
-        df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
+        df1 = pd.read_csv(
+            fname, names=["C1", "C2"], dtype=dtypes, dtype_backend="pyarrow"
+        )
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
         df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
@@ -3779,7 +3799,9 @@ def test_merge_cat1_right(memory_leak_check):
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
-        df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+        df1 = pd.read_csv(
+            fname, names=["C1", "C2", "C3"], dtype=dtypes, dtype_backend="pyarrow"
+        )
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
         df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
@@ -4806,7 +4828,9 @@ class TestJoin(unittest.TestCase):
         def test_impl():
             ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
             dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
-            df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
+            df1 = pd.read_csv(
+                fname, names=["C1", "C2", "C3"], dtype=dtypes, dtype_backend="pyarrow"
+            )
             n = len(df1)
             df2 = pd.DataFrame(
                 {"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0}
