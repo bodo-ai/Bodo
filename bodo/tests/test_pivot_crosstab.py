@@ -343,7 +343,7 @@ def test_pivot_drop_column(datapath, memory_leak_check):
     fname = datapath("pivot2.pq")
 
     def impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
         res = len(pt.small.values)
         return res
@@ -403,7 +403,7 @@ def test_crosstab_deadcolumn(datapath, memory_leak_check):
     fname = datapath("pivot2.pq")
 
     def impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         pt = pd.crosstab(df.A, df.C)
         res = pt.small.values.sum()
         return res
@@ -1630,7 +1630,7 @@ def test_pivot_to_parquet(df):
         passed = 1
         if bodo.get_rank() == 0:
             try:
-                result = pd.read_parquet(output_filename)
+                result = pd.read_parquet(output_filename, dtype_backend="pyarrow")
                 # Reorder the columns since this can't be done in _test_equal_guard.
                 result.sort_index(axis=1, inplace=True)
                 passed = _test_equal_guard(
@@ -1709,11 +1709,11 @@ def test_pivot_table_dict_encoded(memory_leak_check):
     bodo.barrier()
 
     def impl():
-        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"])
+        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"], dtype_backend="pyarrow")
         return df.pivot_table(index=["B", "C"], columns="D", values="A", aggfunc="min")
 
     try:
-        py_output = pd.read_parquet(temp_filename)
+        py_output = pd.read_parquet(temp_filename, dtype_backend="pyarrow")
         py_output = py_output.pivot_table(
             index=["B", "C"], columns="D", values="A", aggfunc="min"
         )
@@ -1759,11 +1759,11 @@ def test_pivot_dict_encoded(memory_leak_check):
     bodo.barrier()
 
     def impl():
-        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"])
+        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"], dtype_backend="pyarrow")
         return df.pivot(index=["D", "C"], columns="A", values="B")
 
     try:
-        py_output = pd.read_parquet(temp_filename)
+        py_output = pd.read_parquet(temp_filename, dtype_backend="pyarrow")
         py_output = py_output.pivot(index=["D", "C"], columns="A", values="B")
         check_func(
             impl,

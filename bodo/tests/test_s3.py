@@ -22,9 +22,10 @@ def test_no_use_ssl(datapath, minio_server_with_s3_envs, s3_bucket):
         return pd.read_parquet(
             fpath,
             storage_options={"anon": False, "endpoint_url": address, "use_ssl": False},
+            dtype_backend="pyarrow",
         )
 
-    py_output = pd.read_parquet(datapath("example.parquet"))
+    py_output = pd.read_parquet(datapath("example.parquet"), dtype_backend="pyarrow")
 
     check_func(
         test_impl,
@@ -54,10 +55,10 @@ def test_partition_cols(minio_server_with_s3_envs, s3_bucket):
         with ensure_clean2(bd_fname):
             write_jit(_get_dist_arg(df, False))
             A0_actual = bodo.jit(returns_maybe_distributed=False)(
-                lambda: pd.read_parquet(f"{bd_fname}/A=0")
+                lambda: pd.read_parquet(f"{bd_fname}/A=0", dtype_backend="pyarrow")
             )()
             A1_actual = bodo.jit(returns_maybe_distributed=False)(
-                lambda: pd.read_parquet(f"{bd_fname}/A=1")
+                lambda: pd.read_parquet(f"{bd_fname}/A=1", dtype_backend="pyarrow")
             )()
         A0_expected = pd.DataFrame({"B": pd.Series([0, 1, 2], dtype="Int64")})
         A1_expected = pd.DataFrame({"B": pd.Series([3, 4, 5], dtype="Int64")})
@@ -226,7 +227,7 @@ def reset_aws_vars(aws_env_vars, orig_env_vars):
 @pytest.mark.skip(reason="BSE-3369: Data link is broken.")
 def test_s3_pq_anon_public_dataset(memory_leak_check):
     """
-    Test pd.read_parquet(..., storage_options={"anon": True})
+    Test pd.read_parquet(..., storage_options={"anon": True}, dtype_backend="pyarrow")
     with a public dataset on S3.
     """
 
@@ -237,6 +238,7 @@ def test_s3_pq_anon_public_dataset(memory_leak_check):
         df = pd.read_parquet(
             "s3://aws-roda-hcls-datalake/opentargets_1911/19_11_target_list/part-00000-af4c14ab-5cfb-47d9-afc0-58db3bf07129-c000.snappy.parquet",
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         return df
 
@@ -261,10 +263,10 @@ def test_s3_pq_asof1(
     request.getfixturevalue(bucket_fixture)
 
     def test_impl(fpath):
-        return pd.read_parquet(fpath)
+        return pd.read_parquet(fpath, dtype_backend="pyarrow")
 
     fname = datapath("asof1.pq")
-    py_output = cast_dt64_to_ns(pd.read_parquet(fname))
+    py_output = cast_dt64_to_ns(pd.read_parquet(fname, dtype_backend="pyarrow"))
     check_func(test_impl, (f"s3://{bucket_name}/asof1.pq",), py_output=py_output)
 
 
@@ -274,10 +276,10 @@ def test_s3_pq_groupby3(minio_server_with_s3_envs, s3_bucket, datapath):
     """
 
     def test_impl():
-        return pd.read_parquet("s3://bodo-test/groupby3.pq")
+        return pd.read_parquet("s3://bodo-test/groupby3.pq", dtype_backend="pyarrow")
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_func(test_impl, (), py_output=py_output)
 
 
@@ -292,11 +294,12 @@ def test_s3_pq_input_file_name_col(
 
     def test_impl():
         return pd.read_parquet(
-            "s3://bodo-test/groupby3.pq", _bodo_input_file_name_col="filename"
+            "s3://bodo-test/groupby3.pq", _bodo_input_file_name_col="filename",
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     py_output["filename"] = "s3://bodo-test/groupby3.pq"
     check_func(test_impl, (), py_output=py_output)
 
@@ -310,14 +313,15 @@ def test_s3_pq_list_files(
 
     def test_impl():
         return pd.read_parquet(
-            ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
+            ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"],
+            dtype_backend="pyarrow",
         )
 
     def test_impl2(fpaths):
-        return pd.read_parquet(fpaths)
+        return pd.read_parquet(fpaths, dtype_backend="pyarrow")
 
-    py_output_part1 = pd.read_parquet(datapath("example.parquet"))
-    py_output_part2 = pd.read_parquet(datapath("example2.parquet"))
+    py_output_part1 = pd.read_parquet(datapath("example.parquet"), dtype_backend="pyarrow")
+    py_output_part2 = pd.read_parquet(datapath("example2.parquet"), dtype_backend="pyarrow")
     py_output = pd.concat([py_output_part1, py_output_part2])
     check_func(test_impl, (), py_output=py_output)
     fpaths = ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
@@ -891,7 +895,7 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     write_table()
 
     def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_read.pq")
+        return pd.read_parquet("s3://bodo-test/test_df_bodo_read.pq", dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -1168,7 +1172,7 @@ def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     os.environ["AWS_SECRET_ACCESS_KEY"] = "OOibMP..."
 
     def read_data(f):
-        df = pd.read_parquet(f)
+        df = pd.read_parquet(f, dtype_backend="pyarrow")
         return df
 
     bodo_read_data = bodo.jit(distributed=["df"])(read_data)
@@ -1192,7 +1196,7 @@ def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     """
 
     def impl():
-        df = pd.read_parquet("s3://bodo-test/example_deltalake")
+        df = pd.read_parquet("s3://bodo-test/example_deltalake", dtype_backend="pyarrow")
         return df
 
     py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
@@ -1204,11 +1208,11 @@ def test_read_parquet_glob_s3(
     minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     filename = "s3://bodo-test/int_nulls_multi.pq"
-    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"), dtype_backend="pyarrow")
     # add glob patterns (only for Bodo, pandas doesn't support it)
     glob_pattern_1 = filename + "/part*.parquet"
     check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
@@ -1221,10 +1225,10 @@ def test_read_parquet_trailing_sep_s3(
     minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl():
-        df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/")
+        df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/", dtype_backend="pyarrow")
         return df
 
-    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"), dtype_backend="pyarrow")
     check_func(test_impl, (), py_output=pyout, check_dtype=False)
 
 
@@ -1283,7 +1287,7 @@ def test_read_parquet_invalid_list_of_files(
     from bodo.utils.typing import BodoError
 
     def test_impl(fnames):
-        df = pd.read_parquet(fnames)
+        df = pd.read_parquet(fnames, dtype_backend="pyarrow")
         return df
 
     with pytest.raises(

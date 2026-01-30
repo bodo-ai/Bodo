@@ -41,7 +41,7 @@ def test_quickstart_local_python_df():
 
     with ensure_clean2(output_path):
         pandas_df.to_parquet(output_path)
-        pandas_out = pd.read_parquet(output_path)
+        pandas_out = pd.read_parquet(output_path, dtype_backend="pyarrow")
 
     def bodo_groupby_write():
         import bodo.pandas as pd
@@ -54,7 +54,7 @@ def test_quickstart_local_python_df():
 
     with ensure_clean2(output_path):
         bodo_groupby_write()
-        bodo_out = pd.read_parquet(output_path)
+        bodo_out = pd.read_parquet(output_path, dtype_backend="pyarrow")
 
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
@@ -82,12 +82,12 @@ def test_quickstart_local_python_jit():
     with ensure_clean2(output_df_path):
         S = bodo.jit(cache=True, spawn=True)(computation)(df)
         pd.DataFrame({"C": S}).to_parquet(output_df_path)
-        bodo_out = pd.read_parquet(output_df_path)
+        bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         S = computation(df)
         pd.DataFrame({"C": S}).to_parquet(output_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     _test_equal(bodo_out, pandas_out)
 
@@ -175,7 +175,7 @@ def test_devguide_transform(devguide_df_path):
     output_df_path = "output_df.pq"
 
     def data_transform(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         df["B"] = df.apply(
             lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
         )
@@ -186,11 +186,11 @@ def test_devguide_transform(devguide_df_path):
     with temp_env_override({"BODO_NUM_WORKERS": "1"}):
         with ensure_clean2(output_df_path):
             bodo.jit(cache=True, spawn=True)(data_transform)(devguide_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+            bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         data_transform(devguide_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     bodo_out["A"] = bodo_out["A"].astype("datetime64[ns]")
     _test_equal(bodo_out, pandas_out, check_dtype=False)
@@ -199,7 +199,7 @@ def test_devguide_transform(devguide_df_path):
 @pytest_mark_spawn_mode
 def test_devguide_parallel1(devguide_df_path):
     def load_data_bodo(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         return df
 
     # BODO_NUM_WORKERS=2 python load_data.py
@@ -215,7 +215,7 @@ def test_devguide_parallel2(devguide_df_path):
     output_df_path = "output_df.pq"
 
     def data_groupby(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         df2 = df.groupby("A", as_index=False).sum()
         df2.to_parquet(output_df_path)
 
@@ -223,11 +223,11 @@ def test_devguide_parallel2(devguide_df_path):
     with temp_env_override({"BODO_NUM_WORKERS": "8"}):
         with ensure_clean2(output_df_path):
             bodo.jit(cache=True, spawn=True)(data_groupby)(devguide_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+            bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         data_groupby(devguide_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
@@ -241,7 +241,7 @@ def test_devguide_type_error(devguide_df_path):
 
     @bodo.jit(spawn=True)
     def groupby_keys(devguide_df_path, extra_keys):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         keys = [c for c in df.columns if c not in ["B", "C"]]
         if extra_keys:
             keys.append("B")
@@ -265,7 +265,7 @@ def test_devguide_groupby_keys_append(devguide_df_path):
         return keys
 
     def groupby_keys(devguide_df_path, extra_keys):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         keys = get_keys(df.columns, extra_keys)
         df2 = df.groupby(keys).sum()
         return df2

@@ -392,7 +392,7 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
     def impl(customer_path, orders_path):
         is_last1 = False
         _iter_1 = 0
-        state_1 = pd.read_parquet(customer_path, _bodo_chunksize=4000)
+        state_1 = pd.read_parquet(customer_path, _bodo_chunksize=4000, dtype_backend="pyarrow")
         state_2 = bodo.libs.streaming.union.init_union_state(-1, all=all)
         while not is_last1:
             T1, is_last1 = bodo.io.arrow_reader.read_arrow_next(state_1, True)
@@ -405,7 +405,7 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
 
         is_last2 = False
         _iter_2 = 0
-        state_3 = pd.read_parquet(orders_path, _bodo_chunksize=4000)
+        state_3 = pd.read_parquet(orders_path, _bodo_chunksize=4000, dtype_backend="pyarrow")
         _temp1 = False
         while not _temp1:
             T2, is_last2 = bodo.io.arrow_reader.read_arrow_next(state_3, True)
@@ -430,10 +430,10 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
         return df1
 
-    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"]).rename(
+    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"], dtype_backend="pyarrow").rename(
         columns={"C_CUSTKEY": "c_custkey"}
     )
-    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"]).rename(
+    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"], dtype_backend="pyarrow").rename(
         columns={"O_CUSTKEY": "c_custkey"}
     )
 
@@ -523,10 +523,10 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
         return df1
 
-    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"]).rename(
+    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"], dtype_backend="pyarrow").rename(
         columns={"C_CUSTKEY": "c_custkey"}
     )
-    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"]).rename(
+    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"], dtype_backend="pyarrow").rename(
         columns={"O_CUSTKEY": "c_custkey"}
     )
 

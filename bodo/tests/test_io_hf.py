@@ -34,7 +34,8 @@ def test_read_parquet_hf(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_parquet(
-            "hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet"
+            "hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet",
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, ())
@@ -50,6 +51,6 @@ def test_read_parquet_hf_split(datapath, memory_leak_check):
             "train": "main/train-00000-of-00001.parquet",
             "test": "main/test-00000-of-00001.parquet",
         }
-        return pd.read_parquet("hf://datasets/openai/gsm8k/" + splits["train"])
+        return pd.read_parquet("hf://datasets/openai/gsm8k/" + splits["train"], dtype_backend="pyarrow")
 
     check_func(test_impl, ())

@@ -2041,7 +2041,7 @@ def test_bodo_meta(memory_leak_check, datapath):
     # df created inside JIT function
     @bodo.jit
     def impl1(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df
 
     # df passed into JIT and returned
@@ -2057,7 +2057,7 @@ def test_bodo_meta(memory_leak_check, datapath):
     # Series created inside JIT function
     @bodo.jit
     def impl4(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df.one
 
     out_df1 = impl1(fname)

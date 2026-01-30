@@ -23,8 +23,8 @@ def test_partition_cols(hdfs_datapath):
         if bodo.get_rank() == 0:
             df.to_parquet(pd_fname, partition_cols=part_cols)
         bodo.barrier()
-        bd_out = pd.read_parquet(bd_fname)
-        pd_out = pd.read_parquet(pd_fname)
+        bd_out = pd.read_parquet(bd_fname, dtype_backend="pyarrow")
+        pd_out = pd.read_parquet(pd_fname, dtype_backend="pyarrow")
     pd.testing.assert_frame_equal(bd_out, pd_out, check_column_type=False)
 
 
@@ -72,10 +72,10 @@ def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("groupby3.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
@@ -89,10 +89,10 @@ def test_hdfs_pq_asof1(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("asof1.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("asof1.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     py_output["time"] = py_output["time"].astype("datetime64[ns, UTC]")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
@@ -107,10 +107,10 @@ def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("int_nulls_multi.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("int_nulls_multi.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
@@ -120,10 +120,10 @@ def test_hdfs_pq_trailing_sep(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("int_nulls_multi.pq/")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("int_nulls_multi.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
@@ -431,7 +431,7 @@ def test_hdfs_parquet_read_seq(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_seq.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
@@ -445,7 +445,7 @@ def test_hdfs_parquet_read_1D(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
@@ -459,7 +459,7 @@ def test_hdfs_parquet_read_1D_var(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 

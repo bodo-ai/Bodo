@@ -1133,7 +1133,7 @@ class TestString(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.five
 
         bodo_func = bodo.jit(distributed=False)(test_impl)

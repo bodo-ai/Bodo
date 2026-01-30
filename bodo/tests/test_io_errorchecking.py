@@ -127,7 +127,7 @@ def test_io_error_nested_calls(memory_leak_check):
 
     @bodo.jit
     def test_pq(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     def test_impl_pq(filename):
@@ -194,7 +194,7 @@ def test_pseudo_exception(datapath, memory_leak_check):
     assert "Pseudo-exception" not in str(csv_track)
 
     def test_pq(file_name):
-        df = pd.read_parquet(file_name)
+        df = pd.read_parquet(file_name, dtype_backend="pyarrow")
         return df.A.WRONG()
 
     fname = datapath("groupby3.pq")

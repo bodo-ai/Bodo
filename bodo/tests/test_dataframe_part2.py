@@ -445,7 +445,7 @@ def test_set_table_data_replace(memory_leak_check):
     """
 
     def impl():
-        df = pd.read_parquet("demand.pq")
+        df = pd.read_parquet("demand.pq", dtype_backend="pyarrow")
         df["tier"] = 3
         df["grouping"] = "abc"
         return df

@@ -285,7 +285,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
 
         @bodo.jit(distributed=False)
         def impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             df.to_parquet(fname2, index=False)
 
         impl()
@@ -297,7 +297,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
         # read in bodo because of pandas type differences
         @bodo.jit(distributed=False)
         def reader():
-            return pd.read_parquet(fname2)
+            return pd.read_parquet(fname2, dtype_backend="pyarrow")
 
         df = reader()
         _test_equal_guard(df, df_orig)

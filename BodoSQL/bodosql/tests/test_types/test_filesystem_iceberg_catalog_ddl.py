@@ -642,7 +642,7 @@ def test_iceberg_drop_table_purge_sql(
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")
 
 
 @pytest_mark_one_rank
@@ -679,7 +679,7 @@ def test_iceberg_drop_table_purge_execute_dll(
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")
 
 
 @pytest_mark_one_rank
@@ -719,4 +719,4 @@ def test_iceberg_drop_table_purge(purge, iceberg_filesystem_catalog, memory_leak
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")

@@ -1430,12 +1430,12 @@ def test_unify_dict_string_dataframes():
 
     def impl2(source_file):
         # table to tuple
-        df = pd.read_parquet(source_file)
+        df = pd.read_parquet(source_file, dtype_backend="pyarrow")
         return bodo.hiframes.pd_dataframe_ext._table_to_tuple_format_decoded(df)
 
     def impl3(source_file):
         # Table to table
-        df = pd.read_parquet(source_file)
+        df = pd.read_parquet(source_file, dtype_backend="pyarrow")
         if len(df) > 200:
             # This implementation should always be False so
             # at runtime we check the cast
@@ -1646,7 +1646,7 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
 
     @bodo.jit
     def memory_usage_table(use_index):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df.memory_usage(use_index)
 
     # Precompute the py_output for distributed data. These
@@ -1706,7 +1706,7 @@ def test_df_table_copy(use_deep, datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def copy_table(use_deep):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df = df.copy(deep=use_deep)
         return df[["Column1", "Column3"]]
 
@@ -1728,7 +1728,7 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def rename_table(use_copy):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df = df.rename(
             copy=use_copy, columns={"Column1": "Columnx23", "Column5": "Column1"}
         )

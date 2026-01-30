@@ -954,7 +954,7 @@ def test_pure_func(datapath):
 
     # pq read
     def impl4():
-        return pd.read_parquet(fname_pq)
+        return pd.read_parquet(fname_pq, dtype_backend="pyarrow")
 
     # np read
     def impl5():

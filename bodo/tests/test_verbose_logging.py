@@ -113,7 +113,7 @@ def test_pq_column_pruning_filter_pushdown(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         df = df[df.one > 1]
         return df.four
 
@@ -137,7 +137,7 @@ def test_pq_logging_closure(datapath, memory_leak_check):
     @bodo.jit
     def test_impl(fname):
         def f():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             df = df[df.one > 1]
             return df.four
 
@@ -162,7 +162,7 @@ def test_pq_logging_multifunction(datapath, memory_leak_check):
 
     @bodo.jit
     def f(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         df = df[df.one > 1]
         return df.four
 
@@ -189,7 +189,7 @@ def test_pq_logging_multifunction_inlining(datapath, memory_leak_check):
 
     @bodo.jit(inline="always")
     def f(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df
 
     @bodo.jit
@@ -236,7 +236,7 @@ def test_pq_dict_arrays(memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     try:
         stream = io.StringIO()

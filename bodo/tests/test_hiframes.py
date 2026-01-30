@@ -244,7 +244,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.four.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -272,7 +272,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.two.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -298,7 +298,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return (df.four.drop_duplicates() == 3.0).sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -319,7 +319,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return (df.two.drop_duplicates() == "foo").sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -728,8 +728,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pd.read_parquet(fname)
-            df2 = pd.read_parquet(fname)
+            df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
+            df2 = pd.read_parquet(fname, dtype_backend="pyarrow")
             A3 = pd.concat([df1, df2])
             return (A3.two == "foo").sum()
 
@@ -757,8 +757,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pd.read_parquet(fname)
-            df2 = pd.read_parquet(fname)
+            df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
+            df2 = pd.read_parquet(fname, dtype_backend="pyarrow")
             A3 = pd.concat([df1.two, df2.two])
             return (A3 == "foo").sum()
 

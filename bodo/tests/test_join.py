@@ -4370,8 +4370,8 @@ def test_merge_asof_parallel(datapath, memory_leak_check):
     fname2 = datapath("asof2.pq")
 
     def impl():
-        df1 = pd.read_parquet(fname1)
-        df2 = pd.read_parquet(fname2)
+        df1 = pd.read_parquet(fname1, dtype_backend="pyarrow")
+        df2 = pd.read_parquet(fname2, dtype_backend="pyarrow")
         df3 = pd.merge_asof(df1, df2, on="time")
         return (df3.A.sum(), df3.time.max(), df3.B.sum())
 

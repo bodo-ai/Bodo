@@ -24,7 +24,7 @@ def df_from_pandas():
 def df_from_parquet():
     path = datapath_util("example_no_index.parquet")
 
-    return pd.read_parquet(path), bd.read_parquet(path)
+    return pd.read_parquet(path, dtype_backend="pyarrow"), bd.read_parquet(path)
 
 
 @pytest.fixture(params=[df_from_pandas, df_from_parquet])

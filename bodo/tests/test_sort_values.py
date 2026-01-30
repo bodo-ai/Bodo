@@ -257,7 +257,7 @@ def test_single_col(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         df.sort_values("points", inplace=True)
         res = df.points.values
         return res

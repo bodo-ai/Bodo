@@ -752,7 +752,7 @@ def test_write_parquet_dict_table(memory_leak_check):
 
     @bodo.jit
     def impl():
-        df = pd.read_parquet("dummy_source.pq")
+        df = pd.read_parquet("dummy_source.pq", dtype_backend="pyarrow")
         df.to_parquet("arr_dict_test.pq", index=False)
 
     impl()

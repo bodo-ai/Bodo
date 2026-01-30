@@ -21,7 +21,7 @@ def read_pq_func1(fname):
     Helper func to test caching with a
     read in another function
     """
-    return pd.read_parquet(fname)
+    return pd.read_parquet(fname, dtype_backend="pyarrow")
 
 
 @bodo.jit
@@ -30,7 +30,7 @@ def read_pq_func2(fname):
     Helper func to test caching with a
     read in another function
     """
-    return pd.read_parquet(fname)
+    return pd.read_parquet(fname, dtype_backend="pyarrow")
 
 
 @pytest.mark.smoke
@@ -55,7 +55,7 @@ def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_ch
     """
 
     def impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     fname = datapath("groupby3.pq")
     check_caching(impl, (fname,), is_cached, fn_distribution)
@@ -71,7 +71,7 @@ def test_read_parquet_cache_fname_arg(
     """
 
     def impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     if is_cached:
         fname = datapath("int_nulls_multi.pq")
@@ -118,14 +118,14 @@ def test_read_parquet_cache_fname_arg_list_files(
     """
 
     def impl(fpaths):
-        return pd.read_parquet(fpaths)
+        return pd.read_parquet(fpaths, dtype_backend="pyarrow")
 
     if not is_cached:
         fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
     else:
         fpaths = [datapath("example2.parquet"), datapath("example.parquet")]
-    py_output_part1 = pd.read_parquet(fpaths[0])
-    py_output_part2 = pd.read_parquet(fpaths[1])
+    py_output_part1 = pd.read_parquet(fpaths[0], dtype_backend="pyarrow")
+    py_output_part2 = pd.read_parquet(fpaths[1], dtype_backend="pyarrow")
     py_out = pd.concat([py_output_part1, py_output_part2])
     check_caching(impl, (fpaths,), is_cached, fn_distribution, py_output=py_out)
 
@@ -141,7 +141,7 @@ def test_write_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_c
 
     @run_rank0
     def check_output():
-        res = pd.read_parquet(fname)
+        res = pd.read_parquet(fname, dtype_backend="pyarrow")
         pd.testing.assert_frame_equal(res, df)
 
     with ensure_clean2(fname):

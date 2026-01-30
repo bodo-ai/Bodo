@@ -1158,7 +1158,7 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(pq_fname, table_name, conn, db_schema):
-        df = pd.read_parquet(pq_fname)
+        df = pd.read_parquet(pq_fname, dtype_backend="pyarrow")
         df.to_sql(
             table_name,
             conn,
@@ -1586,7 +1586,7 @@ def _test_file_part(file_name: str, part_spec: list[PartitionField]):
     ]
 
     # Check if data adheres to partitioning
-    df = pd.read_parquet(file_name)
+    df = pd.read_parquet(file_name, dtype_backend="pyarrow")
 
     for (col, trans, tval), expected_val in zip(part_spec, expected_vals):
         trans_col = ARRAY_TRANSFORM_FUNC[trans](df[col], tval)
