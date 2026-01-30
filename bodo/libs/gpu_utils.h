@@ -25,16 +25,16 @@
     } while (0)
 
 enum class GpuShuffleState {
-    WAITING_FOR_SIZES = 0,
-    INFLIGHT = 1,
+    SIZES_INFLIGHT = 0,
+    DATA_INFLIGHT = 1,
     COMPLETED = 2
 };
 /**
  * @brief Holds information for inflight shuffle operations
  */
 struct GpuShuffle {
-    GpuShuffleState state = GpuShuffleState::WAITING_FOR_SIZES;
-    std::vector<cudf::packed_table> packed_tables;
+    GpuShuffleState send_state = GpuShuffleState::SIZES_INFLIGHT;
+    GpuShuffleState recv_state = GpuShuffleState::SIZES_INFLIGHT;
     MPI_Comm mpi_comm;
     ncclComm_t nccl_comm;
     cudaStream_t stream;
@@ -59,6 +59,11 @@ struct GpuShuffle {
     // Event marker for all nccl operations needed for this shuffle.
     // When this is finished all GPU buffers are in the correct place.
     cudaEvent_t nccl_event;
+    // We need to keep sizes around while the transfers are inflight
+    std::vector<uint64_t> send_metadata_sizes;
+    std::vector<uint64_t> recv_metadata_sizes;
+    std::vector<uint64_t> send_gpu_sizes;
+    std::vector<uint64_t> recv_gpu_sizes;
     // Buffers for metadata from other ranks, these are used to construct
     // packed_columns. Indexed by sending rank
     std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_recv_buffers;
@@ -67,16 +72,15 @@ struct GpuShuffle {
     std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_send_buffers;
     // Buffers for column data from other ranks, these are used to construct
     // packed_columns. Indexed by sending rank
-    std::vector<rmm::device_buffer> packed_recv_buffers;
+    std::vector<std::unique_ptr<rmm::device_buffer>> packed_recv_buffers;
     // Buffers for column data sent to other ranks, these are used to construct
     // packed_columns. Indexed by destination rank
-    std::vector<rmm::device_buffer> packed_send_buffers;
+    std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
     GpuShuffle(std::vector<cudf::packed_table> packed_tables,
                MPI_Comm mpi_comm_, ncclComm_t nccl_comm_, cudaStream_t stream_,
-               int n_ranks)
-        : packed_tables(std::move(packed_tables)),
-          mpi_comm(mpi_comm_),
+               int n_ranks, int start_tag)
+        : mpi_comm(mpi_comm_),
           nccl_comm(nccl_comm_),
           stream(stream_),
           gpu_sizes_recv_reqs(n_ranks),
@@ -85,15 +89,59 @@ struct GpuShuffle {
           metadata_sizes_send_reqs(n_ranks),
           metadata_recv_reqs(n_ranks),
           metadata_send_reqs(n_ranks),
+          send_metadata_sizes(n_ranks, 0),
+          recv_metadata_sizes(n_ranks, 0),
+          send_gpu_sizes(n_ranks, 0),
+          recv_gpu_sizes(n_ranks, 0),
           metadata_recv_buffers(n_ranks),
           metadata_send_buffers(n_ranks),
           packed_recv_buffers(n_ranks),
-          packed_send_buffers(n_ranks) {
+          packed_send_buffers(n_ranks),
+          start_tag(start_tag),
+          n_ranks(n_ranks) {
         CHECK_CUDA(
             cudaEventCreateWithFlags(&nccl_event, cudaEventDisableTiming));
+
+        for (size_t dest_rank = 0; dest_rank < packed_tables.size();
+             dest_rank++) {
+            cudf::packed_table& table = packed_tables[dest_rank];
+            // Prepare send buffers
+            packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
+            metadata_send_buffers[dest_rank] =
+                std::make_unique<std::vector<uint8_t>>(
+                    std::move(*table.data.metadata));
+        }
+
+        this->send_sizes();
+        this->recv_sizes();
+        this->send_metadata();
+        this->send_data();
     }
 
+    GpuShuffle(GpuShuffle&&) = default;
+    GpuShuffle& operator=(GpuShuffle&&) = default;
+
+    // Disable copy constructors
+    GpuShuffle(const GpuShuffle&) = delete;
+    GpuShuffle& operator=(const GpuShuffle&) = delete;
+
+    ~GpuShuffle() { cudaEventDestroy(nccl_event); }
+
     std::optional<cudf::table_view> progress();
+
+   private:
+    int start_tag;
+    int n_ranks;
+    void send_sizes();
+    void recv_sizes();
+    void send_metadata();
+    void recv_metadata();
+    void send_data();
+    void recv_data();
+    void progress_waiting_for_sizes();
+    std::optional<cudf::table_view> progress_waiting_for_data();
+    void progress_sending_sizes();
+    void progress_sending_data();
 };
 
 /**
@@ -123,6 +171,8 @@ class GpuShuffleManager {
     rmm::cuda_set_device_raii cuda_device_raii;
 
     std::vector<GpuShuffle> inflight_shuffles;
+
+    int curr_tag = 0;
 
     /**
      * @brief Initialize NCCL communicator
