@@ -2208,6 +2208,7 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     # __filename column
     df: pd.DataFrame = pq.read_table(fname, columns=["A", "__filename"]).to_pandas()
     py_output = df.rename({"__filename": "fname"}, axis=1)
+    py_output["A"] = py_output["A"].astype(pd.ArrowDtype(pa.decimal128(38, 18)))
 
     check_func(
         test_impl,
