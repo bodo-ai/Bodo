@@ -142,7 +142,7 @@ def test_s3_csv_dir(
             },
         )
 
-    py_out = pd.read_csv(datapath("example.csv"))
+    py_out = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
     # specify dtype here because small partition of dataframe causes only
     # int values(x.0) in float columns, and causes type mismatch becasue
     # pandas infer them as int columns
