@@ -954,7 +954,7 @@ def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
             dtype_backend="pyarrow",
         )
 
-    check_func(test_read, (), py_output=test_df)
+    check_func(test_read, (), py_output=test_df.convert_dtypes(dtype_backend="pyarrow"))
 
 
 def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
