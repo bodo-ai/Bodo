@@ -679,7 +679,7 @@ def test_read_partitions2(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, val):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             return df[(df["c"].astype(np.int32) > val) | (df["c"] == 2)]
 
         # TODO(ehsan): match Index
@@ -716,7 +716,7 @@ def test_read_partitions_implicit_and_detailed(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, val):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             df = df[(df["part"] == "a") | ((df["b"] != "d") & (df["c"] != 4))]
             df = df[((df["b"] == "a") & (df["part"] == "b")) | (df["c"] == val)]
             return df
@@ -755,7 +755,7 @@ def test_read_partitions_implicit_and_simple(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, val):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             df = df[df["part"] == "a"]
             df = df[df["c"] == val]
             return df
@@ -841,7 +841,7 @@ def test_read_partitions_two_level(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, val):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             return df[(df["c"].astype(np.int32) > val) | (df["part"] == "a")]
 
         # TODO(ehsan): match Index
@@ -922,11 +922,11 @@ def test_read_partitions_cat_ordering(memory_leak_check):
         bodo.barrier()
 
         def impl1(path):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             return df
 
         def impl2(path):
-            df = pd.read_parquet(path, dtype_backend="pyarrow")
+            df = pd.read_parquet(path)
             return df[(df["c"] != 3) | (df["part"] == "a")]
 
         check_func(impl1, ("pq_data",), check_dtype=False)
