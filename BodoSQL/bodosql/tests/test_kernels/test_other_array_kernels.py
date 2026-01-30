@@ -1698,9 +1698,6 @@ def test_option_is_functions(memory_leak_check):
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1715,6 +1712,9 @@ def test_option_is_functions(memory_leak_check):
                                     )
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -1768,9 +1768,6 @@ def test_option_is_functions(memory_leak_check):
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1781,6 +1778,9 @@ def test_option_is_functions(memory_leak_check):
                                     ]
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -1819,9 +1819,6 @@ def test_option_is_functions(memory_leak_check):
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1832,6 +1829,9 @@ def test_option_is_functions(memory_leak_check):
                                     ]
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -2049,9 +2049,6 @@ def test_arr_get_invalid(
 # Used in the test below
 internal_struct_type = pa.struct(
     [
-        pa.field("X", pa.string()),
-        pa.field("Y", pa.large_list(pa.float32())),
-        pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
         pa.field(
             "W",
             pa.struct(
@@ -2066,6 +2063,9 @@ internal_struct_type = pa.struct(
                 )
             ),
         ),
+        pa.field("X", pa.string()),
+        pa.field("Y", pa.large_list(pa.float32())),
+        pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
     ]
 )
 

@@ -777,10 +777,12 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                         dtype=pd.ArrowDtype(
                             pa.struct(
                                 [
-                                    pa.field("X", pa.string()),
-                                    pa.field("Y", pa.large_list(pa.float64())),
+                                    pa.field("Q", pa.large_list(pa.string())),
                                     pa.field(
-                                        "Z", pa.large_list(pa.large_list(pa.int64()))
+                                        "R",
+                                        pa.large_list(
+                                            pa.dictionary(pa.int32(), pa.string())
+                                        ),
                                     ),
                                     pa.field(
                                         "W",
@@ -791,12 +793,10 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                             ]
                                         ),
                                     ),
-                                    pa.field("Q", pa.large_list(pa.string())),
+                                    pa.field("X", pa.string()),
+                                    pa.field("Y", pa.large_list(pa.float64())),
                                     pa.field(
-                                        "R",
-                                        pa.large_list(
-                                            pa.dictionary(pa.int32(), pa.string())
-                                        ),
+                                        "Z", pa.large_list(pa.large_list(pa.int64()))
                                     ),
                                 ]
                             )
