@@ -25,6 +25,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     _check_for_io_reader_filters,
     _get_dist_arg,
+    _test_equal,
     cast_dt64_to_ns,
     check_func,
     count_array_REPs,
@@ -2758,9 +2759,7 @@ def test_pq_schema(datapath, memory_leak_check):
             }
         },
     )(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(fname), impl(fname), check_dtype=False, check_column_type=False
-    )
+    _test_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
 
 def test_unify_null_column(memory_leak_check):
