@@ -234,9 +234,11 @@ def test_series_dtype(memory_leak_check, representative_tz):
     def impl(S):
         return S.dtype
 
-    S = pd.date_range(
-        start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz
-    ).to_series()
+    S = (
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz)
+        .to_series()
+        .astype(f"datetime64[ns, {representative_tz}]")
+    )
     check_func(impl, (S,))
 
 
