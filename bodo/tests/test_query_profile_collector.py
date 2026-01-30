@@ -446,7 +446,10 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
         total_max = 0
         is_last_global = False
         reader = pd.read_parquet(
-            path, _bodo_use_index=False, _bodo_chunksize=4096, _bodo_sql_op_id=0,
+            path,
+            _bodo_use_index=False,
+            _bodo_chunksize=4096,
+            _bodo_sql_op_id=0,
             dtype_backend="pyarrow",
         )
         _iter_1 = 0

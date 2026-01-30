@@ -284,7 +284,9 @@ def test_projection(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1["D"]
 
     _test_equal(
@@ -383,7 +385,9 @@ def test_filter(datapath, op):
     """Test for standalone filter."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -460,7 +464,9 @@ def test_filter_multiple1_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
@@ -477,7 +483,9 @@ def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -516,7 +524,9 @@ def test_filter_string_pushdown(datapath):
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[py_df1.B == "gamma"]
 
     _test_equal(
@@ -533,7 +543,9 @@ def test_filter_string(datapath):
 
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -579,7 +591,9 @@ def test_filter_datetime_pushdown(datapath, op):
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
 
     _test_equal(
@@ -599,7 +613,9 @@ def test_filter_datetime(datapath, op):
     """Test for standalone filter."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute so the filter doesn't get pushed into the read.
     _test_equal(
@@ -677,7 +693,9 @@ def test_head(datapath):
 
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     _test_equal(
         bodo_df1.copy(),
@@ -1186,7 +1204,9 @@ def test_project_after_filter(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[py_df1.D > 80][["B", "A"]]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
@@ -1434,7 +1454,9 @@ def test_dataframe_sort(datapath):
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1.sort_values(
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
@@ -1455,7 +1477,9 @@ def test_series_sort(datapath):
         bodo_df2 = bodo_df1["D"]
         bodo_df3 = bodo_df2.sort_values(ascending=False, na_position="last")
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1["D"]
         py_df3 = py_df2.sort_values(ascending=False, na_position="last")
 
@@ -1742,7 +1766,9 @@ def test_compound_projection_expression(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
 
     _test_equal(
@@ -1760,7 +1786,9 @@ def test_projection_expression_floordiv(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
 
     _test_equal(
@@ -1778,7 +1806,9 @@ def test_projection_expression_mod(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[(bodo_df1.A % 5) > 2]
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[(py_df1.A % 5) > 2]
 
     _test_equal(
@@ -1796,7 +1826,9 @@ def test_series_mod(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1["A"] % 5
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1["A"] % 5
 
     _test_equal(
@@ -1814,7 +1846,9 @@ def test_series_compound_expression(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = (bodo_df1["A"] + 50) * 2 / 7
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = (py_df1["A"] + 50) * 2 / 7
         py_df2 = py_df2.astype(pd.ArrowDtype(pa.float64()))
 
@@ -2300,7 +2334,9 @@ def test_topn(datapath):
         )
         bodo_df3 = bodo_df2.head(3)
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1.sort_values(
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
@@ -2497,8 +2533,12 @@ def test_dataframe_concat(datapath):
         ]
         bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")[["A", "D"]]
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow")[["A", "E"]]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )[["A", "D"]]
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )[["A", "E"]]
         py_df3 = pd.concat([py_df1, py_df2, py_df2])
 
     _test_equal(
@@ -2516,8 +2556,12 @@ def test_series_concat(datapath):
         bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
         bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")["A"]
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow")["A"]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )["A"]
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )["A"]
         py_df3 = pd.concat([py_df1, py_df2, py_df2])
 
     _test_equal(
@@ -2535,8 +2579,12 @@ def test_isin(datapath):
         bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
         bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow")
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )
         py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
 
     _test_equal(
@@ -2553,9 +2601,9 @@ def test_drop(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
             columns=["A", "F"]
         )
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow").drop(
-            columns=["A", "F"]
-        )
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).drop(columns=["A", "F"])
 
     _test_equal(
         bodo_df1,
@@ -2571,9 +2619,9 @@ def test_loc(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
             :, ["A", "F"]
         ]
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow").loc[
-            :, ["A", "F"]
-        ]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).loc[:, ["A", "F"]]
 
     _test_equal(
         bodo_df1,
@@ -2588,9 +2636,9 @@ def test_loc(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
             :, ("A", "F")
         ]
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow").loc[
-            :, ("A", "F")
-        ]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).loc[:, ("A", "F")]
 
     _test_equal(
         bodo_df1,
@@ -4010,7 +4058,9 @@ def test_empty_result(datapath):
     """Test empty result node generated by duckdb."""
 
     with assert_executed_plan_count(0):
-        df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow")
+        df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         pdf = df1[(df1.D > 3) & (df1.D < 2)]
         bdf = bodo_df1[(bodo_df1.D > 3) & (bodo_df1.D < 2)]

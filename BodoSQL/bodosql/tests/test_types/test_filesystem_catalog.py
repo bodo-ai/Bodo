@@ -105,7 +105,9 @@ def test_filesystem_parquet_write(memory_leak_check):
         # Write the table
         check_func(write_impl, (bc, write_query), py_output=0, only_1DVar=True)
         # Read the table with pandas and validate the result.
-        result = pd.read_parquet(os.path.join(root, schema, "TABLE2"), dtype_backend="pyarrow")
+        result = pd.read_parquet(
+            os.path.join(root, schema, "TABLE2"), dtype_backend="pyarrow"
+        )
         result = result.sort_values("A").reset_index(drop=True)
         df = df.sort_values("A").reset_index(drop=True)
         pd.testing.assert_frame_equal(result, df)

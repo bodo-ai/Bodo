@@ -1709,7 +1709,11 @@ def test_pivot_table_dict_encoded(memory_leak_check):
     bodo.barrier()
 
     def impl():
-        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"], dtype_backend="pyarrow")
+        df = pd.read_parquet(
+            temp_filename,
+            _bodo_read_as_dict=["A", "B", "C", "D"],
+            dtype_backend="pyarrow",
+        )
         return df.pivot_table(index=["B", "C"], columns="D", values="A", aggfunc="min")
 
     try:
@@ -1759,7 +1763,11 @@ def test_pivot_dict_encoded(memory_leak_check):
     bodo.barrier()
 
     def impl():
-        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"], dtype_backend="pyarrow")
+        df = pd.read_parquet(
+            temp_filename,
+            _bodo_read_as_dict=["A", "B", "C", "D"],
+            dtype_backend="pyarrow",
+        )
         return df.pivot(index=["D", "C"], columns="A", values="B")
 
     try:

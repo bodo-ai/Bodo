@@ -163,7 +163,9 @@ def test_table_path_pq_bodosqlContext_jit(
 
     # Should SQL still produce index columns?
     # Should it include an index column within the data?
-    py_output = pd.read_parquet(filename, dtype_backend="pyarrow").reset_index(drop=True)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow").reset_index(
+        drop=True
+    )
     check_func(impl, (filename,), py_output=py_output)
 
 

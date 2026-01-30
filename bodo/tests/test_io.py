@@ -59,7 +59,9 @@ def remove_files(file_names):
 @pytest.mark.skip
 def test_read_parquet_from_deltalake(memory_leak_check):
     def impl():
-        return pd.read_parquet("bodo/tests/data/example_deltalake", dtype_backend="pyarrow")
+        return pd.read_parquet(
+            "bodo/tests/data/example_deltalake", dtype_backend="pyarrow"
+        )
 
     py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
     check_func(impl, (), py_output=py_output, check_dtype=False)

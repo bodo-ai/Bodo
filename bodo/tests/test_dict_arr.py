@@ -1530,8 +1530,12 @@ def test_concat(memory_leak_check):
         return pd.concat((S1, pd.Series(A1)), ignore_index=True)
 
     def impl3(file1, file2):
-        df1 = pd.read_parquet(file1, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow")
-        df2 = pd.read_parquet(file2, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow")
+        df1 = pd.read_parquet(
+            file1, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow"
+        )
+        df2 = pd.read_parquet(
+            file2, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow"
+        )
         return pd.concat([df1, df2], ignore_index=True)
 
     check_func(

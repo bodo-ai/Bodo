@@ -294,7 +294,8 @@ def test_s3_pq_input_file_name_col(
 
     def test_impl():
         return pd.read_parquet(
-            "s3://bodo-test/groupby3.pq", _bodo_input_file_name_col="filename",
+            "s3://bodo-test/groupby3.pq",
+            _bodo_input_file_name_col="filename",
             dtype_backend="pyarrow",
         )
 
@@ -320,8 +321,12 @@ def test_s3_pq_list_files(
     def test_impl2(fpaths):
         return pd.read_parquet(fpaths, dtype_backend="pyarrow")
 
-    py_output_part1 = pd.read_parquet(datapath("example.parquet"), dtype_backend="pyarrow")
-    py_output_part2 = pd.read_parquet(datapath("example2.parquet"), dtype_backend="pyarrow")
+    py_output_part1 = pd.read_parquet(
+        datapath("example.parquet"), dtype_backend="pyarrow"
+    )
+    py_output_part2 = pd.read_parquet(
+        datapath("example2.parquet"), dtype_backend="pyarrow"
+    )
     py_output = pd.concat([py_output_part1, py_output_part2])
     check_func(test_impl, (), py_output=py_output)
     fpaths = ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
@@ -895,7 +900,9 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     write_table()
 
     def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_read.pq", dtype_backend="pyarrow")
+        return pd.read_parquet(
+            "s3://bodo-test/test_df_bodo_read.pq", dtype_backend="pyarrow"
+        )
 
     check_func(test_read, (), py_output=test_df)
 
@@ -1196,7 +1203,9 @@ def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     """
 
     def impl():
-        df = pd.read_parquet("s3://bodo-test/example_deltalake", dtype_backend="pyarrow")
+        df = pd.read_parquet(
+            "s3://bodo-test/example_deltalake", dtype_backend="pyarrow"
+        )
         return df
 
     py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
@@ -1225,7 +1234,9 @@ def test_read_parquet_trailing_sep_s3(
     minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl():
-        df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/", dtype_backend="pyarrow")
+        df = pd.read_parquet(
+            "s3://bodo-test/int_nulls_multi.pq/", dtype_backend="pyarrow"
+        )
         return df
 
     pyout = pd.read_parquet(datapath("int_nulls_multi.pq"), dtype_backend="pyarrow")

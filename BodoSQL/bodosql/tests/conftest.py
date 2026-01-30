@@ -1690,27 +1690,51 @@ def load_tpcxbb_data(dir_name):
     We use bodo.jit so we can read easily from a directory."""
     # TODO: Update all the data frames selected so every query returns
     # a non-empty DataFrame
-    store_sales_df = pd.read_parquet(dir_name + "/store_sales", dtype_backend="pyarrow").head(1000)
+    store_sales_df = pd.read_parquet(
+        dir_name + "/store_sales", dtype_backend="pyarrow"
+    ).head(1000)
     # we need the entire item df, so we don't get empty queries
     item_df = pd.read_parquet(dir_name + "/item", dtype_backend="pyarrow")
-    customer_df = pd.read_parquet(dir_name + "/customer", dtype_backend="pyarrow").head(1000)
-    customer_address_df = pd.read_parquet(dir_name + "/customer_address", dtype_backend="pyarrow").head(1000)
+    customer_df = pd.read_parquet(dir_name + "/customer", dtype_backend="pyarrow").head(
+        1000
+    )
+    customer_address_df = pd.read_parquet(
+        dir_name + "/customer_address", dtype_backend="pyarrow"
+    ).head(1000)
     customer_demographics_df = pd.read_parquet(
         dir_name + "/customer_demographics", dtype_backend="pyarrow"
     ).head(1000)
-    date_dim_df = pd.read_parquet(dir_name + "/date_dim", dtype_backend="pyarrow").head(1000)
-    product_reviews_df = pd.read_parquet(dir_name + "/product_reviews", dtype_backend="pyarrow").head(1000)
+    date_dim_df = pd.read_parquet(dir_name + "/date_dim", dtype_backend="pyarrow").head(
+        1000
+    )
+    product_reviews_df = pd.read_parquet(
+        dir_name + "/product_reviews", dtype_backend="pyarrow"
+    ).head(1000)
     store_df = pd.read_parquet(dir_name + "/store", dtype_backend="pyarrow").head(1000)
-    web_clickstreams_df = pd.read_parquet(dir_name + "/web_clickstreams", dtype_backend="pyarrow").head(1000)
-    web_sales_df = pd.read_parquet(dir_name + "/web_sales", dtype_backend="pyarrow").head(1000)
+    web_clickstreams_df = pd.read_parquet(
+        dir_name + "/web_clickstreams", dtype_backend="pyarrow"
+    ).head(1000)
+    web_sales_df = pd.read_parquet(
+        dir_name + "/web_sales", dtype_backend="pyarrow"
+    ).head(1000)
     household_demographics_df = pd.read_parquet(
         dir_name + "/household_demographics", dtype_backend="pyarrow"
     ).head(1000)
-    inventory_df = pd.read_parquet(dir_name + "/inventory", dtype_backend="pyarrow").head(1000)
-    item_marketprices_df = pd.read_parquet(dir_name + "/item_marketprices", dtype_backend="pyarrow").head(1000)
-    promotion_df = pd.read_parquet(dir_name + "/promotion", dtype_backend="pyarrow").head(1000)
-    store_returns_df = pd.read_parquet(dir_name + "/store_returns", dtype_backend="pyarrow").head(1000)
-    time_dim_df = pd.read_parquet(dir_name + "/time_dim", dtype_backend="pyarrow").head(1000)
+    inventory_df = pd.read_parquet(
+        dir_name + "/inventory", dtype_backend="pyarrow"
+    ).head(1000)
+    item_marketprices_df = pd.read_parquet(
+        dir_name + "/item_marketprices", dtype_backend="pyarrow"
+    ).head(1000)
+    promotion_df = pd.read_parquet(
+        dir_name + "/promotion", dtype_backend="pyarrow"
+    ).head(1000)
+    store_returns_df = pd.read_parquet(
+        dir_name + "/store_returns", dtype_backend="pyarrow"
+    ).head(1000)
+    time_dim_df = pd.read_parquet(dir_name + "/time_dim", dtype_backend="pyarrow").head(
+        1000
+    )
     # the warehouse df and web_page_df currently only contains 3 and 4 values respectivley,
     # which causes issues with distributed tests.
     # For right now, since neither of these dataframes are actually being used in any of the
@@ -1722,7 +1746,9 @@ def load_tpcxbb_data(dir_name):
     )
     web_page_df = pd.read_parquet(dir_name + "/web_page", dtype_backend="pyarrow")
     web_page_df = pd.concat([web_page_df, web_page_df, web_page_df], ignore_index=True)
-    web_returns_df = pd.read_parquet(dir_name + "/web_returns", dtype_backend="pyarrow").head(1000)
+    web_returns_df = pd.read_parquet(
+        dir_name + "/web_returns", dtype_backend="pyarrow"
+    ).head(1000)
     return (
         store_sales_df,
         item_df,
