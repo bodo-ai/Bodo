@@ -582,7 +582,7 @@ def pyarrow_type_to_numba(arrow_type):
             pa.types.is_string(arrow_type.value_type)
             or pa.types.is_large_string(arrow_type.value_type)
         )
-        and pa.types.is_int32(arrow_type.index_type)
+        and pa.types.is_integer(arrow_type.index_type)
     ):
         return dict_str_arr_type
 
