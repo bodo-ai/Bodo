@@ -6,10 +6,10 @@ Also tests that arithmatic and logical operators work with NULL values
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 from pyspark.sql.functions import lit
 
 import bodo
-from bodo.mpi4py import MPI
 from bodosql.tests.utils import check_query
 
 

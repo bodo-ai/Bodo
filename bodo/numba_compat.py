@@ -5899,7 +5899,7 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
     import tempfile
 
     def _ensure_cache_path(self):
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
         if comm.Get_rank() == 0:

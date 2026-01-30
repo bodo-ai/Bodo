@@ -22,11 +22,11 @@ import cloudpickle
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+from mpi4py import MPI
 from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.spawn.utils import (
     ArgMetadata,

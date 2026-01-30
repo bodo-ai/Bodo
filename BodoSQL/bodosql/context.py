@@ -16,12 +16,12 @@ if typing.TYPE_CHECKING:
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+from mpi4py import MPI
 
 import bodo
 import bodo.pandas as bd
 import bodosql
 from bodo.io.utils import parse_dbtype
-from bodo.mpi4py import MPI
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath
 from bodosql.imported_java_classes import (
@@ -361,7 +361,7 @@ class BodoSQLContext:
         )
 
     def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
 
@@ -423,8 +423,8 @@ class BodoSQLContext:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
         import numba
+        from mpi4py import MPI
 
-        from bodo.mpi4py import MPI
         from bodo.utils.typing import BodoError
 
         comm = MPI.COMM_WORLD
@@ -905,7 +905,7 @@ class BodoSQLContext:
         Returns:
             pd.DataFrame: The result of the DDL query as a Pandas DataFrame.
         """
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
         result = None

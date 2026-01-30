@@ -1,9 +1,9 @@
 from uuid import getnode
 
 import pandas as pd
+from mpi4py import MPI
 
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.caching_tests.caching_tests_common import (  # noqa
     fn_distribution,
 )

@@ -13,6 +13,7 @@ import typing as pt
 import numba
 import pandas as pd
 import pyarrow as pa
+from mpi4py import MPI
 from numba.core import types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
@@ -70,7 +71,6 @@ from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.streaming.base import StreamingStateType
 from bodo.libs.table_builder import TableBuilderStateType
-from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.typing import (
     BodoError,

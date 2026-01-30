@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _get_dist_arg,
     get_query_profile_location,
