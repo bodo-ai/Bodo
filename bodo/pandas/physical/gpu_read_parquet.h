@@ -48,9 +48,6 @@ class RankBatchGenerator {
           selected_columns(_selected_columns),
           arrow_schema(_arrow_schema) {
 
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
-        std::cout << "RANK " << rank_ << " GPU ID: " << get_gpu_id().value() << std::endl;
-
         if (rank_ != 0) {
             // no GPU assigned to this rank
             rank_ = -1;
@@ -418,6 +415,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         }
 
         this->metrics.init_time += end_timer(start_init);
+
+        auto gid = get_gpu_id();
+        std::cout << gid.value() << std::endl;
     }
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);

@@ -64,9 +64,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     }
 
     void recreate_output_dir(const std::string &path) {
-        if (fs::exists(path)) {
-            fs::remove_all(path);
-        }
+        // if (fs::exists(path)) {
+        //     fs::remove_all(path);
+        // }
         fs::create_directories(path);
     }
 

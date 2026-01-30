@@ -1,6 +1,7 @@
 #include "gpu_utils.h"
 
 // #ifdef USE_CUDF
+#include <mpi_proto.h>
 #include <thrust/execution_policy.h>
 #include <thrust/transform.h>
 #include <cassert>
@@ -108,7 +109,11 @@ hash_partition_table(std::shared_ptr<cudf::table> table,
 }
 
 rmm::cuda_device_id get_gpu_id() {
+    // TODO: Fix hang in collective call
     auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
+    // int rank_on_node, n_ranks;
+    // MPI_Comm_rank(MPI_COMM_WORLD, &rank_on_node);
+    // MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
     int device_count;
     cudaGetDeviceCount(&device_count);
@@ -118,7 +123,7 @@ rmm::cuda_device_id get_gpu_id() {
     }
     assert(n_ranks > device_count &&
            "More MPI ranks than available GPUs on node");
-    rmm::cuda_device_id device_id(rank_on_node ? rank_on_node % device_count
+    rmm::cuda_device_id device_id(rank_on_node < device_count ? rank_on_node
                                                : -1);
 
     return device_id;
