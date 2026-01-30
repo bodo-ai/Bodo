@@ -1934,6 +1934,9 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 
 
 # TODO: add memory_leak_check
+@pytest.mark.skip(
+    reason="Series [] operator defaults to get_loc in Pandas 3 and doesn't support int indexing"
+)
 @pytest.mark.smoke
 def test_series_getitem_int(series_val):
     from bodo.utils.typing import BodoError
