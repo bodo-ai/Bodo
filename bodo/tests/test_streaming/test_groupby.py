@@ -568,7 +568,9 @@ def test_groupby_acc_path_fallback(memory_leak_check):
     expected_df.reset_index(inplace=True, drop=True)
     expected_df.columns = out_cols[:-1]
     expected_df["F_boolxor_agg"] = False
-    expected_df["F_boolxor_agg"][expected_df["A"] == 1] = True
+    expected_df["F_boolxor_agg"] = expected_df["F_boolxor_agg"].where(
+        expected_df["A"] != 1, True
+    )
 
     check_func(
         impl,
