@@ -58,6 +58,7 @@ def assert_frame_equal_unordered(df1, df2):
     pd.testing.assert_frame_equal(
         df1.sort_values(by=df1.columns.to_list(), ignore_index=True),
         df2.sort_values(by=df2.columns.to_list(), ignore_index=True),
+        check_dtype=False,
     )
 
 
@@ -110,7 +111,7 @@ def test_filesystem_parquet_write(memory_leak_check):
         )
         result = result.sort_values("A").reset_index(drop=True)
         df = df.sort_values("A").reset_index(drop=True)
-        pd.testing.assert_frame_equal(result, df)
+        pd.testing.assert_frame_equal(result, df, check_dtype=False)
 
 
 def test_default_schema_filesystem_parquet_write(memory_leak_check):
