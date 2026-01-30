@@ -1675,7 +1675,7 @@ def test_table_column_filter_past_setitem(memory_leak_check, datapath, num_layer
 
     func_text = ""
     func_text += "def impl():\n"
-    func_text += f"    df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")\n"
+    func_text += f"    df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')\n"
     for i in range(num_layers):
         func_text += f"    df['Column{i + 1}'] = df['Column{i}']\n"
     func_text += "    df2 = df[df['Column96'] > 10]\n"
@@ -2510,7 +2510,7 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df.loc[:, {columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2548,7 +2548,7 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df.loc[:, {columns_loaded_level_1[::-1]}]
         return df1.loc[:, {columns_loaded_level_2 * 2}]"""
 
@@ -2593,7 +2593,7 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df.iloc[:, {columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2634,7 +2634,7 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df.iloc[:, {columns_loaded_level_1[::-1]}]
         return df1.iloc[:, {columns_loaded_level_2 * 2}]"""
 
@@ -2678,7 +2678,7 @@ def test_table_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df[{columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2715,7 +2715,7 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r}, dtype_backend="pyarrow")
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df[{columns_loaded_level_1[::-1]}]
         return df1[{columns_loaded_level_2 * 2}]"""
 
