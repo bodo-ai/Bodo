@@ -1,4 +1,9 @@
 #include "operator.h"
+#include <arrow/array/builder_base.h>
+
+#ifdef USE_CUDF
+#include "../../libs/gpu_utils.h"
+#endif
 
 int64_t PhysicalOperator::next_op_id = 1;
 
@@ -63,10 +68,31 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     arrow::TableBatchReader reader(*combined_table);
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
         reader.Next();
-    if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
+    if (!batch_result.ok()) {
         throw std::runtime_error("Failed to extract batch from Arrow table");
     }
     arrow_batch = batch_result.ValueOrDie();
+
+    // End of stream (Create RecordBatch of empty arrays for cudf)
+    if (!arrow_batch) {
+        std::vector<std::shared_ptr<arrow::Array>> empty_arrays;
+        empty_arrays.reserve(combined_table->num_columns());
+        for (auto &field : combined_table->schema()->fields()) {
+            std::unique_ptr<arrow::ArrayBuilder> builder;
+            if (!arrow::MakeBuilder(arrow::default_memory_pool(), field->type(),
+                                    &builder)
+                     .ok()) {
+                throw std::runtime_error("Failed to create Arrow ArrayBuilder");
+            }
+            std::shared_ptr<arrow::Array> arr;
+            if (!builder->Finish(&arr).ok()) {
+                throw std::runtime_error("Failed to finish Arrow Array");
+            }
+            empty_arrays.push_back(arr);
+        }
+        arrow_batch =
+            arrow::RecordBatch::Make(combined_table->schema(), 0, empty_arrays);
+    }
 
     // Export to C Data Interface Structs
     // These are lightweight structs that hold pointers to the CPU data.
