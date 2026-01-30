@@ -1504,6 +1504,9 @@ def _test_equal(
                 bodo_out[bodo_out.columns[i]] = pd.array(
                     bodo_out[bodo_out.columns[i]], dtype=py_dtype
                 )
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].map(
+                    lambda a: pd.NA if np.isnan(a) else a
+                )
 
             # Handle categorical mismatch in pd.read_parquet(fname, dtype_backend="pyarrow")
             if isinstance(bodo_dtype, pd.CategoricalDtype) and not isinstance(
