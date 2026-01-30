@@ -357,8 +357,8 @@ def test_astype_str_keep_null(memory_leak_check):
     )
     # This is a Bodo specific arg so use py_output
     py_output = df.astype(str)
-    py_output["A"][py_output["A"] == "<NA>"] = None
-    py_output["B"][py_output["B"] == "NaT"] = None
+    py_output.loc[py_output["A"] == "<NA>", "A"] = None
+    py_output.loc[py_output["B"] == "NaT", "B"] = None
     check_func(impl, (df,), py_output=py_output)
 
 

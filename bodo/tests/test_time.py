@@ -669,7 +669,7 @@ def test_time_array_setitem_none(memory_leak_check):
     df = pd.DataFrame({"A": [bodo.types.Time(1, x) for x in range(15)]})
 
     def impl(df):
-        df["A"][0] = None
+        df.loc[0, "A"] = None
         return df
 
     check_func(impl, (df,))

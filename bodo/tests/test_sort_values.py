@@ -885,7 +885,7 @@ def test_sort_values_na_position_list(memory_leak_check):
             by=["A", "B"], ascending=ascending, na_position=na_position_list[0]
         )
         # Restore NaN
-        output_df["B"][output_df["B"] == na_value] = np.nan
+        output_df.loc[output_df["B"] == na_value, "B"] = np.nan
         return output_df
 
     check_func(
@@ -1969,10 +1969,10 @@ def test_sort_table_for_interval_join(sort_args, memory_leak_check):
         for i, _ in out.iterrows():
             # Note that this will replace the values in-place in the
             # out dataframe, which is what we want.
-            if pd.isna(out["B"][i]):
-                out["B"][i] = max_val
-            if pd.isna(out["A"][i]):
-                out["A"][i] = max_val
+            if pd.isna(out.loc[i, "B"]):
+                out.loc[i, "B"] = max_val
+            if pd.isna(out.loc[i, "A"]):
+                out.loc[i, "A"] = max_val
             assert out["A"][i] <= out["B"][i], (
                 f"Interval sort should skip bad rows. Found ({out['A'][i]}, {out['B'][i]})."
             )
@@ -1992,10 +1992,10 @@ def test_sort_table_for_interval_join(sort_args, memory_leak_check):
         # Verify that all the rows that are expected to be sent to this rank,
         # indeed are.
         for i, _ in in_df.iterrows():
-            if pd.isna(in_df["B"][i]):
-                in_df["B"][i] = max_val
-            if pd.isna(in_df["A"][i]):
-                in_df["A"][i] = max_val
+            if pd.isna(in_df.loc[i, "B"]):
+                in_df.loc[i, "B"] = max_val
+            if pd.isna(in_df.loc[i, "A"]):
+                in_df.loc[i, "A"] = max_val
         exp_df = in_df[
             (in_df["A"] <= in_df["B"])  # Remove bad intervals
             & (in_df["A"] <= right_bound)

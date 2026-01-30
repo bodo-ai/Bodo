@@ -2908,13 +2908,13 @@ def test_df_copy_update(memory_leak_check):
     def impl1(df):
         df1 = df.copy()
         df1["B"] = np.arange(len(df1))
-        df1["A"][2] = 7
+        df1.loc[2, "A"] = 7
         return df, df1
 
     def impl2(df):
         df1 = df.copy(deep=False)
         df1["B"] = np.arange(len(df1))
-        df1["A"][2] = 7
+        df1.loc[2, "A"] = 7
         return df, df1
 
     df = pd.DataFrame({"A": [1, 2, 3] * 10, "C": [2, 3, 4] * 10})

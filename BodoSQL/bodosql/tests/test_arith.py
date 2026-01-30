@@ -454,7 +454,7 @@ def test_subtraction_between_dates_case(bodosql_date_types, memory_leak_check):
     expected_output = pd.DataFrame({"COL1": S1})
     # Replace S1 with S2 when not A > B
     filter1 = ~(table1.A > table1.B)
-    expected_output["COL1"][filter1] = S2
+    expected_output["COL1"] = expected_output["COL1"].where(~filter1, S2)
     check_query(
         query,
         bodosql_date_types,

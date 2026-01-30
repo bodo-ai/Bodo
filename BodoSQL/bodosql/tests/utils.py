@@ -1767,5 +1767,5 @@ def replace_type_varchar(output: pd.DataFrame):
     res = output.copy()
     # replace VARCHAR(precision) with VARCHAR
     type_is_varchar = res["TYPE"].map(lambda x: x.startswith("VARCHAR"))
-    res["TYPE"][type_is_varchar] = "VARCHAR"
+    res["TYPE"] = res["TYPE"].where(~type_is_varchar, "VARCHAR")
     return res
