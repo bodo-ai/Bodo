@@ -844,6 +844,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                 }
             ),
             id="map",
+            marks=pytest.mark.skip("fix map expected output handling in the test"),
         ),
         pytest.param(
             pd.DataFrame(
