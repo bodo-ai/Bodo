@@ -30,6 +30,7 @@ std::map<duckdb::LogicalOperatorType, std::vector<double>> ALPHA{
     {duckdb::LogicalOperatorType::LOGICAL_PROJECTION, {1e-9, 2e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_LIMIT, {1e-9, 5e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_FILTER, {2e-9, 3e-10}},
+    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, {2e-9, 3e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN, {8e-9, 1.5e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT, {1e-8, 2.5e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
@@ -48,6 +49,7 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
     {duckdb::LogicalOperatorType::LOGICAL_PROJECTION, 10 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_LIMIT, 1 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_FILTER, 10 * 1024 * 1024},
+    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, 10 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
@@ -168,8 +170,14 @@ class DevicePlanNode {
         gpu_capable = determineGPUCapable(op);
 
         if (!op.has_estimated_cardinality) {
-            throw std::runtime_error(
-                "DevicePlanNode operator didn't have cardinality.");
+            gpu_capable = false;
+#ifdef DEBUG_GPU_SELECTOR
+            std::cout << "DevicePlanNode operator didn't have cardinality.\n"
+                      << op.ToString() << std::endl;
+#endif
+            //            throw std::runtime_error(
+            //                "DevicePlanNode operator didn't have
+            //                cardinality.");
         }
         rows_out = op.estimated_cardinality;
         rows_out_width = 0;
@@ -260,6 +268,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
         case duckdb::LogicalOperatorType::LOGICAL_CTE_REF:
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
         case duckdb::LogicalOperatorType::LOGICAL_FILTER:
+        case duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR:
             t = a * size_in;
             break;
 

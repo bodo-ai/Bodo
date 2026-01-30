@@ -18,6 +18,8 @@
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
 
+#include <iostream>
+
 namespace bodo {
 
 /**
@@ -44,6 +46,15 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
           is_first_locations(std::move(is_first_locations)),
           orig_build_key_cols(std::move(orig_build_key_cols)) {
         this->children.push_back(std::move(source));
+        // TODO: Can we do better than this?
+        if (!source) {
+            std::cout << "source null in LogicalJoinFilter." << std::endl;
+            estimated_cardinality = 1;
+            has_estimated_cardinality = true;
+        } else {
+            estimated_cardinality = source->estimated_cardinality;
+            has_estimated_cardinality = source->has_estimated_cardinality;
+        }
     }
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
