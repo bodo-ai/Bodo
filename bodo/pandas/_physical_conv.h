@@ -39,6 +39,11 @@ class PhysicalPlanBuilder {
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
     std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states;
+#if USE_CUDF
+    // Mapping of join ids to whether they are run on GPU.
+    // If so, then associated JoinFilter nodes not used.
+    std::shared_ptr<std::unordered_map<int, bool>> join_on_gpu;
+#endif
     // Mapping of join ids to the pipeline for build side of the join.
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
         join_filter_pipelines;
@@ -51,12 +56,16 @@ class PhysicalPlanBuilder {
                 std::make_shared<std::unordered_map<int, join_state_t>>(),
         std::shared_ptr<std::unordered_map<int, std::shared_ptr<Pipeline>>>
             _join_filter_pipelines = std::make_shared<
-                std::unordered_map<int, std::shared_ptr<Pipeline>>>())
+                std::unordered_map<int, std::shared_ptr<Pipeline>>>(),
+        std::shared_ptr<std::unordered_map<int, bool>> _join_on_gpu =
+            std::make_shared < std::unordered_map < int,
+        bool >>>())
         : active_pipeline(nullptr),
           ctes(_ctes),
           run_on_gpu(_run_on_gpu),
           join_filter_states(std::move(_join_filter_states)),
-          join_filter_pipelines(std::move(_join_filter_pipelines)) {}
+          join_filter_pipelines(std::move(_join_filter_pipelines)),
+          join_on_gpu(std::move(_join_on_gpu)) {}
 
     template <typename T>
     void FinishPipelineOneOperator(std::shared_ptr<T> obj) {

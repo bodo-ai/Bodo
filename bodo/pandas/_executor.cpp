@@ -1,5 +1,6 @@
 #include "_executor.h"
 #include <limits.h>
+#include <fstream>
 #include "_bodo_scan_function.h"
 
 // enable and build to print debug info on the pipeline
@@ -30,7 +31,7 @@ std::map<duckdb::LogicalOperatorType, std::vector<double>> ALPHA{
     {duckdb::LogicalOperatorType::LOGICAL_PROJECTION, {1e-9, 2e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_LIMIT, {1e-9, 5e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_FILTER, {2e-9, 3e-10}},
-    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, {2e-9, 3e-10}},
+    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, {0, 0}},
     {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN, {8e-9, 1.5e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT, {1e-8, 2.5e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
@@ -49,7 +50,7 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
     {duckdb::LogicalOperatorType::LOGICAL_PROJECTION, 10 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_LIMIT, 1 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_FILTER, 10 * 1024 * 1024},
-    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, 10 * 1024 * 1024},
+    {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, 0},
     {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
@@ -134,7 +135,7 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR:
-                return false;
+                return true;
 
             default:
                 throw std::runtime_error(
@@ -243,7 +244,376 @@ class DPCost {
 
 using NodeCostMap = std::map<uint64_t, DPCost>;
 
+struct Calibration {
+    double pcie_bw = 12e9;  // bytes/s
+    double transfer_overhead = 10e-6;
+    double kernel_launch = 10e-6;
+    double cpu_alpha_filter = 2e-9;
+    double gpu_alpha_filter = 3e-10;
+    double cpu_alpha_sort = 6e-8;
+    double gpu_alpha_sort = 1e-8;
+    bool valid = false;
+};
+
+static Calibration g_calib;
+static std::string get_calib_path() {
+    const char *home = std::getenv("BOD_GPU_CALIBRATION");
+    if (!home) {
+        home = ".";
+    }
+    std::string ret = std::string(home) + "/.bodo_gpu_calibration.txt";
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "GPU calibration file " << ret << std::endl;
+#endif
+    return ret;
+}
+
+static void save_calibration(const Calibration &c) {
+    std::ofstream out(get_calib_path());
+    if (!out)
+        return;
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "saving GPU calibration" << std::endl;
+#endif
+    out << "pcie_bw=" << c.pcie_bw << "\n";
+    out << "transfer_overhead=" << c.transfer_overhead << "\n";
+    out << "kernel_launch=" << c.kernel_launch << "\n";
+    out << "cpu_alpha_filter=" << c.cpu_alpha_filter << "\n";
+    out << "gpu_alpha_filter=" << c.gpu_alpha_filter << "\n";
+    out << "cpu_alpha_sort=" << c.cpu_alpha_sort << "\n";
+    out << "gpu_alpha_sort=" << c.gpu_alpha_sort << "\n";
+}
+
+static bool load_calibration(Calibration &c) {
+    std::ifstream in(get_calib_path());
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "loading GPU calibration" << std::endl;
+#endif
+    if (!in)
+        return false;
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "found GPU calibration" << std::endl;
+#endif
+    std::string line;
+    while (std::getline(in, line)) {
+        auto pos = line.find('=');
+        if (pos == std::string::npos)
+            continue;
+        std::string key = line.substr(0, pos);
+        double val = std::stod(line.substr(pos + 1));
+        if (key == "pcie_bw")
+            c.pcie_bw = val;
+        else if (key == "transfer_overhead")
+            c.transfer_overhead = val;
+        else if (key == "kernel_launch")
+            c.kernel_launch = val;
+        else if (key == "cpu_alpha_filter")
+            c.cpu_alpha_filter = val;
+        else if (key == "gpu_alpha_filter")
+            c.gpu_alpha_filter = val;
+        else if (key == "cpu_alpha_sort")
+            c.cpu_alpha_sort = val;
+        else if (key == "gpu_alpha_sort")
+            c.gpu_alpha_sort = val;
+    }
+    c.valid = true;
+    return true;
+}
+
+#ifdef USE_CUDF
+
+#include <cuda_runtime.h>
+#include <cudf/column/column.hpp>
+#include <cudf/column/column_factories.hpp>
+#include <cudf/column/column_view.hpp>
+#include <cudf/copying.hpp>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/sorting.hpp>
+#include <cudf/stream_compaction.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+#include <rmm/device_buffer.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <vector>
+
+static double now_seconds() {
+    using clock = std::chrono::high_resolution_clock;
+    return std::chrono::duration<double>(clock::now().time_since_epoch())
+        .count();
+}
+
+/* ---------------- PCIe calibration (no custom kernels) ---------------- */
+
+static void measure_pcie(Calibration &c) {
+    const size_t bytes = 64ull * 1024 * 1024;
+    void *h_ptr = nullptr;
+    void *d_ptr = nullptr;
+
+    cudaMallocHost(&h_ptr, bytes);
+    cudaMalloc(&d_ptr, bytes);
+
+    // warmup
+    cudaMemcpy(d_ptr, h_ptr, bytes, cudaMemcpyHostToDevice);
+    cudaDeviceSynchronize();
+
+    const int iters = 10;
+    double t0 = now_seconds();
+    for (int i = 0; i < iters; ++i) {
+        cudaMemcpy(d_ptr, h_ptr, bytes, cudaMemcpyHostToDevice);
+    }
+    cudaDeviceSynchronize();
+    double t1 = now_seconds();
+
+    double avg = (t1 - t0) / iters;
+    c.pcie_bw = bytes / avg;
+    c.transfer_overhead = 5e-6;  // conservative floor
+
+    cudaFree(d_ptr);
+    cudaFreeHost(h_ptr);
+}
+
+/* ---------------- libcudf “launch” overhead via empty op ---------------- */
+
+static void measure_kernel_launch_effective(Calibration &c) {
+    // zero-row int32 column
+    auto col =
+        cudf::make_numeric_column(cudf::data_type{cudf::type_id::INT32}, 0);
+
+    cudf::table_view tv({col->view()});
+
+    // warmup
+    auto sorted_warmup = cudf::sort(tv);
+
+    const int iters = 1000;
+    double t0 = now_seconds();
+    for (int i = 0; i < iters; ++i) {
+        auto sorted = cudf::sort(tv);
+        (void)sorted;
+    }
+    cudaDeviceSynchronize();
+    double t1 = now_seconds();
+
+    c.kernel_launch = (t1 - t0) / iters;
+}
+
+/* ---------------- Filter throughput: CPU vs libcudf ---------------- */
+
+static void measure_filter_cpu_gpu(Calibration &c) {
+    const size_t n = 64ull * 1024 * 1024 / sizeof(int32_t);
+
+    // CPU side
+    {
+        std::vector<int32_t> data(n, 1);
+        double t0 = now_seconds();
+        volatile int64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+            if (data[i] > 0)
+                sum += data[i];
+        }
+        double t1 = now_seconds();
+        double bytes = n * sizeof(int32_t);
+        c.cpu_alpha_filter = (t1 - t0) / bytes;
+    }
+
+    // GPU side via libcudf: apply_boolean_mask
+    {
+        // data column
+        auto col =
+            cudf::make_numeric_column(cudf::data_type{cudf::type_id::INT32}, n);
+        {
+            // fill with 1s
+            auto view = col->mutable_view();
+            std::vector<int32_t> host(n, 1);
+            cudaMemcpy(view.head<int32_t>(), host.data(), n * sizeof(int32_t),
+                       cudaMemcpyHostToDevice);
+        }
+
+        // mask: all true
+        auto mask_col =
+            cudf::make_numeric_column(cudf::data_type{cudf::type_id::BOOL8}, n);
+        {
+            auto view = mask_col->mutable_view();
+            std::vector<int8_t> host(n, 1);
+            cudaMemcpy(view.head<int8_t>(), host.data(), n * sizeof(int8_t),
+                       cudaMemcpyHostToDevice);
+        }
+
+        cudf::column_view data_view = col->view();
+        cudf::column_view mask_view = mask_col->view();
+
+        // warmup
+        cudf::table_view tv({data_view});
+        auto filtered_warmup = cudf::apply_boolean_mask(tv, mask_view);
+
+        const int iters = 5;
+        double t0 = now_seconds();
+        for (int i = 0; i < iters; ++i) {
+            auto filtered = cudf::apply_boolean_mask(tv, mask_view);
+            (void)filtered;
+        }
+        cudaDeviceSynchronize();
+        double t1 = now_seconds();
+
+        double total_bytes = static_cast<double>(n) * sizeof(int32_t);
+        double avg = (t1 - t0) / iters;
+        c.gpu_alpha_filter = avg / total_bytes;
+    }
+}
+
+/* ---------------- Sort throughput: CPU vs libcudf ---------------- */
+
+static void measure_sort_cpu_gpu(Calibration &c) {
+    const size_t n = 4ull * 1024 * 1024;
+
+    // CPU
+    {
+        std::vector<int32_t> data(n);
+        for (size_t i = 0; i < n; ++i)
+            data[i] = (int32_t)(n - i);
+
+        double t0 = now_seconds();
+        std::sort(data.begin(), data.end());
+        double t1 = now_seconds();
+
+        double bytes = n * sizeof(int32_t);
+        c.cpu_alpha_sort = (t1 - t0) / (bytes * std::log2((double)n));
+    }
+
+    // GPU via libcudf sort
+    {
+        auto col =
+            cudf::make_numeric_column(cudf::data_type{cudf::type_id::INT32}, n);
+        {
+            auto view = col->mutable_view();
+            std::vector<int32_t> host(n);
+            for (size_t i = 0; i < n; ++i)
+                host[i] = (int32_t)(n - i);
+            cudaMemcpy(view.head<int32_t>(), host.data(), n * sizeof(int32_t),
+                       cudaMemcpyHostToDevice);
+        }
+
+        cudf::table_view tv({col->view()});
+
+        // warmup
+        auto sorted_warmup = cudf::sort(tv);
+
+        const int iters = 3;
+        double t0 = now_seconds();
+        for (int i = 0; i < iters; ++i) {
+            auto sorted = cudf::sort(tv);
+            (void)sorted;
+        }
+        cudaDeviceSynchronize();
+        double t1 = now_seconds();
+
+        double bytes = n * sizeof(int32_t);
+        double avg = (t1 - t0) / iters;
+        c.gpu_alpha_sort = avg / (bytes * std::log2((double)n));
+    }
+}
+
+/* ---------------- Public entry point ---------------- */
+
+void run_cudf_calibration(Calibration &c) {
+    measure_pcie(c);
+    measure_kernel_launch_effective(c);
+    measure_filter_cpu_gpu(c);
+    measure_sort_cpu_gpu(c);
+    c.valid = true;
+}
+
+static void run_calibration(Calibration &c) {
+    if (!load_calibration(c)) {
+#ifdef DEBUG_GPU_SELECTOR
+        std::cout << "Running GPU calibration" << std::endl;
+#endif
+        run_cudf_calibration(c);
+        save_calibration(c);
+    }
+}
+
+#else
+
+static void run_calibration(Calibration &c) {
+    // No CUDA: keep defaults, mark valid.
+    c.valid = true;
+}
+
+#endif
+
+static bool g_calib_initialized = false;
+
+static void init_cost_model() {
+    if (g_calib_initialized)
+        return;
+    run_calibration(g_calib);
+    g_calib_initialized = true;
+
+    PCIe_BW = g_calib.pcie_bw;
+    TRANSFER_OVERHEAD = g_calib.transfer_overhead;
+    KERNEL_LAUNCH = g_calib.kernel_launch;
+
+    // We only get the time of one slow and one faster operation and
+    // compute other slow or faster operations as percentages of those.
+    double cpu_f = g_calib.cpu_alpha_filter;
+    double gpu_f = g_calib.gpu_alpha_filter;
+    double cpu_s = g_calib.cpu_alpha_sort;
+    double gpu_s = g_calib.gpu_alpha_sort;
+
+    ALPHA = {
+        {duckdb::LogicalOperatorType::LOGICAL_GET, {cpu_f * 0.5, gpu_f * 0.5}},
+        {duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE,
+         {cpu_f * 0.5, gpu_f * 0.5}},
+        {duckdb::LogicalOperatorType::LOGICAL_PROJECTION,
+         {cpu_f * 0.5, gpu_f * 0.5}},
+        {duckdb::LogicalOperatorType::LOGICAL_LIMIT,
+         {cpu_f * 0.5, gpu_f * 0.25}},
+        {duckdb::LogicalOperatorType::LOGICAL_FILTER, {cpu_f, gpu_f}},
+        {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, {0, 0}},
+        {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN,
+         {cpu_f * 4.0, gpu_f * 5.0}},
+        {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT,
+         {cpu_f * 5.0, gpu_f * 8.0}},
+        {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
+         {cpu_f * 2.5, gpu_f * 3.0}},
+        {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, {cpu_s, gpu_s}},
+        {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, {1e-10, 1e-10}},
+        {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, {1e-10, 1e-10}},
+        {duckdb::LogicalOperatorType::LOGICAL_TOP_N,
+         {cpu_s * 1.3, gpu_s * 1.3}},
+        {duckdb::LogicalOperatorType::LOGICAL_SAMPLE,
+         {cpu_f * 1.5, gpu_f * 1.5}},
+        {duckdb::LogicalOperatorType::LOGICAL_UNION,
+         {cpu_f * 0.75, gpu_f * 0.75}},
+        {duckdb::LogicalOperatorType::LOGICAL_DISTINCT,
+         {cpu_f * 50.0, gpu_f * 20.0}}};
+
+    GPU_MIN_SIZE = {
+        {duckdb::LogicalOperatorType::LOGICAL_GET, 10 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE, 10 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_PROJECTION, 10 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_LIMIT, 1 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_FILTER, 10 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR, 0},
+        {duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN, 5 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT, 5 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY,
+         5 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, 5 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, 0},
+        {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, 0},
+        {duckdb::LogicalOperatorType::LOGICAL_TOP_N, 5 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_SAMPLE, 3 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_UNION, 4 * 1024 * 1024},
+        {duckdb::LogicalOperatorType::LOGICAL_DISTINCT, 2 * 1024 * 1024}};
+}
+
 double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
+    init_cost_model();  // load or run tests to gen cost model
+
     auto op = node->getOp().type;
 
     auto alpha_iter = ALPHA.find(op);

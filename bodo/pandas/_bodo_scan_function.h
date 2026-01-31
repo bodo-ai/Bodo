@@ -45,7 +45,7 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
     // statistics.
     std::optional<JoinFilterProgramState> rtjf_state_map = std::nullopt;
 
-    bool canRunOnGPU(bool has_filters, bool has_limit) { return false; }
+    virtual bool canRunOnGPU(bool has_filters, bool has_limit) { return false; }
 };
 
 /**
