@@ -58,20 +58,22 @@ class PhysicalPlanBuilder {
             _join_filter_pipelines = std::make_shared<
                 std::unordered_map<int, std::shared_ptr<Pipeline>>>()
 #ifdef USE_CUDF
-        , std::shared_ptr<std::unordered_map<int, bool>>
-            _join_on_gpu =
-                std::make_shared<std::unordered_map<int, bool>>()
+            ,
+        std::shared_ptr<std::unordered_map<int, bool>> _join_on_gpu =
+            std::make_shared<std::unordered_map<int, bool>>()
 #endif
-        )
+            )
         : active_pipeline(nullptr),
           ctes(_ctes),
           run_on_gpu(_run_on_gpu),
           join_filter_states(std::move(_join_filter_states)),
           join_filter_pipelines(std::move(_join_filter_pipelines))
 #ifdef USE_CUDF
-          , join_on_gpu(std::move(_join_on_gpu))
+          ,
+          join_on_gpu(std::move(_join_on_gpu))
 #endif
-          {}
+    {
+    }
 
     template <typename T>
     void FinishPipelineOneOperator(std::shared_ptr<T> obj) {
