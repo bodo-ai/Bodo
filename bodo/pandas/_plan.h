@@ -45,16 +45,9 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
           filter_columns(std::move(filter_columns)),
           is_first_locations(std::move(is_first_locations)),
           orig_build_key_cols(std::move(orig_build_key_cols)) {
+        estimated_cardinality = source->estimated_cardinality;
+        has_estimated_cardinality = source->has_estimated_cardinality;
         this->children.push_back(std::move(source));
-        // TODO: Can we do better than this?
-        if (!source) {
-            std::cout << "source null in LogicalJoinFilter." << std::endl;
-            estimated_cardinality = 1;
-            has_estimated_cardinality = true;
-        } else {
-            estimated_cardinality = source->estimated_cardinality;
-            has_estimated_cardinality = source->has_estimated_cardinality;
-        }
     }
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {

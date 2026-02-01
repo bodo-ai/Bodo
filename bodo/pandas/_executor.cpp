@@ -4,7 +4,7 @@
 #include "_bodo_scan_function.h"
 
 // enable and build to print debug info on the pipeline
-#define DEBUG_GPU_SELECTOR
+// #define DEBUG_GPU_SELECTOR
 #ifdef DEBUG_GPU_SELECTOR
 #include <iostream>
 #endif
