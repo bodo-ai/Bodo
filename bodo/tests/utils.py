@@ -2600,7 +2600,10 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
         str_vals.append(val)
 
     # use consistent string array type with Bodo to avoid output comparison errors
-    return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
+    return pd.array(
+        str_vals,
+        dtype=pd.ArrowDtype(pa.large_string() if not is_binary else pa.large_binary()),
+    )
 
 
 def _check_typing_issues(val):
