@@ -18,8 +18,6 @@
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
 
-#include <iostream>
-
 namespace bodo {
 
 /**
