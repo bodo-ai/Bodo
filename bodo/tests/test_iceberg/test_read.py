@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 import pyspark.sql.types as spark_types
 import pytest
+from mpi4py import MPI
 from numba.core import types  # noqa TID253
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader, spark_reader
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,

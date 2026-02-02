@@ -15,12 +15,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import pytz
+from mpi4py import MPI
 from pyiceberg import types
 from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
 from pyiceberg.schema import Schema, assign_fresh_schema_ids
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import schema_evolution_eg_table, spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,

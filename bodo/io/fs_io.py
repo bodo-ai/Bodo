@@ -760,9 +760,8 @@ def get_s3_bucket_region(s3_filepath, parallel):
     PyArrow's region detection only works for actual S3 buckets.
     Returns an empty string in case region cannot be determined.
     """
+    from mpi4py import MPI
     from pyarrow import fs as pa_fs
-
-    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

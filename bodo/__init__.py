@@ -12,7 +12,7 @@ def _global_except_hook(exctype, value, traceback):
 
     import sys
     import time
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -260,7 +260,7 @@ if platform.system() == "Windows":
 
     # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
     # guarantees that impi.dll is loaded, and therefore found when MPI calls are made
-    import bodo.mpi4py
+    import mpi4py
 
     # For Windows pip we need to ensure pyarrow DLLs are added to the search path
     for lib_dir in pyarrow.get_library_dirs():

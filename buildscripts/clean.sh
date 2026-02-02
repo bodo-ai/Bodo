@@ -17,8 +17,6 @@ echo "Removing bodo/transforms/type_inference/native_typer.cpp"
 find . -name "native_typer.cpp" | xargs rm -f
 echo "Removing bodo/pandas/plan_optimizer.cpp"
 find . -name "plan_optimizer.cpp" | xargs rm -f
-echo "Removing vendored mpi4py"
-rm -rf bodo/mpi4py/_vendored_mpi4py
 echo "Removing DuckDB build"
 rm -rf bodo/pandas/vendor/duckdb/build
 

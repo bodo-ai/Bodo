@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 import pyarrow as pa
+from mpi4py import MPI
 from numba.core import types
 
 import bodo
@@ -25,7 +26,6 @@ from bodo.io.helpers import (
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.map_arr_ext import contains_map_array
-from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type, raise_bodo_error

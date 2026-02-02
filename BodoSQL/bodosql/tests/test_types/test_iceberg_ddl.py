@@ -5,12 +5,12 @@ import pandas as pd
 import pytest
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
+from mpi4py import MPI
 from numba.core.config import shutil
 from rest_test_harness import RestTestHarness
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 

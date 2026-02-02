@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import types  # noqa TID253
 
 import bodo
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,

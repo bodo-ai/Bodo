@@ -10,7 +10,7 @@ cimport pyarrow.lib
 from pyarrow._fs cimport FileSystem
 from pyarrow.includes.libarrow_fs cimport CFileSystem
 
-from bodo.mpi4py import MPI
+from mpi4py import MPI
 import bodo
 import bodo.memory_cpp
 import bodo.io.fs_io

@@ -111,11 +111,11 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
 
         time_pt start_finalize_time = start_timer();
-        PyObject* mpi4py_module = PyImport_ImportModule("bodo.mpi4py");
+        PyObject* mpi4py_module = PyImport_ImportModule("mpi4py");
         if (!mpi4py_module) {
             throw std::runtime_error(
                 "PhysicalWriteIceberg::Finalize: Failed to import "
-                "bodo.mpi4py");
+                "mpi4py");
         }
         PyObject* mpi_module = PyObject_GetAttrString(mpi4py_module, "MPI");
         if (!mpi_module) {

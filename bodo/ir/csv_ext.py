@@ -5,6 +5,7 @@ import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 from numba.extending import intrinsic
@@ -29,7 +30,6 @@ from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.mpi4py import MPI
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,

@@ -7,9 +7,9 @@ import uuid
 
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (  # noqa
     get_snowflake_connection_string,
     pytest_perf_regression,

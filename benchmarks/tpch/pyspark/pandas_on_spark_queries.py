@@ -9,7 +9,6 @@ from pyspark.sql import SparkSession
 
 
 def load_lineitem(data_folder: str):
-    print("Loading lineitem")
     data_path = data_folder + "/lineitem.pq"
     df = ps.read_parquet(data_path)
     df["L_SHIPDATE"] = ps.to_datetime(df.L_SHIPDATE, format="%Y-%m-%d")
@@ -19,60 +18,75 @@ def load_lineitem(data_folder: str):
 
 
 def load_part(data_folder: str):
-    print("Loading part")
     data_path = data_folder + "/part.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading part")
     return df
 
 
 def load_orders(data_folder: str):
-    print("Loading orders")
     data_path = data_folder + "/orders.pq"
     df = ps.read_parquet(data_path)
     df["O_ORDERDATE"] = ps.to_datetime(df.O_ORDERDATE, format="%Y-%m-%d")
-    print("Done loading orders")
     return df
 
 
 def load_customer(data_folder: str):
-    print("Loading customer")
     data_path = data_folder + "/customer.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading customer")
     return df
 
 
 def load_nation(data_folder: str):
-    print("Loading nation")
     data_path = data_folder + "/nation.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading nation")
     return df
 
 
 def load_region(data_folder: str):
-    print("Loading region")
     data_path = data_folder + "/region.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading region")
     return df
 
 
 def load_supplier(data_folder: str):
-    print("Loading supplier")
     data_path = data_folder + "/supplier.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading supplier")
     return df
 
 
 def load_partsupp(data_folder: str):
-    print("Loading partsupp")
     data_path = data_folder + "/partsupp.pq"
     df = ps.read_parquet(data_path)
-    print("Done loading partsupp")
     return df
+
+
+def tpch_q01(data_folder: str, scale_factor: float = 1.0):
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/dask/q1.py
+    """
+    lineitem = load_lineitem(data_folder)
+
+    var1 = pd.Timestamp("1998-09-02")
+    filt = lineitem[lineitem["L_SHIPDATE"] <= var1]
+
+    filt["DISC_PRICE"] = filt.L_EXTENDEDPRICE * (1.0 - filt.L_DISCOUNT)
+    filt["CHARGE"] = filt.L_EXTENDEDPRICE * (1.0 - filt.L_DISCOUNT) * (1.0 + filt.L_TAX)
+
+    gb = filt.groupby(["L_RETURNFLAG", "L_LINESTATUS"])
+    agg = gb.agg(
+        SUM_QTY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum"),
+        SUM_BASE_PRICE=pd.NamedAgg(column="L_EXTENDEDPRICE", aggfunc="sum"),
+        SUM_DISC_PRICE=pd.NamedAgg(column="DISC_PRICE", aggfunc="sum"),
+        SUM_CHARGE=pd.NamedAgg(column="CHARGE", aggfunc="sum"),
+        AVG_QTY=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean"),
+        AVG_PRICE=pd.NamedAgg(column="L_EXTENDEDPRICE", aggfunc="mean"),
+        AVG_DISC=pd.NamedAgg(column="L_DISCOUNT", aggfunc="mean"),
+        COUNT_ORDER=pd.NamedAgg(column="L_ORDERKEY", aggfunc="count"),
+    )
+    agg = agg.reset_index()
+
+    result_df = agg.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
+    return result_df
 
 
 def tpch_q02(data_folder: str, scale_factor: float = 1.0) -> pd.DataFrame:
@@ -157,6 +171,35 @@ def tpch_q03(data_folder: str, scale_factor: float = 1.0):
     result_df = sorted.head(10)
 
     return result_df
+
+
+def tpch_q04(data_folder, scale_factor=1.0):
+    """Pandas code adapted from:
+    https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
+    """
+    var1 = pd.Timestamp("1993-11-01")
+    var2 = pd.Timestamp("1993-08-01")
+
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+
+    flineitem = lineitem[lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE]
+    forders = orders[(orders.O_ORDERDATE < var1) & (orders.O_ORDERDATE >= var2)]
+
+    keys = flineitem[["L_ORDERKEY"]].drop_duplicates()
+
+    jn = forders.merge(
+        keys,
+        left_on="O_ORDERKEY",
+        right_on="L_ORDERKEY",
+        how="inner",
+    )
+
+    total = jn.groupby("O_ORDERPRIORITY")["O_ORDERKEY"].count().sort_index()
+
+    total = total.reset_index()
+    total.columns = ["O_ORDERPRIORITY", "ORDER_COUNT"]
+    return total
 
 
 def tpch_q05(data_folder: str, scale_factor: float = 1.0):
@@ -435,6 +478,77 @@ def tpch_q11(data_folder: str, scale_factor: float = 1.0):
     return result_df
 
 
+def tpch_q12(data_folder: str, scale_factor: float = 1.0):
+    """Adapted from:
+    https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
+    """
+    var1 = pd.Timestamp("1994-01-01")
+    var2 = pd.Timestamp("1995-01-01")
+
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+
+    jn1 = orders.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+    jn1 = jn1[
+        (jn1["L_SHIPMODE"].isin(("MAIL", "SHIP")))
+        & (jn1["L_COMMITDATE"] < jn1["L_RECEIPTDATE"])
+        & (jn1["L_SHIPDATE"] < jn1["L_COMMITDATE"])
+        & (jn1["L_RECEIPTDATE"] >= var1)
+        & (jn1["L_RECEIPTDATE"] < var2)
+    ]
+
+    jn1["HIGH_LINE_COUNT"] = (
+        (jn1["O_ORDERPRIORITY"] == "1-URGENT") | (jn1["O_ORDERPRIORITY"] == "2-HIGH")
+    ).astype("int64")
+
+    jn1["LOW_LINE_COUNT"] = (
+        (jn1["O_ORDERPRIORITY"] != "1-URGENT") & (jn1["O_ORDERPRIORITY"] != "2-HIGH")
+    ).astype("int64")
+
+    gb = (
+        jn1.groupby("L_SHIPMODE")
+        .agg(
+            HIGH_LINE_COUNT=("HIGH_LINE_COUNT", "sum"),
+            LOW_LINE_COUNT=("LOW_LINE_COUNT", "sum"),
+        )
+        .sort_index()
+    )
+    result_df = gb.reset_index()
+
+    return result_df
+
+
+def tpch_q13(data_folder: str, scale_factor: float = 1.0):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "special"
+    var2 = "requests"
+
+    customer = load_customer(data_folder)
+    orders = load_orders(data_folder)
+
+    orders = orders[~orders["O_COMMENT"].str.contains(f"{var1}.*{var2}", regex=True)]
+
+    jn1 = customer.merge(
+        orders,
+        left_on="C_CUSTKEY",
+        right_on="O_CUSTKEY",
+        how="left",
+    )
+
+    agg1 = jn1.groupby("C_CUSTKEY").agg(C_COUNT=("O_ORDERKEY", "count")).reset_index()
+
+    agg2 = agg1.groupby("C_COUNT")["C_CUSTKEY"].size().rename("CUSTDIST")
+
+    result_df = agg2.reset_index().sort_values(
+        by=["CUSTDIST", "C_COUNT"],
+        ascending=[False, False],
+    )
+
+    return result_df
+
+
 def tpch_q14(data_folder: str, scale_factor: float = 1.0):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
@@ -494,6 +608,51 @@ def tpch_q15(data_folder: str, scale_factor: float = 1.0):
     result_df = jn2[
         ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
     ].sort_values(by="S_SUPPKEY")
+
+    return result_df
+
+
+def tpch_q16(data_folder: str, scale_factor: float = 1.0):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "Brand#45"
+
+    supplier = load_supplier(data_folder)
+    partsupp = load_partsupp(data_folder)
+    part = load_part(data_folder)
+
+    supplier["IS_COMPLAINT"] = supplier["S_COMMENT"].str.contains(
+        "Customer.*Complaints"
+    )
+
+    complaint_suppkeys = supplier[supplier["IS_COMPLAINT"]]["S_SUPPKEY"]
+
+    jn1 = partsupp.merge(
+        complaint_suppkeys,
+        left_on="PS_SUPPKEY",
+        right_on="S_SUPPKEY",
+        how="left",
+    )
+    jn1 = jn1[jn1["S_SUPPKEY"].isna()].drop(columns=["S_SUPPKEY"])
+
+    jn2 = jn1.merge(part, left_on="PS_PARTKEY", right_on="P_PARTKEY")
+    jn2 = jn2[
+        (jn2["P_BRAND"] != var1)
+        & (~jn2["P_TYPE"].str.startswith("MEDIUM POLISHED"))
+        & (jn2["P_SIZE"].isin((49, 14, 23, 45, 19, 3, 36, 9)))
+    ]
+
+    agg = (
+        jn2.groupby(["P_BRAND", "P_TYPE", "P_SIZE"])["PS_SUPPKEY"]
+        .nunique()
+        .reset_index(name="SUPPLIER_CNT")
+    )
+
+    result_df = agg.sort_values(
+        by=["SUPPLIER_CNT", "P_BRAND", "P_TYPE", "P_SIZE"],
+        ascending=[False, True, True, True],
+    )
 
     return result_df
 
@@ -633,7 +792,89 @@ def tpch_q20(data_folder: str, scale_factor: float = 1.0):
     return result_df
 
 
-def run_query_single(query_func: Callable, data_folder: str, scale_factor: float = 1.0):
+def tpch_q21(data_folder: str, scale_factor: float = 1.0):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "SAUDI ARABIA"
+
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    supplier = load_supplier(data_folder)
+    nation = load_nation(data_folder)
+
+    gb1 = (
+        lineitem.groupby("L_ORDERKEY")
+        .agg(NUM_SUPPLIERS=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique"))
+        .reset_index()
+    )
+    gb1 = gb1[gb1["NUM_SUPPLIERS"] > 1]
+
+    flineitem = lineitem[lineitem["L_RECEIPTDATE"] > lineitem["L_COMMITDATE"]]
+    jn1 = gb1.merge(flineitem, on="L_ORDERKEY")
+
+    gb2 = (
+        jn1.groupby("L_ORDERKEY")
+        .agg(NUNIQUE_COL=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique"))
+        .reset_index()
+    )
+
+    jn2 = gb2.merge(jn1, on="L_ORDERKEY")
+    jn3 = jn2.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+    jn5 = jn5[
+        (
+            (jn5["NUNIQUE_COL"] == 1)
+            & (jn5["N_NAME"] == var1)
+            & (jn5["O_ORDERSTATUS"] == "F")
+        )
+    ]
+    gb3 = jn5.groupby("S_NAME")["NUNIQUE_COL"].size().rename("NUMWAIT").reset_index()
+
+    result_df = gb3.sort_values(["NUMWAIT", "S_NAME"], ascending=[False, True]).head(
+        100
+    )
+
+    return result_df
+
+
+def tpch_q22(data_folder: str, scale_factor: float = 1.0):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    customer = load_customer(data_folder)
+    orders = load_orders(data_folder)
+
+    customer["CNTRYCODE"] = customer["C_PHONE"].str.strip().str.slice(0, 2)
+    fcustomers = customer[
+        customer["CNTRYCODE"].isin(("13", "31", "23", "29", "30", "18", "17"))
+    ]
+
+    average_c_acctbal = fcustomers[fcustomers["C_ACCTBAL"] > 0.0]["C_ACCTBAL"].mean()
+    custsale = fcustomers[fcustomers["C_ACCTBAL"] > average_c_acctbal]
+
+    jn1 = custsale.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left")
+    jn1 = jn1[jn1["O_CUSTKEY"].isnull()]
+
+    agg1 = (
+        jn1.groupby("CNTRYCODE")
+        .agg(
+            NUMCUST=pd.NamedAgg(column="C_ACCTBAL", aggfunc="count"),
+            TOTACCTBAL=pd.NamedAgg(column="C_ACCTBAL", aggfunc="sum"),
+        )
+        .reset_index()
+    )
+
+    result_df = agg1.sort_values("CNTRYCODE", ascending=True)
+
+    return result_df
+
+
+def run_query_single(
+    query_func: Callable, data_folder: str, scale_factor: float = 1.0
+) -> pd.DataFrame:
     res = query_func(data_folder, scale_factor)
     if not isinstance(res, pd.DataFrame):
         res = res.to_pandas()
@@ -689,6 +930,7 @@ def main():
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1,")
         .getOrCreate()
     )
+
     ps.set_option("compute.default_index_type", "distributed-sequence")
 
     queries = args.queries or list(range(1, 23))
