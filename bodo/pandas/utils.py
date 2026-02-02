@@ -529,6 +529,8 @@ def check_args_fallback(
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
+                        # Workaround Pandas 3 bugs for concat with nulls for Arrow dtype
+                        self = pd.Series(self._series).astype(object).str
                     elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
                         base_class = self._series.__class__.__bases__[0].dt
                     else:
