@@ -6981,12 +6981,11 @@ class BodoCacheLocator(numba.core.caching._CacheLocator):
     """
     __slots__ = ('_py_file', '_cache_path', '_bytes_source')
     registered_funcs = {}   # Holds mapping of generated function name to its source.
-    cache_path = os.environ.get("BODO_PLATFORM_CACHE_LOCATION")
-    if cache_path is None:
+    cache_dir = os.environ.get("BODO_PLATFORM_CACHE_LOCATION")
+    if cache_dir is None:
         appdirs = AppDirs(appname="bodo", appauthor=False)
-        cache_path = os.path.join(appdirs.user_cache_dir, ".strfunc_cache")
-    else:
-        cache_path = os.path.join(cache_path, ".strfunc_cache")
+        cache_dir = appdirs.user_cache_dir
+    cache_path = os.path.join(cache_dir, ".strfunc_cache")
 
     def __init__(self, py_func, py_file):
         source = BodoCacheLocator.registered_funcs[py_func.__qualname__]

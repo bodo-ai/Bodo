@@ -257,11 +257,7 @@ struct Calibration {
 
 static Calibration g_calib;
 static std::string get_calib_path() {
-    const char *home = std::getenv("BOD_GPU_CALIBRATION");
-    if (!home) {
-        home = ".";
-    }
-    std::string ret = std::string(home) + "/.bodo_gpu_calibration.txt";
+    std::string ret = get_cache_dir() + "/.bodo_gpu_calibration.txt";
 #ifdef DEBUG_GPU_SELECTOR
     std::cout << "GPU calibration file " << ret << std::endl;
 #endif
