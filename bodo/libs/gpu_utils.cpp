@@ -5,6 +5,7 @@
 #include <thrust/transform.h>
 #include <cassert>
 #include <cudf/column/column_factories.hpp>
+#include <cudf/concatenate.hpp>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/hashing.hpp>
@@ -88,14 +89,10 @@ void GpuShuffleManager::shuffle_table(
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     std::vector<std::unique_ptr<cudf::table>> received_tables;
     for (GpuShuffle& shuffle : this->inflight_shuffles) {
-        std::optional<cudf::table_view> progress_res = shuffle.progress();
-        // This makes a copy, not sure how to avoid it, we get packed_columns
-        // back after the shuffle which have internal buffers that own the data
-        // and only supports creating a cudf::table_view. I can't find a way to
-        // move those buffers into a cudf::table without copying.
+        std::optional<std::unique_ptr<cudf::table>> progress_res =
+            shuffle.progress();
         if (progress_res.has_value()) {
-            received_tables.push_back(
-                std::make_unique<cudf::table>(progress_res.value()));
+            received_tables.push_back(std::move(progress_res.value()));
         }
     }
 
@@ -114,7 +111,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     return received_tables;
 }
 
-std::optional<cudf::table_view> GpuShuffle::progress() {
+std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
             this->progress_sending_sizes();
@@ -212,11 +209,29 @@ void GpuShuffle::recv_metadata() {
 }
 
 void GpuShuffle::send_data() {
-    // Send GPU data using NCCL
+    ncclGroupStart();
+    for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
+         dest_rank++) {
+        CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
+                            packed_send_buffers[dest_rank]->size(), ncclChar,
+                            dest_rank, this->nccl_comm, this->stream));
+    }
+    ncclGroupEnd();
+    // Record event to signal completion
+    CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
 }
 
 void GpuShuffle::recv_data() {
-    // Receive GPU data using NCCL
+    ncclGroupStart();
+    for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
+         src_rank++) {
+        CHECK_NCCL(ncclRecv(packed_recv_buffers[src_rank]->data(),
+                            packed_recv_buffers[src_rank]->size(), ncclChar,
+                            src_rank, this->nccl_comm, this->stream));
+    }
+    ncclGroupEnd();
+    // Record event to signal completion
+    CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
 }
 
 void GpuShuffle::progress_waiting_for_sizes() {
@@ -259,7 +274,42 @@ void GpuShuffle::progress_waiting_for_sizes() {
     }
 }
 
-std::optional<cudf::table_view> GpuShuffle::progress_waiting_for_data() {
+std::optional<std::unique_ptr<cudf::table>>
+GpuShuffle::progress_waiting_for_data() {
+    assert(this->recv_state == GpuShuffleState::DATA_INFLIGHT);
+    int all_metadata_received;
+    CHECK_MPI_TEST_ALL(
+        this->metadata_recv_reqs, all_metadata_received,
+        "GpuShuffle::progress_waiting_for_data: MPI_Test failed:");
+    // Check if NCCL event has completed, this will return cudaSuccess if the
+    // event has completed, cudaErrorNotReady if not yet completed,
+    // or another error code if an error occurred.
+    cudaError_t event_status = cudaEventQuery(nccl_recv_event);
+    // Check for errors
+    if (event_status != cudaErrorNotReady) {
+        CHECK_CUDA(event_status);
+    }
+    bool gpu_data_received = (event_status == cudaSuccess);
+
+    if (all_metadata_received && gpu_data_received) {
+        // Unpack received tables
+        std::vector<cudf::table_view> table_views(n_ranks);
+        for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
+             src_rank++) {
+            cudf::packed_columns packed_cols = cudf::packed_columns(
+                std::move(this->metadata_recv_buffers[src_rank]),
+                std::move(this->packed_recv_buffers[src_rank]));
+            table_views[src_rank] = cudf::unpack(packed_cols);
+        }
+        // Deallocate all receive data
+        this->metadata_recv_buffers.clear();
+        this->packed_recv_buffers.clear();
+        this->metadata_recv_reqs.clear();
+        // Move to completed state
+        this->recv_state = GpuShuffleState::COMPLETED;
+        // Return unpacked table view
+        return cudf::concatenate(table_views);
+    }
     return std::nullopt;
 }
 
@@ -287,7 +337,16 @@ void GpuShuffle::progress_sending_data() {
     int all_metadata_sent;
     CHECK_MPI_TEST_ALL(this->metadata_send_reqs, all_metadata_sent,
                        "GpuShuffle::progress_sending_data: MPI_Test failed:");
-    bool gpu_data_sent = 1;  // Placeholder for NCCL send completion check
+    // Check if NCCL event has completed, this will return cudaSuccess if the
+    // event has completed, cudaErrorNotReady if not yet completed,
+    // or another error code if an error occurred.
+    cudaError_t event_status = cudaEventQuery(nccl_send_event);
+    // Check for errors
+    if (event_status != cudaErrorNotReady) {
+        CHECK_CUDA(event_status);
+    }
+    bool gpu_data_sent = (event_status == cudaSuccess);
+
     if (all_metadata_sent && gpu_data_sent) {
         // Deallocate all send data
         this->metadata_send_buffers.clear();

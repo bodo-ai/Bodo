@@ -56,9 +56,10 @@ struct GpuShuffle {
     // MPI_Requests for metadata transfers to other ranks
     // Indexed by destination rank
     std::vector<MPI_Request> metadata_send_reqs;
-    // Event marker for all nccl operations needed for this shuffle.
+    // Event markers for all nccl operations needed for this shuffle.
     // When this is finished all GPU buffers are in the correct place.
-    cudaEvent_t nccl_event;
+    cudaEvent_t nccl_send_event;
+    cudaEvent_t nccl_recv_event;
     // We need to keep sizes around while the transfers are inflight
     std::vector<uint64_t> send_metadata_sizes;
     std::vector<uint64_t> recv_metadata_sizes;
@@ -100,7 +101,7 @@ struct GpuShuffle {
           start_tag(start_tag),
           n_ranks(n_ranks) {
         CHECK_CUDA(
-            cudaEventCreateWithFlags(&nccl_event, cudaEventDisableTiming));
+            cudaEventCreateWithFlags(&nccl_send_event, cudaEventDisableTiming));
 
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
@@ -125,9 +126,9 @@ struct GpuShuffle {
     GpuShuffle(const GpuShuffle&) = delete;
     GpuShuffle& operator=(const GpuShuffle&) = delete;
 
-    ~GpuShuffle() { cudaEventDestroy(nccl_event); }
+    ~GpuShuffle() { cudaEventDestroy(nccl_send_event); }
 
-    std::optional<cudf::table_view> progress();
+    std::optional<std::unique_ptr<cudf::table>> progress();
 
    private:
     int start_tag;
@@ -139,7 +140,7 @@ struct GpuShuffle {
     void send_data();
     void recv_data();
     void progress_waiting_for_sizes();
-    std::optional<cudf::table_view> progress_waiting_for_data();
+    std::optional<std::unique_ptr<cudf::table>> progress_waiting_for_data();
     void progress_sending_sizes();
     void progress_sending_data();
 };
