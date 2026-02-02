@@ -256,6 +256,9 @@ struct Calibration {
 };
 
 static Calibration g_calib;
+
+#ifdef USE_CUDF
+
 static std::string get_calib_path() {
     std::string ret = get_cache_dir() + "/.bodo_gpu_calibration.txt";
 #ifdef DEBUG_GPU_SELECTOR
@@ -315,8 +318,6 @@ static bool load_calibration(Calibration &c) {
     c.valid = true;
     return true;
 }
-
-#ifdef USE_CUDF
 
 #include <cuda_runtime.h>
 #include <cudf/column/column.hpp>
@@ -531,14 +532,14 @@ static void run_calibration(Calibration &c) {
     }
 }
 
-#else
+#else  // USE_CUDF
 
 static void run_calibration(Calibration &c) {
     // No CUDA: keep defaults, mark valid.
     c.valid = true;
 }
 
-#endif
+#endif  // USE_CUDF
 
 static bool g_calib_initialized = false;
 
