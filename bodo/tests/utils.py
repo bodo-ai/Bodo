@@ -1345,6 +1345,7 @@ def _test_equal(
             if (
                 pa.types.is_map(pa_type)
                 or pa.types.is_struct(pa_type)
+                or pa.types.is_list(pa_type)
                 or pa.types.is_large_list(pa_type)
                 or pa.types.is_time(pa_type)
             ):
