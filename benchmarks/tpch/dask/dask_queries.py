@@ -1371,6 +1371,8 @@ def main():
             # Region for accessing bodo-example-data
             "region": "us-east-2",
             "filesystem_size": 1000,
+            # Profile with AmazonS3FullAccess
+            "iam_instance_profile": {"Name": "dask-benchmark"},
             "env_vars": env_vars,
             "debug": True,
         }
@@ -1390,7 +1392,7 @@ def main():
                         print(f"Submitting query {query} at {datetime.now()}")
                         query_time = client.submit(
                             run_single_query, query_func, dataset_path, scale_factor
-                        ).result(timeout=3600)
+                        ).result()
                         print(f"Query {query} execution time: {query_time:.2f} seconds")
                     except Exception as e:
                         print(f"Query {query} failed with an exception: {e}")

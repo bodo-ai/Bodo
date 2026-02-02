@@ -462,7 +462,9 @@ def tpch_q12(lineitem, orders, pd=bodo.pandas):
     def g2(x):
         return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
 
-    gb = jn1.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
+    gb = jn1.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg(
+        HIGH_LINE_COUNT=g1, LOW_LINE_COUNT=g2
+    )
     result_df = gb.sort_values("L_SHIPMODE")
 
     return result_df
