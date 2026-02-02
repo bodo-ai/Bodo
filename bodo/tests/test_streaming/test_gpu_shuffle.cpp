@@ -1,0 +1,197 @@
+#include "../libs/_distributed.h"
+#include "../libs/gpu_utils.h"
+#include "../test.hpp"
+
+#include <cudf/column/column_factories.hpp>
+#include <cudf/filling.hpp>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/types.hpp>
+#include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_buffer.hpp>
+
+// Helper to create a simple integer cudf table for testing
+std::unique_ptr<cudf::table> create_int_table(int num_rows, int start_val) {
+    // Fill with a sequence for verification
+    cudf::numeric_scalar<int64_t> scalar_start =
+        cudf::numeric_scalar<int64_t>(start_val);
+    cudf::numeric_scalar<int64_t> scalar_step =
+        cudf::numeric_scalar<int64_t>(1);
+
+    std::unique_ptr<cudf::column> col =
+        cudf::sequence(num_rows, scalar_start, scalar_step);
+
+    std::vector<std::unique_ptr<cudf::column>> cols;
+    cols.push_back(std::move(col));
+
+    return std::make_unique<cudf::table>(std::move(cols));
+}
+
+static bodo::tests::suite tests([] {
+    // 1. Basic Lifecycle Test
+    // Verifies we can instantiate the manager and it initializes NCCL without
+    // crashing
+    bodo::tests::test("test_gpu_shuffle_init", [] {
+        // Ensure we have a GPU context for this rank
+        // Note: In a real test runner, this might be handled by a fixture
+        rmm::cuda_device_id device_id = get_gpu_id();
+
+        try {
+            GpuShuffleManager manager;
+
+            if (device_id.value() < 0) {
+                // If no GPU assigned, NCCL comm should be null
+                std::cout << manager.get_nccl_comm() << std::endl;
+                bodo::tests::check(manager.get_nccl_comm() == nullptr);
+                bodo::tests::check(manager.get_stream() == nullptr);
+                bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
+            } else {
+                // Should be empty on init
+                bodo::tests::check(manager.inflight_exists() == false);
+
+                // Check communicators exist
+                bodo::tests::check(manager.get_nccl_comm() != nullptr);
+                bodo::tests::check(manager.get_stream() != nullptr);
+                bodo::tests::check(manager.get_mpi_comm() != MPI_COMM_NULL);
+            }
+
+        } catch (const std::exception& e) {
+            std::cout << "Init failed: " << e.what() << std::endl;
+            bodo::tests::check(false);
+        }
+    });
+
+    // 2. Hash Partition Utility Test
+    // Verifies the partitioning logic works locally before sending data
+    bodo::tests::test("test_hash_partition_logic", [] {
+        int num_rows = 100;
+        int num_partitions = 4;  // Arbitrary partition count
+        auto table = create_int_table(num_rows, 0);
+
+        std::vector<cudf::size_type> hash_cols = {
+            0};  // Hash on the first column
+
+        auto result =
+            hash_partition_table(std::shared_ptr<cudf::table>(std::move(table)),
+                                 hash_cols, num_partitions);
+
+        auto partitioned_table = std::move(result.first);
+        auto offsets = result.second;
+
+        // Verify we got the table back
+        bodo::tests::check(partitioned_table->num_rows() == num_rows);
+        bodo::tests::check(partitioned_table->num_columns() == 1);
+
+        // Verify offsets size
+        bodo::tests::check(offsets.size() ==
+                           static_cast<size_t>(num_partitions + 1));
+
+        // Verify offsets are monotonic and less than the total rows
+        for (size_t i = 0; i < offsets.size() - 1; ++i) {
+            bodo::tests::check(offsets[i] <= offsets[i + 1]);
+            bodo::tests::check(offsets[i] <= num_rows);
+        }
+    });
+
+    // 3. Simple Shuffle Test
+    // Performs a shuffle and ensures data integrity (row counts)
+    bodo::tests::test("test_shuffle_integers_end_to_end", [] {
+        int rank, n_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+
+        rmm::cuda_device_id device_id = get_gpu_id();
+        if (device_id.value() < 0)
+            return;
+
+        // Setup: Create 10 rows per rank.
+        // Rank 0 has [0..9], Rank 1 has [10..19], etc.
+        int rows_per_rank = 10;
+        auto table = create_int_table(rows_per_rank, rank * rows_per_rank);
+
+        // Shared pointer required by API
+        std::shared_ptr<cudf::table> input_ptr = std::move(table);
+
+        GpuShuffleManager manager;
+
+        // Shuffle based on column 0
+        manager.shuffle_table(input_ptr, {0});
+
+        bodo::tests::check(manager.inflight_exists() == true);
+
+        std::vector<std::unique_ptr<cudf::table>> received_tables;
+
+        // Pump the progress loop
+        bool done = false;
+        while (!done) {
+            auto out_batch = manager.progress();
+            // Move received tables into our accumulator
+            for (auto& t : out_batch) {
+                if (t)
+                    received_tables.push_back(std::move(t));
+            }
+
+            // Check if queue is drained
+            if (!manager.inflight_exists()) {
+                done = true;
+            }
+        }
+
+        // Verification
+        // 1. Calculate total rows received on this rank
+        int local_received_rows = 0;
+        for (const auto& t : received_tables) {
+            local_received_rows += t->num_rows();
+        }
+
+        // 2. Sum global rows received (requires MPI check)
+        int global_received_rows = 0;
+        CHECK_MPI(MPI_Allreduce(&local_received_rows, &global_received_rows, 1,
+                                MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+                  "test_shuffle_integers_end_to_end: MPI_Allreduce failed:");
+
+        // 3. Check conservation of data: Total rows in system must equal total
+        // rows out Input was rows_per_rank * n_ranks
+        int expected_total_rows = rows_per_rank * n_ranks;
+
+        bodo::tests::check(global_received_rows == expected_total_rows);
+
+        // 4. Check schema preservation
+        if (local_received_rows > 0 && !received_tables.empty()) {
+            bodo::tests::check(received_tables[0]->num_columns() ==
+                               input_ptr->num_columns());
+            bodo::tests::check(received_tables[0]->get_column(0).type().id() ==
+                               cudf::type_id::INT64);
+        }
+    });
+
+    // 4. Empty Table Test
+    // Corner case: Shuffling empty tables shouldn't hang or crash
+    bodo::tests::test("test_shuffle_empty", [] {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        // Create empty table with 1 column
+        auto table = create_int_table(0, 0);
+        std::shared_ptr<cudf::table> input_ptr = std::move(table);
+
+        GpuShuffleManager manager;
+        manager.shuffle_table(input_ptr, {0});
+
+        bool finished = false;
+        int received_count = 0;
+
+        // Simple timeout mechanism to prevent hanging test
+        int safety_counter = 0;
+
+        while (!finished && safety_counter < 10000) {
+            auto tables = manager.progress();
+            received_count += tables.size();
+            finished = !manager.inflight_exists();
+            safety_counter++;
+        }
+
+        bodo::tests::check(finished == true);
+        bodo::tests::check(safety_counter < 10000);  // Fail if timed out
+    });
+});
