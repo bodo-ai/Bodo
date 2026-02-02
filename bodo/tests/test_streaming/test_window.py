@@ -1528,6 +1528,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                             else datetime.date.fromordinal(738886 + i)
                             for i in range(127)
                         ],
+                        dtype=pd.ArrowDtype(pa.date32()),
                     ),
                 }
             ),
@@ -1541,6 +1542,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                         + [None] * 16
                         + [datetime.date(2024, 2, 3)] * 32
                         + [datetime.date(2024, 3, 18)] * 64,
+                        dtype=pd.ArrowDtype(pa.date32()),
                     ),
                 }
             ),
@@ -1566,6 +1568,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                             else bodo.types.Time(microsecond=int(1.5**i))
                             for i in range(127)
                         ],
+                        dtype=pd.ArrowDtype(pa.time64("us")),
                     ),
                 }
             ),
@@ -1578,6 +1581,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                         + [bodo.types.Time(microsecond=291)] * 8
                         + [bodo.types.Time(microsecond=985)] * 16
                         + [None] * 96,
+                        dtype=pd.ArrowDtype(pa.time64("us")),
                     ),
                 }
             ),
