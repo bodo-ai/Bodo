@@ -711,6 +711,11 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       "bodo/tests/test_javascript.cpp"
       )
   endif()
+  if (USE_CUDF)
+        set(test_list "${test_list}"
+        "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
+        )
+  endif()
   list(APPEND sources_list "${test_list}")
   list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
