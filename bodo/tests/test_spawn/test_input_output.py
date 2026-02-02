@@ -200,7 +200,7 @@ def test_spawn_distributed():
         pd.MultiIndex.from_arrays(
             [
                 np.arange(5),
-                pd.date_range("2001-10-15", periods=5),
+                pd.date_range("2001-10-15", periods=5).astype("datetime64[ns]"),
             ],
             names=["AA", None],
         ),
