@@ -118,7 +118,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)),
+                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)).astype(
+                    "datetime64[ns]"
+                ),
             ),
             id="datetime_index",
             marks=[pytest.mark.slow],
@@ -126,7 +128,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100)
+                ).astype("timedelta64[ns]"),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],

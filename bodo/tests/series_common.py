@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -49,7 +50,8 @@ series_val_params = [
                 None,
                 Decimal("0"),
             ]
-            * 2
+            * 2,
+            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
         ),
         id="decimal",
         marks=pytest.mark.skipif(
@@ -101,7 +103,9 @@ series_val_params = [
         id="string_with_integer_index",
     ),
     pytest.param(
-        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
+        pd.Series(
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)
+        ).astype("datetime64[ns]"),
         id="timestamp",
     ),
     pytest.param(
@@ -117,13 +121,15 @@ series_val_params = [
                 None,
                 datetime.timedelta(5, 5, 5),
             ]
-        ),
+        ).astype("timedelta64[ns]"),
         id="timedelta",
     ),
     pytest.param(
         pd.Series(
             [3, 5, 1, -1, 2],
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
+                "datetime64[ns]"
+            ),
         ),
         marks=pytest.mark.slow,
         id="integer_with_timestamp_index",
@@ -136,12 +142,16 @@ series_val_params = [
                 ["aaa", "b", "cc", "~=[]()%+{}@;’"],
                 None,
                 ["xx", "yy", "#!$_&-"],
-            ]
+            ],
+            dtype=pd.ArrowDtype(pa.list_(pa.large_string())),
         ),
         id="string_non_unicode",
     ),
     pytest.param(
-        pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
+        pd.Series(
+            [[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]],
+            dtype=pd.ArrowDtype(pa.list_(pa.int64())),
+        ),
         id="integer_array",
     ),
     pytest.param(
