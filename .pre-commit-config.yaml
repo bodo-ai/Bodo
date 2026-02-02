@@ -10,7 +10,7 @@ exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apac
 repos:
   # Basics
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-toml
       - id: debug-statements
@@ -19,21 +19,21 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+    rev: v0.14.14
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
       - id: ruff-format
   # Cython
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.16.7
+    rev: v0.19.0
     hooks:
       - id: cython-lint
         args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
       - id: double-quote-cython-strings
   # Java and Kotlin
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.15.0
+    rev: v2.16.0
     hooks:
       - id: pretty-format-java
         args: ["--autofix", "--google-java-formatter-version", "1.24.0"]
@@ -41,7 +41,7 @@ repos:
         args: ["--autofix"]
   # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v20.1.8
+    rev: v21.1.8
     hooks:
       - id: clang-format
         types_or: [c++]
@@ -49,7 +49,7 @@ repos:
           (?x)^(bodo/libs/vendored/.*)$
   # GitHub Actions
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.7
+    rev: v1.7.10
     hooks:
       - id: actionlint
 
