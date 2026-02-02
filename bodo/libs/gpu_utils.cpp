@@ -379,13 +379,8 @@ rmm::cuda_device_id get_gpu_id() {
     int device_count;
     cudaGetDeviceCount(&device_count);
 
-    if (device_count == 0) {
-        throw std::runtime_error("No CUDA devices available");
-    }
-    assert(n_ranks > device_count &&
-           "More MPI ranks than available GPUs on node");
-    rmm::cuda_device_id device_id(rank_on_node ? rank_on_node % device_count
-                                               : -1);
+    rmm::cuda_device_id device_id(rank_on_node < device_count ? rank_on_node
+                                                              : -1);
 
     return device_id;
 }

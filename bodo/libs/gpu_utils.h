@@ -35,9 +35,9 @@ enum class GpuShuffleState {
 struct GpuShuffle {
     GpuShuffleState send_state = GpuShuffleState::SIZES_INFLIGHT;
     GpuShuffleState recv_state = GpuShuffleState::SIZES_INFLIGHT;
-    MPI_Comm mpi_comm;
-    ncclComm_t nccl_comm;
-    cudaStream_t stream;
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+    ncclComm_t nccl_comm = nullptr;
+    cudaStream_t stream = nullptr;
     // MPI Requests for sizes of gpu buffers from other ranks
     // Indexed by sending rank
     std::vector<MPI_Request> gpu_sizes_recv_reqs;
@@ -151,11 +151,11 @@ struct GpuShuffle {
 class GpuShuffleManager {
    private:
     // NCCL communicator
-    ncclComm_t nccl_comm;
+    ncclComm_t nccl_comm = nullptr;
 
     // MPI communicator for CPU communication between ranks
     // with GPUs assgined
-    MPI_Comm mpi_comm;
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
 
     // Number of processes
     int n_ranks;
@@ -164,7 +164,7 @@ class GpuShuffleManager {
     int rank;
 
     // Stream for CUDA operations
-    cudaStream_t stream;
+    cudaStream_t stream = nullptr;
 
     // GPU device ID
     rmm::cuda_device_id gpu_id;
@@ -212,6 +212,12 @@ class GpuShuffleManager {
     cudaStream_t get_stream() const { return stream; }
 
     /**
+     * @brief Get the underlying MPI communicator
+     * @return MPI_Comm
+     */
+    MPI_Comm get_mpi_comm() const { return mpi_comm; }
+
+    /**
      * @brief Check if there are any inflight shuffles
      * @return true if there are inflight shuffles, false otherwise
      */
@@ -236,12 +242,14 @@ hash_partition_table(std::shared_ptr<cudf::table> table,
  * @return rmm::cuda_device_id, -1 if no GPU is assigned to this rank
  */
 rmm::cuda_device_id get_gpu_id();
+
 /**
  * @brief Get the number of CUDA devices available in the cluster. All ranks
  * must call this function.
  * @return Number of CUDA devices
  */
 int get_cluster_cuda_device_count();
+
 /**
  * @brief Get the MPI communicator for ranks with GPUs assigned
  * @param gpu_id GPU device ID
