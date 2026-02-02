@@ -73,14 +73,22 @@ void GpuShuffleManager::shuffle_table(
         return;
     }
     // Hash partition the table
-    auto [partitioned_table, partition_sizes] =
+    auto [partitioned_table, partition_start_rows] =
         hash_partition_table(table, partition_indices, n_ranks);
+
+    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+    // Contiguous splits requires the split indices excluding the first 0
+    // So we create a new vector from partition_start_rows[1..end]
+    std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
+        partition_start_rows.begin() + 1, partition_start_rows.end());
     // Pack the tables for sending
-    std::vector<cudf::packed_table> packed_tables = cudf::contiguous_split(
-        partitioned_table->view(), partition_sizes, stream);
+    std::vector<cudf::packed_table> packed_tables =
+        cudf::contiguous_split(partitioned_table->view(), splits, stream);
+
+    assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
     GpuShuffle(std::move(packed_tables), mpi_comm, nccl_comm, stream,
-               this->rank, this->curr_tag);
+               this->n_ranks, this->curr_tag);
     // Each shuffle will use nranks * 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
     this->curr_tag += this->n_ranks * 3;
