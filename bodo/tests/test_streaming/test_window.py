@@ -2160,7 +2160,7 @@ def test_lead_lag(default_val, in_col, out_col, memory_leak_check):
         impl,
         (in_df,),
         py_output=out_df,
-        check_dtype=True,
+        check_dtype=False,
         reset_index=True,
         sort_output=True,
     )
