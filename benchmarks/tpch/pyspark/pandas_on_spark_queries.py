@@ -803,39 +803,41 @@ def tpch_q21(data_folder: str, scale_factor: float = 1.0):
     supplier = load_supplier(data_folder)
     nation = load_nation(data_folder)
 
-    lineitem["IS_LATE"] = (lineitem["L_RECEIPTDATE"] > lineitem["L_COMMITDATE"]).astype(
-        "int"
-    )
-
-    agg = (
+    gb1 = (
         lineitem.groupby("L_ORDERKEY")
-        .agg(
-            NUM_SUPPLIERS=("L_SUPPKEY", "nunique"),
-            NUM_LATE_SUPPLIERS=("IS_LATE", "sum"),
-        )
+        .agg(NUM_SUPPLIERS=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique"))
+        .reset_index()
+    )
+    gb1 = gb1[gb1["NUM_SUPPLIERS"] > 1]
+
+    flineitem = lineitem[lineitem["L_RECEIPTDATE"] > lineitem["L_COMMITDATE"]]
+    jn1 = gb1.merge(flineitem, on="L_ORDERKEY")
+
+    gb2 = (
+        jn1.groupby("L_ORDERKEY")
+        .agg(NUNIQUE_COL=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique"))
         .reset_index()
     )
 
-    agg = agg[(agg["NUM_SUPPLIERS"] > 1) & (agg["NUM_LATE_SUPPLIERS"] == 1)]
+    jn2 = gb2.merge(jn1, on="L_ORDERKEY")
+    jn3 = jn2.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
 
-    jn = (
-        agg.merge(lineitem[lineitem["IS_LATE"]], on="L_ORDERKEY")
-        .merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
-        .merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
-        .merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+    jn5 = jn5[
+        (
+            (jn5["NUNIQUE_COL"] == 1)
+            & (jn5["N_NAME"] == var1)
+            & (jn5["O_ORDERSTATUS"] == "F")
+        )
+    ]
+    gb3 = jn5.groupby("S_NAME")["NUNIQUE_COL"].size().rename("NUMWAIT").reset_index()
+
+    result_df = gb3.sort_values(["NUMWAIT", "S_NAME"], ascending=[False, True]).head(
+        100
     )
 
-    jn = jn[(jn["N_NAME"] == var1) & (jn["O_ORDERSTATUS"] == "F")]
-
-    result = (
-        jn.groupby("S_NAME")
-        .size()
-        .reset_index(name="NUMWAIT")
-        .sort_values(["NUMWAIT", "S_NAME"], ascending=[False, True])
-        .head(100)
-    )
-
-    return result
+    return result_df
 
 
 def tpch_q22(data_folder: str, scale_factor: float = 1.0):
@@ -870,7 +872,9 @@ def tpch_q22(data_folder: str, scale_factor: float = 1.0):
     return result_df
 
 
-def run_query_single(query_func: Callable, data_folder: str, scale_factor: float = 1.0):
+def run_query_single(
+    query_func: Callable, data_folder: str, scale_factor: float = 1.0
+) -> pd.DataFrame:
     res = query_func(data_folder, scale_factor)
     if not isinstance(res, pd.DataFrame):
         res = res.to_pandas()
