@@ -2546,7 +2546,9 @@ def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     lhs_col = df.iloc[:, left_idx]
     rhs_col = df.iloc[:, right_idx]
 
-    return lhs_col.str.cat(rhs_col, sep, na_rep)
+    # Work around Pandas 3 bugs with ArrowDtype str.cat()
+    out = lhs_col.astype(object).str.cat(rhs_col.astype(object), sep, na_rep)
+    return out.astype("str").astype(pd.ArrowDtype(pa.large_string()))
 
 
 def _get_col_as_series(s, col):
