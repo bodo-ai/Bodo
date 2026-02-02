@@ -1824,9 +1824,7 @@ def test_series_mod(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1["A"] % 5
 
-        py_df1 = pd.read_parquet(
-            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
-        )
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
         py_df2 = py_df1["A"] % 5
 
     _test_equal(
