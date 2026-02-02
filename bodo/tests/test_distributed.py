@@ -2366,18 +2366,23 @@ def get_random_int64index(n):
             marks=pytest.mark.slow,
         ),  # String Index
         pytest.param(
-            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),
+            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)).astype(
+                "datetime64[ns]"
+            ),
             marks=pytest.mark.slow,
         ),  # DatetimeIndex
         pytest.param(
-            pd.timedelta_range(start="1D", periods=n, name="A"), marks=pytest.mark.slow
+            pd.timedelta_range(start="1D", periods=n, name="A").astype(
+                "timedelta64[ns]"
+            ),
+            marks=pytest.mark.slow,
         ),  # TimedeltaIndex
         pytest.param(
             pd.MultiIndex.from_arrays(
                 [
                     gen_random_string_binary_array(n),
                     np.arange(n),
-                    pd.date_range("2001-10-15", periods=n),
+                    pd.date_range("2001-10-15", periods=n).astype("datetime64[ns]"),
                 ],
                 names=["AA", "B", None],
             ),
@@ -2393,7 +2398,7 @@ def get_random_int64index(n):
             {
                 "A": gen_random_string_binary_array(n),
                 "AB": np.arange(n),
-                "CCC": pd.date_range("2001-10-15", periods=n),
+                "CCC": pd.date_range("2001-10-15", periods=n).astype("datetime64[ns]"),
             },
             np.arange(n) + 2,
         ),
@@ -2537,15 +2542,19 @@ def get_random_int64index(n):
                     bodo.types.Time(7, 3, 45, 876, 234),
                     None,
                 ],
-                dtype=object,
+                dtype=pd.ArrowDtype(pa.time64("ns")),
             ),
             marks=pytest.mark.slow,
             id="time",
         ),
         pytest.param(
-            np.append(
-                datetime.timedelta(days=5, seconds=4, weeks=4),
-                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+            pd.array(
+                np.append(
+                    datetime.timedelta(days=5, seconds=4, weeks=4),
+                    [None, datetime.timedelta(microseconds=100000001213131, hours=5)]
+                    * 5,
+                ),
+                dtype=pd.ArrowDtype(pa.duration("ns")),
             ),
             marks=pytest.mark.slow,
             id="timedelta",
