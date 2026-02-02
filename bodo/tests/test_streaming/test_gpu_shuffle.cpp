@@ -101,8 +101,9 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() < 0)
+        if (device_id.value() < 0) {
             return;
+        }
 
         // Setup: Create 10 rows per rank.
         // Rank 0 has [0..9], Rank 1 has [10..19], etc.

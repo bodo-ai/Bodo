@@ -87,8 +87,9 @@ void GpuShuffleManager::shuffle_table(
 
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
-    GpuShuffle(std::move(packed_tables), mpi_comm, nccl_comm, stream,
-               this->n_ranks, this->curr_tag);
+    this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
+                                         nccl_comm, stream, this->n_ranks,
+                                         this->curr_tag);
     // Each shuffle will use nranks * 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
     this->curr_tag += this->n_ranks * 3;
