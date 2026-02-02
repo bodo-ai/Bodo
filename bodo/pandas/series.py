@@ -2577,17 +2577,17 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
     extracted = string_s.str.extract(pat, flags=flags, expand=expand)
 
     if is_series_output:
-        return extracted
+        return extracted.astype(pd.ArrowDtype(pa.large_string()))
 
     def to_extended_list(s):
         """Extends list in each row to match length to n_cols"""
-        list_s = s.tolist()
-        list_s.extend([pd.NA] * (n_cols - len(s)))
+        list_s = s.astype(object).replace(np.nan, None).tolist()
+        list_s.extend([None] * (n_cols - len(s)))
         return list_s
 
     # Map tolist() to convert DataFrame to Series of lists
     extended_s = extracted.apply(to_extended_list, axis=1)
-    return extended_s
+    return extended_s.astype(pd.ArrowDtype(pa.large_list(pa.large_string())))
 
 
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
