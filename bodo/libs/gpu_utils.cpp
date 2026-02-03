@@ -21,11 +21,14 @@
 GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
     // There's probably a more robust way to handle this
     cudaSetDevice(this->gpu_id.value());
+    std::cout << "set device to " << this->gpu_id.value() << std::endl;
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
+    std::cout << "GpuShuffleManager created on rank with GPU ID: "
+              << this->gpu_id.value() << std::endl;
 
     // Get rank and size
     MPI_Comm_rank(mpi_comm, &this->rank);
@@ -33,6 +36,8 @@ GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
 
     // Create CUDA stream
     cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking);
+    std::cout << "Stream created for GpuShuffleManager on rank " << this->rank
+              << std::endl;
 
     // Initialize NCCL
     initialize_nccl();
