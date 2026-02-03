@@ -235,8 +235,6 @@ void GpuShuffle::send_data() {
                             packed_send_buffers[dest_rank]->size(), ncclChar,
                             dest_rank, this->nccl_comm, this->stream));
     }
-    // Record event to signal completion
-    CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
 }
 
 void GpuShuffle::recv_data() {
@@ -249,8 +247,6 @@ void GpuShuffle::recv_data() {
                             packed_recv_buffers[src_rank]->size(), ncclChar,
                             src_rank, this->nccl_comm, this->stream));
     }
-    // Record event to signal completion
-    CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
 }
 
 void GpuShuffle::progress_waiting_for_sizes() {
@@ -290,6 +286,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->recv_data();
         this->send_data();
         ncclGroupEnd();
+        cuEventRecord(this->nccl_recv_event, this->stream);
+        cuEventRecord(this->nccl_send_event, this->stream);
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
