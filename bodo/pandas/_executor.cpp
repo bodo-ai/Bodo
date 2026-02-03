@@ -545,8 +545,9 @@ static void run_calibration(Calibration &c) {
 static bool g_calib_initialized = false;
 
 static void init_cost_model() {
-    if (g_calib_initialized)
+    if (g_calib_initialized) {
         return;
+    }
     run_calibration(g_calib);
     g_calib_initialized = true;
 
