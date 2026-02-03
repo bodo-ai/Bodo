@@ -125,7 +125,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            // std::cout << "send SIZES INFLIGHT" << std::endl;
+            std::cout << "send SIZES INFLIGHT" << std::endl;
             this->progress_sending_sizes();
             break;
         }
@@ -142,7 +142,7 @@ std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
 
     switch (this->recv_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            // std::cout << "recv SIZES INFLIGHT" << std::endl;
+            std::cout << "recv SIZES INFLIGHT" << std::endl;
             this->progress_waiting_for_sizes();
             return std::nullopt;
         } break;
@@ -194,9 +194,6 @@ void GpuShuffle::recv_sizes() {
                             src_rank, this->start_tag + 1, mpi_comm,
                             &this->gpu_sizes_recv_reqs[src_rank]),
                   "GpuShuffle::recv_sizes: MPI_Irecv failed:");
-        std::cout << "Receiving GPU data size from rank " << src_rank
-                  << " with tag " << this->start_tag + this->n_ranks + src_rank
-                  << std::endl;
     }
 }
 
