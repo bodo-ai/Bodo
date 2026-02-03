@@ -125,7 +125,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            std::cout << "send SIZES INFLIGHT" << std::endl;
+            // std::cout << "send SIZES INFLIGHT" << std::endl;
             this->progress_sending_sizes();
             break;
         }
@@ -142,7 +142,7 @@ std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
 
     switch (this->recv_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            std::cout << "recv SIZES INFLIGHT" << std::endl;
+            // std::cout << "recv SIZES INFLIGHT" << std::endl;
             this->progress_waiting_for_sizes();
             return std::nullopt;
         } break;
@@ -260,6 +260,10 @@ void GpuShuffle::progress_waiting_for_sizes() {
     CHECK_MPI_TEST_ALL(
         this->gpu_sizes_recv_reqs, all_gpu_sizes_received,
         "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
+    std::cout << "all_metadata_sizes_received: " << all_metadata_sizes_received
+              << std::endl;
+    std::cout << "all_gpu_sizes_received: " << all_gpu_sizes_received
+              << std::endl;
     if (all_metadata_sizes_received && all_gpu_sizes_received) {
         // Allocate receive buffers based on received sizes
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
