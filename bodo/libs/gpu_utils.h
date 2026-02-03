@@ -86,16 +86,24 @@ struct GpuShuffle {
         : mpi_comm(mpi_comm_),
           nccl_comm(nccl_comm_),
           stream(stream_),
-          gpu_sizes_recv_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          gpu_sizes_send_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks),
-          metadata_sizes_recv_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks),
-          metadata_sizes_send_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks),
-          metadata_recv_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks),
-          metadata_send_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks),
-          send_metadata_sizes(std::make_make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          recv_metadata_sizes(std::make_make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          send_gpu_sizes(std::make_make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          recv_gpu_sizes(std::make_make_unique<std::vector<uint64_t>>(n_ranks, 0)),
+          gpu_sizes_recv_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          gpu_sizes_send_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          metadata_sizes_recv_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          metadata_sizes_send_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          metadata_recv_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          metadata_send_reqs(
+              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          send_metadata_sizes(
+              std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
+          recv_metadata_sizes(
+              std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
+          send_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
+          recv_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
           metadata_recv_buffers(n_ranks),
           metadata_send_buffers(n_ranks),
           packed_recv_buffers(n_ranks),
@@ -129,8 +137,7 @@ struct GpuShuffle {
     GpuShuffle(const GpuShuffle&) = delete;
     GpuShuffle& operator=(const GpuShuffle&) = delete;
 
-    ~GpuShuffle() {
-        cudaEventDestroy(nccl_send_event); }
+    ~GpuShuffle() { cudaEventDestroy(nccl_send_event); }
 
     std::optional<std::unique_ptr<cudf::table>> progress();
 
