@@ -227,11 +227,15 @@ void GpuShuffle::send_data() {
     ncclGroupStart();
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
+        std::cout << "Rank " << this->rank << ": Sending "
+                  << packed_send_buffers[dest_rank]->size() << " bytes to rank "
+                  << dest_rank << std::endl;
         CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
                             packed_send_buffers[dest_rank]->size(), ncclChar,
                             dest_rank, this->nccl_comm, this->stream));
     }
     ncclGroupEnd();
+    std::cout << "Rank " << this->rank << ": All sends posted." << std::endl;
     // Record event to signal completion
     CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
 }
