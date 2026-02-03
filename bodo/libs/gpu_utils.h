@@ -124,6 +124,7 @@ struct GpuShuffle {
         this->send_metadata();
         std::cout << "metadata sent" << std::endl;
         this->send_data();
+        std::cout << "data sent" << std::endl;
     }
 
     GpuShuffle(GpuShuffle&&) = default;
