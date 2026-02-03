@@ -1425,7 +1425,8 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
         }
 
         default:
-            throw std::runtime_error("Unsupported Arrow type: " + t->ToString());
+            throw std::runtime_error("Unsupported Arrow type: " +
+                                     t->ToString());
     }
 }
 
