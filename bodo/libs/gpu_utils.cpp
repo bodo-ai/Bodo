@@ -222,6 +222,9 @@ void GpuShuffle::recv_metadata() {
 void GpuShuffle::send_data() {
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
+        if (packed_send_buffers[dest_rank]->size() == 0) {
+            continue;
+        }
         CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
                             packed_send_buffers[dest_rank]->size(), ncclChar,
                             dest_rank, this->nccl_comm, this->stream));
@@ -233,6 +236,9 @@ void GpuShuffle::send_data() {
 void GpuShuffle::recv_data() {
     for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
          src_rank++) {
+        if (packed_recv_buffers[src_rank]->size() == 0) {
+            continue;
+        }
         CHECK_NCCL(ncclRecv(packed_recv_buffers[src_rank]->data(),
                             packed_recv_buffers[src_rank]->size(), ncclChar,
                             src_rank, this->nccl_comm, this->stream));
@@ -275,8 +281,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
         ncclGroupStart();
-        this->send_data();
         this->recv_data();
+        this->send_data();
         ncclGroupEnd();
 
         // Move to next state
