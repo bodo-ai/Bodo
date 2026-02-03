@@ -171,14 +171,12 @@ class DevicePlanNode {
         gpu_capable = determineGPUCapable(op);
 
         if (!op.has_estimated_cardinality) {
-            gpu_capable = false;
 #ifdef DEBUG_GPU_SELECTOR
             std::cout << "DevicePlanNode operator didn't have cardinality.\n"
                       << op.ToString() << std::endl;
 #endif
-            //            throw std::runtime_error(
-            //                "DevicePlanNode operator didn't have
-            //                cardinality.");
+            throw std::runtime_error(
+                "DevicePlanNode operator didn't have cardinality.");
         }
         rows_out = op.estimated_cardinality;
         rows_out_width = 0;
