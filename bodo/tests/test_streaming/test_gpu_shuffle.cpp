@@ -185,15 +185,9 @@ static bodo::tests::suite tests([] {
         std::shared_ptr<cudf::table> input_ptr = std::move(table);
 
         GpuShuffleManager manager;
-        std::cout << "Rank " << rank
-                  << " starting shuffle of empty table on device ID: "
-                  << device_id.value() << std::endl;
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
-
-        std::cout << "Rank " << rank << " initiated shuffle of empty table."
-                  << std::endl;
 
         // Verify inflight status matches GPU presence
         bodo::tests::check(manager.inflight_exists() ==

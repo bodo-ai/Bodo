@@ -76,6 +76,8 @@ void GpuShuffleManager::shuffle_table(
     // Hash partition the table
     auto [partitioned_table, partition_start_rows] =
         hash_partition_table(table, partition_indices, n_ranks);
+    std::cout << "Rank " << rank << ": Partitioned table has "
+              << partitioned_table->num_rows() << " rows." << std::endl;
 
     assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
     // Contiguous splits requires the split indices excluding the first 0
@@ -88,9 +90,12 @@ void GpuShuffleManager::shuffle_table(
 
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
+    std::cout << "Rank " << rank << ": Packed " << packed_tables.size()
+              << " tables for shuffle." << std::endl;
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
                                          nccl_comm, stream, this->n_ranks,
                                          this->curr_tag);
+    std::cout << "Constructed GpuShuffle on rank " << rank << std::endl;
     // Each shuffle will use nranks * 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
     this->curr_tag += this->n_ranks * 3;
