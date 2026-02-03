@@ -41,8 +41,10 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    auto gpu_batch = convertTableToGPU(input_batch);
-    return ProcessBatch(gpu_batch, prev_op_result);
+    auto [cpu_batch, exchange_result] =
+        cpu_to_gpu_exchange.CPURanksToGPURanks(input_batch, prev_op_result);
+    auto gpu_batch = convertTableToGPU(cpu_batch);
+    return ProcessBatch(gpu_batch, exchange_result);
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
@@ -216,7 +218,8 @@ CPUtoGPUExchange::CPUtoGPUExchange(int64_t op_id_)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     has_gpu = myrank == 0;
     gpu_ranks = {0};
-    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
+    CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm),
+              "CPUtoGPUExchange::CPUtoGPUExchange Error in MPI_Comm_dup");
 }
 
 void CPUtoGPUExchange::Initialize(table_info *input_batch) {
@@ -234,14 +237,13 @@ void CPUtoGPUExchange::Initialize(table_info *input_batch) {
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
 
-    // TODO: Free ShuffleState earlier ?
     this->shuffle_state = std::make_unique<IncrementalShuffleState>(
         input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
         this->op_id, gpu_ranks);
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 
-std::tuple<std::shared_ptr<table_info>, bool>
+std::tuple<std::shared_ptr<table_info>, OperatorResult>
 CPUtoGPUExchange::CPURanksToGPURanks(std::shared_ptr<table_info> input_batch,
                                      OperatorResult prev_op_result) {
     if (!this->shuffle_state) {
@@ -259,18 +261,27 @@ CPUtoGPUExchange::CPURanksToGPURanks(std::shared_ptr<table_info> input_batch,
         collected_rows->UnifyDictionariesAndAppend(shuffled_table);
     }
 
-    local_is_last = local_is_last && (this->shuffle_state->SendRecvEmpty());
+    bool request_input = true;
+    if (this->shuffle_state->BuffersFull() ||
+        collected_rows->total_remaining >
+            (2 * collected_rows->active_chunk_capacity)) {
+        request_input = false;
+    }
 
+    local_is_last = local_is_last && (this->shuffle_state->SendRecvEmpty());
     bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
         is_last_state.get(), static_cast<int32_t>(local_is_last)));
-
     auto [output_batch, _] = collected_rows->PopChunk(
         /*force_return*/ global_is_last);
 
     bool finished =
         global_is_last && this->collected_rows->total_remaining == 0;
 
-    return std::make_tuple(output_batch, finished);
+    return std::make_tuple(
+        output_batch, finished
+                          ? OperatorResult::FINISHED
+                          : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                           : OperatorResult::HAVE_MORE_OUTPUT));
 }
 
 CPUtoGPUExchange::~CPUtoGPUExchange() { MPI_Comm_free(&this->shuffle_comm); }

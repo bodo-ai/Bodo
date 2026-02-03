@@ -62,6 +62,43 @@ struct GPU_DATA {};
 #endif
 
 /**
+ * @brief
+ *
+ */
+class CPUtoGPUExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_);
+
+    /**
+     * @brief
+     *
+     * @param input_batch
+     */
+    void Initialize(table_info* input_batch);
+
+    /**
+     * @brief
+     *
+     * @param input_batch
+     * @param prev_op_result
+     * @return std::tuple<std::shared_ptr<table_info>, bool>
+     */
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> CPURanksToGPURanks(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    ~CPUtoGPUExchange();
+
+   private:
+    int64_t op_id;
+    bool has_gpu;
+    std::vector<int> gpu_ranks;
+    MPI_Comm shuffle_comm;
+    const std::shared_ptr<IsLastState> is_last_state;
+    std::unique_ptr<IncrementalShuffleState> shuffle_state;
+    std::unique_ptr<ChunkedTableBuilder> collected_rows;
+};
+
+/**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
  * are Bodo classes and not using DuckDB).
  */
@@ -190,6 +227,8 @@ class PhysicalGPUSource : public PhysicalOperator {
  */
 class PhysicalGPUSink : public PhysicalOperator {
    public:
+    PhysicalGPUSink() : cpu_to_gpu_exchange(this->getOpId()) {}
+
     OperatorType operator_type() const override {
         return OperatorType::GPU_SINK;
     }
@@ -204,6 +243,9 @@ class PhysicalGPUSink : public PhysicalOperator {
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
 };
 
 /**
@@ -213,6 +255,8 @@ class PhysicalGPUSink : public PhysicalOperator {
  */
 class PhysicalGPUProcessBatch : public PhysicalOperator {
    public:
+    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->getOpId()) {}
+
     OperatorType operator_type() const override {
         return OperatorType::GPU_SOURCE_AND_SINK;
     }
@@ -231,6 +275,9 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
 };
 /**
  * @brief Get the streaming batch size from environment variable.
@@ -257,40 +304,3 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif
-
-/**
- * @brief
- *
- */
-class CPUtoGPUExchange {
-   public:
-    CPUtoGPUExchange(int64_t op_id_);
-
-    /**
-     * @brief
-     *
-     * @param input_batch
-     */
-    void Initialize(table_info* input_batch);
-
-    /**
-     * @brief
-     *
-     * @param input_batch
-     * @param prev_op_result
-     * @return std::tuple<std::shared_ptr<table_info>, bool>
-     */
-    std::tuple<std::shared_ptr<table_info>, bool> CPURanksToGPURanks(
-        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
-
-    ~CPUtoGPUExchange();
-
-   private:
-    int64_t op_id;
-    bool has_gpu;
-    std::vector<int> gpu_ranks;
-    MPI_Comm shuffle_comm;
-    const std::shared_ptr<IsLastState> is_last_state;
-    std::unique_ptr<IncrementalShuffleState> shuffle_state;
-    std::unique_ptr<ChunkedTableBuilder> collected_rows;
-};
