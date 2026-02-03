@@ -3,6 +3,27 @@
 #include <fstream>
 #include "_bodo_scan_function.h"
 
+#ifdef USE_CUDF
+#include <cuda_runtime.h>
+#include <cudf/column/column.hpp>
+#include <cudf/column/column_factories.hpp>
+#include <cudf/column/column_view.hpp>
+#include <cudf/copying.hpp>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/sorting.hpp>
+#include <cudf/stream_compaction.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+#include <rmm/device_buffer.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <vector>
+
+#include "physical/gpu_join.h"
+#endif
+
 // enable and build to print debug info on the pipeline
 // #define DEBUG_GPU_SELECTOR
 #ifdef DEBUG_GPU_SELECTOR
@@ -25,6 +46,7 @@ double transfer_time(uint64_t bytes_size) {
     return TRANSFER_OVERHEAD + (bytes_size / PCIe_BW);
 }
 
+// Some reasonable defaults in rare case calibration fails.
 std::map<duckdb::LogicalOperatorType, std::vector<double>> ALPHA{
     {duckdb::LogicalOperatorType::LOGICAL_GET, {1e-9, 2e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE, {1e-9, 2e-10}},
@@ -76,6 +98,15 @@ class DevicePlanNode {
     static uint64_t next_id;
     static std::map<duckdb::idx_t, DevicePlanNode *> cte_map;
 
+    /*
+     * This function has to match which GPU capable physical nodes
+     * we have and any options that those nodes may or may not
+     * support.  Suggest using the ::gpu_capable function approach
+     * that we use below for join if there are options that the
+     * GPU side may not support.  Create a gpu_capable function
+     * that takes the given duckdb node type and put that function
+     * in the physical GPU node file so things stay colocated.
+     */
     bool determineGPUCapable(duckdb::LogicalOperator &op) {
         switch (op.type) {
             case duckdb::LogicalOperatorType::LOGICAL_GET: {
@@ -105,10 +136,8 @@ class DevicePlanNode {
             case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
                 return false;
 
-            case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
-                return op.Cast<duckdb::LogicalComparisonJoin>().join_type ==
-                       duckdb::JoinType::INNER;
-            }
+            case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
+                return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
                 return false;
@@ -135,6 +164,7 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR:
+                // LogicalJoinFilter becomes no-op on GPU.
                 return true;
 
             default:
@@ -317,23 +347,6 @@ static bool load_calibration(Calibration &c) {
     return true;
 }
 
-#include <cuda_runtime.h>
-#include <cudf/column/column.hpp>
-#include <cudf/column/column_factories.hpp>
-#include <cudf/column/column_view.hpp>
-#include <cudf/copying.hpp>
-#include <cudf/scalar/scalar.hpp>
-#include <cudf/sorting.hpp>
-#include <cudf/stream_compaction.hpp>
-#include <cudf/table/table.hpp>
-#include <cudf/table/table_view.hpp>
-#include <rmm/device_buffer.hpp>
-
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <vector>
-
 static double now_seconds() {
     using clock = std::chrono::high_resolution_clock;
     return std::chrono::duration<double>(clock::now().time_since_epoch())
@@ -466,9 +479,9 @@ static void measure_sort_cpu_gpu(Calibration &c) {
     // CPU
     {
         std::vector<int32_t> data(n);
-        for (size_t i = 0; i < n; ++i){
+        for (size_t i = 0; i < n; ++i) {
             data[i] = (int32_t)(n - i);
-         }
+        }
 
         double t0 = now_seconds();
         std::sort(data.begin(), data.end());
@@ -521,6 +534,10 @@ void run_cudf_calibration(Calibration &c) {
     c.valid = true;
 }
 
+/*
+ * Try to load calibration from a file and if not present then
+ * run the calibration code and save result to file.
+ */
 static void run_calibration(Calibration &c) {
     if (!load_calibration(c)) {
 #ifdef DEBUG_GPU_SELECTOR
@@ -542,6 +559,12 @@ static void run_calibration(Calibration &c) {
 
 static bool g_calib_initialized = false;
 
+/*
+ * Make sure the CPu/GPU cost model is available.
+ * Return immediately if already initialized.
+ * Otherwise, run_calibration which will check for the calibration
+ * saved to a file and if not present runs the calibration code above.
+ */
 static void init_cost_model() {
     if (g_calib_initialized) {
         return;
@@ -608,6 +631,9 @@ static void init_cost_model() {
         {duckdb::LogicalOperatorType::LOGICAL_DISTINCT, 2 * 1024 * 1024}};
 }
 
+/*
+ * Estimate the runtime of the given node on the given device type.
+ */
 double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
     init_cost_model();  // load or run tests to gen cost model
 
@@ -618,6 +644,8 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
         throw std::runtime_error("compute_time didn't find op in ALPHA.\n" +
                                  node->getOp().ToString());
     }
+    // The constant alpha (a) factor applied to the number of elements
+    // for the given operation.
     double a = alpha_iter->second[device];
 
     double n_in = std::max((double)node->getRowsIn(), 1.0);
@@ -626,6 +654,11 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
 
     double t = 0;
 
+    /*
+     * For each operator type, we multiply the number of elements
+     * we expect to look at times some per-operation type alpha constant.
+     * This gives the runtime estimate for the operator.
+     */
     switch (op) {
         case duckdb::LogicalOperatorType::LOGICAL_GET:
             t = a * size_out;
@@ -644,6 +677,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
             break;
 
         case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
+            // This node itself doesn't do any real work.
             t = 0;
             break;
 
@@ -684,6 +718,8 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
             throw std::runtime_error("compute_time doesn't support op.");
     }
 
+    // Add in kernel launch time and apply penalty if operation is
+    // considered too small for GPU.
     if (device == DEVICE::GPU) {
         t += KERNEL_LAUNCH;
         auto gpu_min_size_iter = GPU_MIN_SIZE.find(op);
@@ -708,6 +744,11 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
 
 /*
  * Compute dynamic programming (DP) costs for all nodes.
+ * Does postorder traversal of the tree.
+ * Compute costs for each node if run on CPU or GPU that takes
+ * the CPU or GPU node local runtime estimate and adds to it
+ * the costs of running its children on CPU or GPU, whichever is
+ * fastest..
  */
 DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
     // If DPCost already computed return it.
@@ -720,7 +761,8 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
     std::cout << "dp_compute start " << node->getId() << std::endl;
 #endif
 
-    // Compute child costs first
+    // Compute the cost of the child nodes first.
+    // Remember the cost structure and output size of each child node.
     NodeCostMap child_costs;
     std::map<uint64_t, uint64_t> child_sizes;
     for (auto &child : node->getChildren()) {
@@ -731,9 +773,13 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
     // Determine the node-only time.
     double cpu_total = compute_time(node, DEVICE::CPU);
     double gpu_total = std::numeric_limits<double>::infinity();
+    // These will store the optimal CPU/GPU choice for each child
+    // node if the current node is run CPU or GPU.
     NodeDeviceMap cpu_children_choice;
     NodeDeviceMap gpu_children_choice;
 
+    // Init gpu_total time to infinity but if a node is GPU capable
+    // then start gpu_total as the node-only GPU time estimate.
     if (node->isGPUCapable()) {
         gpu_total = compute_time(node, DEVICE::GPU);
     }
@@ -744,11 +790,19 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
 #endif
 
     // Add in the cost of the children with any transfer times and
-    // pick the best one.
+    // pick the best one.  For each child...
     for (auto &child : node->getChildren()) {
+        // In the first part, we determine the optimum child node
+        // CPU/GPU selection on the condition that the current node
+        // is run on CPU.
+
+        // Get the cost structure for the child.
         DPCost &cc = child_costs[child->getId()];
+        // The cost of running this child on CPU.
         double cost_cpu = cc.cpu_cost;
         double cost_gpu = std::numeric_limits<double>::infinity();
+        // If child is GPU capable, then the cost of running this
+        // child on GPU is the per-node GPU cost plus transfer costs.
         if (child->isGPUCapable()) {
             if (node->getOp().type ==
                 duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE) {
@@ -760,9 +814,15 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
         }
 
         if (cost_cpu <= cost_gpu) {
+            // If running child on CPU is cheaper than running child on GPU
+            // then add the CPU child cost to the total CPU time for this node
+            // and remember that for CPU we will run this child also on CPU.
             cpu_total += cost_cpu;
             cpu_children_choice.insert({child->getId(), DEVICE::CPU});
         } else {
+            // If running child on GPU is cheaper than running child on CPU
+            // then add the GPU child cost to the total CPU time for this node
+            // and remember that for CPU we will run this child on GPU.
             cpu_total += cost_gpu;
             cpu_children_choice.insert({child->getId(), DEVICE::GPU});
         }
@@ -773,6 +833,10 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
                   << std::endl;
 #endif
 
+        // This section handles computing the cost if this node is GPU
+        // capable.  It is the same as above but transfer costs occur
+        // if the child is CPU because the current node is considered
+        // GPU in this section.
         if (node->isGPUCapable()) {
             cost_gpu = cc.gpu_cost;
             if (node->getOp().type ==
@@ -809,6 +873,16 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
     return dpc;
 }
 
+/*
+ * Given a DevicePlanNode tree and the cost of each node stored
+ * in the dp_cache map, fill out the run_on_gpu map that is used
+ * by the rest of the system to select a CPU or GPU physical node.
+ *
+ * chosen_device will be empty for the first call of this method
+ * and if it is empty then the lowest cost for CPU or GPU is
+ * selected from this root node.  For recursive calls, the child
+ * map is used to select whether the child will run on CPU or GPU.
+ */
 void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
                     std::map<void *, bool> &run_on_gpu,
                     std::optional<DEVICE> chosen_device = {}) {
@@ -821,8 +895,11 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 
     DEVICE dev;
     if (chosen_device.has_value()) {
+        // Use the device that your parent in the tree selected
+        // for you.
         dev = *chosen_device;
     } else {
+        // This is the root node so select the best time.
         dev = (dpc.cpu_cost <= dpc.gpu_cost) ? DEVICE::CPU : DEVICE::GPU;
     }
 
@@ -831,11 +908,15 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
               << (dev == DEVICE::CPU ? "CPU" : "GPU") << std::endl;
 #endif
 
+    // Fill in the map with true if the selected device is GPU.
     run_on_gpu[&(node->getOp())] = (dev == DEVICE::GPU);
 
+    // Pick the child map to use based on the selected device.
     NodeDeviceMap &chosen_map = (dev == DEVICE::GPU) ? dpc.gpu_children_choice
                                                      : dpc.cpu_children_choice;
 
+    // Have each child node put itself into run_on_gpu and determine
+    // where its children should run.
     for (auto &child : node->getChildren()) {
         auto cmiter = chosen_map.find(child->getId());
         if (cmiter == chosen_map.end()) {
@@ -847,15 +928,25 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 
 void Executor::partition_internal(duckdb::LogicalOperator &op,
                                   std::map<void *, bool> &run_on_gpu) {
+    /*
+     * If GPU mode is enabled then we will run an algorithm to determine
+     * whether to run each node on CPU or GPU.
+     */
     if (get_use_cudf()) {
         DevicePlanNode::startDeviceAssignment();
-        // Converts DuckDB LogicalOperator tree to DevicePlanNode tree.
+        // Wrap each node in the DuckDB LogicalOperator tree with
+        // a DevicePlanNode to make a DevicePlanNode tree in which
+        // we can store cardinality and whether a node is GPU capable.
         std::shared_ptr<DevicePlanNode> root =
             std::make_shared<DevicePlanNode>(op);
         DevicePlanNode::endDeviceAssignment();
 
         std::map<uint64_t, DPCost> dp_cache;
+        // Run the dynamic programming algorithm on the tree in postorder
+        // to determine the cost for each node if it is run on CPU or GPU
+        // depending on whether its children are run on CPU or GPU.
         dp_compute(root, dp_cache);
+        // Fill out the run_on_gpu map.
         assign_devices(root, dp_cache, run_on_gpu);
     } else {
         for (auto &child : op.children) {
