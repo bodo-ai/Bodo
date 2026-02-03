@@ -227,7 +227,11 @@ def series_val(request):
             pd.Series([1, 8, 4, -1, 2], [3, 7, 9, 2, 1], name="AAC"),
             marks=pytest.mark.slow,
         ),
-        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
+        pd.Series(
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
+                "datetime64[ns]"
+            )
+        ),
     ]
 )
 def numeric_series_val(request):
