@@ -37,7 +37,10 @@ static bodo::tests::suite tests([] {
         rmm::cuda_device_id device_id = get_gpu_id();
 
         try {
+            std::cout << "Testing GpuShuffleManager init on device ID: "
+                      << device_id.value() << std::endl;
             GpuShuffleManager manager;
+            std::cout << "Created GpuShuffleManager successfully." << std::endl;
 
             if (device_id.value() < 0) {
                 // If no GPU assigned, NCCL comm should be null
