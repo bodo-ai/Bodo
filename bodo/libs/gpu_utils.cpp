@@ -169,6 +169,9 @@ void GpuShuffle::send_sizes() {
                        dest_rank, this->start_tag + dest_rank, mpi_comm,
                        &this->metadata_sizes_send_reqs[dest_rank]),
             "GpuShuffle::send_sizes: MPI_Issend failed:");
+        std::cout << "Sent metadata size to rank " << dest_rank << ": "
+                  << this->send_metadata_sizes[dest_rank] << "with tag "
+                  << this->start_tag + dest_rank << std::endl;
     }
     // Send GPU data sizes
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
@@ -180,6 +183,9 @@ void GpuShuffle::send_sizes() {
                        dest_rank, this->start_tag + this->n_ranks + dest_rank,
                        mpi_comm, &this->gpu_sizes_send_reqs[dest_rank]),
             "GpuShuffle::send_sizes: MPI_Issend failed:");
+        std::cout << "Sent GPU data size to rank " << dest_rank << ": "
+                  << this->send_gpu_sizes[dest_rank] << "with tag "
+                  << this->start_tag + this->n_ranks + dest_rank << std::endl;
     }
 }
 void GpuShuffle::recv_sizes() {
@@ -190,6 +196,8 @@ void GpuShuffle::recv_sizes() {
                       src_rank, this->start_tag + src_rank, mpi_comm,
                       &this->metadata_sizes_recv_reqs[src_rank]),
             "GpuShuffle::recv_sizes: MPI_Irecv failed:");
+        std::cout << "Receiving metadata size from rank " << src_rank
+                  << " with tag " << this->start_tag + src_rank << std::endl;
     }
     for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
          src_rank++) {
@@ -198,6 +206,9 @@ void GpuShuffle::recv_sizes() {
                       src_rank, this->start_tag + this->n_ranks + src_rank,
                       mpi_comm, &this->gpu_sizes_recv_reqs[src_rank]),
             "GpuShuffle::recv_sizes: MPI_Irecv failed:");
+        std::cout << "Receiving GPU data size from rank " << src_rank
+                  << " with tag " << this->start_tag + this->n_ranks + src_rank
+                  << std::endl;
     }
 }
 
@@ -260,10 +271,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
     CHECK_MPI_TEST_ALL(
         this->gpu_sizes_recv_reqs, all_gpu_sizes_received,
         "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
-    std::cout << "all_metadata_sizes_received: " << all_metadata_sizes_received
-              << std::endl;
-    std::cout << "all_gpu_sizes_received: " << all_gpu_sizes_received
-              << std::endl;
     if (all_metadata_sizes_received && all_gpu_sizes_received) {
         // Allocate receive buffers based on received sizes
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
@@ -350,9 +357,6 @@ void GpuShuffle::progress_sending_sizes() {
     int all_gpu_sizes_sent;
     CHECK_MPI_TEST_ALL(this->gpu_sizes_send_reqs, all_gpu_sizes_sent,
                        "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
-    std::cout << "all_metadata_sizes_sent: " << all_metadata_sizes_sent
-              << std::endl;
-    std::cout << "all_gpu_sizes_sent: " << all_gpu_sizes_sent << std::endl;
     if (all_metadata_sizes_sent && all_gpu_sizes_sent) {
         // Deallocate all size data
         this->send_metadata_sizes.clear();
