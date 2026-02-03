@@ -468,9 +468,9 @@ static void measure_sort_cpu_gpu(Calibration &c) {
     // CPU
     {
         std::vector<int32_t> data(n);
-        for (size_t i = 0; i < n; ++i){
+        for (size_t i = 0; i < n; ++i) {
             data[i] = (int32_t)(n - i);
-         }
+        }
 
         double t0 = now_seconds();
         std::sort(data.begin(), data.end());
