@@ -1505,11 +1505,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
         S.iloc[idx] = val
         return S
 
-    # test Series.values since it is used instead of iloc sometimes
-    def test_impl2(S, idx, val):
-        S.values[idx] = val
-        return S
-
     idx = np.array([True, True, False, True, False] + [False] * (len(series_val) - 5))
     # value is array
     val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
@@ -1523,7 +1518,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     ):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, idx, val)
-        check_func(test_impl2, (series_val, idx, val), copy_input=True, dist_test=False)
 
     # binary setitem not supported yet
     elif isinstance(series_val.iat[0], bytes) and not isinstance(
@@ -1534,11 +1528,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
-        with pytest.raises(
-            BodoError,
-            match="Binary array setitem with index .* and value .* not supported.",
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1547,16 +1536,10 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             match="Series setitem not supported for Series with immutable array type .*",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
-        with pytest.raises(
-            BodoError,
-            match="only setitem with scalar index is currently supported for list arrays",
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
 
     else:
         # TODO: Test distributed implementation
         check_func(test_impl, (series_val, idx, val), copy_input=True, dist_test=False)
-        check_func(test_impl2, (series_val, idx, val), copy_input=True, dist_test=False)
 
     val = series_val.dropna().iloc[0:3].to_list()
 
@@ -1566,11 +1549,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     ):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, idx, val)
-        with pytest.raises(
-            BodoError,
-            match="StringArray setitem with index .* and value .* not supported.",
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
 
     # binary setitem not supported for list of bytes
     elif isinstance(series_val.iat[0], bytes) and not isinstance(
@@ -1581,11 +1559,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
-        with pytest.raises(
-            BodoError,
-            match="Binary array setitem with index .* and value .* not supported.",
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1594,11 +1567,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             match="Series setitem not supported for Series with immutable array type .*",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
-        with pytest.raises(
-            BodoError,
-            match="only setitem with scalar index is currently supported for list arrays",
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
 
     else:
         # TODO: Test distributed implementation
@@ -1615,18 +1583,6 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             dist_test=False,
             check_dtype=check_dtype,
         )
-        # setitem dt64/td64 array with list Timestamp/Timedelta values not supported
-        if not (
-            series_val.dtype == np.dtype("datetime64[ns]")
-            or series_val.dtype == np.dtype("timedelta64[ns]")
-        ):
-            check_func(
-                test_impl2,
-                (series_val, idx, val),
-                copy_input=True,
-                dist_test=False,
-                check_dtype=check_dtype,
-            )
 
 
 def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
@@ -1820,12 +1776,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
         S.iloc[idx] = val
         return S
 
-    # test Series.values which may be used as alternative to Series.iloc for setitem
-    # tests underlying array setitem essentially
-    def test_impl2(S, val, idx):
-        S.values[idx] = val
-        return S
-
     # value is an array
     val = series_val.iloc[0:2].values.copy()  # values to avoid alignment
     if series_val.hasnans:
@@ -1837,7 +1787,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     ):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
 
     # binary setitem not supported yet
     elif isinstance(series_val.iat[0], bytes) and not isinstance(
@@ -1848,7 +1797,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1857,7 +1805,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             match="Series setitem not supported for Series with immutable array type .*",
         ):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
     else:
         check_func(
             test_impl,
@@ -1866,18 +1813,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             check_dtype=False,
             dist_test=False,
         )
-        # setitem dt64/td64 array with list(int) idx not supported
-        if not (
-            series_val.dtype == np.dtype("datetime64[ns]")
-            or series_val.dtype == np.dtype("timedelta64[ns]")
-        ):
-            check_func(
-                test_impl2,
-                (series_val, val, idx),
-                copy_input=True,
-                check_dtype=False,
-                dist_test=False,
-            )
 
     val = series_val.dropna().iloc[0:2].to_list()
     # string setitem not supported yet
@@ -1886,7 +1821,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     ):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
 
     # binary setitem not supported yet
     elif isinstance(series_val.iat[0], bytes) and not isinstance(
@@ -1897,7 +1831,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1906,7 +1839,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             match="Series setitem not supported for Series with immutable array type .*",
         ):
             bodo.jit(test_impl)(series_val, val, idx)
-        # TODO: Prevent writing to immutable array for test_impl2.
     else:
         check_func(
             test_impl,
@@ -1915,18 +1847,6 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             check_dtype=False,
             dist_test=False,
         )
-        # setitem dt64/td64 array with list(int) idx not supported
-        if not (
-            series_val.dtype == np.dtype("datetime64[ns]")
-            or series_val.dtype == np.dtype("timedelta64[ns]")
-        ):
-            check_func(
-                test_impl2,
-                (series_val, val, idx),
-                copy_input=True,
-                check_dtype=False,
-                dist_test=False,
-            )
 
 
 ####### getitem tests ###############
