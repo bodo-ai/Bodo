@@ -286,8 +286,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->recv_data();
         this->send_data();
         ncclGroupEnd();
-        cuEventRecord(this->nccl_recv_event, this->stream);
-        cuEventRecord(this->nccl_send_event, this->stream);
+        CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
+        CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
