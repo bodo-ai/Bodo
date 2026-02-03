@@ -53,8 +53,6 @@ void GpuShuffleManager::initialize_nccl() {
     ncclUniqueId nccl_id;
 
     if (rank == 0) {
-        std::cout << "Rank " << rank << " generating NCCL unique ID."
-                  << std::endl;
         // Generate unique ID on root rank
         CHECK_NCCL(ncclGetUniqueId(&nccl_id));
     }
@@ -64,8 +62,6 @@ void GpuShuffleManager::initialize_nccl() {
     if (ret != MPI_SUCCESS) {
         throw std::runtime_error("MPI_Bcast failed");
     }
-    std::cout << "Rank " << rank << " initializing NCCL communicator with ID "
-              << nccl_id.internal << std::endl;
 
     // Initialize NCCL communicator
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
