@@ -1401,6 +1401,7 @@ def _test_equal(
                 or pa.types.is_null(pa_type)
                 or pa.types.is_decimal(pa_type)
             ):
+                py_out = py_out.fillna(None) if py_out.dtype == np.object_ else py_out
                 py_out = py_out.astype(bodo_out.dtype)
 
             # Pandas boolean output may have False instead of NA
