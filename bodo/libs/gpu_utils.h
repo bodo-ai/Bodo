@@ -104,6 +104,7 @@ struct GpuShuffle {
             cudaEventCreateWithFlags(&nccl_send_event, cudaEventDisableTiming));
         CHECK_CUDA(
             cudaEventCreateWithFlags(&nccl_recv_event, cudaEventDisableTiming));
+        std::cout << "event created" << std::endl;
 
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
@@ -114,10 +115,14 @@ struct GpuShuffle {
                 std::make_unique<std::vector<uint8_t>>(
                     std::move(*table.data.metadata));
         }
+        std::cout << "buffers prepared" << std::endl;
 
         this->send_sizes();
+        std::cout << "sizes sent" << std::endl;
         this->recv_sizes();
+        std::cout << "sizes recv posted" << std::endl;
         this->send_metadata();
+        std::cout << "metadata sent" << std::endl;
         this->send_data();
     }
 
