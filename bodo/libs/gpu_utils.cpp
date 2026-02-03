@@ -21,14 +21,12 @@
 GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
     // There's probably a more robust way to handle this
     cudaSetDevice(this->gpu_id.value());
-    std::cout << "set device to " << this->gpu_id.value() << std::endl;
+
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
-    std::cout << "GpuShuffleManager created on rank with GPU ID: "
-              << this->gpu_id.value() << std::endl;
 
     // Get rank and size
     MPI_Comm_rank(mpi_comm, &this->rank);
@@ -36,8 +34,6 @@ GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
 
     // Create CUDA stream
     cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking);
-    std::cout << "Stream created for GpuShuffleManager on rank " << this->rank
-              << std::endl;
 
     // Initialize NCCL
     initialize_nccl();
@@ -57,6 +53,8 @@ void GpuShuffleManager::initialize_nccl() {
     ncclUniqueId nccl_id;
 
     if (rank == 0) {
+        std::cout << "Rank " << rank << " generating NCCL unique ID."
+                  << std::endl;
         // Generate unique ID on root rank
         CHECK_NCCL(ncclGetUniqueId(&nccl_id));
     }
@@ -66,6 +64,8 @@ void GpuShuffleManager::initialize_nccl() {
     if (ret != MPI_SUCCESS) {
         throw std::runtime_error("MPI_Bcast failed");
     }
+    std::cout << "Rank " << rank << " initializing NCCL communicator with ID "
+              << nccl_id.internal << std::endl;
 
     // Initialize NCCL communicator
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
