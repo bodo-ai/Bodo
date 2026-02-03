@@ -188,6 +188,7 @@ static bodo::tests::suite tests([] {
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
+        std::cout << "Posted shuffle" << std::endl;
 
         // Verify inflight status matches GPU presence
         bodo::tests::check(manager.inflight_exists() ==
@@ -210,6 +211,7 @@ static bodo::tests::suite tests([] {
                 done = true;
             }
         }
+        std::cout << "Completed shuffle" << std::endl;
 
         // Verification
         // 1. Calculate total rows received on this rank

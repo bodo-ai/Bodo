@@ -76,8 +76,6 @@ void GpuShuffleManager::shuffle_table(
     // Hash partition the table
     auto [partitioned_table, partition_start_rows] =
         hash_partition_table(table, partition_indices, n_ranks);
-    std::cout << "Rank " << rank << ": Partitioned table has "
-              << partitioned_table->num_rows() << " rows." << std::endl;
 
     assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
     // Contiguous splits requires the split indices excluding the first 0
@@ -90,12 +88,10 @@ void GpuShuffleManager::shuffle_table(
 
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
-    std::cout << "Rank " << rank << ": Packed " << packed_tables.size()
-              << " tables for shuffle." << std::endl;
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
                                          nccl_comm, stream, this->n_ranks,
                                          this->curr_tag);
-    std::cout << "Constructed GpuShuffle on rank " << rank << std::endl;
+
     // Each shuffle will use nranks * 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
     this->curr_tag += this->n_ranks * 3;
@@ -224,30 +220,23 @@ void GpuShuffle::recv_metadata() {
 }
 
 void GpuShuffle::send_data() {
-    ncclGroupStart();
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
-        std::cout << "Sending " << packed_send_buffers[dest_rank]->size()
-                  << " bytes to rank " << dest_rank << std::endl;
         CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
                             packed_send_buffers[dest_rank]->size(), ncclChar,
                             dest_rank, this->nccl_comm, this->stream));
     }
-    ncclGroupEnd();
-    std::cout << "All sends posted." << std::endl;
     // Record event to signal completion
     CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
 }
 
 void GpuShuffle::recv_data() {
-    ncclGroupStart();
     for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
          src_rank++) {
         CHECK_NCCL(ncclRecv(packed_recv_buffers[src_rank]->data(),
                             packed_recv_buffers[src_rank]->size(), ncclChar,
                             src_rank, this->nccl_comm, this->stream));
     }
-    ncclGroupEnd();
     // Record event to signal completion
     CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
 }
@@ -283,9 +272,12 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->metadata_sizes_recv_reqs.clear();
         this->gpu_sizes_recv_reqs.clear();
 
-        // Start receiving metadata and data
+        // Start receiving metadata and data and send gpu data
         this->recv_metadata();
+        ncclGroupStart();
+        this->send_data();
         this->recv_data();
+        ncclGroupEnd();
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
