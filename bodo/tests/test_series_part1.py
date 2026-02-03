@@ -79,12 +79,7 @@ def test_series_constructor(data, index, name, memory_leak_check):
         return pd.Series(d, i, name=n)
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(
-        bodo_func(data, index, name),
-        impl(data, index, name),
-        check_dtype=False,
-        check_index_type=False,
-    )
+    _test_equal(bodo_func(data, index, name), impl(data, index, name))
 
 
 @pytest.mark.slow
