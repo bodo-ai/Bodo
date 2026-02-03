@@ -466,8 +466,9 @@ static void measure_sort_cpu_gpu(Calibration &c) {
     // CPU
     {
         std::vector<int32_t> data(n);
-        for (size_t i = 0; i < n; ++i)
+        for (size_t i = 0; i < n; ++i){
             data[i] = (int32_t)(n - i);
+         }
 
         double t0 = now_seconds();
         std::sort(data.begin(), data.end());
@@ -542,8 +543,9 @@ static void run_calibration(Calibration &c) {
 static bool g_calib_initialized = false;
 
 static void init_cost_model() {
-    if (g_calib_initialized)
+    if (g_calib_initialized) {
         return;
+    }
     run_calibration(g_calib);
     g_calib_initialized = true;
 
