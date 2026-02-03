@@ -283,8 +283,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         physical_join;
     if (node_run_on_gpu(op)) {
         physical_join = std::make_shared<PhysicalGPUJoin>(op);
+        (*this->join_on_gpu).insert({op.join_id, true});
     } else {
         physical_join = std::make_shared<PhysicalJoin>(op);
+        (*this->join_on_gpu).insert({op.join_id, false});
     }
 #else
     std::shared_ptr<PhysicalJoin> physical_join =
@@ -358,6 +360,27 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // Process the source of this join filter.
     this->Visit(*op.children[0]);
+
+#ifdef USE_CUDF
+    bool all_joins_on_gpu = true;
+    for (int filter_id : op.filter_ids) {
+        all_joins_on_gpu = all_joins_on_gpu && !(*join_on_gpu)[filter_id];
+    }
+    if (all_joins_on_gpu) {
+        // Don't need to add a pipeline stage if all joins will be
+        // run on GPU.
+        return;
+    }
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        // If the planner wants this JoinFilter to run on GPU
+        // then we won't do join filtering even if the join itself
+        // is done on CPU.
+        return;
+    }
+#endif
+
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
@@ -369,6 +392,11 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // Make sure all filter generators used by this
     // join filter run before this pipeline.
     for (int filter_id : op.filter_ids) {
+#ifdef USE_CUDF
+        if ((*join_on_gpu)[filter_id]) {
+            continue;
+        }
+#endif
         std::shared_ptr<Pipeline> filter_pipeline =
             (*join_filter_pipelines)[filter_id];
         if (!filter_pipeline) {

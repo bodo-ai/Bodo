@@ -21,6 +21,18 @@ struct PhysicalGPUJoinMetrics {
     stat_t output_row_count = 0;
 };
 
+inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
+    if (logical_join.join_type != duckdb::JoinType::INNER) {
+        return false;
+    }
+    for (const duckdb::JoinCondition& cond : logical_join.conditions) {
+        if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * @brief Physical node for join.
  *
