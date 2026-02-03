@@ -125,27 +125,33 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
+            std::cout << "send SIZES INFLIGHT" << std::endl;
             this->progress_sending_sizes();
             break;
         }
         case GpuShuffleState::DATA_INFLIGHT: {
+            std::cout << "send DATA INFLIGHT" << std::endl;
             this->progress_sending_data();
             break;
         }
         case GpuShuffleState::COMPLETED: {
+            std::cout << "send COMPLETED" << std::endl;
             break;
         }
     }
 
     switch (this->recv_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
+            std::cout << "recv SIZES INFLIGHT" << std::endl;
             this->progress_waiting_for_sizes();
             return std::nullopt;
         } break;
         case GpuShuffleState::DATA_INFLIGHT: {
+            std::cout << "recv DATA INFLIGHT" << std::endl;
             return this->progress_waiting_for_data();
         } break;
         case GpuShuffleState::COMPLETED: {
+            std::cout << "recv COMPLETED" << std::endl;
             return std::nullopt;
         } break;
     }
