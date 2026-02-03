@@ -85,6 +85,8 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
     {duckdb::LogicalOperatorType::LOGICAL_UNION, 4 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_DISTINCT, 2 * 1024 * 1024}};
 
+#ifdef USE_CUDF
+
 class DevicePlanNode {
    private:
     duckdb::LogicalOperator &op;
@@ -259,6 +261,8 @@ std::map<duckdb::idx_t, DevicePlanNode *> DevicePlanNode::cte_map;
 
 void DevicePlanNode::startDeviceAssignment() {}
 void DevicePlanNode::endDeviceAssignment() { cte_map.clear(); }
+
+#endif
 
 using NodeDeviceMap = std::map<uint64_t, DEVICE>;
 
@@ -547,15 +551,6 @@ static void run_calibration(Calibration &c) {
         save_calibration(c);
     }
 }
-
-#else  // USE_CUDF
-
-static void run_calibration(Calibration &c) {
-    // No CUDA: keep defaults, mark valid.
-    c.valid = true;
-}
-
-#endif  // USE_CUDF
 
 static bool g_calib_initialized = false;
 
@@ -926,6 +921,8 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
     }
 }
 
+#endif  // USE_CUDF
+
 void Executor::partition_internal(duckdb::LogicalOperator &op,
                                   std::map<void *, bool> &run_on_gpu) {
     /*
@@ -933,6 +930,7 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
      * whether to run each node on CPU or GPU.
      */
     if (get_use_cudf()) {
+#ifdef USE_CUDF
         DevicePlanNode::startDeviceAssignment();
         // Wrap each node in the DuckDB LogicalOperator tree with
         // a DevicePlanNode to make a DevicePlanNode tree in which
@@ -948,6 +946,10 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
         dp_compute(root, dp_cache);
         // Fill out the run_on_gpu map.
         assign_devices(root, dp_cache, run_on_gpu);
+#else
+        throw std::runtime_error(
+            "Cannot use BODO_GPU mode when not built with GPU enabled.");
+#endif
     } else {
         for (auto &child : op.children) {
             partition_internal(*child, run_on_gpu);
