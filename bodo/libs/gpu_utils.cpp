@@ -92,9 +92,9 @@ void GpuShuffleManager::shuffle_table(
                                          nccl_comm, stream, this->n_ranks,
                                          this->curr_tag);
 
-    // Each shuffle will use nranks * 3 tags for shuffling metadata/gpu data
+    // Each shuffle will use 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
-    this->curr_tag += this->n_ranks * 3;
+    this->curr_tag += 3;
 }
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
