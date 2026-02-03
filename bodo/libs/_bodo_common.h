@@ -1762,13 +1762,16 @@ struct mpi_comm_info {
      * shuffling them. Defaults to false.
      * @param send_only only initialize send counts and not recv counts. This
      * avoids alltoall collectives which is necessary for async shuffle.
+     * @param dest_ranks Optional list of destination ranks to shuffle to. If
+     * empty, all ranks in the communicator are used.
      */
     explicit mpi_comm_info(
         const std::vector<std::shared_ptr<array_info>>& arrays,
         const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
         const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
         const uint8_t* keep_row_bitmask = nullptr,
-        bool keep_filter_misses = false, bool send_only = false);
+        bool keep_filter_misses = false, bool send_only = false,
+        const std::vector<int>& dest_ranks = {});
 
     /**
      * @brief Construct mpi_comm_info for inner array of array item array.

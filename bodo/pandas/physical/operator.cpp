@@ -208,3 +208,69 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     throw std::runtime_error("Should never be called in non-CUDF mode.");
 }
 #endif
+
+CPUtoGPUExchange::CPUtoGPUExchange(int64_t op_id_)
+    : op_id(op_id_), is_last_state(std::make_shared<IsLastState>()) {
+    // TODO: Get GPU Ranks to send to.
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    has_gpu = myrank == 0;
+    gpu_ranks = {0};
+    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
+}
+
+void CPUtoGPUExchange::Initialize(table_info *input_batch) {
+    std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    for (const std::unique_ptr<bodo::DataType> &t :
+         table_schema->column_types) {
+        dict_builders.emplace_back(
+            create_dict_builder_for_array(t->copy(), false));
+    }
+    this->collected_rows = std::make_unique<ChunkedTableBuilder>(
+        input_batch->schema(), dict_builders, get_streaming_batch_size());
+
+    uint64_t n_keys = 1;
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
+
+    // TODO: Free ShuffleState earlier ?
+    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
+        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
+        this->op_id, gpu_ranks);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
+}
+
+std::tuple<std::shared_ptr<table_info>, bool>
+CPUtoGPUExchange::CPURanksToGPURanks(std::shared_ptr<table_info> input_batch,
+                                     OperatorResult prev_op_result) {
+    if (!this->shuffle_state) {
+        Initialize(input_batch.get());
+    }
+    bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+
+    std::vector<bool> append_rows(input_batch->nrows(), true);
+    this->shuffle_state->AppendBatch(input_batch, append_rows);
+
+    auto result = this->shuffle_state->ShuffleIfRequired(true);
+
+    if (result.has_value()) {
+        std::shared_ptr<table_info> shuffled_table = result.value();
+        collected_rows->UnifyDictionariesAndAppend(shuffled_table);
+    }
+
+    local_is_last = local_is_last && (this->shuffle_state->SendRecvEmpty());
+
+    bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
+        is_last_state.get(), static_cast<int32_t>(local_is_last)));
+
+    auto [output_batch, _] = collected_rows->PopChunk(
+        /*force_return*/ global_is_last);
+
+    bool finished =
+        global_is_last && this->collected_rows->total_remaining == 0;
+
+    return std::make_tuple(output_batch, finished);
+}
+
+CPUtoGPUExchange::~CPUtoGPUExchange() { MPI_Comm_free(&this->shuffle_comm); }

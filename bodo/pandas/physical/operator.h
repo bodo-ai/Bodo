@@ -10,6 +10,9 @@
 #include <typeinfo>
 #include <utility>
 
+#include "../../libs/_bodo_common.h"
+#include "../../libs/_chunked_table_builder.h"
+#include "../../libs/streaming/_shuffle.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
@@ -254,3 +257,40 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif
+
+/**
+ * @brief
+ *
+ */
+class CPUtoGPUExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_);
+
+    /**
+     * @brief
+     *
+     * @param input_batch
+     */
+    void Initialize(table_info* input_batch);
+
+    /**
+     * @brief
+     *
+     * @param input_batch
+     * @param prev_op_result
+     * @return std::tuple<std::shared_ptr<table_info>, bool>
+     */
+    std::tuple<std::shared_ptr<table_info>, bool> CPURanksToGPURanks(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    ~CPUtoGPUExchange();
+
+   private:
+    int64_t op_id;
+    bool has_gpu;
+    std::vector<int> gpu_ranks;
+    MPI_Comm shuffle_comm;
+    const std::shared_ptr<IsLastState> is_last_state;
+    std::unique_ptr<IncrementalShuffleState> shuffle_state;
+    std::unique_ptr<ChunkedTableBuilder> collected_rows;
+};

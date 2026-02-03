@@ -92,11 +92,12 @@ IncrementalShuffleState::IncrementalShuffleState(
     std::shared_ptr<bodo::Schema> schema_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-    int64_t parent_op_id_)
+    int64_t parent_op_id_, const std::vector<int>& dest_ranks_)
     : schema(std::move(schema_)),
       dict_builders(dict_builders_),
       table_buffer(std::make_unique<TableBuildBuffer>(this->schema,
                                                       this->dict_builders)),
+      dest_ranks(dest_ranks_),
       n_keys(n_keys_),
       shuffle_threshold(get_shuffle_threshold()),
       curr_iter(curr_iter_),
@@ -568,11 +569,13 @@ AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
                                      const std::shared_ptr<uint32_t[]>& hashes,
                                      const uint8_t* keep_row_bitmask,
                                      MPI_Comm shuffle_comm,
-                                     int starting_msg_tag) {
+                                     int starting_msg_tag,
+                                     std::vector<int> dest_ranks) {
     mpi_comm_info comm_info(in_table->columns, hashes,
                             /*is_parallel*/ true, /*filter*/ nullptr,
                             keep_row_bitmask,
-                            /*keep_filter_misses*/ false, /*send_only*/ true);
+                            /*keep_filter_misses*/ false, /*send_only*/ true,
+                            /*dest_ranks*/ dest_ranks);
 
     AsyncShuffleSendState send_state(starting_msg_tag);
     send_state.send(in_table, comm_info, shuffle_comm);
@@ -796,9 +799,9 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
             "[IncrementalShuffleState::ShuffleIfRequired] Unable to get "
             "available MPI tag for shuffle send. All tags are inflight.");
     }
-    this->send_states.push_back(
-        shuffle_issend(std::move(shuffle_table), shuffle_hashes,
-                       keep_row_bitmask.get(), this->shuffle_comm, start_tag));
+    this->send_states.push_back(shuffle_issend(
+        std::move(shuffle_table), shuffle_hashes, keep_row_bitmask.get(),
+        this->shuffle_comm, start_tag, this->dest_ranks));
     this->inflight_tags.insert(start_tag);
 
     this->metrics.shuffle_send_time += end_timer(start);

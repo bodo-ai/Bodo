@@ -777,6 +777,10 @@ class IncrementalShuffleState {
 
     MPI_Comm shuffle_comm;
 
+    /// @brief Ranks receiving data from this rank during shuffle.
+    /// If empty, all ranks are assumed.
+    const std::vector<int> dest_ranks;
+
     /**
      * @brief Constructor for new IncrementalShuffleState
      *
@@ -795,7 +799,7 @@ class IncrementalShuffleState {
         std::shared_ptr<bodo::Schema> schema_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-        int64_t parent_op_id_);
+        int64_t parent_op_id_, const std::vector<int>& dest_ranks_ = {});
     /**
      * @brief Constructor for new IncrementalShuffleState
      *
@@ -817,6 +821,8 @@ class IncrementalShuffleState {
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
         int64_t parent_op_id_);
+
+    virtual ~IncrementalShuffleState() = default;
 
     /**
      * @brief Calculate initial synchronization frequency if syncing
@@ -1031,12 +1037,15 @@ class IncrementalShuffleState {
  its own)
  * @param starting_msg_tag Starting message tag to use for posting the messages
  that send the data buffers.
+ * @param dest_ranks Optional list of destination ranks to shuffle to. If empty,
+ all ranks in the communicator are used.
  */
 AsyncShuffleSendState shuffle_issend(
     std::shared_ptr<table_info> in_table,
     const std::shared_ptr<uint32_t[]>& hashes, const uint8_t* keep_row_bitmask,
     MPI_Comm shuffle_comm,
-    int starting_msg_tag = (SHUFFLE_METADATA_MSG_TAG + 1));
+    int starting_msg_tag = (SHUFFLE_METADATA_MSG_TAG + 1),
+    std::vector<int> dest_ranks = {});
 
 /**
  * @brief Checks for incoming shuffle messages using MPI probe and fills recieve

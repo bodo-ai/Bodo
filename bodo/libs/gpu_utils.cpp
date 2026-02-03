@@ -1,4 +1,10 @@
 #include "gpu_utils.h"
+#include <memory>
+#include <stdexcept>
+#include "_bodo_common.h"
+#include "_table_builder_utils.h"
+#include "physical/operator.h"
+#include "streaming/_shuffle.h"
 
 #ifdef USE_CUDF
 #include <mpi_proto.h>
