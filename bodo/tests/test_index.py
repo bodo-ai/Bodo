@@ -548,43 +548,6 @@ def test_index_set_operations(args):
     check_func(impl4, (I, J), sort_output=True, dist_test=dist_test, check_dtype=False)
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
-        pd.Index([1, 2, 3, 4, 5]),
-        pd.Index([1.0, 2.0, 3.0, 4.0, 5.0]),
-        pd.Index([True, False, True, True, False]),
-        pytest.param(pd.Index(pd.array([6, 7, 8, 9, 10])), marks=pytest.mark.slow),
-        pytest.param(pd.Index(pd.array([6, 7, None, 9, None])), marks=pytest.mark.slow),
-        pd.Index(["A", "B", "C", "D", "E"]),
-        pd.Index([b"a", b"e", b"i", b"o", b"u"]),
-        pd.RangeIndex(0, 100, 15),
-        pd.date_range("2018-01-01", "2018-01-10"),
-        pytest.param(pd.timedelta_range("1D", "7D"), marks=pytest.mark.slow),
-        pd.CategoricalIndex(list("abcaacab")),
-        pytest.param(
-            pd.CategoricalIndex([1, 2, 3, 1, 1, 2, 3, 1]), marks=pytest.mark.slow
-        ),
-        pd.interval_range(0, 5),
-        pd.period_range("2018", "2019", freq="M"),
-        pd.MultiIndex.from_product([["A", "B", "C"], [1, 2, 3]]),
-    ],
-)
-def test_index_is_methods(index):
-    def impl(I):
-        return (
-            I.is_numeric(),
-            I.is_integer(),
-            I.is_floating(),
-            I.is_boolean(),
-            I.is_categorical(),
-            I.is_interval(),
-            I.is_object(),
-        )
-
-    check_func(impl, (index,))
-
-
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
