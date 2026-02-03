@@ -340,7 +340,8 @@ void GpuShuffle::progress_sending_sizes() {
     int all_gpu_sizes_sent;
     CHECK_MPI_TEST_ALL(this->gpu_sizes_send_reqs, all_gpu_sizes_sent,
                        "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
-    if (all_metadata_sizes_sent && all_gpu_sizes_sent) {
+    if (all_metadata_sizes_sent && all_gpu_sizes_sent &&
+        this->recv_state != GpuShuffleState::SIZES_INFLIGHT) {
         // Deallocate all size data
         this->send_metadata_sizes.clear();
         this->send_gpu_sizes.clear();
