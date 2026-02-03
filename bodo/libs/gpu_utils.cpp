@@ -20,7 +20,7 @@
 
 GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
     // There's probably a more robust way to handle this
-    cudaSetDevice(this->gpu_id.value());
+    CHECK_CUDA(cudaSetDevice(this->gpu_id.value()));
 
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
