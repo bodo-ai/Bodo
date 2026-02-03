@@ -102,6 +102,8 @@ struct GpuShuffle {
           n_ranks(n_ranks) {
         CHECK_CUDA(
             cudaEventCreateWithFlags(&nccl_send_event, cudaEventDisableTiming));
+        CHECK_CUDA(
+            cudaEventCreateWithFlags(&nccl_recv_event, cudaEventDisableTiming));
 
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
@@ -168,8 +170,6 @@ class GpuShuffleManager {
 
     // GPU device ID
     rmm::cuda_device_id gpu_id;
-    // Ensure the correct device is set for the lifetime of this manager
-    rmm::cuda_set_device_raii cuda_device_raii;
 
     std::vector<GpuShuffle> inflight_shuffles;
 

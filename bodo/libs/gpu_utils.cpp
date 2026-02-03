@@ -18,9 +18,9 @@
 #include "_utils.h"
 #include "cuda_runtime_api.h"
 
-GpuShuffleManager::GpuShuffleManager()
-    : gpu_id(get_gpu_id()),
-      cuda_device_raii(rmm::cuda_set_device_raii(gpu_id)) {
+GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
+    // There's probably a more robust way to handle this
+    cudaSetDevice(this->gpu_id.value());
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
@@ -303,12 +303,13 @@ GpuShuffle::progress_waiting_for_data() {
     if (all_metadata_received && gpu_data_received) {
         // Unpack received tables
         std::vector<cudf::table_view> table_views(n_ranks);
+        std::vector<cudf::packed_columns> packed_recv_columns(n_ranks);
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
              src_rank++) {
-            cudf::packed_columns packed_cols = cudf::packed_columns(
+            packed_recv_columns[src_rank] = cudf::packed_columns(
                 std::move(this->metadata_recv_buffers[src_rank]),
                 std::move(this->packed_recv_buffers[src_rank]));
-            table_views[src_rank] = cudf::unpack(packed_cols);
+            table_views[src_rank] = cudf::unpack(packed_recv_columns[src_rank]);
         }
         // Deallocate all receive data
         this->metadata_recv_buffers.clear();
@@ -316,8 +317,12 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_reqs.clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
-        // Return unpacked table view
-        return cudf::concatenate(table_views);
+
+        cudaStreamSynchronize(this->stream);
+        std::unique_ptr<cudf::table> shuffle_res =
+            cudf::concatenate(table_views);
+
+        return {std::move(shuffle_res)};
     }
     return std::nullopt;
 }
