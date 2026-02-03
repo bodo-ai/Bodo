@@ -400,8 +400,17 @@ rmm::cuda_device_id get_gpu_id() {
 }
 
 int get_cluster_cuda_device_count() {
-    int local_device_count, device_count;
-    cudaGetDeviceCount(&device_count);
+    auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
+
+    int local_device_count = 0;
+
+    if (rank_on_node == 0) {
+        // Note: We ignore the return code here to default to 0 if no driver
+        // exists
+        cudaGetDeviceCount(&local_device_count);
+    }
+
+    int device_count;
     CHECK_MPI(MPI_Allreduce(&local_device_count, &device_count, 1, MPI_INT,
                             MPI_SUM, MPI_COMM_WORLD),
               "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");

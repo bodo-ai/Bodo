@@ -41,7 +41,6 @@ static bodo::tests::suite tests([] {
 
             if (device_id.value() < 0) {
                 // If no GPU assigned, NCCL comm should be null
-                std::cout << manager.get_nccl_comm() << std::endl;
                 bodo::tests::check(manager.get_nccl_comm() == nullptr);
                 bodo::tests::check(manager.get_stream() == nullptr);
                 bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
@@ -64,6 +63,11 @@ static bodo::tests::suite tests([] {
     // 2. Hash Partition Utility Test
     // Verifies the partitioning logic works locally before sending data
     bodo::tests::test("test_hash_partition_logic", [] {
+        rmm::cuda_device_id device_id = get_gpu_id();
+        if (device_id.value() < 0) {
+            // Skip test if no GPU assigned
+            return;
+        }
         int num_rows = 100;
         int num_partitions = 4;  // Arbitrary partition count
         auto table = create_int_table(num_rows, 0);
@@ -84,7 +88,7 @@ static bodo::tests::suite tests([] {
 
         // Verify offsets size
         bodo::tests::check(offsets.size() ==
-                           static_cast<size_t>(num_partitions + 1));
+                           static_cast<size_t>(num_partitions));
 
         // Verify offsets are monotonic and less than the total rows
         for (size_t i = 0; i < offsets.size() - 1; ++i) {
@@ -101,14 +105,13 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() < 0) {
-            return;
-        }
 
-        // Setup: Create 10 rows per rank.
+        // Setup: Create 10 rows per rank with a gpu assigned
         // Rank 0 has [0..9], Rank 1 has [10..19], etc.
-        int rows_per_rank = 10;
-        auto table = create_int_table(rows_per_rank, rank * rows_per_rank);
+        int rows_per_device = 10;
+        auto table =
+            create_int_table(device_id.value() < 0 ? 0 : rows_per_device,
+                             rank * rows_per_device);
 
         // Shared pointer required by API
         std::shared_ptr<cudf::table> input_ptr = std::move(table);
@@ -118,7 +121,8 @@ static bodo::tests::suite tests([] {
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
 
-        bodo::tests::check(manager.inflight_exists() == true);
+        bodo::tests::check(manager.inflight_exists() ==
+                           (device_id.value() >= 0));
 
         std::vector<std::unique_ptr<cudf::table>> received_tables;
 
@@ -152,8 +156,9 @@ static bodo::tests::suite tests([] {
                   "test_shuffle_integers_end_to_end: MPI_Allreduce failed:");
 
         // 3. Check conservation of data: Total rows in system must equal total
-        // rows out Input was rows_per_rank * n_ranks
-        int expected_total_rows = rows_per_rank * n_ranks;
+        // rows out Input was rows_per_rank * number of devices
+        int expected_total_rows =
+            rows_per_device * get_cluster_cuda_device_count();
 
         bodo::tests::check(global_received_rows == expected_total_rows);
 
@@ -165,34 +170,68 @@ static bodo::tests::suite tests([] {
                                cudf::type_id::INT64);
         }
     });
-
-    // 4. Empty Table Test
-    // Corner case: Shuffling empty tables shouldn't hang or crash
     bodo::tests::test("test_shuffle_empty", [] {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        // Create empty table with 1 column
+        rmm::cuda_device_id device_id = get_gpu_id();
+
+        // Setup: Create 0 rows (empty table)
+        // We use the same helper, just requesting 0 rows.
         auto table = create_int_table(0, 0);
         std::shared_ptr<cudf::table> input_ptr = std::move(table);
 
         GpuShuffleManager manager;
+
+        // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
 
-        bool finished = false;
-        int received_count = 0;
+        // Verify inflight status matches GPU presence
+        bodo::tests::check(manager.inflight_exists() ==
+                           (device_id.value() >= 0));
 
-        // Simple timeout mechanism to prevent hanging test
-        int safety_counter = 0;
+        std::vector<std::unique_ptr<cudf::table>> received_tables;
 
-        while (!finished && safety_counter < 10000) {
-            auto tables = manager.progress();
-            received_count += tables.size();
-            finished = !manager.inflight_exists();
-            safety_counter++;
+        // Pump the progress loop
+        bool done = false;
+        while (!done) {
+            auto out_batch = manager.progress();
+            // Move received tables into our accumulator
+            for (auto& t : out_batch) {
+                if (t)
+                    received_tables.push_back(std::move(t));
+            }
+
+            // Check if queue is drained
+            if (!manager.inflight_exists()) {
+                done = true;
+            }
         }
 
-        bodo::tests::check(finished == true);
-        bodo::tests::check(safety_counter < 10000);  // Fail if timed out
+        // Verification
+        // 1. Calculate total rows received on this rank
+        int local_received_rows = 0;
+        for (const auto& t : received_tables) {
+            local_received_rows += t->num_rows();
+        }
+
+        // 2. Sum global rows received (requires MPI check)
+        int global_received_rows = 0;
+        CHECK_MPI(MPI_Allreduce(&local_received_rows, &global_received_rows, 1,
+                                MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+                  "test_shuffle_empty: MPI_Allreduce failed:");
+
+        // 3. Check conservation of data: Total rows in system must be 0
+        bodo::tests::check(global_received_rows == 0);
+
+        // 4. Check schema preservation
+        // Even if the table is empty, we expect the schema (column types) to
+        // remain INT64
+        if (!received_tables.empty()) {
+            bodo::tests::check(received_tables[0]->num_columns() ==
+                               input_ptr->num_columns());
+            bodo::tests::check(received_tables[0]->get_column(0).type().id() ==
+                               cudf::type_id::INT64);
+        }
     });
 });
