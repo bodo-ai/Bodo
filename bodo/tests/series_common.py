@@ -51,7 +51,7 @@ series_val_params = [
                 Decimal("0"),
             ]
             * 2,
-            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+            dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
         ),
         id="decimal",
         marks=pytest.mark.skipif(

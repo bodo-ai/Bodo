@@ -1399,6 +1399,7 @@ def _test_equal(
                 or pa.types.is_large_binary(pa_type)
                 or pa.types.is_date32(pa_type)
                 or pa.types.is_null(pa_type)
+                or pa.types.is_decimal(pa_type)
             ):
                 py_out = py_out.astype(bodo_out.dtype)
 
@@ -1528,6 +1529,7 @@ def _test_equal(
                 or pa.types.is_large_string(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_null(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_decimal(bodo_dtype.pyarrow_dtype)
             ):
                 in_arr = py_out[py_out.columns[i]]
                 # Avoid np.nan in object arrays which causes PyArrow errors
