@@ -15,6 +15,8 @@ int64_t get_parquet_chunk_size() {
 }
 
 #ifdef USE_CUDF
+bool g_use_async = false;
+
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
@@ -28,16 +30,34 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
     return ProcessBatch(cpu_batch, prev_op_result);
 }
 
+OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
+                                             OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    // Wait until previous GPU pipeline processing is done.
+    input_batch.stream_event->event.wait(se->stream);
+    return ConsumeBatchGPU(input_batch, prev_op_result, se);
+}
+
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
     auto gpu_batch = convertTableToGPU(input_batch);
-    return ConsumeBatch(gpu_batch, prev_op_result);
+    return ConsumeBatchGPU(gpu_batch, prev_op_result, se);
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    GPU_DATA input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    // Wait until previous GPU pipeline processing is done.
+    input_batch.stream_event->event.wait(se->stream);
+    return ProcessBatchGPU(input_batch, prev_op_result, se);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
     auto gpu_batch = convertTableToGPU(input_batch);
-    return ProcessBatch(gpu_batch, prev_op_result);
+    return ProcessBatchGPU(gpu_batch, prev_op_result, se);
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
@@ -109,7 +129,8 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     }
 
     // Return the cudf::table (moving ownership)
-    return GPU_DATA{std::move(result), arrow_batch->schema()};
+    return GPU_DATA{std::move(result), arrow_batch->schema(),
+                    make_stream_and_event(false)};
 }
 
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
