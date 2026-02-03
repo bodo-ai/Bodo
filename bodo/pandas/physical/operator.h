@@ -65,10 +65,23 @@ struct GPU_DATA {};
  * @brief
  *
  */
-class CPUtoGPUExchange {
+class RankDataExchange {
    public:
-    CPUtoGPUExchange(int64_t op_id_);
+    RankDataExchange(int64_t op_id_);
 
+    /**
+     * @brief
+     *
+     * @param input_batch
+     * @param prev_op_result
+     * @return std::tuple<std::shared_ptr<table_info>, bool>
+     */
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    ~RankDataExchange();
+
+   protected:
     /**
      * @brief
      *
@@ -80,15 +93,11 @@ class CPUtoGPUExchange {
      * @brief
      *
      * @param input_batch
-     * @param prev_op_result
-     * @return std::tuple<std::shared_ptr<table_info>, bool>
      */
-    std::tuple<std::shared_ptr<table_info>, OperatorResult> CPURanksToGPURanks(
-        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+    virtual void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) = 0;
 
-    ~CPUtoGPUExchange();
-
-   private:
     int64_t op_id;
     bool has_gpu;
     std::vector<int> gpu_ranks;
@@ -96,6 +105,32 @@ class CPUtoGPUExchange {
     const std::shared_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
     std::unique_ptr<ChunkedTableBuilder> collected_rows;
+};
+
+/**
+ * @brief
+ *
+ */
+class CPUtoGPUExchange : public RankDataExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+};
+
+/**
+ * @brief
+ *
+ */
+class GPUtoCPUExchange : public RankDataExchange {
+   public:
+    GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
 };
 
 /**
@@ -165,6 +200,13 @@ class PhysicalSink : public PhysicalOperator {
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+#ifdef USE_CUDF
+    PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -193,6 +235,13 @@ class PhysicalProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+#ifdef USE_CUDF
+    PhysicalProcessBatch() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -227,8 +276,6 @@ class PhysicalGPUSource : public PhysicalOperator {
  */
 class PhysicalGPUSink : public PhysicalOperator {
    public:
-    PhysicalGPUSink() : cpu_to_gpu_exchange(this->getOpId()) {}
-
     OperatorType operator_type() const override {
         return OperatorType::GPU_SINK;
     }
@@ -244,8 +291,12 @@ class PhysicalGPUSink : public PhysicalOperator {
 
     virtual void FinalizeSink() = 0;
 
+#ifdef USE_CUDF
+    PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
+
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 
 /**
@@ -255,8 +306,6 @@ class PhysicalGPUSink : public PhysicalOperator {
  */
 class PhysicalGPUProcessBatch : public PhysicalOperator {
    public:
-    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->getOpId()) {}
-
     OperatorType operator_type() const override {
         return OperatorType::GPU_SOURCE_AND_SINK;
     }
@@ -276,8 +325,12 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 
+#ifdef USE_CUDF
+    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->op_id) {}
+
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 /**
  * @brief Get the streaming batch size from environment variable.

@@ -23,26 +23,32 @@ int64_t get_parquet_chunk_size() {
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
-    return ConsumeBatch(cpu_batch, prev_op_result);
+    auto [cpu_batch_fragment, exchange_result] =
+        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+    return ConsumeBatch(cpu_batch_fragment, exchange_result);
 }
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
                                    OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
-    return ProcessBatch(cpu_batch, prev_op_result);
+    auto [cpu_batch_fragment, exchange_result] =
+        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+    return ProcessBatch(cpu_batch_fragment, exchange_result);
 }
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    auto gpu_batch = convertTableToGPU(input_batch);
-    return ConsumeBatch(gpu_batch, prev_op_result);
+    auto [cpu_batch, exchange_result] =
+        cpu_to_gpu_exchange(input_batch, prev_op_result);
+    auto gpu_batch = convertTableToGPU(cpu_batch);
+    return ConsumeBatch(gpu_batch, exchange_result);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
     auto [cpu_batch, exchange_result] =
-        cpu_to_gpu_exchange.CPURanksToGPURanks(input_batch, prev_op_result);
+        cpu_to_gpu_exchange(input_batch, prev_op_result);
     auto gpu_batch = convertTableToGPU(cpu_batch);
     return ProcessBatch(gpu_batch, exchange_result);
 }
@@ -211,7 +217,7 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 }
 #endif
 
-CPUtoGPUExchange::CPUtoGPUExchange(int64_t op_id_)
+RankDataExchange::RankDataExchange(int64_t op_id_)
     : op_id(op_id_), is_last_state(std::make_shared<IsLastState>()) {
     // TODO: Get GPU Ranks to send to.
     int myrank;
@@ -219,33 +225,12 @@ CPUtoGPUExchange::CPUtoGPUExchange(int64_t op_id_)
     has_gpu = myrank == 0;
     gpu_ranks = {0};
     CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm),
-              "CPUtoGPUExchange::CPUtoGPUExchange Error in MPI_Comm_dup");
-}
-
-void CPUtoGPUExchange::Initialize(table_info *input_batch) {
-    std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    for (const std::unique_ptr<bodo::DataType> &t :
-         table_schema->column_types) {
-        dict_builders.emplace_back(
-            create_dict_builder_for_array(t->copy(), false));
-    }
-    this->collected_rows = std::make_unique<ChunkedTableBuilder>(
-        input_batch->schema(), dict_builders, get_streaming_batch_size());
-
-    uint64_t n_keys = 1;
-    uint64_t curr_iter = 0;
-    int64_t sync_freq = 1;
-
-    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
-        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
-        this->op_id, gpu_ranks);
-    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
+              "RankDataExchange::RankDataExchange Error in MPI_Comm_dup");
 }
 
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
-CPUtoGPUExchange::CPURanksToGPURanks(std::shared_ptr<table_info> input_batch,
-                                     OperatorResult prev_op_result) {
+RankDataExchange::operator()(std::shared_ptr<table_info> input_batch,
+                             OperatorResult prev_op_result) {
     if (!this->shuffle_state) {
         Initialize(input_batch.get());
     }
@@ -284,4 +269,43 @@ CPUtoGPUExchange::CPURanksToGPURanks(std::shared_ptr<table_info> input_batch,
                                            : OperatorResult::HAVE_MORE_OUTPUT));
 }
 
-CPUtoGPUExchange::~CPUtoGPUExchange() { MPI_Comm_free(&this->shuffle_comm); }
+void RankDataExchange::Initialize(table_info *input_batch) {
+    std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    for (const std::unique_ptr<bodo::DataType> &t :
+         table_schema->column_types) {
+        dict_builders.emplace_back(
+            create_dict_builder_for_array(t->copy(), false));
+    }
+    this->collected_rows = std::make_unique<ChunkedTableBuilder>(
+        input_batch->schema(), dict_builders, get_streaming_batch_size());
+
+    InitializeShuffleState(input_batch, dict_builders);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
+}
+
+RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
+
+void CPUtoGPUExchange::InitializeShuffleState(
+    table_info *input_batch,
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    uint64_t n_keys = 1;
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
+
+    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
+        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
+        this->op_id, gpu_ranks);
+}
+
+void GPUtoCPUExchange::InitializeShuffleState(
+    table_info *input_batch,
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    uint64_t n_keys = 1;
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
+
+    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
+        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
+        this->op_id);
+}

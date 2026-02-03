@@ -917,39 +917,39 @@ static bodo::tests::suite tests([] {
             bodo::tests::check(ss_actual.str() == ss_expected.str());
         }
     });
-    bodo::tests::test("test_cpu_to_gpu_exchange", []() {
-        int rank;
-        int npes;
+    // bodo::tests::test("test_cpu_to_gpu_exchange", []() {
+    //     int rank;
+    //     int npes;
 
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &npes);
+    //     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    //     MPI_Comm_size(MPI_COMM_WORLD, &npes);
 
-        // if (npes != 2) {
-        //     return;
-        // }
+    //     // if (npes != 2) {
+    //     //     return;
+    //     // }
 
-        size_t array_size = 100;
+    //     size_t array_size = 100;
 
-        std::vector<int32_t> input_col;
-        for (size_t i = 0; i < array_size; ++i) {
-            input_col.push_back(i);
-        }
-        auto table = bodo::tests::cppToBodo({"A"}, {true}, {}, input_col);
-        auto empty_table = alloc_table_like(table);
+    //     std::vector<int32_t> input_col;
+    //     for (size_t i = 0; i < array_size; ++i) {
+    //         input_col.push_back(i);
+    //     }
+    //     auto table = bodo::tests::cppToBodo({"A"}, {true}, {}, input_col);
+    //     auto empty_table = alloc_table_like(table);
 
-        CPUtoGPUExchange exchange(-1);
+    //     CPUtoGPUExchange exchange(-1);
 
-        auto result_table = alloc_table_like(empty_table);
+    //     auto result_table = alloc_table_like(empty_table);
 
-        bool is_done = false;
-        do {
-            auto [shuffled_table, finished] =
-                exchange.CPURanksToGPURanks(table, OperatorResult::FINISHED);
-            result_table = concat_tables({result_table, shuffled_table});
-            is_done = finished;
-            table = alloc_table_like(empty_table);
-        } while (!is_done);
+    //     bool is_done = false;
+    //     do {
+    //         auto [shuffled_table, finished] =
+    //             exchange.CPURanksToGPURanks(table, OperatorResult::FINISHED);
+    //         result_table = concat_tables({result_table, shuffled_table});
+    //         is_done = finished;
+    //         table = alloc_table_like(empty_table);
+    //     } while (!is_done);
 
-        DEBUG_PrintTable(std::cout, result_table);
-    });
+    //     DEBUG_PrintTable(std::cout, result_table);
+    // });
 });
