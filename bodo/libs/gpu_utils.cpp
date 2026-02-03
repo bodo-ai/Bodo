@@ -164,20 +164,20 @@ void GpuShuffle::send_sizes() {
          dest_rank++) {
         this->send_metadata_sizes[dest_rank] =
             this->metadata_send_buffers[dest_rank]->size();
-        CHECK_MPI(MPI_Issend(&this->send_metadata_sizes[dest_rank], 1,
-                             MPI_UINT64_T, dest_rank, this->start_tag, mpi_comm,
-                             &this->metadata_sizes_send_reqs[dest_rank]),
-                  "GpuShuffle::send_sizes: MPI_Issend failed:");
+        CHECK_MPI(MPI_Isend(&this->send_metadata_sizes[dest_rank], 1,
+                            MPI_UINT64_T, dest_rank, this->start_tag, mpi_comm,
+                            &this->metadata_sizes_send_reqs[dest_rank]),
+                  "GpuShuffle::send_sizes: MPI_Isend failed:");
     }
     // Send GPU data sizes
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         this->send_gpu_sizes[dest_rank] =
             packed_send_buffers[dest_rank]->size();
-        CHECK_MPI(MPI_Issend(&this->send_metadata_sizes[dest_rank], 1,
-                             MPI_UINT64_T, dest_rank, this->start_tag + 1,
-                             mpi_comm, &this->gpu_sizes_send_reqs[dest_rank]),
-                  "GpuShuffle::send_sizes: MPI_Issend failed:");
+        CHECK_MPI(MPI_Isend(&this->send_metadata_sizes[dest_rank], 1,
+                            MPI_UINT64_T, dest_rank, this->start_tag + 1,
+                            mpi_comm, &this->gpu_sizes_send_reqs[dest_rank]),
+                  "GpuShuffle::send_sizes: MPI_Isend failed:");
     }
 }
 void GpuShuffle::recv_sizes() {
@@ -200,11 +200,11 @@ void GpuShuffle::recv_sizes() {
 void GpuShuffle::send_metadata() {
     for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
          dest_rank++) {
-        CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
-                             this->metadata_send_buffers[dest_rank]->size(),
-                             MPI_UINT8_T, dest_rank, this->start_tag + 2,
-                             mpi_comm, &this->metadata_send_reqs[dest_rank]),
-                  "GpuShuffle::send_metadata: MPI_Issend failed:");
+        CHECK_MPI(MPI_Isend(this->metadata_send_buffers[dest_rank]->data(),
+                            this->metadata_send_buffers[dest_rank]->size(),
+                            MPI_UINT8_T, dest_rank, this->start_tag + 2,
+                            mpi_comm, &this->metadata_send_reqs[dest_rank]),
+                  "GpuShuffle::send_metadata: MPI_Isend failed:");
     }
 }
 
