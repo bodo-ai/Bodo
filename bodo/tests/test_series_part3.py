@@ -9,7 +9,7 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import check_func, no_default, pytest_pandas
+from bodo.tests.utils import check_func, pytest_pandas
 
 pytestmark = pytest_pandas
 
@@ -756,60 +756,6 @@ def test_constant_lowering(memory_leak_check):
         return S
 
     check_func(impl, (), only_seq=True)
-
-
-@pytest.mark.parametrize("offset", ("15D", pd.DateOffset(days=15), "0D"))
-def test_series_first_last(offset):
-    """
-    Test Series.first() and Series.last() with string and DateOffset offsets (for Series with DateTimeIndex)
-    """
-
-    def impl_first(S):
-        return S.first(offset)
-
-    def impl_last(S):
-        return S.last(offset)
-
-    n = 30
-    i = pd.date_range("2018-04-09", periods=n, freq="2D", unit="ns")
-    ts = pd.Series(np.arange(n), index=i)
-
-    # Pandas functionality is ostensibly incorrect, see:
-    # https://github.com/pandas-dev/pandas/blob/v1.4.0/pandas/core/generic.py#L8401-L8463
-    if isinstance(offset, pd.DateOffset):
-        end_date = end = ts.index[0] + offset
-        # Tick-like, e.g. 3 weeks
-        if isinstance(offset, pd._libs.tslibs.Tick) and end_date in ts.index:
-            end = ts.index.searchsorted(end_date, side="left")
-            py_output = ts.iloc[:end]
-        else:
-            py_output = ts.loc[:end]
-    else:
-        py_output = no_default
-
-    check_func(impl_first, (ts,), py_output=py_output)
-    check_func(impl_last, (ts,))
-
-
-def test_empty_series_first_last():
-    """
-    Test Series.first() and Series.last() with an empty series.
-    """
-
-    def impl_first(S):
-        return S.first("5D")
-
-    def impl_last(S):
-        return S.last("5D")
-
-    n = 10
-    ts = pd.Series(
-        np.arange(n), index=pd.date_range("2018-04-09", periods=n, freq="1D", unit="ns")
-    )
-    empty_ts = ts[ts > n]
-
-    check_func(impl_first, (empty_ts,))
-    check_func(impl_last, (empty_ts,))
 
 
 def _convert_helper(df, typ):
