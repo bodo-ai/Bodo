@@ -192,17 +192,17 @@ def test_string_series_fillna_inplace():
     A2 = pd.Series(["hsldf", "avsjbdhjof", "bjknjoiuh", "abnsdgd", "", "sadf"] * 2)
 
     def impl0(S):
-        return S.fillna("", inplace=True)
+        S.fillna("", inplace=True)
 
     def impl1(S):
-        return S.fillna("hello", inplace=True)
+        S.fillna("hello", inplace=True)
 
     def impl2(S):
         val = S.iat[0]
-        return S.fillna(val, inplace=True)
+        S.fillna(val, inplace=True)
 
     def impl3(S1, S2):
-        return S1.fillna(S2, inplace=True)
+        S1.fillna(S2, inplace=True)
 
     check_func(impl0, (A,), check_dtype=False, use_dict_encoded_strings=False)
     check_func(
@@ -223,17 +223,17 @@ def test_binary_series_fillna_inplace():
     A2 = pd.Series([bytes(1), b"avsjbdhjof", b"bjknjoiuh", b"abnsdgd", b""] * 3)
 
     def impl0(S):
-        return S.fillna(b"", inplace=True)
+        S.fillna(b"", inplace=True)
 
     def impl1(S):
-        return S.fillna(b"hello", inplace=True)
+        S.fillna(b"hello", inplace=True)
 
     def impl2(S):
         val = S.iat[0]
-        return S.fillna(val, inplace=True)
+        S.fillna(val, inplace=True)
 
     def impl3(S1, S2):
-        return S1.fillna(S2, inplace=True)
+        S1.fillna(S2, inplace=True)
 
     check_func(impl0, (A,), check_dtype=False)
     check_func(impl0, (A2,), check_dtype=False)
@@ -256,7 +256,7 @@ def test_str_binary_series_fillna_inplace_mismatch():
     A2 = pd.Series(["b", None] * 12)
 
     def impl(S1, S2):
-        return S1.fillna(S2, inplace=True)
+        S1.fillna(S2, inplace=True)
 
     with pytest.raises(AssertionError, match="requires same length"):
         check_func(impl, (A, A2), check_dtype=False)
