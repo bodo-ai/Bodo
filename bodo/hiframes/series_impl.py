@@ -4537,6 +4537,8 @@ def _validate_self_other_mask_where(
         or isinstance(arr, BooleanArrayType)
         or isinstance(arr, IntegerArrayType)
         or isinstance(arr, FloatingArrayType)
+        or isinstance(arr, bodo.types.DatetimeArrayType)
+        or arr == bodo.types.timedelta_array_type
         or (
             bodo.utils.utils.is_array_typ(arr, False)
             and (arr.dtype in [bodo.types.string_type, bodo.types.bytes_type])
