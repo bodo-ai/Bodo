@@ -1762,8 +1762,6 @@ struct mpi_comm_info {
      * shuffling them. Defaults to false.
      * @param send_only only initialize send counts and not recv counts. This
      * avoids alltoall collectives which is necessary for async shuffle.
-     * @param dest_ranks Optional list of destination ranks to shuffle to. If
-     * empty, all ranks in the communicator are used.
      */
     explicit mpi_comm_info(
         const std::vector<std::shared_ptr<array_info>>& arrays,

@@ -4,13 +4,11 @@
 #include <sstream>
 #include "../../libs/_dict_builder.h"
 #include "../../libs/_distributed.h"
-#include "../../libs/_table_builder_utils.h"
 #include "../../libs/groupby/_groupby_ftypes.h"
 #include "../../libs/streaming/_groupby.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "../table_generator.hpp"
 #include "../test.hpp"
-#include "physical/operator.h"
 
 // Mock class to test protected methods
 class IncrementalShuffleStateTest : public IncrementalShuffleState {
@@ -26,18 +24,15 @@ class IncrementalShuffleStateTest : public IncrementalShuffleState {
     IncrementalShuffleStateTest(
         std::shared_ptr<bodo::Schema> schema_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
-        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-        const std::vector<int>& dest_ranks_ = {})
+        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_)
         : IncrementalShuffleState(schema_, dict_builders_, n_keys_, curr_iter_,
-                                  sync_freq_, -1, dest_ranks_) {};
+                                  sync_freq_, -1) {};
     void ResetAfterShuffle() override {
         IncrementalShuffleState::ResetAfterShuffle();
     }
 };
 
-std::shared_ptr<table_info> test_shuffle(
-    std::shared_ptr<table_info> table,
-    const std::vector<int>& dest_ranks = {}) {
+std::shared_ptr<table_info> test_shuffle(std::shared_ptr<table_info> table) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     std::unique_ptr<bodo::Schema> schema = table->schema();
@@ -56,8 +51,7 @@ std::shared_ptr<table_info> test_shuffle(
     // Test with a length % 8 != 0
     uint64_t curr_iter = 0;
     IncrementalShuffleStateTest state = IncrementalShuffleStateTest(
-        std::move(schema), dict_builders, table->ncols(), curr_iter, sync_freq,
-        dest_ranks);
+        std::move(schema), dict_builders, table->ncols(), curr_iter, sync_freq);
     state.Initialize(nullptr, true, MPI_COMM_WORLD);
     if (rank == 0) {
         size_t nrows = table->nrows();
@@ -879,77 +873,4 @@ static bodo::tests::suite tests([] {
             }
         }
     });
-    bodo::tests::test("test_shuffle_to_dest_ranks", []() {
-        int rank;
-        int npes;
-
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &npes);
-
-        if (npes != 2) {
-            return;
-        }
-
-        size_t array_size = 100;
-
-        std::vector<int32_t> input_col;
-        for (size_t i = 0; i < array_size; ++i) {
-            input_col.push_back(i);
-        }
-        auto table = bodo::tests::cppToBodo({"A"}, {true}, {}, input_col);
-
-        std::vector<int> dest_ranks = {1};
-
-        std::shared_ptr<table_info> shuffled_table =
-            test_shuffle(std::move(table), dest_ranks);
-
-        if (rank == 0) {
-            bodo::tests::check(shuffled_table == nullptr);
-        } else {
-            auto expected_table =
-                bodo::tests::cppToBodo({"A"}, {true}, {}, input_col);
-
-            std::stringstream ss_actual;
-            std::stringstream ss_expected;
-
-            DEBUG_PrintTable(ss_actual, shuffled_table);
-            DEBUG_PrintTable(ss_expected, expected_table);
-            bodo::tests::check(ss_actual.str() == ss_expected.str());
-        }
-    });
-    // bodo::tests::test("test_cpu_to_gpu_exchange", []() {
-    //     int rank;
-    //     int npes;
-
-    //     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    //     MPI_Comm_size(MPI_COMM_WORLD, &npes);
-
-    //     // if (npes != 2) {
-    //     //     return;
-    //     // }
-
-    //     size_t array_size = 100;
-
-    //     std::vector<int32_t> input_col;
-    //     for (size_t i = 0; i < array_size; ++i) {
-    //         input_col.push_back(i);
-    //     }
-    //     auto table = bodo::tests::cppToBodo({"A"}, {true}, {}, input_col);
-    //     auto empty_table = alloc_table_like(table);
-
-    //     CPUtoGPUExchange exchange(-1);
-
-    //     auto result_table = alloc_table_like(empty_table);
-
-    //     bool is_done = false;
-    //     do {
-    //         auto [shuffled_table, finished] =
-    //             exchange.CPURanksToGPURanks(table, OperatorResult::FINISHED);
-    //         result_table = concat_tables({result_table, shuffled_table});
-    //         is_done = finished;
-    //         table = alloc_table_like(empty_table);
-    //     } while (!is_done);
-
-    //     DEBUG_PrintTable(std::cout, result_table);
-    // });
 });

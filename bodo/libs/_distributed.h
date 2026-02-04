@@ -24,21 +24,20 @@
 
 // Helper macro to make an MPI call that returns an error code. In case of an
 // error, this raises a runtime_error (with MPI error details).
-#define CHECK_MPI(CALL, USER_ERR_MSG_PREFIX)                           \
-    {                                                                  \
-        int err = CALL;                                                \
-        int err_class;                                                 \
-        if (err) {                                                     \
-            char err_msg[MPI_MAX_ERROR_STRING + 1];                    \
-            int err_msg_len = 0;                                       \
-            MPI_Error_string(err, err_msg, &err_msg_len);              \
-            MPI_Error_class(err, &err_class);                          \
-            throw std::runtime_error(                                  \
-                USER_ERR_MSG_PREFIX + std::string(" ") +               \
-                std::to_string(err_class) + std::string(" ") +         \
-                std::string(err_msg, err_msg_len) + std::string(" ") + \
-                std::string(__FILE__) + std::to_string(__LINE__));     \
-        }                                                              \
+#define CHECK_MPI(CALL, USER_ERR_MSG_PREFIX)                                  \
+    {                                                                         \
+        int err = CALL;                                                       \
+        int err_class;                                                        \
+        if (err) {                                                            \
+            char err_msg[MPI_MAX_ERROR_STRING + 1];                           \
+            int err_msg_len = 0;                                              \
+            MPI_Error_string(err, err_msg, &err_msg_len);                     \
+            MPI_Error_class(err, &err_class);                                 \
+            throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
+                                     std::to_string(err_class) +              \
+                                     std::string(" ") +                       \
+                                     std::string(err_msg, err_msg_len));      \
+        }                                                                     \
     }
 
 /**
