@@ -39,7 +39,9 @@ df_value_params = [
                 .astype("category"),
                 "D": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 )

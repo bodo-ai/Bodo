@@ -1675,7 +1675,7 @@ def test_dt_timedelta_fields(memory_leak_check):
         exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
-        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        S = pd.timedelta_range("1s", "1d", freq="s", unit="ns").to_series()
         check_func(impl, (S, field), check_dtype=False)
 
 
@@ -1690,7 +1690,7 @@ def test_dt_timedelta_methods(memory_leak_check):
         exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
-        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        S = pd.timedelta_range("1s", "1d", freq="s", unit="ns").to_series()
         check_func(impl, (S, method))
 
 
@@ -1944,7 +1944,9 @@ def test_pd_to_timedelta_td64(memory_leak_check):
     def impl(S):
         return pd.to_timedelta(S)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
     check_func(impl, (S,))
 
 
@@ -2188,7 +2190,9 @@ def test_dt_components(memory_leak_check):
     def impl(S):
         return S.dt.components
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     check_func(impl, (S,))
 
@@ -2197,7 +2201,9 @@ def test_dt_ceil_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2210,7 +2216,9 @@ def test_dt_ceil_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
     freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
@@ -2220,7 +2228,9 @@ def test_dt_floor_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2233,7 +2243,9 @@ def test_dt_floor_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
     freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
@@ -2243,7 +2255,9 @@ def test_dt_round_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.round(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2256,7 +2270,9 @@ def test_dt_round_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.round(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
     freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))

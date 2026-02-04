@@ -104,7 +104,11 @@ from bodo.tests.utils import (
                     "D": pd.Categorical(
                         pd.concat(
                             [
-                                pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                                pd.Series(
+                                    pd.timedelta_range(
+                                        start="1 day", periods=4, unit="ns"
+                                    )
+                                ),
                                 pd.Series(data=[None], index=[4]),
                             ]
                         ).astype("timedelta64[ns]"),
@@ -2097,7 +2101,7 @@ def test_agg_td64(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
         }
     )
     check_func(test_impl, (df,), sort_output=True, reset_index=True)
@@ -4544,7 +4548,7 @@ def test_min_max_other_supported_types(memory_leak_check):
     df_td = pd.DataFrame(
         {
             "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
         }
     )
     check_func(impl1, (df_td,), sort_output=True)
@@ -4568,7 +4572,7 @@ def test_min_max_other_supported_types(memory_leak_check):
             "A": [1, 2, 3, 2, 1],
             "B": pd.concat(
                 (
-                    pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                    pd.Series(pd.timedelta_range(start="1 day", periods=4, unit="ns")),
                     pd.Series(data=[np.timedelta64("nat")], index=[4]),
                 )
             ),
@@ -4973,7 +4977,7 @@ def test_first_last_supported_types(memory_leak_check):
     df_td = pd.DataFrame(
         {
             "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
         }
     )
     check_func(impl1, (df_td,), sort_output=True)
@@ -5011,7 +5015,7 @@ def test_first_last_supported_types(memory_leak_check):
             "A": [1, 2, 3, 2, 1],
             "B": pd.concat(
                 (
-                    pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                    pd.Series(pd.timedelta_range(start="1 day", periods=4, unit="ns")),
                     pd.Series(data=[np.timedelta64("nat")], index=[4]),
                 )
             ),
@@ -6073,7 +6077,7 @@ def test_groupby_shift_unknown_cats(memory_leak_check):
     df5 = pd.DataFrame(
         {
             "A": [1, 1, 1, 4, 5],
-            "B": pd.timedelta_range(start="1 day", periods=5),
+            "B": pd.timedelta_range(start="1 day", periods=5, unit="ns"),
             "C": [0.1, 0.2, 0.3, 0.4, 0.5],
         }
     )
@@ -6444,7 +6448,9 @@ def test_cumulatives_supported_cases(memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [1, 2, 3, 2, 1],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                    "B": pd.Series(
+                        pd.timedelta_range(start="1 day", periods=5, unit="ns")
+                    ),
                 }
             ),
             marks=pytest.mark.slow,
@@ -6869,7 +6875,7 @@ def test_groupby_transform_count(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["foo", "foo", "foo", "bar", "foo", "bar"],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=6, unit="ns")),
             "C": [True, False, False, False, True, True],
             "D": ["foo", "foo", "foo", "bar", "foo", "bar"],
             "H": [b"foo", b"foo", b"foo", b"bar", b"foo", b"bar"],
@@ -7210,7 +7216,7 @@ def test_head(memory_leak_check):
                 ]
             ).astype(pd.ArrowDtype(pa.decimal128(38, 18))),
             "C": pd.date_range(start="2018-04-24", end="2018-04-29", periods=7),
-            "D": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
+            "D": pd.Series(pd.timedelta_range(start="1 day", periods=7, unit="ns")),
             "F": [
                 pd.Timestamp("20130101 09:00:00"),
                 pd.Timestamp("20130101 09:00:02"),

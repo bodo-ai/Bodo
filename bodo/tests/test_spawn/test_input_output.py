@@ -69,7 +69,9 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame(
                 {"A": ["A"] * 100},
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
+                ),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],
@@ -129,7 +131,7 @@ def df_value(request):
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
                 index=pd.TimedeltaIndex(
-                    pd.timedelta_range("1 days", periods=100)
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
                 ).astype("timedelta64[ns]"),
             ),
             id="timedelta_index",

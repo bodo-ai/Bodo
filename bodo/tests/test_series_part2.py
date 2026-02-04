@@ -131,7 +131,9 @@ def test_series_map_isna_check(memory_leak_check):
     ).to_series()
     S.iloc[2:4] = None
     check_func(impl1, (S,))
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=5).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=5, unit="ns"
+    ).to_series()
     S.iloc[2:4] = None
     check_func(impl2, (S,))
 
@@ -3103,7 +3105,7 @@ def test_np_pd_timedelta_truediv(memory_leak_check):
     def test_impl(S, val):
         return S / val
 
-    S = pd.Series(pd.timedelta_range(start="1 day", periods=10))
+    S = pd.Series(pd.timedelta_range(start="1 day", periods=10, unit="ns"))
     val1 = pd.Timedelta(days=3)
     val2 = pd.Timedelta(nanoseconds=3)
     val3 = pd.Timedelta(days=-2, seconds=53, minutes=2)

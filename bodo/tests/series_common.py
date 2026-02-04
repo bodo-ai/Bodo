@@ -196,7 +196,7 @@ series_val_params = [
     pytest.param(
         pd.concat(
             [
-                pd.Series(pd.timedelta_range(start="1 day", periods=9)),
+                pd.Series(pd.timedelta_range(start="1 day", periods=9, unit="ns")),
                 pd.Series([None]),
             ]
         )

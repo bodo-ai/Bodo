@@ -2463,7 +2463,8 @@ def test_df_reset_index1(df_value, memory_leak_check):
         # TODO: test PeriodIndex when PeriodArray is supported
         # pd.period_range(start='2017-01-01', end='2017-05-01', freq='M', name="ACD"),
         pytest.param(
-            pd.timedelta_range(start="1D", end="5D", name="ABC"), marks=pytest.mark.slow
+            pd.timedelta_range(start="1D", end="5D", name="ABC", unit="ns"),
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.MultiIndex.from_arrays(

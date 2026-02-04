@@ -134,7 +134,9 @@ pytestmark = pytest_pandas
                 "D": pd.Categorical(
                     pd.concat(
                         [
-                            pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                            pd.Series(
+                                pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                            ),
                             pd.Series(data=[None], index=[4]),
                         ]
                     ),
@@ -1689,13 +1691,16 @@ def test_sort_values_input_boundaries(memory_leak_check):
                         {
                             "A": np.array(
                                 pd.timedelta_range(
-                                    start="1 day", end="500 day", periods=15
+                                    start="1 day", end="500 day", periods=15, unit="ns"
                                 ),
                                 dtype="timedelta64[ns]",
                             ),
                             "B": np.array(
                                 pd.timedelta_range(
-                                    start="10 days", end="300 day", periods=15
+                                    start="10 days",
+                                    end="300 day",
+                                    periods=15,
+                                    unit="ns",
                                 ),
                                 dtype="timedelta64[ns]",
                             ),
@@ -1708,7 +1713,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                     np.array([None] * 5, dtype="timedelta64[ns]"),
                                     np.array(
                                         pd.timedelta_range(
-                                            start="1 day", end="500 day", periods=15
+                                            start="1 day",
+                                            end="500 day",
+                                            periods=15,
+                                            unit="ns",
                                         ),
                                         dtype="timedelta64[ns]",
                                     ),
@@ -1720,7 +1728,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                     np.array([None] * 2, dtype="timedelta64[ns]"),
                                     np.array(
                                         pd.timedelta_range(
-                                            start="10 days", end="300 day", periods=15
+                                            start="10 days",
+                                            end="300 day",
+                                            periods=15,
+                                            unit="ns",
                                         ),
                                         dtype="timedelta64[ns]",
                                     ),

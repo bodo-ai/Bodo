@@ -1272,9 +1272,13 @@ def test_interval_join_detection(memory_leak_check):
             (
                 pd.DataFrame(
                     {
-                        "P": pd.timedelta_range(start="1 day", periods=8).tolist()
+                        "P": pd.timedelta_range(
+                            start="1 day", periods=8, unit="ns"
+                        ).tolist()
                         + [None, None],
-                        "E": pd.timedelta_range(start="1 day", freq="18h", periods=10),
+                        "E": pd.timedelta_range(
+                            start="1 day", freq="18h", periods=10, unit="ns"
+                        ),
                         "G": [1, 2, 3, 4, 5] * 2,
                     }
                 ),

@@ -916,7 +916,9 @@ def test_prod_args(memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -926,7 +928,7 @@ def test_prod_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1011,7 +1013,9 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1036,7 +1040,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1340,7 +1344,9 @@ def test_idxmax_args(memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1350,7 +1356,7 @@ def test_idxmax_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1453,7 +1459,9 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1463,7 +1471,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1642,7 +1650,9 @@ def test_cumultative_args(memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [1, 2, 3, 2, 1],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                    "B": pd.Series(
+                        pd.timedelta_range(start="1 day", periods=5, unit="ns")
+                    ),
                 }
             ),
             marks=pytest.mark.slow,

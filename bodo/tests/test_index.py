@@ -298,7 +298,7 @@ def test_distributed_range_index(memory_leak_check):
         pd.date_range(
             start="2018-04-24", end="2018-04-27", periods=3
         ),  # datetime range
-        pd.timedelta_range(start="1D", end="3D"),  # deltatime range
+        pd.timedelta_range(start="1D", end="3D", unit="ns"),  # deltatime range
         pd.date_range(start="2018-04-10", end="2018-04-27", periods=3),
         pd.date_range(
             start="2018-04-10", end="2018-04-27", periods=3
@@ -414,7 +414,7 @@ def test_array_index_box(index, memory_leak_check):
         pd.RangeIndex(10),
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         # TODO: PeriodIndex.values returns object array of Period objects
         # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
@@ -1068,7 +1068,7 @@ def test_index_argsort(index):
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=6),
             pd.Timestamp("2018-04-27"),
         ),
-        (pd.timedelta_range(start="1D", end="3D"), pd.Timedelta("2D")),
+        (pd.timedelta_range(start="1D", end="3D", unit="ns"), pd.Timedelta("2D")),
     ],
 )
 def test_index_get_loc(index, key, memory_leak_check):
@@ -1620,7 +1620,7 @@ def test_range_index_malformed(args):
             month=[1, 2, 3, 1, 2, 3, 4],
             freq="M",
         ),
-        pd.timedelta_range(start="1D", end="15D", name="A"),
+        pd.timedelta_range(start="1D", end="15D", name="A", unit="ns"),
     ],
 )
 def test_index_copy(index, memory_leak_check):
@@ -1975,9 +1975,10 @@ def test_pd_date_range(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pd.timedelta_range(start="1D", end="3D"),
+        pd.timedelta_range(start="1D", end="3D", unit="ns"),
         pytest.param(
-            pd.timedelta_range(start="1D", end="3D", name="A"), marks=pytest.mark.slow
+            pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -2265,7 +2266,7 @@ def test_init_binary_array_bad_numpy_arr(memory_leak_check):
         pytest.param(
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         ),
-        pytest.param(pd.timedelta_range(start="1D", end="6D", name="A")),
+        pytest.param(pd.timedelta_range(start="1D", end="6D", name="A", unit="ns")),
         # Note: only functional for homogenous Index types
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
         pd.CategoricalIndex(["a", "b", "c", "a", "b", "c"]),
@@ -2393,7 +2394,7 @@ def test_index_isin(args, memory_leak_check):
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         ),
         pytest.param(
-            pd.timedelta_range(start="1D", end="3D", name="A"),
+            pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         ),
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
         pd.CategoricalIndex(["a", "b", "c", "a", "b", "c"]),
@@ -2553,10 +2554,11 @@ def test_map(index, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.timedelta_range(start="1D", end="15D", freq="1D"), marks=pytest.mark.slow
+            pd.timedelta_range(start="1D", end="15D", freq="1D", unit="ns"),
+            marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.timedelta_range(start="3D", end="1D", periods=100),
+            pd.timedelta_range(start="3D", end="1D", periods=100, unit="ns"),
             marks=pytest.mark.slow,
         ),
         pytest.param(
@@ -3220,7 +3222,7 @@ def test_index_nunique(idx):
         pd.date_range(
             start="2018-04-24", end="2018-04-27", periods=3
         ),  # datetime range
-        pd.timedelta_range(start="1D", end="3D"),  # deltatime range
+        pd.timedelta_range(start="1D", end="3D", unit="ns"),  # deltatime range
         pytest.param(
             np.array([b"adksg", b"abdsgas", b"asdga", b"lkjhi"]),
             id="binary_case",
@@ -3630,7 +3632,7 @@ def test_index_cmp_ops(op, memory_leak_check):
         pd.Index([10.1, 12.1], dtype="Float64"),
         pd.Index([10, 12], dtype="UInt64"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
         pytest.param(
             pd.Index([b"sdhfa", b"asdf", bytes(5), b"", b"A", b"abjfdsb", b"ABCDF"]),
@@ -3715,8 +3717,8 @@ def test_index_nbytes(index, memory_leak_check):
         pd.Index([b"A", b"B", b"C", b"D", b"E"], name="I9"),
         pd.date_range("2018-01-01", "2018-01-06"),
         pd.date_range("2018-01-01", "2017-01-06", name="I11"),
-        pd.timedelta_range("1D", "7D"),
-        pd.timedelta_range("7D", "1D", name="I13"),
+        pd.timedelta_range("1D", "7D", unit="ns"),
+        pd.timedelta_range("7D", "1D", name="I13", unit="ns"),
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
         pd.CategoricalIndex(list("AAEAAEIOUOIEA"), ordered=True, name="I15"),
         pd.CategoricalIndex([], name="I16"),
@@ -3924,7 +3926,7 @@ def test_timedelta_max_all_na():
         pd.Index([1, 2, 3, 4, 5]),
         pd.Index([-5.0, -6.1, -7.2, 3.8, -6.1], name="f"),
         pd.date_range("2018-01-01", "2018-06-01", freq="ME"),
-        pd.timedelta_range("1D", "7D"),
+        pd.timedelta_range("1D", "7D", unit="ns"),
         pd.Index(["A", "E", "I", "O", "U", "A"]),
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
         pd.CategoricalIndex(list("abcaacab")),

@@ -2372,7 +2372,7 @@ def get_random_int64index(n):
             marks=pytest.mark.slow,
         ),  # DatetimeIndex
         pytest.param(
-            pd.timedelta_range(start="1D", periods=n, name="A").astype(
+            pd.timedelta_range(start="1D", periods=n, name="A", unit="ns").astype(
                 "timedelta64[ns]"
             ),
             marks=pytest.mark.slow,

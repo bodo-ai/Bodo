@@ -663,7 +663,8 @@ def test_df_apply_name_timedelta_index(memory_leak_check):
         return df.apply(lambda x: x.name.value, axis=1)
 
     df = pd.DataFrame(
-        {"A": [1, 2, 3, 4, 1]}, index=pd.timedelta_range(start="1 day", periods=5)
+        {"A": [1, 2, 3, 4, 1]},
+        index=pd.timedelta_range(start="1 day", periods=5, unit="ns"),
     )
 
     check_func(test_impl, (df,))
@@ -1148,7 +1149,9 @@ def test_df_apply_datetime(memory_leak_check):
         return df.apply(lambda r: r.A, axis=1)
 
     # timedelta
-    df = pd.DataFrame({"A": pd.Series(pd.timedelta_range(start="1 day", periods=6))})
+    df = pd.DataFrame(
+        {"A": pd.Series(pd.timedelta_range(start="1 day", periods=6, unit="ns"))}
+    )
     check_func(test_impl, (df,))
 
     # datetime
@@ -1247,7 +1250,7 @@ def test_dataframe_pipe():
         pd.DataFrame(
             {
                 "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=6, unit="ns")),
             }
         ),
         # datetime
@@ -1387,7 +1390,7 @@ def test_concat_nulls(memory_leak_check):
         {
             "B": np.arange(n),
             "C": np.ones(n),
-            "E": pd.timedelta_range(start=3, periods=n),
+            "E": pd.timedelta_range(start=3, periods=n, unit="ns"),
         }
     )
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
@@ -1426,7 +1429,7 @@ def test_concat_tuple(memory_leak_check):
             {
                 "B": np.arange(11),
                 "C": np.ones(11),
-                "E": pd.timedelta_range(start=3, periods=11),
+                "E": pd.timedelta_range(start=3, periods=11, unit="ns"),
             },
         ),
         # variable item size data and index
@@ -2939,7 +2942,9 @@ def test_unsupported_df_method():
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # timedelta
-        pd.DataFrame({"D": pd.Series(pd.timedelta_range(start="1 day", periods=4))}),
+        pd.DataFrame(
+            {"D": pd.Series(pd.timedelta_range(start="1 day", periods=4, unit="ns"))}
+        ),
         # string
         pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", None]}),
         # nullable int

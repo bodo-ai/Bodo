@@ -132,7 +132,7 @@ def numeric_arrays(request):
             id="dt_array",
         ),
         pytest.param(
-            (pd.Series(pd.timedelta_range("1 day", "10 day", 10, None)),),
+            (pd.Series(pd.timedelta_range("1 day", "10 day", 10, None, unit="ns")),),
             id="td_array",
         ),
         pytest.param(

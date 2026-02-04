@@ -773,7 +773,7 @@ def test_np_random_multivariate_normal(memory_leak_check):
         pytest.param(
             pd.Categorical(
                 np.append(
-                    pd.timedelta_range(start="1 day", periods=9),
+                    pd.timedelta_range(start="1 day", periods=9, unit="ns"),
                     [np.timedelta64("NaT")],
                 )
             ),

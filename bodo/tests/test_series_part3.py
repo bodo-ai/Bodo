@@ -898,7 +898,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
             "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
-            "C": pd.timedelta_range("1 second", periods=6),
+            "C": pd.timedelta_range("1 second", periods=6, unit="ns"),
             # String columns don't work properly in Pandas
         }
     )

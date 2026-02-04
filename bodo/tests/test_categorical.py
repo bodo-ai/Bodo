@@ -81,7 +81,7 @@ def test_unbox_dtype(dtype, memory_leak_check):
         pytest.param(
             pd.Categorical(
                 np.append(
-                    pd.timedelta_range(start="1 day", periods=4),
+                    pd.timedelta_range(start="1 day", periods=4, unit="ns"),
                     [np.timedelta64("NaT")],
                 )
             ),

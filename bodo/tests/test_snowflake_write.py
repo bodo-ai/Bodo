@@ -950,7 +950,9 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             # Date
             "DATE_COL": pd.date_range("2001-01-01", periods=df_len).date,
             # timedelta
-            "TIMEDELTA_COL": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
+            "TIMEDELTA_COL": pd.Series(
+                pd.timedelta_range(start="1 day", periods=7, unit="ns")
+            ),
             # string
             "STRING_COL": list_string,
         }

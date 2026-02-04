@@ -1615,7 +1615,7 @@ def groupby_agg_df(request):
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
-            "T": pd.timedelta_range("1 day", periods=12, freq="D"),
+            "T": pd.timedelta_range("1 day", periods=12, freq="D", unit="ns"),
         }
     )
 
@@ -1746,7 +1746,9 @@ def test_groupby_agg_ordered(func):
                 "F": pd.date_range("1988-01-01", periods=12, freq="D")
                 .to_series()
                 .dt.date,  # date32
-                "T": pd.timedelta_range("1 day", periods=12, freq="D"),  # duration
+                "T": pd.timedelta_range(
+                    "1 day", periods=12, freq="D", unit="ns"
+                ),  # duration
                 "K": ["A", "A", "B"] * 4,
             }
         )
@@ -2413,7 +2415,9 @@ def test_series_min_max():
 
 def test_series_min_max_unsupported_types():
     with assert_executed_plan_count(2):
-        df = pd.DataFrame({"A": pd.timedelta_range("1 day", periods=10, freq="D")})
+        df = pd.DataFrame(
+            {"A": pd.timedelta_range("1 day", periods=10, freq="D", unit="ns")}
+        )
         bdf = bd.from_pandas(df)
 
         with pytest.warns(BodoLibFallbackWarning):
@@ -2914,7 +2918,9 @@ def test_set_df_column_non_arith_binops():
             {
                 "A": ["a", "b", "c", "d"],
                 "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
-                "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
+                "C": pd.timedelta_range(
+                    "1 day", periods=4, unit="ns"
+                ),  # timedelta64[ns]
             }
         )
 
