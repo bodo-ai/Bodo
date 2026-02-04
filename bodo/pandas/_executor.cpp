@@ -287,9 +287,9 @@ struct Calibration {
     bool valid = false;
 };
 
-static Calibration g_calib;
-
 #ifdef USE_CUDF
+
+static Calibration g_calib;
 
 static std::string get_calib_path() {
     std::string ret = get_cache_dir() + "/.bodo_gpu_calibration.txt";
