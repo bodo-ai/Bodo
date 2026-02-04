@@ -123,33 +123,27 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            std::cout << "send SIZES INFLIGHT" << std::endl;
             this->progress_sending_sizes();
             break;
         }
         case GpuShuffleState::DATA_INFLIGHT: {
-            std::cout << "send DATA INFLIGHT" << std::endl;
             this->progress_sending_data();
             break;
         }
         case GpuShuffleState::COMPLETED: {
-            std::cout << "send COMPLETED" << std::endl;
             break;
         }
     }
 
     switch (this->recv_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
-            std::cout << "recv SIZES INFLIGHT" << std::endl;
             this->progress_waiting_for_sizes();
             return std::nullopt;
         } break;
         case GpuShuffleState::DATA_INFLIGHT: {
-            std::cout << "recv DATA INFLIGHT" << std::endl;
             return this->progress_waiting_for_data();
         } break;
         case GpuShuffleState::COMPLETED: {
-            std::cout << "recv COMPLETED" << std::endl;
             return std::nullopt;
         } break;
     }
@@ -287,7 +281,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
         CHECK_NCCL(ncclGroupStart());
-        std::cout << "Posting NCCL receives" << std::endl;
         // 1. Post ALL Receives first
         for (int i = 0; i < n_ranks; ++i) {
             if (packed_recv_buffers[i]->size() > 0) {
@@ -298,7 +291,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
                           << packed_recv_buffers[i]->size() << std::endl;
             }
         }
-        std::cout << "Posting NCCL sends" << std::endl;
         // 2. Post ALL Sends next
         for (int i = 0; i < n_ranks; ++i) {
             if (packed_send_buffers[i]->size() > 0) {
@@ -310,13 +302,9 @@ void GpuShuffle::progress_waiting_for_sizes() {
             }
         }
 
-        std::cout << "NCCL sends/receives posted" << std::endl;
         CHECK_NCCL(ncclGroupEnd());
-        std::cout << "NCCL group ended" << std::endl;
         CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
-        std::cout << "NCCL recv event recorded" << std::endl;
         CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
-        std::cout << "NCCL send event recorded" << std::endl;
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
