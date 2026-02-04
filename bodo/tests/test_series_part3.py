@@ -1204,7 +1204,17 @@ def test_series_rank(S, method, na_option, ascending, pct, memory_leak_check):
         ):
             bodo.jit(impl)(S)
     else:
-        check_func(impl, (S,), dist_test=False)
+        py_out = S.rank(
+            method=method, na_option=na_option, ascending=ascending, pct=pct
+        )
+        py_output = py_out.astype(np.float64)
+        check_func(
+            impl,
+            (S,),
+            dist_test=False,
+            py_output=py_output,
+            convert_to_nullable_float=False,
+        )
 
 
 @pytest.mark.slow()
