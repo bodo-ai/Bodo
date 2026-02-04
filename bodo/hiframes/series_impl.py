@@ -5685,6 +5685,8 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         or isinstance(choicelist_array_typ, BooleanArrayType)
         or isinstance(choicelist_array_typ, IntegerArrayType)
         or isinstance(choicelist_array_typ, FloatingArrayType)
+        or isinstance(choicelist_array_typ, bodo.types.DatetimeArrayType)
+        or choicelist_array_typ == bodo.types.timedelta_array_type
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
             and (
