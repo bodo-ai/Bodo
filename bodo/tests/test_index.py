@@ -417,7 +417,7 @@ def test_array_index_box(index, memory_leak_check):
         pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         # TODO: PeriodIndex.values returns object array of Period objects
-        # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        # pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
     ],
 )
@@ -1600,7 +1600,7 @@ def test_range_index_malformed(args):
 
 
 # Need to add the code and the check for the PeriodIndex
-# pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+# pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
 @pytest.mark.parametrize(
     "index",
     [
@@ -2151,7 +2151,7 @@ def test_period_index_box(period_index, memory_leak_check):
 
 
 def test_periodindex_constant_lowering(memory_leak_check):
-    pi = pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3])
+    pi = pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], quarter=[1, 2, 3])
 
     def impl():
         return pi
@@ -3301,12 +3301,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_fillna)(idx=pd.Index(data))
 
-    def test_format(idx):
-        return idx.format()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_format)(idx=pd.Index(data))
-
     def test_get_indexer(idx):
         return idx.get_indexer()
 
@@ -3372,12 +3366,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_is_)(idx=pd.Index(data))
-
-    def test_is_mixed(idx):
-        return idx.is_mixed()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_is_mixed)(idx=pd.Index(data))
 
     def test_is_type_compatible(idx):
         return idx.is_type_compatible()

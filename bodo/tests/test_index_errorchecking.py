@@ -240,7 +240,9 @@ def test_period_idx_unsupported_methods():
     for unsupported_method in period_index_unsupported_methods:
         check_unsupported_method(
             "pandas.PeriodIndex.{}",
-            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            pd.PeriodIndex.from_fields(
+                year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+            ),
             unsupported_method,
         )
 
@@ -341,7 +343,9 @@ def test_period_idx_unsupported_atrs():
     for unsupported_atr in period_index_unsupported_atrs:
         check_unsupported_atr(
             "pandas.PeriodIndex.{}",
-            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            pd.PeriodIndex.from_fields(
+                year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+            ),
             unsupported_atr,
         )
 
