@@ -19,13 +19,13 @@
 #include "cuda_runtime_api.h"
 
 GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
-    // There's probably a more robust way to handle this
-
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
+
+    // There's probably a more robust way to handle this
     CHECK_CUDA(cudaSetDevice(this->gpu_id.value()));
 
     // Get rank and size
@@ -269,23 +269,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
         CHECK_NCCL(ncclGroupStart());
-        // 1. Post ALL Receives first
-        for (int i = 0; i < n_ranks; ++i) {
-            if (packed_recv_buffers[i]->size() > 0) {
-                CHECK_NCCL(ncclRecv(packed_recv_buffers[i]->data(),
-                                    packed_recv_buffers[i]->size(), ncclChar, i,
-                                    nccl_comm, stream));
-            }
-        }
-        // 2. Post ALL Sends next
-        for (int i = 0; i < n_ranks; ++i) {
-            if (packed_send_buffers[i]->size() > 0) {
-                CHECK_NCCL(ncclSend(packed_send_buffers[i]->data(),
-                                    packed_send_buffers[i]->size(), ncclChar, i,
-                                    nccl_comm, stream));
-            }
-        }
-
+        this->recv_data();
+        this->send_data();
         CHECK_NCCL(ncclGroupEnd());
         CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
         CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
