@@ -161,7 +161,8 @@ static bodo::tests::suite tests([] {
         // 3. Check conservation of data: Total rows in system must equal total
         // rows out Input was rows_per_rank * number of devices
         int expected_total_rows =
-            rows_per_device * get_cluster_cuda_device_count();
+            rows_per_device *
+            std::min(get_cluster_cuda_device_count(), n_ranks);
 
         bodo::tests::check(global_received_rows == expected_total_rows);
 
