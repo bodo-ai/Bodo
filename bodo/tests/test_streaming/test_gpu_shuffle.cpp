@@ -37,10 +37,7 @@ static bodo::tests::suite tests([] {
         rmm::cuda_device_id device_id = get_gpu_id();
 
         try {
-            std::cout << "Testing GpuShuffleManager init on device ID: "
-                      << device_id.value() << std::endl;
             GpuShuffleManager manager;
-            std::cout << "Created GpuShuffleManager successfully." << std::endl;
 
             if (device_id.value() < 0) {
                 // If no GPU assigned, NCCL comm should be null
@@ -121,12 +118,9 @@ static bodo::tests::suite tests([] {
         std::shared_ptr<cudf::table> input_ptr = std::move(table);
 
         GpuShuffleManager manager;
-        std::cout << "Rank " << rank << " manager created." << std::endl;
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
-
-        std::cout << "Rank " << rank << " posted shuffle." << std::endl;
 
         bodo::tests::check(manager.inflight_exists() ==
                            (device_id.value() >= 0));
@@ -194,7 +188,6 @@ static bodo::tests::suite tests([] {
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
-        std::cout << "Posted shuffle" << std::endl;
 
         // Verify inflight status matches GPU presence
         bodo::tests::check(manager.inflight_exists() ==
@@ -217,7 +210,6 @@ static bodo::tests::suite tests([] {
                 done = true;
             }
         }
-        std::cout << "Completed shuffle" << std::endl;
 
         // Verification
         // 1. Calculate total rows received on this rank

@@ -160,9 +160,6 @@ void GpuShuffle::send_sizes() {
                             MPI_UINT64_T, dest_rank, this->start_tag, mpi_comm,
                             &(*this->metadata_sizes_send_reqs)[dest_rank]),
                   "GpuShuffle::send_sizes: MPI_Isend failed:");
-        std::cout << "Sending metadata size: "
-                  << (*this->send_metadata_sizes)[dest_rank] << " to rank "
-                  << dest_rank << std::endl;
     }
     // Send GPU data sizes
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
@@ -173,9 +170,6 @@ void GpuShuffle::send_sizes() {
                             MPI_UINT64_T, dest_rank, this->start_tag + 1,
                             mpi_comm, &(*this->gpu_sizes_send_reqs)[dest_rank]),
                   "GpuShuffle::send_sizes: MPI_Isend failed:");
-        std::cout << "Sending GPU data size: "
-                  << (*this->send_gpu_sizes)[dest_rank] << " to rank "
-                  << dest_rank << std::endl;
     }
 }
 void GpuShuffle::recv_sizes() {
@@ -259,18 +253,12 @@ void GpuShuffle::progress_waiting_for_sizes() {
             this->packed_recv_buffers[src_rank] =
                 std::make_unique<rmm::device_buffer>(
                     (*this->recv_gpu_sizes)[src_rank], stream);
-            std::cout << "Allocated GPU recv buffer from rank " << src_rank
-                      << " of size " << (*this->recv_gpu_sizes)[src_rank]
-                      << std::endl;
         }
         for (size_t src_rank = 0; src_rank < metadata_recv_buffers.size();
              src_rank++) {
             this->metadata_recv_buffers[src_rank] =
                 std::make_unique<std::vector<uint8_t>>(
                     (*this->recv_metadata_sizes)[src_rank]);
-            std::cout << "Allocated metadata recv buffer from rank " << src_rank
-                      << " of size " << (*this->recv_metadata_sizes)[src_rank]
-                      << std::endl;
         }
         // Deallocate size data
         this->recv_metadata_sizes->clear();
@@ -287,8 +275,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
                 CHECK_NCCL(ncclRecv(packed_recv_buffers[i]->data(),
                                     packed_recv_buffers[i]->size(), ncclChar, i,
                                     nccl_comm, stream));
-                std::cout << "Posted NCCL recv from rank " << i << " of size "
-                          << packed_recv_buffers[i]->size() << std::endl;
             }
         }
         // 2. Post ALL Sends next
@@ -297,8 +283,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
                 CHECK_NCCL(ncclSend(packed_send_buffers[i]->data(),
                                     packed_send_buffers[i]->size(), ncclChar, i,
                                     nccl_comm, stream));
-                std::cout << "Posted NCCL send to rank " << i << "of size "
-                          << packed_send_buffers[i]->size() << std::endl;
             }
         }
 
