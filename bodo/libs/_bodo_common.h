@@ -1770,8 +1770,7 @@ struct mpi_comm_info {
         const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
         const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
         const uint8_t* keep_row_bitmask = nullptr,
-        bool keep_filter_misses = false, bool send_only = false,
-        const std::vector<int>& dest_ranks = {});
+        bool keep_filter_misses = false, bool send_only = false);
 
     /**
      * @brief Construct mpi_comm_info for inner array of array item array.

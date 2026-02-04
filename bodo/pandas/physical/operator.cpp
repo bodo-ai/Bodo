@@ -217,6 +217,64 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 }
 #endif
 
+/** State for sending data from Source ranks to Destination ranks
+ */
+class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
+   public:
+    using dict_hashes_t = bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>;
+
+    SrcDestIncrementalShuffleState(
+        std::shared_ptr<bodo::Schema> schema_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>> &dict_builders_,
+        const std::vector<int> &src_ranks_, const std::vector<int> &dest_ranks_,
+        const uint64_t &curr_iter_, int64_t &sync_freq_, int64_t parent_op_id_)
+        : IncrementalShuffleState(std::move(schema_), dict_builders_,
+                                  static_cast<uint64_t>(0), curr_iter_,
+                                  sync_freq_, parent_op_id_),
+          src_ranks(src_ranks_),
+          dest_ranks(dest_ranks_) {}
+
+    std::tuple<std::shared_ptr<table_info>, std::shared_ptr<dict_hashes_t>,
+               std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
+    GetShuffleTableAndHashes() override {
+        std::shared_ptr<table_info> shuffle_table =
+            this->table_buffer->data_table;
+        auto dict_hashes = std::make_shared<dict_hashes_t>();
+
+        int rank;
+        MPI_Comm_rank(this->shuffle_comm, &rank);
+        std::shared_ptr<uint32_t[]> shuffle_hashes = nullptr;
+
+        if (src_ranks.size() >= dest_ranks.size()) {
+            uint32_t dest_rank =
+                dest_ranks[(rank * dest_ranks.size()) / src_ranks.size()];
+            shuffle_hashes =
+                std::make_shared<uint32_t[]>(shuffle_table->nrows(), dest_rank);
+        } else {
+            shuffle_hashes =
+                std::make_shared<uint32_t[]>(shuffle_table->nrows());
+            int dests_per_rank = dest_ranks.size() / src_ranks.size();
+            int rem = dest_ranks.size() % src_ranks.size();
+            int start_idx = rank * dests_per_rank + std::min(rank, rem);
+            int local_n_dest = dests_per_rank + (rank < rem ? 1 : 0);
+
+            for (size_t i = 0; i < shuffle_table->nrows(); i++) {
+                uint32_t dest_rank =
+                    dest_ranks[start_idx +
+                               ((i * local_n_dest) / shuffle_table->nrows())];
+                shuffle_hashes[i] = dest_rank;
+            }
+        }
+
+        return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
+                               std::unique_ptr<uint8_t[]>(nullptr));
+    }
+
+   private:
+    const std::vector<int> src_ranks;
+    const std::vector<int> dest_ranks;
+};
+
 RankDataExchange::RankDataExchange(int64_t op_id_)
     : op_id(op_id_), is_last_state(std::make_shared<IsLastState>()) {
     // TODO: Get GPU Ranks to send to.
@@ -281,7 +339,6 @@ void RankDataExchange::Initialize(table_info *input_batch) {
         input_batch->schema(), dict_builders, get_streaming_batch_size());
 
     InitializeShuffleState(input_batch, dict_builders);
-    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 
 RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
@@ -289,23 +346,33 @@ RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
 void CPUtoGPUExchange::InitializeShuffleState(
     table_info *input_batch,
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
-    uint64_t n_keys = 1;
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
 
-    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
-        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
-        this->op_id, gpu_ranks);
+    int n_pes;
+    MPI_Comm_size(this->shuffle_comm, &n_pes);
+    std::vector<int> cpu_ranks(n_pes);
+    std::iota(cpu_ranks.begin(), cpu_ranks.end(), 0);
+
+    this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
+        input_batch->schema(), dict_builders, cpu_ranks, gpu_ranks, curr_iter,
+        sync_freq, this->op_id);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 
 void GPUtoCPUExchange::InitializeShuffleState(
     table_info *input_batch,
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
-    uint64_t n_keys = 1;
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
 
-    this->shuffle_state = std::make_unique<IncrementalShuffleState>(
-        input_batch->schema(), dict_builders, n_keys, curr_iter, sync_freq,
-        this->op_id);
+    int n_pes;
+    MPI_Comm_size(this->shuffle_comm, &n_pes);
+    std::vector<int> cpu_ranks(n_pes);
+    std::iota(cpu_ranks.begin(), cpu_ranks.end(), 0);
+
+    this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
+        input_batch->schema(), dict_builders, gpu_ranks, cpu_ranks, curr_iter,
+        sync_freq, this->op_id);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }

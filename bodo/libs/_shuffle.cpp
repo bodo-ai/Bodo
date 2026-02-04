@@ -166,8 +166,7 @@ mpi_comm_info::mpi_comm_info(
     const std::vector<std::shared_ptr<array_info>>& arrays,
     const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
     const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const uint8_t* keep_row_bitmask, bool keep_filter_misses, bool send_only,
-    const std::vector<int>& dest_ranks)
+    const uint8_t* keep_row_bitmask, bool keep_filter_misses, bool send_only)
     : has_nulls(false), row_dest(arrays[0]->length, -1) {
     tracing::Event ev("mpi_comm_info", is_parallel);
     const uint64_t& n_rows = arrays[0]->length;
@@ -196,22 +195,10 @@ mpi_comm_info::mpi_comm_info(
     send_disp.resize(n_pes);
     recv_disp.resize(n_pes);
 
-    // Shuffle to specific ranks only
-    if (!dest_ranks.empty()) {
-        for (size_t i = 0; i < n_rows; i++) {
-            int node = dest_ranks[hash_to_rank(hashes[i], dest_ranks.size())];
-            row_dest[i] = node;
-            send_count[node]++;
-        }
+    if (keep_filter_misses) {
+        this->set_send_count<true>(hashes, filter, keep_row_bitmask, n_rows);
     } else {
-        // General Shuffle to all ranks
-        if (keep_filter_misses) {
-            this->set_send_count<true>(hashes, filter, keep_row_bitmask,
-                                       n_rows);
-        } else {
-            this->set_send_count<false>(hashes, filter, keep_row_bitmask,
-                                        n_rows);
-        }
+        this->set_send_count<false>(hashes, filter, keep_row_bitmask, n_rows);
     }
 
     // Rows can get filtered if either a bloom-filter or a null filter is

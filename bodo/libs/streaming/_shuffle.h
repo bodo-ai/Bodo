@@ -777,10 +777,6 @@ class IncrementalShuffleState {
 
     MPI_Comm shuffle_comm;
 
-    /// @brief Ranks receiving data from this rank during shuffle.
-    /// If empty, all ranks are assumed.
-    const std::vector<int> dest_ranks;
-
     /**
      * @brief Constructor for new IncrementalShuffleState
      *
@@ -799,7 +795,7 @@ class IncrementalShuffleState {
         std::shared_ptr<bodo::Schema> schema_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-        int64_t parent_op_id_, const std::vector<int>& dest_ranks_ = {});
+        int64_t parent_op_id_);
     /**
      * @brief Constructor for new IncrementalShuffleState
      *
@@ -1044,8 +1040,7 @@ AsyncShuffleSendState shuffle_issend(
     std::shared_ptr<table_info> in_table,
     const std::shared_ptr<uint32_t[]>& hashes, const uint8_t* keep_row_bitmask,
     MPI_Comm shuffle_comm,
-    int starting_msg_tag = (SHUFFLE_METADATA_MSG_TAG + 1),
-    std::vector<int> dest_ranks = {});
+    int starting_msg_tag = (SHUFFLE_METADATA_MSG_TAG + 1));
 
 /**
  * @brief Checks for incoming shuffle messages using MPI probe and fills recieve
