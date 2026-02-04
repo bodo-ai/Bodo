@@ -43,8 +43,9 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
-#ifdef USE_CUDF
 extern bool g_use_async;
+
+#ifdef USE_CUDF
 
 struct cuda_event_wrapper {
     cudaEvent_t ev;
