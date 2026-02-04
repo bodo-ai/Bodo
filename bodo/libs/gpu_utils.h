@@ -1,6 +1,6 @@
 #pragma once
 
-// #ifdef USE_CUDF
+#ifdef USE_CUDF
 #include <mpi.h>
 #include <nccl.h>
 #include <cudf/contiguous_split.hpp>
@@ -130,6 +130,7 @@ struct GpuShuffle {
         this->send_metadata();
     }
 
+    // Enable move constructors
     GpuShuffle(GpuShuffle&&) = default;
     GpuShuffle& operator=(GpuShuffle&&) = default;
 
@@ -139,6 +140,10 @@ struct GpuShuffle {
 
     ~GpuShuffle() { cudaEventDestroy(nccl_send_event); }
 
+    /*
+     * @brief Progress the shuffle operation
+     * @return Optional unique_ptr to cudf::table if shuffle is complete
+     */
     std::optional<std::unique_ptr<cudf::table>> progress();
 
    private:
@@ -182,6 +187,8 @@ class GpuShuffleManager {
 
     std::vector<GpuShuffle> inflight_shuffles;
 
+    // Tag counter for shuffles, each shuffle uses 3 tags
+    // and they can't overlap
     int curr_tag = 0;
 
     /**
@@ -266,11 +273,11 @@ int get_cluster_cuda_device_count();
  */
 MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 
-// #else
-//// Empty implementation when CUDF is not available
-// class GpuShuffleManager {
-// public:
-//     explicit GpuShuffleManager(MPI_Comm mpi_comm_) {}
-//     bool is_available() const { return false; }
-// };
-// #endif
+#else
+// Empty implementation when CUDF is not available
+class GpuShuffleManager {
+   public:
+    explicit GpuShuffleManager(MPI_Comm mpi_comm_) {}
+    bool is_available() const { return false; }
+};
+#endif

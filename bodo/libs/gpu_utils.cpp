@@ -1,6 +1,6 @@
 #include "gpu_utils.h"
 
-// #ifdef USE_CUDF
+#ifdef USE_CUDF
 #include <thrust/execution_policy.h>
 #include <thrust/transform.h>
 #include <cassert>
@@ -445,4 +445,4 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
     return gpu_comm;
 }
 
-// #endif // USE_CUDF
+#endif  // USE_CUDF
