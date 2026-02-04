@@ -2760,12 +2760,6 @@ def test_series_apply_args(memory_leak_check):
     """Test Series.apply with unsupported and wrong arguments"""
     from bodo.utils.typing import BodoError
 
-    def test_convert_dtype_false(S):
-        return S.apply(lambda a: a, convert_dtype=False)
-
-    def test_convert_dtype_true(S):
-        return S.apply(lambda a: a, convert_dtype=True)
-
     def test_wrong_func(S):
         return S.apply("XX")
 
@@ -2773,12 +2767,6 @@ def test_series_apply_args(memory_leak_check):
         return S.apply(lambda x: x, axis=1)
 
     S = pd.Series([2, 1, 3])
-    with pytest.raises(
-        BodoError, match="Series.apply.* only supports default value True"
-    ):
-        bodo.jit(test_convert_dtype_false)(S)
-
-    bodo.jit(test_convert_dtype_true)(S)
 
     with pytest.raises(
         BodoError, match="Series.apply.*: user-defined function not supported"
