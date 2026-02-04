@@ -814,7 +814,7 @@ def test_empty_series_first_last():
 
 def _convert_helper(df, typ):
     # NOTE: first value in each column must not be NA
-    res = df.fillna(method="ffill").apply(lambda r: r.astype(typ), axis=1)
+    res = df.ffill().apply(lambda r: r.astype(typ), axis=1)
     res[pd.isna(df)] = np.nan
     res.replace(np.nan, pd.NA)
     return res

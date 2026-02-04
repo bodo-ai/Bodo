@@ -1728,24 +1728,6 @@ def fillna_series(request):
 
 
 @pytest.mark.parametrize(
-    "method",
-    [
-        "bfill",
-        pytest.param("backfill", marks=pytest.mark.slow),
-        "ffill",
-        pytest.param("pad", marks=pytest.mark.slow),
-    ],
-)
-def test_series_fillna_method(fillna_series, method, memory_leak_check):
-    def test_impl(S, method):
-        return S.fillna(method=method)
-
-    # Set check_dtype=False because Bodo's unboxing type does not match
-    # dtype="string"
-    check_func(test_impl, (fillna_series, method), check_dtype=False)
-
-
-@pytest.mark.parametrize(
     "name,test_impl",
     [
         ("bfill", lambda S: S.bfill()),

@@ -1625,24 +1625,6 @@ def fillna_dataframe(request):
     return request.param
 
 
-@pytest.mark.parametrize(
-    "method",
-    [
-        "bfill",
-        pytest.param("backfill", marks=pytest.mark.slow),
-        "ffill",
-        pytest.param("pad", marks=pytest.mark.slow),
-    ],
-)
-def test_dataframe_fillna_method(fillna_dataframe, method, memory_leak_check):
-    def test_impl(df, method):
-        return df.fillna(method=method)
-
-    # Set check_dtype=False because Bodo's unboxing type does not match
-    # dtype="string"
-    check_func(test_impl, (fillna_dataframe, method), check_dtype=False)
-
-
 @pytest.mark.slow
 def test_df_replace_df_value(df_value):
     from bodo.utils.typing import BodoError
