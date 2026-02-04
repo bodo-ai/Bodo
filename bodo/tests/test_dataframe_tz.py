@@ -41,12 +41,13 @@ def test_pd_concat_df(memory_leak_check):
             freq="16D5h",
             periods=30,
             tz="Poland",
+            unit="ns",
         )
         .to_series()
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC", unit="ns")
         .to_series()
         .reset_index(drop=True)
     )
@@ -137,17 +138,18 @@ def test_pd_concat_dataframe_error(memory_leak_check):
             freq="16D5h",
             periods=30,
             tz="Poland",
+            unit="ns",
         )
         .to_series()
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC", unit="ns")
         .to_series()
         .reset_index(drop=True)
     )
     S3 = (
-        pd.date_range(start="1/1/2022", freq="16D5h", periods=30)
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, unit="ns")
         .to_series()
         .reset_index(drop=True)
     )
@@ -199,6 +201,7 @@ def test_tz_aware_unsupported(memory_leak_check):
                 freq="16D5h",
                 periods=30,
                 tz="Poland",
+                unit="ns",
             ).to_series(),
             np.datetime64("2023-01-01"),
         )

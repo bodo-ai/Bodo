@@ -490,7 +490,9 @@ def test_pivot_invalid_types(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "B": list(range(10)) * 100,
-                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=1000)),
+                "C": pd.Series(
+                    pd.date_range("1/1/2022", freq="h", periods=1000, unit="ns")
+                ),
             }
         ),
         # Nullable Integer Values
@@ -583,7 +585,9 @@ def test_pivot_basic(df, memory_leak_check):
             {
                 "A": np.arange(1000),
                 "B": np.arange(1000),
-                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=1000)),
+                "C": pd.Series(
+                    pd.date_range("1/1/2022", freq="h", periods=1000, unit="ns")
+                ),
             }
         ),
         # Nullable Integer Values
@@ -665,7 +669,9 @@ def test_pivot_empty(df, memory_leak_check):
             {
                 "A": list(range(3)) * 5,
                 "B": list(range(5)) * 3,
-                "C": pd.Series(pd.date_range("1/1/2022", freq="h", periods=15)),
+                "C": pd.Series(
+                    pd.date_range("1/1/2022", freq="h", periods=15, unit="ns")
+                ),
             }
         ),
         # Nullable Integer Values

@@ -277,7 +277,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     params=[
         pd.DataFrame(
             {
-                "A": pd.date_range(start="2018-04-24", periods=12),
+                "A": pd.date_range(start="2018-04-24", periods=12, unit="ns"),
                 "B": [
                     "¡Y tú quién te crees?",
                     "🐍⚡",

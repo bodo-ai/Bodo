@@ -104,7 +104,9 @@ def test_series_map_none_timestamp(memory_leak_check):
             lambda a: a + datetime.timedelta(days=1) if a.year < 2019 else None
         )
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    S = pd.Series(
+        pd.date_range(start="2018-04-24", end="2019-04-29", periods=5, unit="ns")
+    )
     check_func(impl, (S,))
 
 
@@ -124,7 +126,9 @@ def test_series_map_isna_check(memory_leak_check):
             lambda a: pd.Timedelta(days=3) if pd.isna(a) else a + pd.Timedelta(days=1)
         )
 
-    S = pd.date_range(start="2018-04-24", end="2019-04-29", periods=5).to_series()
+    S = pd.date_range(
+        start="2018-04-24", end="2019-04-29", periods=5, unit="ns"
+    ).to_series()
     S.iloc[2:4] = None
     check_func(impl1, (S,))
     S = pd.timedelta_range(start="1 day", end="2 days", periods=5).to_series()
@@ -395,7 +399,9 @@ def test_series_map_date(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: a.date())
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    S = pd.Series(
+        pd.date_range(start="2018-04-24", end="2019-04-29", periods=5, unit="ns")
+    )
     check_func(test_impl, (S,))
 
 
@@ -408,7 +414,9 @@ def test_series_map_full_pipeline(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: datetime.date.today())
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    S = pd.Series(
+        pd.date_range(start="2018-04-24", end="2019-04-29", periods=5, unit="ns")
+    )
     check_func(test_impl, (S,))
 
 
@@ -421,7 +429,9 @@ def test_series_map_timestamp(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: a + datetime.timedelta(days=1))
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    S = pd.Series(
+        pd.date_range(start="2018-04-24", end="2019-04-29", periods=5, unit="ns")
+    )
     check_func(test_impl, (S,))
 
 
@@ -457,7 +467,7 @@ def test_series_map_dt_str(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: str(a.year))
 
-    S = pd.date_range(start="2018-04-24", periods=11).to_series()
+    S = pd.date_range(start="2018-04-24", periods=11, unit="ns").to_series()
     check_func(test_impl, (S,))
 
 
@@ -1140,10 +1150,10 @@ def test_series_equals(memory_leak_check):
     S1 = pd.Series([0] + list(range(20)))
     S2 = pd.Series([1] + list(range(20)))
     S3 = pd.date_range(
-        start="1/1/2018", end="1/08/2018", tz="America/Los_Angeles"
+        start="1/1/2018", end="1/08/2018", tz="America/Los_Angeles", unit="ns"
     ).to_series()
     S4 = pd.date_range(
-        start="1/1/2018", end="1/08/2018", tz="America/New_York"
+        start="1/1/2018", end="1/08/2018", tz="America/New_York", unit="ns"
     ).to_series()
     check_func(f, (S1, S1))
     check_func(f, (S1, S2))
@@ -1522,7 +1532,7 @@ def test_series_quantile_q(memory_leak_check):
     check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # dt64
-    S = pd.Series(pd.date_range("2030-01-1", periods=11))
+    S = pd.Series(pd.date_range("2030-01-1", periods=11, unit="ns"))
     check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # int
@@ -3123,7 +3133,7 @@ def test_series_std(memory_leak_check):
 
 def test_series_std_dt64(memory_leak_check):
     def f():
-        S = pd.Series(pd.date_range("2017-01-03", periods=11))
+        S = pd.Series(pd.date_range("2017-01-03", periods=11, unit="ns"))
         return S.std()
 
     # Bodo differs in micro/nano seconds accuracy from Pandas
@@ -3308,7 +3318,7 @@ def test_datetime_series_mean(memory_leak_check):
     """
     Test Series.mean() with a datetime Series.
     """
-    S = pd.Series(pd.date_range("2030-01-1", periods=11))
+    S = pd.Series(pd.date_range("2030-01-1", periods=11, unit="ns"))
 
     def impl_mean(S):
         return S.mean()

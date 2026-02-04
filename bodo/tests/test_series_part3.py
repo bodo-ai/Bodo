@@ -771,7 +771,7 @@ def test_series_first_last(offset):
         return S.last(offset)
 
     n = 30
-    i = pd.date_range("2018-04-09", periods=n, freq="2D")
+    i = pd.date_range("2018-04-09", periods=n, freq="2D", unit="ns")
     ts = pd.Series(np.arange(n), index=i)
 
     # Pandas functionality is ostensibly incorrect, see:
@@ -804,7 +804,7 @@ def test_empty_series_first_last():
 
     n = 10
     ts = pd.Series(
-        np.arange(n), index=pd.date_range("2018-04-09", periods=n, freq="1D")
+        np.arange(n), index=pd.date_range("2018-04-09", periods=n, freq="1D", unit="ns")
     )
     empty_ts = ts[ts > n]
 
@@ -890,7 +890,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
             "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
-            "C": pd.date_range("01-01-2022", periods=6),
+            "C": pd.date_range("01-01-2022", periods=6, unit="ns"),
             "D": ["01-01-2021", "01-02-2021", "01-03-2022"] * 2,
         }
     )
@@ -1052,7 +1052,7 @@ def test_series_duplicated(S_val, memory_leak_check):
     [
         pd.Index(list(ascii_lowercase[:15])),
         pd.Index(np.arange(100, 115)),
-        pd.date_range("01-01-2022", periods=15, freq="D"),
+        pd.date_range("01-01-2022", periods=15, freq="D", unit="ns"),
     ],
 )
 def test_series_first_last_valid_index(arr, idx):
@@ -1133,7 +1133,7 @@ def test_unique(memory_leak_check):
     "S",
     [
         pd.Series(np.arange(100)),
-        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30)),
+        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30, unit="ns")),
     ],
 )
 def test_dist_iat(S, memory_leak_check):

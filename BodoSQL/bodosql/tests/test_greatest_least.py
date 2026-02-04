@@ -301,13 +301,17 @@ def test_greatest_tz_aware_columns(
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="3/1/2022", freq="4h", periods=30, tz=representative_tz
+                start="3/1/2022", freq="4h", periods=30, tz=representative_tz, unit="ns"
             ),
             "B": pd.date_range(
-                start="2/18/2022", freq="1D5h", periods=30, tz=representative_tz
+                start="2/18/2022",
+                freq="1D5h",
+                periods=30,
+                tz=representative_tz,
+                unit="ns",
             ),
             "C": pd.date_range(
-                start="1/1/2022", freq="5D", periods=30, tz=representative_tz
+                start="1/1/2022", freq="5D", periods=30, tz=representative_tz, unit="ns"
             ),
         }
     )

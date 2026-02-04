@@ -563,10 +563,15 @@ def test_nvl2(args, memory_leak_check):
         pytest.param(
             (
                 pd.Series(
-                    (list(pd.date_range("2018", "2019", periods=3).date) + [None]) * 4
+                    (
+                        list(pd.date_range("2018", "2019", periods=3, unit="ns").date)
+                        + [None]
+                    )
+                    * 4
                 ),
                 pd.Series(
-                    list(pd.date_range("2018", "2019", periods=3).date) + [None]
+                    list(pd.date_range("2018", "2019", periods=3, unit="ns").date)
+                    + [None]
                 ).repeat(4),
             ),
             False,

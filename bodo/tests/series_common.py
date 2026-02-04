@@ -104,12 +104,16 @@ series_val_params = [
     ),
     pytest.param(
         pd.Series(
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns")
         ).astype("datetime64[ns]"),
         id="timestamp",
     ),
     pytest.param(
-        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
+        pd.Series(
+            pd.date_range(
+                start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+            ).date
+        ),
         id="date",
     ),
     pytest.param(
@@ -127,9 +131,9 @@ series_val_params = [
     pytest.param(
         pd.Series(
             [3, 5, 1, -1, 2],
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
-                "datetime64[ns]"
-            ),
+            pd.date_range(
+                start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+            ).astype("datetime64[ns]"),
         ),
         marks=pytest.mark.slow,
         id="integer_with_timestamp_index",
@@ -173,7 +177,11 @@ series_val_params = [
     pytest.param(
         pd.concat(
             [
-                pd.Series(pd.date_range(start="1/1/2018", end="1/10/2018", periods=9)),
+                pd.Series(
+                    pd.date_range(
+                        start="1/1/2018", end="1/10/2018", periods=9, unit="ns"
+                    )
+                ),
                 pd.Series([None]),
             ]
         )
@@ -228,9 +236,9 @@ def series_val(request):
             marks=pytest.mark.slow,
         ),
         pd.Series(
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
-                "datetime64[ns]"
-            )
+            pd.date_range(
+                start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+            ).astype("datetime64[ns]")
         ),
     ]
 )

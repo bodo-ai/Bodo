@@ -153,7 +153,7 @@ def devguide_df_path():
     """Writes to parquet file used by multiple examples in docs/quick_start/devguide.md"""
     df = pd.DataFrame(
         {
-            "A": np.repeat(pd.date_range("2013-01-03", periods=1000), 1),
+            "A": np.repeat(pd.date_range("2013-01-03", periods=1000, unit="ns"), 1),
             "B": np.arange(1_000),
         }
     )

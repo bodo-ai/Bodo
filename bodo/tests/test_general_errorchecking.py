@@ -49,14 +49,14 @@ def test_date_range_unsupported(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        return pd.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
+        return pd.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo", unit="ns")
 
     message = "tz parameter only supports default value None"
     with pytest.raises(BodoError, match=message):
         bodo.jit(test_impl)()
 
     def test_impl2():
-        return pd.date_range(start="1/1/2018")
+        return pd.date_range(start="1/1/2018", unit="ns")
 
     message = "exactly three must be specified"
     with pytest.raises(BodoError, match=message):

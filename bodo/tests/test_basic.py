@@ -767,7 +767,7 @@ def test_udf_nest_jit_convert():
     df = pd.DataFrame(
         {
             "A": [1, 1, 3, 4, 1],
-            "B": pd.date_range("2020-01-01", periods=5),
+            "B": pd.date_range("2020-01-01", periods=5, unit="ns"),
             "C": [1, 2, 3, 4, 5],
         }
     )

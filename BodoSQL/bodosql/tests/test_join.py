@@ -378,7 +378,7 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "D": pd.Series(list(pd.date_range("2011", "2018", 5)) * 20),
+                "D": pd.Series(list(pd.date_range("2011", "2018", 5, unit="ns")) * 20),
                 "S": pd.Series(
                     [
                         None if i % 7 == 0 else chr(65 + (i**2) % 8 + i // 48)
@@ -423,7 +423,11 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="4D7h", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="4D7h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None] * 4,
@@ -431,14 +435,22 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
             "B": [None] * 14
             + list(
                 pd.date_range(
-                    start="1/1/2022", freq="12D21h", periods=20, tz=representative_tz
+                    start="1/1/2022",
+                    freq="12D21h",
+                    periods=20,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             ),
             "C": pd.date_range(
-                start="3/1/2022", freq="1h", periods=34, tz=representative_tz
+                start="3/1/2022", freq="1h", periods=34, tz=representative_tz, unit="ns"
             ),
             "D": pd.date_range(
-                start="1/1/2022", freq="14D20min", periods=34, tz=representative_tz
+                start="1/1/2022",
+                freq="14D20min",
+                periods=34,
+                tz=representative_tz,
+                unit="ns",
             ),
         }
     )
@@ -504,8 +516,12 @@ def test_interval_join_compilation(memory_leak_check):
     )
     df2 = pd.DataFrame(
         {
-            "L": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
-            "R": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
+            "L": pd.date_range(
+                start="2023-01-01", periods=10, freq="D", unit="ns"
+            ).to_series(),
+            "R": pd.date_range(
+                start="2023-01-01", periods=10, freq="D", unit="ns"
+            ).to_series(),
         }
     )
     bc = bodosql.BodoSQLContext({"ARG1": df1, "ARG2": df2})

@@ -67,7 +67,7 @@ pytestmark = pytest_pandas
                 "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
                 "B": pd.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype="Float32"),
             },
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns"),
         ),
         # bool list, numpy array
         # TODO: change to "A": [True, False, False, None, True])
@@ -98,8 +98,12 @@ pytestmark = pytest_pandas
         # datetime columns, int index
         pd.DataFrame(
             {
-                "A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-                "B": pd.date_range(start="2013-09-04", end="2013-09-29", periods=5),
+                "A": pd.date_range(
+                    start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+                ),
+                "B": pd.date_range(
+                    start="2013-09-04", end="2013-09-29", periods=5, unit="ns"
+                ),
                 "C": [1.1, np.nan, 4.2, 3.1, -1.3],
                 "D": pd.array([1.1, None, 4.2, 3.1, -1.3], "Float64"),
             },
@@ -116,7 +120,10 @@ pytestmark = pytest_pandas
                         [
                             pd.Series(
                                 pd.date_range(
-                                    start="2/1/2015", end="2/24/2021", periods=4
+                                    start="2/1/2015",
+                                    end="2/24/2021",
+                                    periods=4,
+                                    unit="ns",
                                 )
                             ),
                             pd.Series(data=[None], index=[4]),
@@ -213,7 +220,7 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
         return df2
 
     len_period = 400
-    list_date = pd.date_range(start="2000-01-01", periods=len_period)
+    list_date = pd.date_range(start="2000-01-01", periods=len_period, unit="ns")
     np.random.seed(5)
     e_list = []
     for idx in range(len_period):
@@ -1522,10 +1529,16 @@ def test_sort_values_input_boundaries(memory_leak_check):
                     pd.DataFrame(
                         {
                             "A": pd.date_range(
-                                start="2016-01-01", end="2022-12-12", periods=15
+                                start="2016-01-01",
+                                end="2022-12-12",
+                                periods=15,
+                                unit="ns",
                             ).date,
                             "B": pd.date_range(
-                                start="2018-01-01", end="2024-12-12", periods=15
+                                start="2018-01-01",
+                                end="2024-12-12",
+                                periods=15,
+                                unit="ns",
                             ).date,
                         }
                     ),
@@ -1535,7 +1548,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                 (
                                     np.array([pd.NA] * 5),
                                     pd.date_range(
-                                        start="2016-01-01", end="2022-12-12", periods=15
+                                        start="2016-01-01",
+                                        end="2022-12-12",
+                                        periods=15,
+                                        unit="ns",
                                     ).date,
                                 )
                             ),
@@ -1543,7 +1559,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                 (
                                     np.array([pd.NA] * 3),
                                     pd.date_range(
-                                        start="2016-01-01", end="2022-12-12", periods=15
+                                        start="2016-01-01",
+                                        end="2022-12-12",
+                                        periods=15,
+                                        unit="ns",
                                     ).date,
                                     np.array([pd.NA] * 2),
                                 )
@@ -1582,13 +1601,19 @@ def test_sort_values_input_boundaries(memory_leak_check):
                         {
                             "A": np.array(
                                 pd.date_range(
-                                    start="2016-01-01", end="2022-12-12", periods=15
+                                    start="2016-01-01",
+                                    end="2022-12-12",
+                                    periods=15,
+                                    unit="ns",
                                 ),
                                 dtype="datetime64[ns]",
                             ),
                             "B": np.array(
                                 pd.date_range(
-                                    start="2018-01-01", end="2024-12-12", periods=15
+                                    start="2018-01-01",
+                                    end="2024-12-12",
+                                    periods=15,
+                                    unit="ns",
                                 ),
                                 dtype="datetime64[ns]",
                             ),
@@ -1604,6 +1629,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                             start="2016-01-01",
                                             end="2022-12-12",
                                             periods=15,
+                                            unit="ns",
                                         ),
                                         dtype="datetime64[ns]",
                                     ),
@@ -1618,6 +1644,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
                                             start="2016-01-01",
                                             end="2022-12-12",
                                             periods=15,
+                                            unit="ns",
                                         ),
                                         dtype="datetime64[ns]",
                                     ),

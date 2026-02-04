@@ -165,7 +165,7 @@ def test_df_column_order():
     # user specified type doesn't match output's column order
     df1 = pd.DataFrame(
         {
-            "D": pd.date_range("2017-01-03", periods=3),
+            "D": pd.date_range("2017-01-03", periods=3, unit="ns"),
             "C": ["a", "ab", "cd"],
             "A": [1, 2, 3],
             "B": [1.1, 1.1, 2.2],
@@ -179,7 +179,7 @@ def test_df_column_order():
                 {
                     "C": ["a", "ab", "cd"],
                     "A": [1, 2, 3],
-                    "D": pd.date_range("2017-01-03", periods=3),
+                    "D": pd.date_range("2017-01-03", periods=3, unit="ns"),
                     "B": [1.1, 1.1, 2.2],
                 }
             )

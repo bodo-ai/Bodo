@@ -44,8 +44,10 @@ pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
         pd.Series([2.1, 5.3, 6.1], name="C"),
         pd.Series(["A", "B", "CC"]),
         pd.Series(["A", "B", "CC"], name="A"),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, unit="ns"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
         pd.Index([10, 12, 13], dtype="Int64"),
         pd.Index([10, 12, 14], dtype="Int64", name="A"),
     ],
@@ -57,8 +59,10 @@ pytestmark = pytest_pandas + [pytest.mark.jit_dependency]
         [2.1, 3.2, 5.4],
         ["A", "C", "AB"],
         np.array([2, 3, 5]),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, unit="ns"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
         pd.Index([10, 12, 13], dtype="Int64"),
         pd.Index([10, 12, 14], dtype="Int64", name="A"),
         pd.RangeIndex(1, 4, 1),
@@ -413,7 +417,9 @@ def test_replace_types_supported(series_replace):
         pytest.param(
             SeriesReplace(
                 series=pd.Series(
-                    pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)
+                    pd.date_range(
+                        start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+                    )
                 ),
                 to_replace=pd.Timestamp("2018-04-24 00:00:00"),
                 value=pd.Timestamp("2020-01-01 01:01:01"),
@@ -1146,8 +1152,8 @@ def test_series_iat_getitem_datetime(memory_leak_check):
     def test_impl(S):
         return S.iat[2]
 
-    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17").date)
-    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17"))
+    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17", unit="ns").date)
+    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17", unit="ns"))
     timedelta_series = pd.Series(
         np.append(
             [datetime.timedelta(days=5, seconds=4, weeks=4)] * 2,
@@ -1208,9 +1214,13 @@ def test_series_iat_setitem_datetime(memory_leak_check):
         S.iat[2] = val
         return S
 
-    S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    S1 = pd.Series(
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns")
+    )
     val1 = datetime.datetime(2011, 11, 4, 0, 0)
-    S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date)
+    S2 = pd.Series(
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns").date
+    )
     val2 = datetime.date(2002, 12, 26)
     S3 = pd.Series(
         [
@@ -1248,8 +1258,8 @@ def test_series_iloc_getitem_datetime(memory_leak_check):
     def test_impl(S):
         return S.iloc[2]
 
-    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17").date)
-    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17"))
+    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17", unit="ns").date)
+    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17", unit="ns"))
     timedelta_series = pd.Series(
         np.append(
             [datetime.timedelta(days=5, seconds=4, weeks=4)] * 2,
@@ -1423,9 +1433,13 @@ def test_series_iloc_setitem_datetime_scalar(memory_leak_check):
         S.iloc[idx] = val
         return S
 
-    S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    S1 = pd.Series(
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns")
+    )
     val1 = datetime.datetime(2011, 11, 4, 0, 0)
-    S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date)
+    S2 = pd.Series(
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns").date
+    )
     val2 = datetime.date(2002, 12, 26)
     S3 = pd.Series(
         [

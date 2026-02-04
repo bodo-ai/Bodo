@@ -565,7 +565,7 @@ def test_unbox_df3(memory_leak_check):
 
     df1 = pd.DataFrame(
         {"A": [3, 5, 1, -1, 4]},
-        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns"),
     )
     df2 = pd.DataFrame(
         {"A": [3, 5, 1, -1, 4]},
@@ -1171,7 +1171,7 @@ def test_df_astype_dtypes(memory_leak_check):
             "B": ["a", "b", "c"] * 2,
             "C": pd.array([1, 2, 3] * 2, "Int64"),
             "D": [True, False, True] * 2,
-            "E": pd.date_range("2017-01-03", periods=6),
+            "E": pd.date_range("2017-01-03", periods=6, unit="ns"),
         }
     )
     df2 = df1.copy()
@@ -1197,6 +1197,7 @@ def test_tz_aware_df_astype(dtype, memory_leak_check):
         end="2018-04-29",
         periods=5,
         tz="Poland",
+        unit="ns",
     ).to_frame()
 
     def impl(df):
@@ -1856,13 +1857,15 @@ def test_df_describe_mixed_dt(memory_leak_check):
     # all datetime
     df = pd.DataFrame(
         {
-            "A": pd.date_range("2017-01-03", periods=6),
-            "B": pd.date_range("2019-01-03", periods=6),
+            "A": pd.date_range("2017-01-03", periods=6, unit="ns"),
+            "B": pd.date_range("2019-01-03", periods=6, unit="ns"),
         }
     )
     check_func(test_impl, (df,), is_out_distributed=False)
     # datetime mixed with numeric
-    df = pd.DataFrame({"A": pd.date_range("2017-01-03", periods=6), "B": np.arange(6)})
+    df = pd.DataFrame(
+        {"A": pd.date_range("2017-01-03", periods=6, unit="ns"), "B": np.arange(6)}
+    )
     check_func(test_impl, (df,), is_out_distributed=False)
 
 
@@ -1895,7 +1898,9 @@ def test_df_stack_trace(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [1, 2, 3, 4, 5, 6],
-            "B": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)),
+            "B": pd.Series(
+                pd.date_range(start="1/1/2018", end="1/4/2018", periods=6, unit="ns")
+            ),
         }
     )
 
@@ -2026,7 +2031,7 @@ def test_df_idxmax_datetime(memory_leak_check):
 
     df = pd.DataFrame(
         {"A": [3, 5, 1, -1, 2]},
-        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5, unit="ns"),
     )
     check_func(impl, (df,), is_out_distributed=False)
 
@@ -2450,7 +2455,9 @@ def test_df_reset_index1(df_value, memory_leak_check):
         ),
         # named date/time index
         pytest.param(
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=5, name="ABC"),
+            pd.date_range(
+                start="2018-04-24", end="2018-04-27", periods=5, name="ABC", unit="ns"
+            ),
             marks=pytest.mark.slow,
         ),
         # TODO: test PeriodIndex when PeriodArray is supported
@@ -2463,7 +2470,9 @@ def test_df_reset_index1(df_value, memory_leak_check):
                 [
                     ["ABCD", "V", "CAD", "", "AA"],
                     [1.3, 4.1, 3.1, -1.1, -3.2],
-                    pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+                    pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=5, unit="ns"
+                    ),
                 ]
             ),
             marks=pytest.mark.slow,
@@ -2473,7 +2482,9 @@ def test_df_reset_index1(df_value, memory_leak_check):
                 [
                     ["ABCD", "V", "CAD", "", "AA"],
                     [1.3, 4.1, 3.1, -1.1, -3.2],
-                    pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+                    pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=5, unit="ns"
+                    ),
                 ],
                 names=["AA", "ABC", "ABCD"],
             ),

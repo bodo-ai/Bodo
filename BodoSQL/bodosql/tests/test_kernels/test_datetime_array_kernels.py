@@ -101,13 +101,21 @@ pytestmark = pytest_slow_unless_codegen
         pytest.param(
             (
                 100,
-                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11)),
+                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11, unit="ns")),
             ),
             {
-                "years": pd.Series(pd.date_range("2099-12-20", "2099-12-30", 11)),
-                "months": pd.Series(pd.date_range("2008-04-20", "2008-04-30", 11)),
-                "weeks": pd.Series(pd.date_range("2001-11-19", "2001-11-29", 11)),
-                "days": pd.Series(pd.date_range("2000-03-29", "2000-04-08", 11)),
+                "years": pd.Series(
+                    pd.date_range("2099-12-20", "2099-12-30", 11, unit="ns")
+                ),
+                "months": pd.Series(
+                    pd.date_range("2008-04-20", "2008-04-30", 11, unit="ns")
+                ),
+                "weeks": pd.Series(
+                    pd.date_range("2001-11-19", "2001-11-29", 11, unit="ns")
+                ),
+                "days": pd.Series(
+                    pd.date_range("2000-03-29", "2000-04-08", 11, unit="ns")
+                ),
             },
             id="scalar_vector",
         ),
@@ -699,12 +707,20 @@ def test_interval_add_date_interval_to_date(
             id="dateoffset-all-scalar",
         ),
         pytest.param(
-            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                pd.date_range(
+                    "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
+                )
+            ),
             pd.DateOffset(months=70),
             id="dateoffset-vector-scalar",
         ),
         pytest.param(
-            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                pd.date_range(
+                    "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
+                )
+            ),
             pd.Series(
                 [
                     pd.DateOffset(months=1),
@@ -724,12 +740,20 @@ def test_interval_add_date_interval_to_date(
             id="timedelta-all-scalar",
         ),
         pytest.param(
-            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                pd.date_range(
+                    "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
+                )
+            ),
             pd.Timedelta(minutes=70),
             id="timedelta-vector-scalar",
         ),
         pytest.param(
-            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                pd.date_range(
+                    "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
+                )
+            ),
             pd.Series(
                 [
                     pd.Timedelta(hours=1),
@@ -1090,33 +1114,55 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
         pytest.param(
             (
                 100,
-                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11).date),
+                pd.Series(
+                    pd.date_range("1999-12-20", "1999-12-30", 11, unit="ns").date
+                ),
             ),
             {
-                "years": pd.Series(pd.date_range("2099-12-20", "2099-12-30", 11).date),
-                "quarters": pd.Series(
-                    pd.date_range("2024-12-20", "2024-12-30", 11).date
+                "years": pd.Series(
+                    pd.date_range("2099-12-20", "2099-12-30", 11, unit="ns").date
                 ),
-                "months": pd.Series(pd.date_range("2008-04-20", "2008-04-30", 11).date),
-                "weeks": pd.Series(pd.date_range("2001-11-19", "2001-11-29", 11).date),
-                "days": pd.Series(pd.date_range("2000-03-29", "2000-04-08", 11).date),
+                "quarters": pd.Series(
+                    pd.date_range("2024-12-20", "2024-12-30", 11, unit="ns").date
+                ),
+                "months": pd.Series(
+                    pd.date_range("2008-04-20", "2008-04-30", 11, unit="ns").date
+                ),
+                "weeks": pd.Series(
+                    pd.date_range("2001-11-19", "2001-11-29", 11, unit="ns").date
+                ),
+                "days": pd.Series(
+                    pd.date_range("2000-03-29", "2000-04-08", 11, unit="ns").date
+                ),
                 "hours": pd.Series(
-                    pd.date_range("1999-12-24 04:00:00", "2000-01-03 04:00:00", 11)
+                    pd.date_range(
+                        "1999-12-24 04:00:00", "2000-01-03 04:00:00", 11, unit="ns"
+                    )
                 ),
                 "minutes": pd.Series(
-                    pd.date_range("1999-12-20 01:40:00", "1999-12-30 01:40:00", 11)
+                    pd.date_range(
+                        "1999-12-20 01:40:00", "1999-12-30 01:40:00", 11, unit="ns"
+                    )
                 ),
                 "seconds": pd.Series(
-                    pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 11)
+                    pd.date_range(
+                        "1999-12-20 00:01:40", "1999-12-30 00:01:40", 11, unit="ns"
+                    )
                 ),
                 "milliseconds": pd.Series(
                     pd.date_range(
-                        "1999-12-20 00:00:00.100", "1999-12-30 00:00:00.100", 11
+                        "1999-12-20 00:00:00.100",
+                        "1999-12-30 00:00:00.100",
+                        11,
+                        unit="ns",
                     )
                 ),
                 "microseconds": pd.Series(
                     pd.date_range(
-                        "1999-12-20 00:00:00.000100", "1999-12-30 00:00:00.000100", 11
+                        "1999-12-20 00:00:00.000100",
+                        "1999-12-30 00:00:00.000100",
+                        11,
+                        unit="ns",
                     )
                 ),
                 "nanoseconds": pd.Series(
@@ -1124,6 +1170,7 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         "1999-12-20 00:00:00.000000100",
                         "1999-12-30 00:00:00.000000100",
                         11,
+                        unit="ns",
                     )
                 ),
             },
@@ -1208,12 +1255,16 @@ def test_add_interval_date(unit, args, answers, memory_leak_check):
             pd.Series(
                 [
                     pd.Timestamp(d)
-                    for d in pd.date_range("2018-01-01", "2019-01-01", periods=20)
+                    for d in pd.date_range(
+                        "2018-01-01", "2019-01-01", periods=20, unit="ns"
+                    )
                 ]
                 + [None, None]
                 + [
                     pd.Timestamp(d)
-                    for d in pd.date_range("1970-01-01", "2108-01-01", periods=20)
+                    for d in pd.date_range(
+                        "1970-01-01", "2108-01-01", periods=20, unit="ns"
+                    )
                 ]
             ),
             id="vector",
@@ -1648,7 +1699,7 @@ def test_int_to_days(days, memory_leak_check):
     "dt, date_part",
     [
         pytest.param(
-            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20)),
+            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20, unit="ns")),
             "month",
             id="timestamp-vector",
         ),
@@ -1658,7 +1709,9 @@ def test_int_to_days(days, memory_leak_check):
             id="timestamp-scalar",
         ),
         pytest.param(
-            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20).date),
+            pd.Series(
+                pd.date_range("2019-01-01", "2020-01-01", periods=20, unit="ns").date
+            ),
             "week",
             id="date-vector",
         ),
@@ -1936,7 +1989,7 @@ def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
         pd.Timestamp("2007-10-07"),
         pd.Series(
             [None] * 2
-            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30, unit="ns"))
             + [None]
         ).values,
     ],
@@ -1978,12 +2031,16 @@ def test_to_days(arg, memory_leak_check):
         pd.Timestamp("2007-10-07", tz="US/Pacific"),
         pd.Series(
             [None] * 2
-            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30, unit="ns"))
             + [None]
         ).values,
         pd.Series(
             [None] * 2
-            + list(pd.date_range("2020-10-01", freq="11D", periods=30, tz="US/Pacific"))
+            + list(
+                pd.date_range(
+                    "2020-10-01", freq="11D", periods=30, tz="US/Pacific", unit="ns"
+                )
+            )
             + [None]
         ).array,
     ],
@@ -2058,12 +2115,14 @@ def test_from_days(arg, memory_leak_check):
     "dt, dow_str",
     [
         pytest.param(
-            pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+            pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20, unit="ns")),
             pd.Series(["su"] * 20),
             id="timestamp-vector",
         ),
         pytest.param(
-            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=21).date),
+            pd.Series(
+                pd.date_range("2019-01-01", "2020-01-01", periods=21, unit="ns").date
+            ),
             pd.Series(["mo", "tu", "we", "th", "fr", "sa", "su"] * 3),
             id="date-vector",
         ),
@@ -2273,7 +2332,9 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
         pd.Series(
             [None] * 4
             + list(
-                pd.date_range("1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific")
+                pd.date_range(
+                    "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
+                )
             )
             + [None] * 2
         ),
@@ -2322,7 +2383,9 @@ def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
         pd.Series(
             [None] * 4
             + list(
-                pd.date_range("1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific")
+                pd.date_range(
+                    "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
+                )
             )
             + [None] * 2
         ),
@@ -2410,7 +2473,10 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                 [None] * 4
                 + list(
                     pd.date_range(
-                        "2022-11-6 04:12:41.432433", periods=20, freq="11D3h5us"
+                        "2022-11-6 04:12:41.432433",
+                        periods=20,
+                        freq="11D3h5us",
+                        unit="ns",
                     )
                 )
                 + [None] * 2
@@ -2426,6 +2492,7 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                         periods=20,
                         freq="11D3h5us",
                         tz="US/Pacific",
+                        unit="ns",
                     )
                 )
                 + [None] * 2

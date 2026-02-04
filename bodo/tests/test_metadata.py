@@ -17,7 +17,9 @@ from bodo.tests.series_common import series_val  # noqa
         pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
@@ -78,7 +80,9 @@ def test_metadata_typemaps():
         pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),

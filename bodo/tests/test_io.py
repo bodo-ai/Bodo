@@ -362,7 +362,11 @@ def test_to_csv_date_format_kwd_arg(memory_leak_check):
         return df.to_csv(f_name, date_format="%W, %z, %f, %S, %x")
 
     df = pd.DataFrame(
-        {"A": pd.date_range(start="1998-04-24", end="2000-04-29", periods=100)}
+        {
+            "A": pd.date_range(
+                start="1998-04-24", end="2000-04-29", periods=100, unit="ns"
+            )
+        }
     )
     check_to_csv_string_output(df, impl_none)
     check_CSV_write(

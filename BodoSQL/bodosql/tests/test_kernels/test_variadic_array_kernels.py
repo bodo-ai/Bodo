@@ -557,10 +557,14 @@ def test_coalesce_str_array_optimized(memory_leak_check):
             (
                 pd.Series(
                     [
-                        *pd.date_range("2018-01-01", "2018-06-02", freq="ME"),
+                        *pd.date_range(
+                            "2018-01-01", "2018-06-02", freq="ME", unit="ns"
+                        ),
                         None,
                         None,
-                        *pd.date_range("2018-03-01", "2018-07-02", freq="ME"),
+                        *pd.date_range(
+                            "2018-03-01", "2018-07-02", freq="ME", unit="ns"
+                        ),
                     ]
                     * 2
                 ),
@@ -570,7 +574,7 @@ def test_coalesce_str_array_optimized(memory_leak_check):
                 np.datetime64(pd.Timestamp("2018-03-01"), "ns"),
                 np.datetime64(pd.Timestamp("2018-05-30"), "ns"),
                 np.datetime64(pd.Timestamp("2018-05-01"), "ns"),
-                pd.Series(pd.date_range("2018", "2019-11-01", freq="ME")),
+                pd.Series(pd.date_range("2018", "2019-11-01", freq="ME", unit="ns")),
             ),
             id="date_vector_output",
             marks=pytest.mark.slow,

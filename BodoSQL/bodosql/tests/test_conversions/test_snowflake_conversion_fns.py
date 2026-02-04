@@ -354,7 +354,7 @@ def test_to_char_scalars(spark_info, func):
             "A": [1, 2, 3, 4, 5] * 3,
             "B": [1.1, 2.2, np.nan, 4.4, 5.5] * 3,
             "C": [True, False, True, False, True] * 3,
-            "D": pd.date_range("20130101", periods=15, freq="D"),
+            "D": pd.date_range("20130101", periods=15, freq="D", unit="ns"),
         }
     )
     ctx = {"TABLE1": df}
@@ -394,7 +394,9 @@ def test_timestamp_to_char(memory_leak_check):
     """simplest test for TO_CHAR on timezone-naive timestamps"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5h15min45s").to_series()
+    dt_series = pd.date_range(
+        "2022/1/1", periods=30, freq="6D5h15min45s", unit="ns"
+    ).to_series()
     df = pd.DataFrame({"A": dt_series})
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 

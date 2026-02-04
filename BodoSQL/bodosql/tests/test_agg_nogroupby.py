@@ -609,7 +609,11 @@ def test_max_min_tz_aware(memory_leak_check):
     Test max and min on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland"))
+        list(
+            pd.date_range(
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+            )
+        )
         + [None] * 4
     )
     df = pd.DataFrame(
@@ -637,7 +641,11 @@ def test_count_tz_aware(memory_leak_check):
     Test count and count(*) on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland"))
+        list(
+            pd.date_range(
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+            )
+        )
         + [None] * 4
     )
     df = pd.DataFrame(
@@ -665,7 +673,11 @@ def test_any_value_tz_aware(memory_leak_check):
     Test any_value on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland"))
+        list(
+            pd.date_range(
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+            )
+        )
         + [None] * 4
     )
     df = pd.DataFrame(
@@ -847,7 +859,7 @@ def test_single_value2(spark_info, memory_leak_check):
 
     df1 = pd.DataFrame(
         {
-            "A": pd.date_range("2022-02-05", periods=8).date,
+            "A": pd.date_range("2022-02-05", periods=8, unit="ns").date,
         }
     )
 

@@ -226,10 +226,10 @@ def test_to_boolean_opt(to_boolean_test_arrs_null):
     )
 
 
-_dates = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D")).apply(
+_dates = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D", unit="ns")).apply(
     lambda x: x.date()
 )
-_timestamps = pd.Series(pd.date_range("20130101", periods=10, freq="h"))
+_timestamps = pd.Series(pd.date_range("20130101", periods=10, freq="h", unit="ns"))
 _dates_nans = _dates.copy()
 _timestamps_nans = _timestamps.copy()
 _dates_nans[4] = _dates_nans[7] = np.nan

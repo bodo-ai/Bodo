@@ -558,7 +558,7 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
             ],
             # This is just a Data Column
             "C": pd.date_range(
-                "2022/1/1", freq="13min", periods=10, tz=representative_tz
+                "2022/1/1", freq="13min", periods=10, tz=representative_tz, unit="ns"
             ),
         }
     )

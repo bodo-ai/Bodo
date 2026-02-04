@@ -28,7 +28,9 @@ df_value_params = [
                 "C": pd.concat(
                     [
                         pd.Series(
-                            pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
+                            pd.date_range(
+                                start="2/1/2015", end="2/24/2021", periods=4, unit="ns"
+                            )
                         ),
                         pd.Series(data=[None], index=[4]),
                     ]
@@ -123,7 +125,7 @@ df_value_params = [
         pd.DataFrame(
             {
                 "A": pd.date_range(
-                    start="2018-04-24", end="2018-04-29", periods=5
+                    start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
                 ).astype("datetime64[ns]")
             }
         ),
@@ -133,9 +135,9 @@ df_value_params = [
     pytest.param(
         pd.DataFrame(
             {"A": [3, 5, 1, -1, 4]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
-                "datetime64[ns]"
-            ),
+            pd.date_range(
+                start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+            ).astype("datetime64[ns]"),
         ),
         marks=pytest.mark.slow,
         id="datetime_index",
@@ -200,13 +202,19 @@ def df_value(request):
         ),
         # datetime column
         pd.DataFrame(
-            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
+            {
+                "A": pd.date_range(
+                    start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+                )
+            }
         ),
         # datetime index
         pytest.param(
             pd.DataFrame(
                 {"A": [3, 5, 1, -1, 2]},
-                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+                pd.date_range(
+                    start="2018-04-24", end="2018-04-29", periods=5, unit="ns"
+                ),
             ),
             marks=pytest.mark.slow,
         ),

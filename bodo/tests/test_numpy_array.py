@@ -245,11 +245,11 @@ from bodo.tests.utils import check_func, no_default
         pytest.param(
             (
                 np.append(
-                    pd.date_range("2017-07-03", "2017-07-17").date,
+                    pd.date_range("2017-07-03", "2017-07-17", unit="ns").date,
                     [datetime.date(2016, 3, 3)],
                 ),
                 np.append(
-                    pd.date_range("2017-07-15", "2017-09-02").date,
+                    pd.date_range("2017-07-15", "2017-09-02", unit="ns").date,
                     [datetime.date(2018, 6, 7)],
                 ),
             ),
@@ -604,7 +604,7 @@ def test_cbrt(num_arr):
             ]
         ),
         np.append(
-            pd.date_range("2017-07-03", "2017-07-17").date,
+            pd.date_range("2017-07-03", "2017-07-17", unit="ns").date,
             [datetime.date(2016, 3, 3)],
         ),
         pd.array(
@@ -745,7 +745,9 @@ def test_np_random_multivariate_normal(memory_leak_check):
             id="DecimalArray",
         ),
         pytest.param(
-            np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
+            np.append(
+                pd.date_range("2020-01-14", "2020-01-22", unit="ns").date, [None]
+            ),
             id="DateArray",
         ),
         pytest.param(

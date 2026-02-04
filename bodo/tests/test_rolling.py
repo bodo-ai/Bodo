@@ -658,7 +658,7 @@ class TestRolling(unittest.TestCase):
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
                 pd.testing.assert_frame_equal(
                     bodo_func(df), test_impl(df), check_column_type=False
@@ -723,7 +723,7 @@ class TestRolling(unittest.TestCase):
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
                 pd.testing.assert_frame_equal(
                     bodo_func(df), test_impl(df), check_column_type=False
