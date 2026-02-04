@@ -58,10 +58,8 @@ void GpuShuffleManager::initialize_nccl() {
     }
 
     // Broadcast the unique ID to all ranks
-    int ret = MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm);
-    if (ret != MPI_SUCCESS) {
-        throw std::runtime_error("MPI_Bcast failed");
-    }
+    CHECK_MPI(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm),
+              "GpuShuffleManager::initialize_nccl: MPI_Bcast failed:");
 
     // Initialize NCCL communicator
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
@@ -276,7 +274,7 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
-        ncclGroupStart();
+        CHECK_NCCL(ncclGroupStart());
         std::cout << "Posting NCCL receives" << std::endl;
         // 1. Post ALL Receives first
         for (int i = 0; i < n_ranks; ++i) {
@@ -298,7 +296,7 @@ void GpuShuffle::progress_waiting_for_sizes() {
         }
 
         std::cout << "NCCL sends/receives posted" << std::endl;
-        ncclGroupEnd();
+        CHECK_NCCL(ncclGroupEnd());
         std::cout << "NCCL group ended" << std::endl;
         CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
         std::cout << "NCCL recv event recorded" << std::endl;
