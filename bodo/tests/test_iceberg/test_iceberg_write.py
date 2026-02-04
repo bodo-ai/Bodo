@@ -321,7 +321,7 @@ def test_basic_write_new_append(
 
         passed = _test_equal_guard(
             bodo_out,
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -370,7 +370,7 @@ def test_basic_write_new_append(
             spark_out = convert_non_pandas_columns(spark_out)
 
         spark_passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
