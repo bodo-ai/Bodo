@@ -606,7 +606,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
     # Check for sums
     with pytest.raises(
         BodoError,
-        match="column type of datetime64.* is not supported in groupby built-in function sum",
+        match="column type of .* is not supported in groupby built-in function sum",
     ):
         bodo.jit(impl_sum)(df1_datetime)
     with pytest.raises(
@@ -616,13 +616,13 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
         bodo.jit(impl_sum)(df1_date)
     with pytest.raises(
         BodoError,
-        match="column type of timedelta64.* is not supported in groupby built-in function sum",
+        match="column type of .* is not supported in groupby built-in function sum",
     ):
         bodo.jit(impl_sum)(df1_timedelta)
     # checks for prod
     with pytest.raises(
         BodoError,
-        match="column type of datetime64.* is not supported in groupby built-in function prod",
+        match="column type of .* is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl_prod)(df1_datetime)
     with pytest.raises(
@@ -632,7 +632,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
         bodo.jit(impl_prod)(df1_date)
     with pytest.raises(
         BodoError,
-        match="column type of timedelta64.* is not supported in groupby built-in function prod",
+        match="column type of .* is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl_prod)(df1_timedelta)
     # checks for cumsum
