@@ -297,8 +297,9 @@ void GpuShuffle::progress_waiting_for_sizes() {
             }
         }
 
-        ncclGroupEnd();
         std::cout << "NCCL sends/receives posted" << std::endl;
+        ncclGroupEnd();
+        std::cout << "NCCL group ended" << std::endl;
         CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
         std::cout << "NCCL recv event recorded" << std::endl;
         CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
