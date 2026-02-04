@@ -1183,6 +1183,11 @@ def box_dataframe(typ, val, c):
             builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)
         ]
         arr_typs = typ.data
+
+        none_obj = pyapi.borrow_none()
+        slice_class_obj = pyapi.unserialize(pyapi.serialize_object(slice))
+        slice_obj = pyapi.call_function_objargs(slice_class_obj, [none_obj])
+
         for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
             # box array if df doesn't have a parent, or column was unboxed in function,
             # since changes in arrays like strings don't reflect back to parent object
@@ -1199,7 +1204,7 @@ def box_dataframe(typ, val, c):
             )
 
             with builder.if_then(box_array):
-                # df[i] = boxed_arr
+                # df.loc[:, i] = boxed_arr
                 c_ind_obj = pyapi.long_from_longlong(
                     context.get_constant(types.int64, i)
                 )
@@ -1207,9 +1212,16 @@ def box_dataframe(typ, val, c):
                 context.nrt.incref(builder, arr_typ, arr)
                 arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
                 df_obj = builder.load(res)
-                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
+                df_loc_obj = pyapi.object_getattr_string(df_obj, "loc")
+                slice_ind_tup_obj = pyapi.tuple_pack([slice_obj, c_ind_obj])
+                pyapi.object_setitem(df_loc_obj, slice_ind_tup_obj, arr_obj)
+                pyapi.decref(slice_ind_tup_obj)
+                pyapi.decref(df_loc_obj)
                 pyapi.decref(arr_obj)
                 pyapi.decref(c_ind_obj)
+
+        pyapi.decref(slice_obj)
+        pyapi.decref(slice_class_obj)
 
     df_obj = builder.load(res)
     columns_obj = _get_df_columns_obj(
