@@ -43,7 +43,7 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
-extern bool g_use_async;
+extern const bool G_USE_ASYNC;
 
 #ifdef USE_CUDF
 
@@ -248,7 +248,7 @@ class PhysicalGPUSource : public PhysicalOperator {
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatch() {
-        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
         return ProduceBatchGPU(se);
     }
 

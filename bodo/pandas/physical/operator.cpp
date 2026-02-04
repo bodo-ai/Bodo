@@ -14,7 +14,7 @@ int64_t get_parquet_chunk_size() {
                                 : 256e6;  // Default to 256 MiB
 }
 
-bool g_use_async = false;
+extern const bool G_USE_ASYNC = false;
 
 #ifdef USE_CUDF
 
@@ -33,7 +33,7 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
                                              OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     // Wait until previous GPU pipeline processing is done.
     input_batch.stream_event->event.wait(se->stream);
     return ConsumeBatchGPU(input_batch, prev_op_result, se);
@@ -41,14 +41,14 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto gpu_batch = convertTableToGPU(input_batch);
     return ConsumeBatchGPU(gpu_batch, prev_op_result, se);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     GPU_DATA input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     // Wait until previous GPU pipeline processing is done.
     input_batch.stream_event->event.wait(se->stream);
     return ProcessBatchGPU(input_batch, prev_op_result, se);
@@ -56,7 +56,7 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto gpu_batch = convertTableToGPU(input_batch);
     return ProcessBatchGPU(gpu_batch, prev_op_result, se);
 }
