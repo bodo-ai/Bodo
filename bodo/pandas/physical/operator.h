@@ -46,18 +46,99 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
+extern const bool G_USE_ASYNC;
+
 #ifdef USE_CUDF
+
+struct cuda_event_wrapper {
+    cudaEvent_t ev;
+
+    cuda_event_wrapper() {
+        cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+    }
+
+    ~cuda_event_wrapper() {
+        if (ev) {
+            cudaEventDestroy(ev);
+        }
+    }
+
+    // Disable copy
+    cuda_event_wrapper(const cuda_event_wrapper&) = delete;
+    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = delete;
+
+    // Enable move
+    cuda_event_wrapper(cuda_event_wrapper&& other) noexcept {
+        ev = other.ev;
+        other.ev = nullptr;
+    }
+
+    cuda_event_wrapper& operator=(cuda_event_wrapper&& other) noexcept {
+        if (this != &other) {
+            if (ev)
+                cudaEventDestroy(ev);
+            ev = other.ev;
+            other.ev = nullptr;
+        }
+        return *this;
+    }
+
+    void record(rmm::cuda_stream_view stream) {
+        cudaEventRecord(ev, stream.value());
+    }
+
+    void wait(rmm::cuda_stream_view stream) const {
+        cudaStreamWaitEvent(stream.value(), ev, 0);
+    }
+};
+
+struct StreamAndEvent {
+    rmm::cuda_stream_view stream;
+    cuda_event_wrapper event;
+
+    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper&& e)
+        : stream(s), event(std::move(e)) {}
+};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    if (use_async) {
+        // Create a new non-blocking CUDA stream
+        rmm::cuda_stream_view s{rmm::cuda_stream_per_thread};
+
+        // Create an unsignaled event (default constructor)
+        cuda_event_wrapper e;
+
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
+    } else {
+        // Synchronous mode: use default stream
+        rmm::cuda_stream_view s = rmm::cuda_stream_default;
+
+        // Event is already completed
+        cuda_event_wrapper e;
+        e.record(s);
+
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
+    }
+}
+
 struct GPU_DATA {
    public:
     std::shared_ptr<cudf::table> table;
     std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<StreamAndEvent> stream_event;
 
-    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
-        : table(t), schema(s) {}
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s,
+             std::shared_ptr<StreamAndEvent> se)
+        : table(t), schema(s), stream_event(se) {}
 };
 #else
 
 struct GPU_DATA {};
+struct StreamAndEvent {};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    return std::shared_ptr<StreamAndEvent>();
+}
 
 #endif
 
@@ -255,7 +336,13 @@ class PhysicalGPUSource : public PhysicalOperator {
         return OperatorType::GPU_SOURCE;
     }
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatch() = 0;
+    std::pair<GPU_DATA, OperatorResult> ProduceBatch() {
+        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
+        return ProduceBatchGPU(se);
+    }
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     // Constructor is always required for initialization
     // We should have a separate Finalize step that can throw an exception
@@ -280,11 +367,15 @@ class PhysicalGPUSink : public PhysicalOperator {
         return OperatorType::GPU_SINK;
     }
 
-    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                        OperatorResult prev_op_result) = 0;
+    OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                OperatorResult prev_op_result);
 
-    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
-                                        OperatorResult prev_op_result);
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result);
+
+    virtual OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
@@ -310,11 +401,15 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
         return OperatorType::GPU_SOURCE_AND_SINK;
     }
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
-        GPU_DATA input_batch, OperatorResult prev_op_result) = 0;
+    std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result);
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+    std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual void FinalizeProcessBatch() = 0;
 

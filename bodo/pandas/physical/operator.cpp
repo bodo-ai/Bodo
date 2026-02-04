@@ -19,7 +19,10 @@ int64_t get_parquet_chunk_size() {
                                 : 256e6;  // Default to 256 MiB
 }
 
+extern const bool G_USE_ASYNC = false;
+
 #ifdef USE_CUDF
+
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
@@ -37,20 +40,46 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
     return ProcessBatch(cpu_batch_fragment, exchange_result);
 }
 
+OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
+                                             OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
+    // Wait until previous GPU pipeline processing is done.
+    input_batch.stream_event->event.wait(se->stream);
+    return ConsumeBatchGPU(input_batch, prev_op_result, se);
+}
+
+OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
+                                             OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
+    // Wait until previous GPU pipeline processing is done.
+    input_batch.stream_event->event.wait(se->stream);
+    return ConsumeBatchGPU(input_batch, prev_op_result, se);
+}
+
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [cpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, prev_op_result);
     auto gpu_batch = convertTableToGPU(cpu_batch);
-    return ConsumeBatch(gpu_batch, exchange_result);
+    return ConsumeBatchGPU(gpu_batch, exchange_result, se);
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    GPU_DATA input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
+    // Wait until previous GPU pipeline processing is done.
+    input_batch.stream_event->event.wait(se->stream);
+    return ProcessBatchGPU(input_batch, prev_op_result, se);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [cpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, prev_op_result);
     auto gpu_batch = convertTableToGPU(cpu_batch);
-    return ProcessBatch(gpu_batch, exchange_result);
+    return ProcessBatchGPU(gpu_batch, exchange_result, se);
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
@@ -143,7 +172,8 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     }
 
     // Return the cudf::table (moving ownership)
-    return GPU_DATA{std::move(result), arrow_batch->schema()};
+    return GPU_DATA{std::move(result), arrow_batch->schema(),
+                    make_stream_and_event(false)};
 }
 
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
@@ -208,6 +238,16 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
+                                             OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    GPU_DATA input_batch, OperatorResult prev_op_result) {
     throw std::runtime_error("Should never be called in non-CUDF mode.");
 }
 
