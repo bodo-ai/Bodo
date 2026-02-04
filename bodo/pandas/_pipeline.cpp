@@ -224,8 +224,8 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch =
-                                GPU_DATA(make_empty_like(x.table), x.schema);
+                            batch = GPU_DATA(make_empty_like(x.table), x.schema,
+                                             make_stream_and_event(false));
 #endif
                         }
                     },
@@ -293,8 +293,8 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch =
-                                GPU_DATA(make_empty_like(x.table), x.schema);
+                            batch = GPU_DATA(make_empty_like(x.table), x.schema,
+                                             make_stream_and_event(false));
 #endif
                         }
                     },
@@ -360,7 +360,8 @@ uint64_t Pipeline::Execute() {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
 #ifdef USE_CUDF
-                        batch = GPU_DATA(make_empty_like(x.table), x.schema);
+                        batch = GPU_DATA(make_empty_like(x.table), x.schema,
+                                         make_stream_and_event(false));
 #endif
                     }
                 },

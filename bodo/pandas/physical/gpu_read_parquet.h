@@ -71,14 +71,17 @@ class RankBatchGenerator {
 
     // next() returns a pair: (cudf::table, eof_flag)
     // If no data assigned to this rank, returns empty table and eof=true.
-    std::pair<std::unique_ptr<cudf::table>, bool> next() {
+    std::pair<std::unique_ptr<cudf::table>, bool> next(
+        std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
             // nothing assigned to this rank
+            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         // If we've exhausted all parts, signal EOF
         if (current_part_idx_ >= static_cast<int>(parts_.size())) {
+            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
@@ -113,7 +116,7 @@ class RankBatchGenerator {
                 if (selected_columns.size() > 0) {
                     reader_opts.set_columns(selected_columns);
                 }
-                auto result = cudf::io::read_parquet(reader_opts);
+                auto result = cudf::io::read_parquet(reader_opts, se->stream);
 
                 // result.tbl is typically a std::unique_ptr<cudf::table> or
                 // cudf::table Adjust the following to match your cuDF version:
@@ -143,6 +146,7 @@ class RankBatchGenerator {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
             bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()));
+            se->event.record(se->stream);
             return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
         }
 
@@ -159,7 +163,7 @@ class RankBatchGenerator {
             batch = std::move(gpu_tables[0]);
         } else {
             // concatenate returns a std::unique_ptr<cudf::table>
-            batch = cudf::concatenate(views);
+            batch = cudf::concatenate(views, se->stream);
         }
 
         // Determine EOF: true if we've consumed all parts and current_rg_ >=
@@ -174,6 +178,7 @@ class RankBatchGenerator {
             }
         }
 
+        se->event.record(se->stream);
         return {std::move(batch), eof};
     }
 
@@ -432,7 +437,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             this->metrics.rows_read);
     }
 
-    std::pair<GPU_DATA, OperatorResult> ProduceBatch() override {
+    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) override {
         if (!batch_gen) {
             time_pt start_init = start_timer();
             init_batch_gen();
@@ -442,13 +448,14 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         time_pt start_produce = start_timer();
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
-            batch_gen->next();
+            batch_gen->next(se);
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
 
         std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
-            GPU_DATA(std::move(next_batch_tup.first), arrow_schema), result);
+            GPU_DATA(std::move(next_batch_tup.first), arrow_schema, se),
+            result);
 
         this->metrics.produce_time += end_timer(start_produce);
         return ret;
