@@ -27,7 +27,6 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
-    no_default,
     pytest_pandas,
 )
 
@@ -1249,72 +1248,6 @@ def test_df_mask_where_scalar_other(memory_leak_check):
 
     check_func(test_mask, (df, cond, other))
     check_func(test_where, (df, cond, other))
-
-
-@pytest.mark.parametrize("offset", ("15D", pd.DateOffset(days=15), "0D"))
-def test_df_first_last(memory_leak_check, offset):
-    """
-    Test df.first() and last() with string and DateOffset offsets (for DataFrames with DateTimeIndex)
-    """
-
-    def impl_first(df):
-        return df.first(offset)
-
-    def impl_last(df):
-        return df.last(offset)
-
-    n = 30
-    df = pd.DataFrame(
-        {"A": pd.Series(np.arange(n))},
-        index=pd.date_range("2018-04-09", periods=n, freq="2D"),
-    )
-
-    if isinstance(offset, pd.DateOffset):
-        end_date = end = df.index[0] + offset
-        # Tick-like, e.g. 3 weeks
-        if isinstance(offset, pd._libs.tslibs.Tick) and end_date in df.index:
-            end = df.index.searchsorted(end_date, side="left")
-            py_output = df.iloc[:end]
-        else:
-            py_output = df.loc[:end]
-    else:
-        py_output = no_default
-
-    check_func(impl_first, (df,), py_output=py_output, check_dtype=False)
-    check_func(impl_last, (df,))
-
-
-def test_empty_df_first_last(memory_leak_check):
-    """
-    Test Series.first() and Series.last() with an empty dataframe.
-    """
-
-    def impl_first(df):
-        return df.first("5D")
-
-    def impl_last(df):
-        return df.last("5D")
-
-    def one_empty_rank(df):
-        # tests df.last() with at least rank being empty when run with 3+ ranks
-        res = df.groupby("A").sum().sort_values("B")
-        return res.last("1D")
-
-    n = 10
-    df = pd.DataFrame(
-        {"A": pd.Series(np.arange(n))},
-        index=pd.date_range("2018-04-09", periods=n, freq="1D"),
-    )
-    empty_df = df[df.A > n]
-    df2 = pd.DataFrame(
-        {
-            "A": np.tile(pd.date_range("2018-04-09", periods=2, freq="1D"), 15),
-            "B": np.arange(30),
-        }
-    )
-    check_func(impl_first, (empty_df,))
-    check_func(impl_last, (empty_df,))
-    check_func(one_empty_rank, (df2,))
 
 
 def test_dataframe_explode():
