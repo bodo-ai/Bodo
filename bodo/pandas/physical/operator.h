@@ -53,7 +53,31 @@ struct cuda_event_wrapper {
         cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
     }
 
-    ~cuda_event_wrapper() { cudaEventDestroy(ev); }
+    ~cuda_event_wrapper() {
+        if (ev) {
+            cudaEventDestroy(ev);
+        }
+    }
+
+    // Disable copy
+    cuda_event_wrapper(const cuda_event_wrapper&) = delete;
+    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = delete;
+
+    // Enable move
+    cuda_event_wrapper(cuda_event_wrapper&& other) noexcept {
+        ev = other.ev;
+        other.ev = nullptr;
+    }
+
+    cuda_event_wrapper& operator=(cuda_event_wrapper&& other) noexcept {
+        if (this != &other) {
+            if (ev)
+                cudaEventDestroy(ev);
+            ev = other.ev;
+            other.ev = nullptr;
+        }
+        return *this;
+    }
 
     void record(rmm::cuda_stream_view stream) {
         cudaEventRecord(ev, stream.value());
@@ -68,7 +92,7 @@ struct StreamAndEvent {
     rmm::cuda_stream_view stream;
     cuda_event_wrapper event;
 
-    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper e)
+    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper&& e)
         : stream(s), event(std::move(e)) {}
 };
 
@@ -80,7 +104,7 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
         // Create an unsignaled event (default constructor)
         cuda_event_wrapper e;
 
-        return std::make_shared<StreamAndEvent>(s, e);
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
     } else {
         // Synchronous mode: use default stream
         rmm::cuda_stream_view s = rmm::cuda_stream_default;
@@ -89,7 +113,7 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
         cuda_event_wrapper e;
         e.record(s);
 
-        return std::make_shared<StreamAndEvent>(s, e);
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
     }
 }
 

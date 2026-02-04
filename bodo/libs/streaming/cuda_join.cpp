@@ -44,7 +44,8 @@ void CudaHashJoin::FinalizeBuild() {
             arrow::field("max",
                          build_table_arrow_schema->field(col_idx)->type())};
         GPU_DATA stats_gpu_data = {
-            stats_table, std::make_shared<arrow::Schema>(std::move(fields))};
+            stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
+            make_stream_and_event(false)};
         std::shared_ptr<arrow::Table> stats = convertGPUToArrow(stats_gpu_data);
         this->min_max_stats.push_back(stats);
     }

@@ -198,8 +198,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
      *
      * @return OperatorResult
      */
-    OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                OperatorResult prev_op_result) override {
+    OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
         cuda_join->BuildConsumeBatch(input_batch.table);
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
@@ -217,9 +218,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se) override {
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
-        GPU_DATA output_gpu_data = {std::move(output_table),
-                                    this->arrow_schema};
-        return {output_gpu_data, prev_op_result, se};
+        GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
+                                    se};
+        return {output_gpu_data, prev_op_result};
     }
 
     /**

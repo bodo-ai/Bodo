@@ -74,8 +74,9 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
      * The output table from the current operation and whether there is more
      * output.
      */
-    std::pair<GPU_DATA, OperatorResult> ProcessBatch(
-        GPU_DATA input_batch, OperatorResult prev_op_result) override {
+    std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
         std::vector<GPU_COLUMN> out_cols;
 
         time_pt start_process_exprs = start_timer();
@@ -100,7 +101,7 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
         }
 
         auto out_table = std::make_unique<cudf::table>(std::move(out_cols));
-        GPU_DATA out_table_info(std::move(out_table), arrow_output_schema);
+        GPU_DATA out_table_info(std::move(out_table), arrow_output_schema, se);
 
         this->metrics.output_row_count += out_size;
 

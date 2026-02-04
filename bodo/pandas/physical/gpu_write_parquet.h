@@ -170,8 +170,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     }
 
     // ConsumeBatch signature using GPU_DATA
-    OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                OperatorResult prev_op_result) override {
+    OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
         if (finished) {
             return OperatorResult::FINISHED;
         }

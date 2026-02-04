@@ -111,7 +111,6 @@ class RankBatchGenerator {
                         cudf::io::source_info(part.path))
                         .row_groups(std::vector<std::vector<int>>{
                             std::vector<int>{current_rg_}})
-                        .set_stream(se->stream)
                         .build();
 
                 if (selected_columns.size() > 0) {
