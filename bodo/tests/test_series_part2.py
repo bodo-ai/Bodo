@@ -1770,7 +1770,7 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
         pytest.skip("not supported for dict string type")
 
     def test_impl(A, val):
-        return A.fillna(val, inplace=True)
+        A.fillna(val, inplace=True)
 
     check_func(test_impl, (S, value), use_dict_encoded_strings=False)
 
