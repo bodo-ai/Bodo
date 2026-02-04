@@ -277,8 +277,24 @@ void GpuShuffle::progress_waiting_for_sizes() {
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
         ncclGroupStart();
-        this->recv_data();
-        this->send_data();
+        // 1. Post ALL Receives first
+        for (int i = 0; i < n_ranks; ++i) {
+            if (packed_recv_buffers[i]->size() > 0) {
+                CHECK_NCCL(ncclRecv(packed_recv_buffers[i]->data(),
+                                    packed_recv_buffers[i]->size(), ncclChar, i,
+                                    nccl_comm, stream));
+            }
+        }
+
+        // 2. Post ALL Sends next
+        for (int i = 0; i < n_ranks; ++i) {
+            if (packed_send_buffers[i]->size() > 0) {
+                CHECK_NCCL(ncclSend(packed_send_buffers[i]->data(),
+                                    packed_send_buffers[i]->size(), ncclChar, i,
+                                    nccl_comm, stream));
+            }
+        }
+
         ncclGroupEnd();
         CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
         CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
