@@ -121,7 +121,11 @@ df_value_params = [
     # datetime column
     pytest.param(
         pd.DataFrame(
-            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
+            {
+                "A": pd.date_range(
+                    start="2018-04-24", end="2018-04-29", periods=5
+                ).astype("datetime64[ns]")
+            }
         ),
         id="datetime_df",
     ),
@@ -129,7 +133,9 @@ df_value_params = [
     pytest.param(
         pd.DataFrame(
             {"A": [3, 5, 1, -1, 4]},
-            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).astype(
+                "datetime64[ns]"
+            ),
         ),
         marks=pytest.mark.slow,
         id="datetime_index",

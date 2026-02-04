@@ -84,7 +84,11 @@ def test_df_dtypes(memory_leak_check, representative_tz_or_none):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz_or_none
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz=representative_tz_or_none,
+                unit="ns",
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
@@ -105,7 +109,11 @@ def test_df_dtypes_astype(memory_leak_check, representative_tz_or_none):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz_or_none
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz=representative_tz_or_none,
+                unit="ns",
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
