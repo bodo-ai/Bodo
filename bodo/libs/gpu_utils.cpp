@@ -275,22 +275,21 @@ void GpuShuffle::progress_waiting_for_sizes() {
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
         CHECK_NCCL(ncclGroupStart());
-        std::cout << "Posting NCCL receives" << std::endl;
-        // 1. Post ALL Receives first
-        for (int i = 0; i < n_ranks; ++i) {
-            if (packed_recv_buffers[i]->size() > 0) {
-                CHECK_NCCL(ncclRecv(packed_recv_buffers[i]->data(),
-                                    packed_recv_buffers[i]->size(), ncclChar, i,
-                                    nccl_comm, stream));
-            }
-        }
-
         std::cout << "Posting NCCL sends" << std::endl;
         // 2. Post ALL Sends next
         for (int i = 0; i < n_ranks; ++i) {
             if (packed_send_buffers[i]->size() > 0) {
                 CHECK_NCCL(ncclSend(packed_send_buffers[i]->data(),
                                     packed_send_buffers[i]->size(), ncclChar, i,
+                                    nccl_comm, stream));
+            }
+        }
+        std::cout << "Posting NCCL receives" << std::endl;
+        // 1. Post ALL Receives first
+        for (int i = 0; i < n_ranks; ++i) {
+            if (packed_recv_buffers[i]->size() > 0) {
+                CHECK_NCCL(ncclRecv(packed_recv_buffers[i]->data(),
+                                    packed_recv_buffers[i]->size(), ncclChar, i,
                                     nccl_comm, stream));
             }
         }
