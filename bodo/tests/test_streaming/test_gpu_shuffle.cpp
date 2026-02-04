@@ -120,9 +120,12 @@ static bodo::tests::suite tests([] {
         std::shared_ptr<cudf::table> input_ptr = std::move(table);
 
         GpuShuffleManager manager;
+        std::cout << "Rank " << rank << " manager created." << std::endl;
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
+
+        std::cout << "Rank " << rank << " posted shuffle." << std::endl;
 
         bodo::tests::check(manager.inflight_exists() ==
                            (device_id.value() >= 0));
