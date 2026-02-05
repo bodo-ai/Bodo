@@ -385,7 +385,7 @@ def test_series_replace_str_literal(memory_leak_check):
             SeriesReplace(
                 pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
                 to_replace=5,
-                value=15,
+                value=2,
             ),
         ),
         # to_replace=dictionary success
