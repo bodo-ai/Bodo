@@ -1979,21 +1979,19 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
         series_val = series_val[:5]
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
+    _test_equal(
         bodo_func(series_val),
         test_impl(series_val),
         check_dtype=False,
         check_categorical=False,
-        check_index_type=False,
     )
     cond = pd.Series([True, True, False, True, False])
     bodo_func = bodo.jit(test_impl2)
-    pd.testing.assert_series_equal(
+    _test_equal(
         bodo_func(series_val, cond),
         test_impl2(series_val, cond),
         check_dtype=False,
         check_categorical=False,
-        check_index_type=False,
     )
 
 
