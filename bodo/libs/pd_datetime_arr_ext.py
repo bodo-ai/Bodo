@@ -498,6 +498,12 @@ def overload_timestamp_to_dt64(val):
             return val
 
         return impl
+    elif val == bodo.types.datetime_datetime_type:  # pragma: no cover
+
+        def impl(val):  # pragma: no cover
+            return bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
+
+        return impl
     else:
         raise BodoError("timestamp_to_dt64 requires a timestamp")
 
