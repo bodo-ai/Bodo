@@ -929,6 +929,7 @@ def test_series_astype_str(series_val):
     # Avoid Pandas issues for decimal nulls
     if isinstance(series_val.iloc[0], Decimal):
         series_val = series_val.dropna()
+        pytest.skip("Pandas string representation has extra zeroes")
 
     check_func(test_impl1, (series_val,))
     # Bodo doesn't unbox string dtypes as pd.StringDtype(), so provide a py_output
