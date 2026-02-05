@@ -170,7 +170,7 @@ class GpuShuffleManager {
     ncclComm_t nccl_comm = nullptr;
 
     // MPI communicator for CPU communication between ranks
-    // with GPUs assgined
+    // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
 
     // Number of processes
