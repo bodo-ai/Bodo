@@ -1677,6 +1677,7 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
             )
 
 
+@pytest.mark.skip(reason="Not allowed in Pandas 3")
 def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series.values with slice idx.
