@@ -376,7 +376,7 @@ RankDataExchange::operator()(std::shared_ptr<table_info> input_batch,
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
-    // TODO: Start data transfer for CPU->GPU as soon as it's availible
+    // TODO: Start data transfer for CPU->GPU as soon as it's available
     if (result.has_value()) {
         std::shared_ptr<table_info> shuffled_table = result.value();
         collected_rows->builder->UnifyDictionariesAndAppend(shuffled_table);
