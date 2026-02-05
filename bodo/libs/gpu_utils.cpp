@@ -33,13 +33,17 @@ GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking);
+    CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
 
     // Initialize NCCL
     initialize_nccl();
 }
 
 GpuShuffleManager::~GpuShuffleManager() {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return;
+    }
+
     // Destroy NCCL communicator
     ncclCommDestroy(nccl_comm);
 
@@ -47,6 +51,9 @@ GpuShuffleManager::~GpuShuffleManager() {
     if (stream) {
         cudaStreamDestroy(stream);
     }
+
+    // Free MPI communicator
+    mpi_Comm_free(&mpi_comm);
 }
 
 void GpuShuffleManager::initialize_nccl() {
@@ -315,7 +322,6 @@ GpuShuffle::progress_waiting_for_data() {
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
 
-        cudaStreamSynchronize(this->stream);
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
 
@@ -333,8 +339,7 @@ void GpuShuffle::progress_sending_sizes() {
     int all_gpu_sizes_sent;
     CHECK_MPI_TEST_ALL((*this->gpu_sizes_send_reqs), all_gpu_sizes_sent,
                        "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
-    if (all_metadata_sizes_sent && all_gpu_sizes_sent &&
-        this->recv_state != GpuShuffleState::SIZES_INFLIGHT) {
+    if (all_metadata_sizes_sent && all_gpu_sizes_sent) {
         // Deallocate all size data
         this->send_metadata_sizes->clear();
         this->send_gpu_sizes->clear();

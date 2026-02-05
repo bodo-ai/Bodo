@@ -29,6 +29,7 @@ enum class GpuShuffleState {
     DATA_INFLIGHT = 1,
     COMPLETED = 2
 };
+
 /**
  * @brief Holds information for inflight shuffle operations
  */
@@ -138,7 +139,10 @@ struct GpuShuffle {
     GpuShuffle(const GpuShuffle&) = delete;
     GpuShuffle& operator=(const GpuShuffle&) = delete;
 
-    ~GpuShuffle() { cudaEventDestroy(nccl_send_event); }
+    ~GpuShuffle() {
+        cudaEventDestroy(nccl_send_event);
+        cudaEventDestroy(nccl_recv_event);
+    }
 
     /*
      * @brief Progress the shuffle operation
@@ -238,6 +242,8 @@ class GpuShuffleManager {
      * @return true if there are inflight shuffles, false otherwise
      */
     bool inflight_exists() const { return !inflight_shuffles.empty(); }
+
+    bool is_available() const { return true; }
 };
 
 /**
@@ -277,7 +283,7 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 // Empty implementation when CUDF is not available
 class GpuShuffleManager {
    public:
-    explicit GpuShuffleManager(MPI_Comm mpi_comm_) {}
+    explicit GpuShuffleManager() = default;
     bool is_available() const { return false; }
 };
 #endif

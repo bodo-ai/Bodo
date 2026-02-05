@@ -105,7 +105,9 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        cudaSetDevice(device_id.value());
+        if (device_id > 0) {
+            cudaSetDevice(device_id.value());
+        }
 
         // Setup: Create 10 rows per rank with a gpu assigned
         // Rank 0 has [0..9], Rank 1 has [10..19], etc.
@@ -177,7 +179,9 @@ static bodo::tests::suite tests([] {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        cudaSetDevice(device_id.value());
+        if (device_id.value() >= 0) {
+            cudaSetDevice(device_id.value());
+        }
 
         // Setup: Create 0 rows (empty table)
         // We use the same helper, just requesting 0 rows.
