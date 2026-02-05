@@ -392,7 +392,7 @@ def overload_dataframe_astype(
     dtype,
     copy=True,
     errors="raise",
-    _bodo_nan_to_str=True,
+    _bodo_nan_to_str=False,
     _bodo_object_typeref=None,
 ):
     # _bodo_nan_to_str is a bodo specific argument that indicate is string should be converted
@@ -428,7 +428,7 @@ def overload_dataframe_astype(
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
     extra_globals = None
-    header = "def bodo_dataframe_astype(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True, _bodo_object_typeref=None):\n"
+    header = "def bodo_dataframe_astype(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=False, _bodo_object_typeref=None):\n"
     if df.is_table_format:
         # Table format must always pass the final table as its output.
         extra_globals = {}

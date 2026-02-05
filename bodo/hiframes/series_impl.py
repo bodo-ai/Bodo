@@ -2115,7 +2115,7 @@ def overload_series_notna(S):
     inline="always",
     no_unliteral=True,
 )
-def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True):
+def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=False):
     unsupported_args = {"errors": errors}
     arg_defaults = {"errors": "raise"}
     check_unsupported_args(
@@ -2134,7 +2134,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str
 
     # TODO: other data types like datetime, records/tuples
     def impl(
-        S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True
+        S, dtype, copy=True, errors="raise", _bodo_nan_to_str=False
     ):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
