@@ -7,6 +7,7 @@ import numba  # noqa TID253
 import numba.np.ufunc_db  # noqa TID253
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
@@ -1132,7 +1133,13 @@ def test_series_to_numpy(numeric_series_val, memory_leak_check):
     def test_impl(S):
         return S.to_numpy()
 
-    check_func(test_impl, (numeric_series_val,))
+    check_func(
+        test_impl,
+        (numeric_series_val,),
+        py_output=numeric_series_val.astype(pd.ArrowDtype(pa.float64())).array
+        if numeric_series_val.dtype == np.float64
+        else None,
+    )
 
 
 # TODO: add memory_leak_check (it leaks with Decimal array)
