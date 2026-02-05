@@ -1930,12 +1930,11 @@ def test_series_getitem_slice(series_val, memory_leak_check):
         return S[1:4]
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
+    _test_equal(
         bodo_func(series_val),
         test_impl(series_val),
         check_dtype=False,
         check_categorical=False,
-        check_index_type=False,
     )
 
 
