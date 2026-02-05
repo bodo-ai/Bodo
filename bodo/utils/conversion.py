@@ -829,6 +829,9 @@ def overload_ndarray_if_nullable_arr(data):
             data
         )  # pragma: no cover
 
+    if isinstance(data, bodo.types.DatetimeArrayType):
+        return lambda data: data._data  # pragma: no cover
+
     return lambda data: data  # pragma: no cover
 
 
