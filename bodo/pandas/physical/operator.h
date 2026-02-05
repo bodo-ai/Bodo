@@ -194,8 +194,8 @@ class RankDataExchange {
     std::vector<int> cpu_ranks;
     MPI_Comm shuffle_comm;
 
-    // State for synchronizing after all ranks have sent their last batch to/from
-    // GPU ranks.
+    // State for synchronizing after all ranks have sent their last batch
+    // to/from GPU ranks.
     std::unique_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
