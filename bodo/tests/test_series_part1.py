@@ -3015,9 +3015,7 @@ def test_series_init_dict_kwd():
     """tests that we handle kwd argument correctly in the typing pass transform"""
 
     def impl1():
-        S = pd.Series(
-            {"r1": 1, "r2": 2, "r3": 3}, None, np.int32, "my_series", False, False
-        )
+        S = pd.Series({"r1": 1, "r2": 2, "r3": 3}, None, np.int32, "my_series", False)
         return S
 
     def impl2():
