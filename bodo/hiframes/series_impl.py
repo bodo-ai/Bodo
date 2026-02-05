@@ -1484,7 +1484,11 @@ def overload_series_idxmax(S, axis=0, skipna=True):
             ),
         )
         or S.data
-        in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
+        in [
+            bodo.types.boolean_array_type,
+            bodo.types.datetime_date_array_type,
+            bodo.types.timedelta_array_type,
+        ]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."

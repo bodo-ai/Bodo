@@ -218,6 +218,17 @@ def _get_type_min_value_overload(dtype):
 
         return impl
 
+    # timedelta array
+    if dtype == bodo.types.timedelta_array_type:
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_min_value(
+                numba.core.types.int64
+            )
+            return bodo.hiframes.datetime_timedelta_ext.init_pd_timedelta(int_value)
+
+        return impl
+
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(

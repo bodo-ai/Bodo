@@ -440,18 +440,77 @@ def timedelta_min(lhs, rhs):
 
         return impl
 
-    if (
+    elif (
         isinstance(lhs, numba.core.typing.builtins.IndexValueType)
-        and lhs.val_typ == pd_timedelta_type
         and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == pd_timedelta_type
         and rhs.val_typ == pd_timedelta_type
     ):
 
         def impl(lhs, rhs):  # pragma: no cover
-            if lhs.value == rhs.value:
-                # If the values are equal return the smaller index
-                return lhs if lhs.index < rhs.index else rhs
-            return lhs if lhs.value < rhs.value else rhs
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return lhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True, jit_options={"cache": True})
+def timedelta_max(lhs, rhs):
+    if rhs == pd_timedelta_type and lhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # prama: no cover
+            return lhs if lhs.value > rhs.value else rhs
+
+        return impl
+
+    elif (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == pd_timedelta_type
+        and rhs.val_typ == pd_timedelta_type
+    ):  # pragma: no cover
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return rhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return lhs
 
         return impl
 

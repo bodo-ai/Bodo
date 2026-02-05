@@ -2839,7 +2839,7 @@ def timestamp_min(lhs, rhs):
     elif (
         isinstance(lhs, IndexValueType)
         and isinstance(rhs, IndexValueType)
-        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(lhs.val_typ, PandasTimestampType)
         and isinstance(rhs.val_typ, PandasTimestampType)
     ):
 
@@ -2891,7 +2891,7 @@ def timestamp_max(lhs, rhs):
     elif (
         isinstance(lhs, IndexValueType)
         and isinstance(rhs, IndexValueType)
-        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(lhs.val_typ, PandasTimestampType)
         and isinstance(rhs.val_typ, PandasTimestampType)
     ):  # pragma: no cover
 
