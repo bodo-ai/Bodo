@@ -920,6 +920,22 @@ def overload_sub_operator_datetime_arr(lhs, rhs):
 
             return impl
 
+        if isinstance(rhs, DatetimeArrayType) and rhs.tz == lhs.tz:
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(
+                        lhs, i
+                    ) or bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs[i] - rhs[i]
+                return out_arr
+
+            return impl
         else:
             raise BodoError(
                 f"sub operator not supported between Timezone-aware timestamp and {rhs}. Please convert to timezone naive with ts.tz_convert(None)"

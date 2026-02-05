@@ -4106,10 +4106,24 @@ def overload_series_diff(S, periods=1):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     if not (
-        isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
+        isinstance(
+            S.data,
+            (
+                types.Array,
+                IntegerArrayType,
+                FloatingArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
+        )
         and (
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.types.datetime64ns
+            or (
+                isinstance(
+                    S.data.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+                )
+                and S.data.dtype.tz is None
+            )
         )
     ):
         # TODO: Link to supported Column input types.
