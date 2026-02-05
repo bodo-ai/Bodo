@@ -546,6 +546,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             bodo.types.timedelta64ns,
             bodo.types.datetime_date_type,
             bodo.types.TimeType,
+            bodo.types.pd_timedelta_type,
         ]
 
         if target_typ not in supported_typs and not isinstance(

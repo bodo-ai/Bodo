@@ -4451,7 +4451,12 @@ def _overload_nan_argmin(arr):
             arr,
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
-        or arr in [boolean_array_type, datetime_date_array_type]
+        or arr
+        in [
+            boolean_array_type,
+            datetime_date_array_type,
+            bodo.types.timedelta_array_type,
+        ]
         or arr.dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values

@@ -431,6 +431,31 @@ def pd_td_total_seconds(td):
     return impl
 
 
+@overload(min, no_unliteral=True, jit_options={"cache": True})
+def timedelta_min(lhs, rhs):
+    if rhs == pd_timedelta_type and lhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # prama: no cover
+            return lhs if lhs.value < rhs.value else rhs
+
+        return impl
+
+    if (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == pd_timedelta_type
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and rhs.val_typ == pd_timedelta_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            if lhs.value == rhs.value:
+                # If the values are equal return the smaller index
+                return lhs if lhs.index < rhs.index else rhs
+            return lhs if lhs.value < rhs.value else rhs
+
+        return impl
+
+
 def overload_add_operator_datetime_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
