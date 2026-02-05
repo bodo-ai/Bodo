@@ -338,13 +338,13 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
     const std::vector<int> dest_ranks;
 };
 
-RankDataExchange::RankDataExchange(int64_t op_id_)
-    : op_id(op_id_), is_last_state(std::make_shared<IsLastState>()) {
+RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
     // Create a communicator for all ranks on the node
     CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
                                   MPI_INFO_NULL, &this->shuffle_comm),
               "RankDataExchange::RankDataExchange:: MPI error on "
               "MPI_Comm_split_type:");
+    this->is_last_state = std::make_unique<IsLastState>(this->shuffle_comm);
 
     // Get a list of all GPU ranks
     int n_pes;
@@ -397,6 +397,11 @@ RankDataExchange::operator()(std::shared_ptr<table_info> input_batch,
 
     bool finished =
         global_is_last && this->collected_rows->builder->total_remaining == 0;
+
+    if (finished) {
+        this->shuffle_state->Finalize();
+        this->collected_rows->builder->Finalize();
+    }
     return std::make_tuple(
         output_batch, finished
                           ? OperatorResult::FINISHED

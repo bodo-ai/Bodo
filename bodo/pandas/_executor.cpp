@@ -30,7 +30,7 @@
 #include <iostream>
 #endif
 
-// Always choose GPU as device for supported (used testing purposes)
+// Always choose GPU as device for supported ops (used for testing)
 // #define ALWAYS_RUN_ON_GPU
 
 enum DEVICE { CPU = 0, GPU = 1 };
@@ -724,7 +724,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
     // considered too small for GPU.
     if (device == DEVICE::GPU) {
 #ifdef ALWAYS_RUN_ON_GPU
-        t = 0;
+        t = 0.0;
 #else
         t += KERNEL_LAUNCH;
         auto gpu_min_size_iter = GPU_MIN_SIZE.find(op);
