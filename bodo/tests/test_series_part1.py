@@ -1809,6 +1809,9 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
         pytest.skip("TODO: update datetime/timedelta setitem support")
 
+    if series_val.dtype == np.uint8:
+        pytest.skip("Pandas issue with uint8 setitem")
+
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
         return
