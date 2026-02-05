@@ -25,7 +25,7 @@
 #endif
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_GPU_SELECTOR
+#define DEBUG_GPU_SELECTOR
 #ifdef DEBUG_GPU_SELECTOR
 #include <iostream>
 #endif
@@ -649,6 +649,10 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
 
     double t = 0;
 
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "compute_time alpha = " << a << std::endl;
+#endif
+
     /*
      * For each operator type, we multiply the number of elements
      * we expect to look at times some per-operation type alpha constant.
@@ -724,6 +728,10 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
         }
         uint64_t min_size = gpu_min_size_iter->second;
         if (size_in < min_size) {
+#ifdef DEBUG_GPU_SELECTOR
+            std::cout << "compute_time applying min_size penalty " << t << " "
+                      << t * 1.5 << std::endl;
+#endif
             t *= 1.5;
         }
     }
