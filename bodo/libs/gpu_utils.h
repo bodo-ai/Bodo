@@ -195,6 +195,8 @@ class GpuShuffleManager {
     // and they can't overlap
     int curr_tag = 0;
 
+    const int MAX_TAG_VAL;
+
     /**
      * @brief Initialize NCCL communicator
      */

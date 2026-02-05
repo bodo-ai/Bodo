@@ -15,10 +15,12 @@
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 #include "../libs/_distributed.h"
+#include "../libs/streaming/_shuffle.h"
 #include "_utils.h"
 #include "cuda_runtime_api.h"
 
-GpuShuffleManager::GpuShuffleManager() : gpu_id(get_gpu_id()) {
+GpuShuffleManager::GpuShuffleManager()
+    : gpu_id(get_gpu_id()), MAX_TAG_VAL(get_max_allowed_tag_value()) {
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
@@ -53,7 +55,7 @@ GpuShuffleManager::~GpuShuffleManager() {
     }
 
     // Free MPI communicator
-    mpi_Comm_free(&mpi_comm);
+    MPI_Comm_free(&mpi_comm);
 }
 
 void GpuShuffleManager::initialize_nccl() {
@@ -99,7 +101,7 @@ void GpuShuffleManager::shuffle_table(
 
     // Each shuffle will use 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
-    this->curr_tag += 3;
+    this->curr_tag = (this->curr_tag + 3) % MAX_TAG_VAL;
 }
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {

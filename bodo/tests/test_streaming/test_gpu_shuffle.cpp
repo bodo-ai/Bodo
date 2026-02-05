@@ -105,7 +105,7 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id > 0) {
+        if (device_id.value() > 0) {
             cudaSetDevice(device_id.value());
         }
 
