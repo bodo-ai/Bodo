@@ -101,7 +101,7 @@ void GpuShuffleManager::shuffle_table(
 
     // Each shuffle will use 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
-    if (inflight_shuffles * 3 < MAX_TAG_VAL) {
+    if (inflight_shuffles.size() * 3 < static_cast<size_t>(MAX_TAG_VAL)) {
         throw std::runtime_error(
             "Exceeded maxiumum number of inflight shuffles");
     }
