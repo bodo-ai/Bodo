@@ -423,7 +423,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);
         Py_XDECREF(this->schema_fields);
-        MPI_Comm_free(&this->comm);
+        if (this->comm != MPI_COMM_NULL) {
+            MPI_Comm_free(&this->comm);
+        }
     }
 
     void FinalizeSource() override {

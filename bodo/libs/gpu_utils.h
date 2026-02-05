@@ -2,7 +2,6 @@
 
 #ifdef USE_CUDF
 #include <mpi.h>
-#include <nccl.h>
 #include <cudf/table/table.hpp>
 
 /**

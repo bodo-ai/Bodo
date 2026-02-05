@@ -14,6 +14,7 @@ int get_streaming_batch_size() {
 
 int get_gpu_streaming_batch_size() {
     char *env_str = std::getenv("BODO_GPU_STREAMING_BATCH_SIZE");
+    // TODO: tune batch size
     return (env_str != nullptr) ? std::stoi(env_str) : 32768 * 10;
 }
 
@@ -221,38 +222,6 @@ std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     table = table->ReplaceSchemaMetadata(batch.schema->metadata());
     return table;
 }
-#else
-OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
-                                          OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-
-std::pair<std::shared_ptr<table_info>, OperatorResult>
-PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
-                                   OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-
-OperatorResult PhysicalGPUSink::ConsumeBatch(
-    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-
-OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
-                                             OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-
-std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
-    GPU_DATA input_batch, OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-
-std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
-    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    throw std::runtime_error("Should never be called in non-CUDF mode.");
-}
-#endif
 
 /**
  * @brief State for sending contiguous chunks for data from source ranks to
@@ -308,7 +277,9 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
             uint32_t dest_rank =
                 dest_ranks[(rank_idx * dest_ranks.size()) / src_ranks.size()];
             shuffle_hashes =
-                std::make_shared<uint32_t[]>(shuffle_table->nrows(), dest_rank);
+                std::make_shared<uint32_t[]>(shuffle_table->nrows());
+            std::fill(shuffle_hashes.get(),
+                      shuffle_hashes.get() + shuffle_table->nrows(), dest_rank);
         }
         // Case 2: send fewer sources to many destinations
         // Distribute destination ranks evenly among source ranks.
@@ -450,3 +421,35 @@ void GPUtoCPUExchange::InitializeShuffleState(
         sync_freq, this->op_id);
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
+#else
+OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
+                                          OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<std::shared_ptr<table_info>, OperatorResult>
+PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
+                                   OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+OperatorResult PhysicalGPUSink::ConsumeBatch(
+    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
+                                             OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    GPU_DATA input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
+    std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+#endif

@@ -132,16 +132,6 @@ struct GPU_DATA {
              std::shared_ptr<StreamAndEvent> se)
         : table(t), schema(s), stream_event(se) {}
 };
-#else
-
-struct GPU_DATA {};
-struct StreamAndEvent {};
-
-inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
-    return std::shared_ptr<StreamAndEvent>();
-}
-
-#endif
 
 /**
  * @brief Base class for sending data to/from ranks with pinned resources (GPUs)
@@ -230,6 +220,16 @@ class GPUtoCPUExchange : public RankDataExchange {
         table_info* input_batch,
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
 };
+#else
+
+struct GPU_DATA {};
+struct StreamAndEvent {};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    return std::shared_ptr<StreamAndEvent>();
+}
+
+#endif
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
