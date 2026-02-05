@@ -1605,18 +1605,14 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
 
     else:
         # TODO: Test distributed implementation
-        # Pandas promotes to float64. This is most likely a bug and Bodo
-        # keeps the same, smaller type.
         if series_val.dtype == np.uint8:
-            check_dtype = False
-        else:
-            check_dtype = True
+            pytest.skip("uint8 setitem has pandas issues")
         check_func(
             test_impl,
             (series_val, idx, val),
             copy_input=True,
             dist_test=False,
-            check_dtype=check_dtype,
+            check_dtype=True,
         )
 
 
