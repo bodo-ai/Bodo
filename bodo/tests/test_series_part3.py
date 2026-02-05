@@ -682,9 +682,10 @@ def test_series_categorical_astype_str(memory_leak_check):
     def impl(S):
         return S.astype(str, _bodo_nan_to_str=False)
 
-    S = pd.Series(pd.Categorical([1, 2, 4, None, 5] * 5))
+    S = pd.Series(
+        pd.Categorical(pd.array([1, 2, 4, None, 5] * 5, dtype=pd.Int64Dtype()))
+    )
     py_output = S.astype(str)
-    py_output[py_output == "nan"] = None
     check_func(impl, (S,), py_output=py_output)
 
 
