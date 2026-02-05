@@ -513,19 +513,23 @@ def overload_setitem(A, ind, val):
         isinstance(val, DatetimeArrayType)
         or isinstance(val, bodo.types.PandasTimestampType)
         or val == bodo.types.datetime64ns
+        or val == bodo.types.datetime_datetime_type
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
         )
 
+    is_tz_naive_dt = (
+        isinstance(val, numba.core.types.scalars.NPDatetime)
+        or val == bodo.types.datetime_datetime_type
+    )
+
     # Ensure the timezones match, and that, if a datetime 64, we have no time zone
-    if (
-        not isinstance(val, numba.core.types.scalars.NPDatetime) and val.tz != tz
-    ):  # pragma: no cover
+    if not is_tz_naive_dt and val.tz != tz:  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires the Array and values to set to share a timezone"
         )
-    elif isinstance(val, numba.core.types.scalars.NPDatetime) and tz is not None:
+    elif is_tz_naive_dt and tz is not None:
         raise BodoError(
             "operator.setitem with tz-aware DatetimeArrayType requires timezone-aware values"
         )
@@ -545,6 +549,16 @@ def overload_setitem(A, ind, val):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
+                A._data[ind] = dt64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
+                )
+
+            return impl
+        elif val == bodo.types.datetime_datetime_type:
+
+            def impl(A, ind, val):  # pragma: no cover
+                dt64_val = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
                 A._data[ind] = dt64_val
                 bodo.libs.int_arr_ext.set_bit_to_arr(
                     A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
