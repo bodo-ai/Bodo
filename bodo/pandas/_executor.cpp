@@ -30,6 +30,9 @@
 #include <iostream>
 #endif
 
+// Always choose GPU as device for supported (used testing purposes)
+// #define ALWAYS_RUN_ON_GPU
+
 enum DEVICE { CPU = 0, GPU = 1 };
 
 /* -----------------------------
@@ -43,7 +46,11 @@ double TRANSFER_OVERHEAD = 10e-6;  // 10 microseconds
 double KERNEL_LAUNCH = 10e-6;      // 10 microseconds
 
 double transfer_time(uint64_t bytes_size) {
+#ifdef ALWAYS_RUN_ON_GPU
+    return 0.0;
+#else
     return TRANSFER_OVERHEAD + (bytes_size / PCIe_BW);
+#endif
 }
 
 // Some reasonable defaults in rare case calibration fails.
@@ -716,6 +723,9 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
     // Add in kernel launch time and apply penalty if operation is
     // considered too small for GPU.
     if (device == DEVICE::GPU) {
+#ifdef ALWAYS_RUN_ON_GPU
+        t = 0;
+#else
         t += KERNEL_LAUNCH;
         auto gpu_min_size_iter = GPU_MIN_SIZE.find(op);
         if (gpu_min_size_iter == GPU_MIN_SIZE.end()) {
@@ -726,6 +736,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
         if (size_in < min_size) {
             t *= 1.5;
         }
+#endif
     }
 
 #ifdef DEBUG_GPU_SELECTOR

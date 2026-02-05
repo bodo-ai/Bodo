@@ -2,6 +2,7 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cstdint>
 #ifdef USE_CUDF
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
@@ -143,7 +144,7 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
 #endif
 
 /**
- * @brief
+ * @brief Base class for sending data to/from ranks with pinned resources (GPUs)
  *
  */
 class RankDataExchange {
@@ -151,11 +152,15 @@ class RankDataExchange {
     RankDataExchange(int64_t op_id_);
 
     /**
-     * @brief
+     * @brief Exchange data between ranks with pinned resources (GPUs)
      *
-     * @param input_batch
-     * @param prev_op_result
-     * @return std::tuple<std::shared_ptr<table_info>, bool>
+     * @param input_batch The input batch to be exchanged.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<std::shared_ptr<table_info>, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
      */
     std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
         std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
@@ -163,29 +168,37 @@ class RankDataExchange {
     ~RankDataExchange();
 
    protected:
-    /**
-     * @brief
+    /** @brief Initialize the RankDataExchange state including output builders
+     * and shuffle state.
      *
-     * @param input_batch
+     * @param input_batch Sample input batch to determine column types.
      */
     void Initialize(table_info* input_batch);
 
     /**
-     * @brief
+     * @brief Initialize shuffle state for sending data between CPU and GPU
+     * ranks asyncrhonously.
      *
      * @param input_batch
+     * @param dict_builders
      */
     virtual void InitializeShuffleState(
         table_info* input_batch,
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) = 0;
 
+    virtual int64_t GetOutBatchSize() = 0;
+
     int64_t op_id;
-    bool has_gpu;
+
     std::vector<int> gpu_ranks;
+    std::vector<int> cpu_ranks;
     MPI_Comm shuffle_comm;
+
+    // State for syncronizing after all ranks have sent their last batch to/from
+    // GPU ranks.
     const std::shared_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
-    std::unique_ptr<ChunkedTableBuilder> collected_rows;
+    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
 };
 
 /**
@@ -196,6 +209,8 @@ class CPUtoGPUExchange : public RankDataExchange {
    public:
     CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
 
+   private:
+    int64_t GetOutBatchSize() override;
     void InitializeShuffleState(
         table_info* input_batch,
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
@@ -208,7 +223,7 @@ class CPUtoGPUExchange : public RankDataExchange {
 class GPUtoCPUExchange : public RankDataExchange {
    public:
     GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
-
+    int64_t GetOutBatchSize() override;
     void InitializeShuffleState(
         table_info* input_batch,
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
@@ -435,6 +450,13 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
  * @return int batch size to be used in streaming operators
  */
 int get_streaming_batch_size();
+
+/**
+ * @brief Get the streaming batch size from environment variable.
+ *
+ * @return int batch size to be used in gpu streaming operators
+ */
+int get_gpu_streaming_batch_size();
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size();

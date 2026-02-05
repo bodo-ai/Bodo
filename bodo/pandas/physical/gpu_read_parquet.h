@@ -50,6 +50,8 @@ class RankBatchGenerator {
           selected_columns(_selected_columns),
           arrow_schema(_arrow_schema) {
         files_ = list_parquet_files(path_);
+
+        // Only assign parts to GPU-pinned ranks
         if (files_.empty() || comm == MPI_COMM_NULL) {
             // nothing to do
             parts_ = {};
@@ -447,7 +449,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         std::shared_ptr<StreamAndEvent> se) override {
         if (!batch_gen) {
             time_pt start_init = start_timer();
-            init_batch_gen(comm);
+            init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
         }
 
@@ -485,6 +487,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     PhysicalGPUReadParquetMetrics metrics;
     std::shared_ptr<RankBatchGenerator> batch_gen;
     std::shared_ptr<arrow::Schema> arrow_schema;
+
+    // Communicator for GPU ranks (for part assignments)
     MPI_Comm comm;
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
@@ -492,9 +496,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             TimerMetric("produce_time", this->metrics.produce_time));
     }
 
-    void init_batch_gen(MPI_Comm comm) {
-        auto batch_size =
-            get_streaming_batch_size();  // TO-DO different for GPU
+    void init_batch_gen() {
+        auto batch_size = get_gpu_streaming_batch_size();
 
         batch_gen = std::make_shared<RankBatchGenerator>(
             path, batch_size, output_schema->column_names, arrow_schema, comm);

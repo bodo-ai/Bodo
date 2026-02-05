@@ -23,11 +23,7 @@
 #include "_utils.h"
 
 rmm::cuda_device_id get_gpu_id() {
-    // TODO: Fix hang in collective call
     auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
-    // int rank_on_node, n_ranks;
-    // MPI_Comm_rank(MPI_COMM_WORLD, &rank_on_node);
-    // MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
     int device_count;
     cudaGetDeviceCount(&device_count);
@@ -41,15 +37,6 @@ rmm::cuda_device_id get_gpu_id() {
                                                               : -1);
 
     return device_id;
-}
-
-int get_cluster_cuda_device_count() {
-    int local_device_count, device_count;
-    cudaGetDeviceCount(&device_count);
-    CHECK_MPI(MPI_Allreduce(&local_device_count, &device_count, 1, MPI_INT,
-                            MPI_SUM, MPI_COMM_WORLD),
-              "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");
-    return device_count;
 }
 
 MPI_Comm get_gpu_mpi_comm() {

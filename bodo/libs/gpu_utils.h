@@ -11,12 +11,7 @@
  * @return rmm::cuda_device_id, -1 if no GPU is assigned to this rank
  */
 rmm::cuda_device_id get_gpu_id();
-/**
- * @brief Get the number of CUDA devices available in the cluster. All ranks
- * must call this function.
- * @return Number of CUDA devices
- */
-int get_cluster_cuda_device_count();
+
 /**
  * @brief Get the MPI communicator for ranks with GPUs assigned
  * @return MPI_Comm
