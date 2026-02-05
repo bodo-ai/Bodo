@@ -202,7 +202,8 @@ class RankDataExchange {
 };
 
 /**
- * @brief
+ * @brief Class for managing data exchange between CPU ranks (all ranks on the
+ * node) and GPU-pinned ranks.
  *
  */
 class CPUtoGPUExchange : public RankDataExchange {
@@ -217,7 +218,8 @@ class CPUtoGPUExchange : public RankDataExchange {
 };
 
 /**
- * @brief
+ * @brief Class for managing data exchange between GPU-pinned ranks and CPU
+ * ranks (all ranks on the node).
  *
  */
 class GPUtoCPUExchange : public RankDataExchange {

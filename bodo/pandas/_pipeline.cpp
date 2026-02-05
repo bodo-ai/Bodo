@@ -307,12 +307,12 @@ bool Pipeline::midPipelineExecute(
 uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
+
     uint64_t batches_processed = 0;
     bool finished = false;
     std::variant<std::shared_ptr<table_info>, GPU_DATA> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
     while (!finished) {
         batches_processed++;
 
