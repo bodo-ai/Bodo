@@ -144,8 +144,6 @@ class RankBatchGenerator {
                 // cudf::table Adjust the following to match your cuDF version:
                 std::unique_ptr<cudf::table> tbl = std::move(result.tbl);
 
-                ++current_rg_;
-
                 if (!tbl || tbl->num_rows() == 0) {
                     // no rows in this row group (rare) — advance
                     continue;
