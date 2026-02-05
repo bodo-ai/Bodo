@@ -17,6 +17,7 @@ from bodo.tests.series_common import (  # noqa
 )
 from bodo.tests.utils import (
     _get_dist_arg,
+    _test_equal,
     check_func,
     get_num_test_workers,
     is_bool_object_series,
@@ -1393,12 +1394,10 @@ def test_series_take(series_val, memory_leak_check):
         return A.take([2, 3])
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
+    _test_equal(
         bodo_func(series_val),
         test_impl(series_val),
         check_dtype=False,
-        check_index_type=False,
-        check_categorical=False,
     )
     # TODO: dist support for selection with index list
 
