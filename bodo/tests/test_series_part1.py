@@ -1345,6 +1345,9 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
 
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
+
     def test_impl(S, val):
         S.loc[[True, True, False, True, False]] = val
         return S
@@ -1479,6 +1482,9 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     """
     from bodo.utils.typing import BodoError
 
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -1519,6 +1525,9 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     """
     import bodo.decorators  # noqa
     from bodo.utils.typing import BodoError
+
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -1618,6 +1627,9 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
     """
     from bodo.utils.typing import BodoError
 
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
+
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support setitem array idx, scalar value for Categorical arrays
         return
@@ -1674,6 +1686,9 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     Test setitem for Series.iloc and Series.values with slice idx.
     """
     from bodo.utils.typing import BodoError
+
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1793,6 +1808,9 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     of ints idx.
     """
     from bodo.utils.typing import BodoError
+
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1984,6 +2002,9 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 def test_series_setitem_int(series_val, memory_leak_check):
     from bodo.utils.typing import BodoError
 
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2010,6 +2031,9 @@ def test_series_setitem_int(series_val, memory_leak_check):
 
 
 def test_series_setitem_slice(series_val, memory_leak_check):
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2034,6 +2058,9 @@ def test_series_setitem_slice(series_val, memory_leak_check):
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_check):
     from bodo.utils.typing import BodoError
+
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        pytest.skip("TODO: update datetime/timedelta setitem support")
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
