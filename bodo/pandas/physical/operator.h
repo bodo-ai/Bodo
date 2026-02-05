@@ -177,7 +177,7 @@ class RankDataExchange {
 
     /**
      * @brief Initialize shuffle state for sending data between CPU and GPU
-     * ranks asyncrhonously.
+     * ranks asynchronously.
      *
      * @param input_batch
      * @param dict_builders
