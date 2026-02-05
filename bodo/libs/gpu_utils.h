@@ -70,8 +70,8 @@ struct GpuShuffle {
     // Buffers for metadata from other ranks, these are used to construct
     // packed_columns. Indexed by sending rank
     std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_recv_buffers;
-    // Buffers for metadata transfers to other ranks, these are used to construct
-    // packed_columns. Indexed by destination rank
+    // Buffers for metadata transfers to other ranks, these are used to
+    // construct packed_columns. Indexed by destination rank
     std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_send_buffers;
     // Buffers for column data from other ranks, these are used to construct
     // packed_columns. Indexed by sending rank
