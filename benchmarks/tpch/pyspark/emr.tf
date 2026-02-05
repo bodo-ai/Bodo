@@ -17,7 +17,7 @@ variable "scale_factor" {
 variable "queries" {
   description = "List of TPCH queries to run."
   type        = list(number)
-  default     = [2,3,5,6,7,8,9,10,11,14,15,17,18,19,20]
+  default     = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17,18,19,20,21,22]
 }
 
 locals {
@@ -61,12 +61,12 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
 
   master_instance_group {
-    instance_type = "r6i.16xlarge"
+    instance_type = "c6i.xlarge"
   }
 
   core_instance_group {
     instance_type  = "r6i.16xlarge"
-    instance_count = 3
+    instance_count = 4
 
     ebs_config {
       size                 = "300"
