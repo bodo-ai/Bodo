@@ -1408,6 +1408,15 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 )
 
             return impl
+        elif types.unliteral(val) == bodo.types.timedelta64ns:
+
+            def impl(A, ind, val):  # pragma: no cover
+                A._data[ind] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(val) else 1
+                )
+
+            return impl
         else:
             raise BodoError(typ_err_msg)
 
