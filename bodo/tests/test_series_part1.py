@@ -850,7 +850,7 @@ def test_tz_aware_series_astype(dtype, memory_leak_check):
             pd.Timestamp("2022-01-01", tz="America/New_York"),
         ]
         * 4
-    )
+    ).astype("datetime64[ns, America/New_York]")
 
     if dtype == pd.StringDtype():
         check_func(test_impl, (S,), py_output=S.astype(str))
