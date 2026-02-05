@@ -4,7 +4,7 @@
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ExprGPUResult> left_res,
     std::shared_ptr<ExprGPUResult> right_res,
-    const cudf::binary_operator& comparator,
+    const cudf::binary_operator& comparator, std::shared_ptr<StreamAndEvent> se,
     const std::shared_ptr<cudf::data_type> result_type) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
@@ -28,13 +28,13 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
             cudf_result_type = left_as_array->result->view().type();
         }
         if (right_as_array) {
-            res = cudf::binary_operation(left_as_array->result->view(),
-                                         right_as_array->result->view(),
-                                         comparator, cudf_result_type);
+            res = cudf::binary_operation(
+                left_as_array->result->view(), right_as_array->result->view(),
+                comparator, cudf_result_type, se->stream);
         } else if (right_as_scalar) {
             res = cudf::binary_operation(left_as_array->result->view(),
                                          *(right_as_scalar->result), comparator,
-                                         cudf_result_type);
+                                         cudf_result_type, se->stream);
         } else {
             throw std::runtime_error(
                 "do_cudf_compute right is neither array nor scalar.");
@@ -44,9 +44,9 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
             if (!result_type) {
                 cudf_result_type = right_as_array->result->view().type();
             }
-            res = cudf::binary_operation(*(left_as_scalar->result),
-                                         right_as_array->result->view(),
-                                         comparator, cudf_result_type);
+            res = cudf::binary_operation(
+                *(left_as_scalar->result), right_as_array->result->view(),
+                comparator, cudf_result_type, se->stream);
         } else if (right_as_scalar) {
             throw std::runtime_error(
                 "do_cudf_compute both left and right are scalar.");
@@ -65,7 +65,7 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
     std::shared_ptr<ExprGPUResult> left_res,
-    const cudf::unary_operator& comparator,
+    const cudf::unary_operator& comparator, std::shared_ptr<StreamAndEvent> se,
     const arrow::compute::FunctionOptions* func_options) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
@@ -75,7 +75,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
         std::dynamic_pointer_cast<ScalarExprGPUResult>(left_res);
 
     if (left_as_array) {
-        return cudf::unary_operation(left_as_array->result->view(), comparator);
+        return cudf::unary_operation(left_as_array->result->view(), comparator,
+                                     se->stream);
     } else if (left_as_scalar) {
         throw std::runtime_error(
             "do_cudf_compute_unary for scalar not yet implemented.");
@@ -87,7 +88,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
     std::shared_ptr<ExprGPUResult> left_res,
-    const duckdb::LogicalType& return_type) {
+    const duckdb::LogicalType& return_type,
+    std::shared_ptr<StreamAndEvent> se) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprGPUResult> left_as_array =
@@ -98,7 +100,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
     cudf::data_type cudf_result_type = duckdb_logicaltype_to_cudf(return_type);
 
     if (left_as_array) {
-        return cudf::cast(left_as_array->result->view(), cudf_result_type);
+        return cudf::cast(left_as_array->result->view(), cudf_result_type,
+                          se->stream);
     } else if (left_as_scalar) {
         throw std::runtime_error(
             "do_cudf_compute_cast cast of scalar not yet implemented.");
@@ -110,7 +113,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
 
 GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
                                 std::shared_ptr<ExprGPUResult> then_res,
-                                std::shared_ptr<ExprGPUResult> else_res) {
+                                std::shared_ptr<ExprGPUResult> else_res,
+                                std::shared_ptr<StreamAndEvent> se) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprGPUResult> when_as_array =
@@ -141,11 +145,11 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
         if (else_as_array) {
             res = std::move(cudf::copy_if_else(then_as_array->result->view(),
                                                else_as_array->result->view(),
-                                               when_col));
+                                               when_col, se->stream));
         } else if (else_as_scalar) {
             res = std::move(cudf::copy_if_else(then_as_array->result->view(),
                                                *(else_as_scalar->result),
-                                               when_col));
+                                               when_col, se->stream));
         } else {
             throw std::runtime_error(
                 "do_cudf_compute_case right is neither array nor scalar.");
@@ -154,7 +158,7 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
         if (else_as_array) {
             res = std::move(cudf::copy_if_else(*(then_as_scalar->result),
                                                else_as_array->result->view(),
-                                               when_col));
+                                               when_col, se->stream));
         } else if (else_as_scalar) {
             throw std::runtime_error(
                 "do_cudf_compute_case both then and else are scalar.");
@@ -431,7 +435,7 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
 }
 
 std::shared_ptr<ExprGPUResult> PhysicalGPUUDFExpression::ProcessBatch(
-    GPU_DATA input_batch) {
+    GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
     throw std::runtime_error(
         "PhysicalGPUUDFExpression::ProcessBatch unimplemented ");
 }

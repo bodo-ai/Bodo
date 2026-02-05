@@ -82,7 +82,7 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
         time_pt start_process_exprs = start_timer();
         for (auto& phys_expr : this->physical_exprs) {
             std::shared_ptr<ExprGPUResult> phys_res =
-                phys_expr->ProcessBatch(input_batch);
+                phys_expr->ProcessBatch(input_batch, se);
             std::shared_ptr<ArrayExprGPUResult> res_as_array =
                 std::dynamic_pointer_cast<ArrayExprGPUResult>(phys_res);
             if (!res_as_array) {
@@ -100,7 +100,8 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
                 "Output size does not match input size in Projection");
         }
 
-        auto out_table = std::make_unique<cudf::table>(std::move(out_cols));
+        auto out_table =
+            std::make_unique<cudf::table>(std::move(out_cols), se->stream);
         GPU_DATA out_table_info(std::move(out_table), arrow_output_schema, se);
 
         this->metrics.output_row_count += out_size;
