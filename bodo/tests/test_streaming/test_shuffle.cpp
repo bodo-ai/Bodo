@@ -873,4 +873,140 @@ static bodo::tests::suite tests([] {
             }
         }
     });
+    bodo::tests::test("test_send_src_dest_shuffle", []() {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        auto test_src_dest_shuffle = [](std::shared_ptr<table_info> table,
+                                        std::vector<int> src_ranks,
+                                        std::vector<int> dest_ranks) {
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+            for (size_t i = 0; i < table->ncols(); i++) {
+                dict_builders.push_back(create_dict_builder_for_array(
+                    std::shared_ptr<bodo::DataType>(
+                        table->schema()->column_types[i]->copy()),
+                    true));
+                if (dict_builders[i] != nullptr) {
+                    table->columns[i] = dict_builders[i]->UnifyDictionaryArray(
+                        table->columns[i]);
+                }
+            }
+            uint64_t curr_iter = 0;
+            int64_t sync_freq = 1;
+
+            SrcDestIncrementalShuffleState shuffle_state(
+                table->schema(), dict_builders, src_ranks, dest_ranks,
+                curr_iter, sync_freq, -1);
+
+            shuffle_state.Initialize(nullptr, true, MPI_COMM_WORLD);
+            size_t nrows = table->nrows();
+            std::vector<bool> append = std::vector<bool>(nrows, true);
+            shuffle_state.AppendBatch(std::move(table), append);
+            std::shared_ptr<table_info> shuffle_table = nullptr;
+            MPI_Request finish_req = MPI_REQUEST_NULL;
+            int finish_flag = 0;
+            do {
+                auto shuffle_result = shuffle_state.ShuffleIfRequired(true);
+                if (shuffle_state.SendRecvEmpty() && !finish_flag) {
+                    if (finish_req == MPI_REQUEST_NULL) {
+                        CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &finish_req),
+                                  "test_shuffle: MPI error on MPI_Ibarrier:");
+                    } else {
+                        CHECK_MPI(MPI_Test(&finish_req, &finish_flag,
+                                           MPI_STATUS_IGNORE),
+                                  "test_shuffle: MPI error on MPI_Test:");
+                    }
+                }
+                if (shuffle_result.has_value()) {
+                    shuffle_table = shuffle_result.value();
+                }
+            } while (!finish_flag || !shuffle_state.SendRecvEmpty());
+
+            return shuffle_table;
+        };
+
+        if (n_pes == 2) {
+            // 1. Sending multiple ranks to the same source:
+            {
+                std::vector<int> int_col(5);
+                std::iota(int_col.begin(), int_col.end(), myrank * 5);
+                std::shared_ptr<table_info> table =
+                    bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
+
+                auto out_table = test_src_dest_shuffle(table, {0, 1}, {1});
+
+                if (myrank == 0) {
+                    bodo::tests::check(out_table == nullptr);
+                } else {
+                    std::vector<int> expected_col(10);
+                    std::iota(expected_col.begin(), expected_col.end(), 0);
+                    std::shared_ptr<table_info> expected_table =
+                        bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
+                    std::stringstream ss_expected;
+                    std::stringstream ss_result;
+                    DEBUG_PrintTable(ss_expected, expected_table);
+                    DEBUG_PrintTable(ss_result, out_table);
+                    std::cout << "EXPECTED " << myrank << ss_expected.str()
+                              << std::endl;
+                    std::cout << "RESULT " << myrank << ss_result.str()
+                              << std::endl;
+                }
+            }
+
+            // 2. Send single source table to multiple ranks
+            {
+                std::shared_ptr<table_info> table = nullptr;
+                if (myrank == 0) {
+                    std::vector<int> int_col(10);
+                    std::iota(int_col.begin(), int_col.end(), 0);
+                    table = bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
+                } else {
+                    table = bodo::tests::cppToBodo({"A"}, {true}, {},
+                                                   std::vector<int>());
+                }
+
+                auto out_table = test_src_dest_shuffle(table, {0}, {0, 1});
+
+                std::vector<int> expected_col(5);
+                std::iota(expected_col.begin(), expected_col.end(), myrank * 5);
+                std::shared_ptr<table_info> expected_table =
+                    bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
+                std::stringstream ss_expected;
+                std::stringstream ss_result;
+                DEBUG_PrintTable(ss_expected, expected_table);
+                DEBUG_PrintTable(ss_result, out_table);
+                std::cout << "EXPECTED " << myrank << ss_expected.str()
+                          << std::endl;
+                std::cout << "RESULT " << myrank << ss_result.str()
+                          << std::endl;
+            }
+
+            // 3. Send multi source table to multiple ranks (same number of
+            // ranks)
+            {
+                std::vector<int> int_col(5);
+                std::iota(int_col.begin(), int_col.end(), myrank * 5);
+                std::shared_ptr<table_info> table =
+                    bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
+
+                auto out_table = test_src_dest_shuffle(table, {0, 1}, {0, 1});
+
+                std::stringstream ss_expected;
+                std::stringstream ss_result;
+                DEBUG_PrintTable(ss_expected, table);
+                DEBUG_PrintTable(ss_result, out_table);
+                std::cout << "EXPECTED " << myrank << ss_expected.str()
+                          << std::endl;
+                std::cout << "RESULT " << myrank << ss_result.str()
+                          << std::endl;
+            }
+        } else if (n_pes == 3) {
+        } else {
+            std::cout
+                << "Skipping test_send_src_dest_shuffle: requires 2 or 3 ranks."
+                << std::endl;
+            return;
+        }
+    });
 });

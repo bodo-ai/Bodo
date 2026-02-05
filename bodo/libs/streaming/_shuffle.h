@@ -1422,3 +1422,42 @@ class IsLastState {
  * @return 1 if is_last is true on all ranks else 0
  */
 int32_t sync_is_last_non_blocking(IsLastState* state, int32_t local_is_last);
+
+/**
+ * @brief State for sending contiguous chunks for data from source ranks to
+ * destination ranks.
+ */
+class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
+   public:
+    SrcDestIncrementalShuffleState(
+        std::shared_ptr<bodo::Schema> schema_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+        const std::vector<int>& src_ranks_, const std::vector<int>& dest_ranks_,
+        const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t parent_op_id_)
+        : IncrementalShuffleState(std::move(schema_), dict_builders_,
+                                  static_cast<uint64_t>(0), curr_iter_,
+                                  sync_freq_, parent_op_id_),
+          src_ranks(src_ranks_),
+          dest_ranks(dest_ranks_) {}
+
+    /**
+     * @brief Get the table to be shuffle and list of destination ranks to send
+     to.
+     *
+     * @return std::tuple<std::shared_ptr<table_info>,
+               std::shared_ptr<dict_hashes_t>,
+               std::shared_ptr<uint32_t[]>,
+               std::unique_ptr<uint8_t[]>>
+               The table to be shuffled, empty dict hashes (not used here),
+     destination ranks per row, and nullptr keep_row_bitmask (not used here).
+     */
+    std::tuple<
+        std::shared_ptr<table_info>,
+        std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
+        std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
+    GetShuffleTableAndHashes() override;
+
+   private:
+    const std::vector<int> src_ranks;
+    const std::vector<int> dest_ranks;
+};

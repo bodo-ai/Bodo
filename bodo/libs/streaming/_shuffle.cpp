@@ -1148,3 +1148,54 @@ void consume_completed_recvs(
         return done;
     });
 }
+
+std::tuple<
+    std::shared_ptr<table_info>,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
+    std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
+SrcDestIncrementalShuffleState::GetShuffleTableAndHashes() {
+    std::shared_ptr<table_info> shuffle_table = this->table_buffer->data_table;
+    auto dict_hashes = std::make_shared<
+        bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>();
+
+    int rank;
+    MPI_Comm_rank(this->shuffle_comm, &rank);
+    std::shared_ptr<uint32_t[]> shuffle_hashes = nullptr;
+    auto rank_it = std::ranges::find(src_ranks, rank);
+    if (rank_it == src_ranks.end()) {
+        throw std::runtime_error(
+            "SrcDestIncrementalShuffleState::GetShuffleTableAndHashes: "
+            "Current rank not in source ranks list");
+    }
+    int rank_idx = std::distance(src_ranks.begin(), rank_it);
+
+    // Case 1: send many sources to fewer (or equal) destinations
+    // Assign each source rank a single destination rank to send to.
+    if (src_ranks.size() >= dest_ranks.size()) {
+        uint32_t dest_rank =
+            dest_ranks[(rank_idx * dest_ranks.size()) / src_ranks.size()];
+        shuffle_hashes = std::make_shared<uint32_t[]>(shuffle_table->nrows());
+        std::fill(shuffle_hashes.get(),
+                  shuffle_hashes.get() + shuffle_table->nrows(), dest_rank);
+    }
+    // Case 2: send fewer sources to many destinations
+    // Distribute destination ranks evenly among source ranks.
+    // Send contiguous blocks of rows to each destination rank.
+    else {
+        shuffle_hashes = std::make_shared<uint32_t[]>(shuffle_table->nrows());
+        int dests_per_rank = dest_ranks.size() / src_ranks.size();
+        int rem = dest_ranks.size() % src_ranks.size();
+        int start_idx = rank_idx * dests_per_rank + std::min(rank_idx, rem);
+        int local_n_dest = dests_per_rank + (rank_idx < rem ? 1 : 0);
+
+        for (size_t i = 0; i < shuffle_table->nrows(); i++) {
+            uint32_t dest_rank =
+                dest_ranks[start_idx +
+                           ((i * local_n_dest) / shuffle_table->nrows())];
+            shuffle_hashes[i] = dest_rank;
+        }
+    }
+
+    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
+                           std::unique_ptr<uint8_t[]>(nullptr));
+}
