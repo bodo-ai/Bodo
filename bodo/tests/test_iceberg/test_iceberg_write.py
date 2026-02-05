@@ -1729,7 +1729,7 @@ def test_write_partitioned(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
             sort_output=True,
             check_dtype=False,
@@ -1755,7 +1755,7 @@ def test_write_partitioned(
         if base_name == "DT_TSZ_TABLE":
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
