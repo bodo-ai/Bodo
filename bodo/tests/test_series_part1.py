@@ -650,6 +650,7 @@ def test_dataframe_concat(series_val):
 # TODO: readd memory leak check when PDCategorical type constant lowering
 # no longer leaks memory
 @pytest.mark.slow
+@pytest.mark.skip(reason="Pandas 3 doesn't allow changing categories")
 def test_dataframe_concat_cat_dynamic():
     """This is actually a dataframe test that adds empty
     column when missing if categories change dynamically
