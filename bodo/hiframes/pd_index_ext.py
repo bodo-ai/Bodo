@@ -1260,6 +1260,7 @@ def pd_timedelta_range_overload(
     freq=None,
     name=None,
     closed=None,
+    unit=None,
 ):
     if is_overload_none(freq) and any(
         is_overload_none(t) for t in (start, end, periods)
@@ -1280,6 +1281,7 @@ def pd_timedelta_range_overload(
         freq=None,
         name=None,
         closed=None,
+        unit=None,
     ):  # pragma: no cover
         # pandas source code performs the below conditional in timedelta_range
         if freq is None and (start is None or end is None or periods is None):
