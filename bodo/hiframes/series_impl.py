@@ -3281,7 +3281,9 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.types.datetime64ns
         )
-    ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
+    ) and not isinstance(
+        S.data, (IntegerArrayType, FloatingArrayType, bodo.types.DatetimeArrayType)
+    ):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
     # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
@@ -3289,7 +3291,9 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     # TODO: compute unique, top (most common value), freq (how many times the most common value is found)
 
     # datetime case doesn't return std
-    if S.data.dtype == bodo.types.datetime64ns:
+    if S.data.dtype == bodo.types.datetime64ns or isinstance(
+        S.data, bodo.types.DatetimeArrayType
+    ):
 
         def impl_dt(
             S, percentiles=None, include=None, exclude=None
