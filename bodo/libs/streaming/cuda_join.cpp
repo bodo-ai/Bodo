@@ -5,6 +5,77 @@
 #include <cudf/reduction.hpp>
 #include "../../pandas/physical/operator.h"
 
+std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
+    std::shared_ptr<arrow::Table> local_stats) {
+    // 1. Serialize local stats to bytes
+    auto local_buf = SerializeTableToIPC(local_stats);
+    int local_size = static_cast<int>(local_buf->size());
+
+    // 2. Gather sizes from all ranks
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    std::vector<int> recv_counts(world_size);
+    CHECK_MPI(MPI_Allgather(&local_size, 1, MPI_INT, recv_counts.data(), 1,
+                            MPI_INT, MPI_COMM_WORLD),
+              "Failed to gather local stats sizes");
+
+    // 3. Calculate displacements (offsets) for the variable-length gather
+    std::vector<int> displs(world_size);
+    int total_bytes = 0;
+    for (int i = 0; i < world_size; ++i) {
+        displs[i] = total_bytes;
+        total_bytes += recv_counts[i];
+    }
+
+    // 4. Gather all IPC buffers into one large blob
+    std::vector<uint8_t> recv_buffer(total_bytes);
+    CHECK_MPI(MPI_Allgatherv(local_buf->data(), local_size, MPI_BYTE,
+                             recv_buffer.data(), recv_counts.data(),
+                             displs.data(), MPI_BYTE, MPI_COMM_WORLD),
+              "Failed to gather local stats buffers");
+
+    // 5. Deserialize all tables
+    std::vector<std::shared_ptr<arrow::Table>> all_tables;
+    for (int i = 0; i < world_size; ++i) {
+        if (recv_counts[i] > 0) {
+            std::shared_ptr<arrow::Buffer> buf = arrow::Buffer::Wrap(
+                recv_buffer.data() + displs[i], recv_counts[i]);
+            all_tables.push_back(DeserializeIPC(std::move(buf)));
+        }
+    }
+
+    // 6. Concatenate into a single table (N rows, where N = number of ranks)
+    auto combined_table = arrow::ConcatenateTables(all_tables).ValueOrDie();
+
+    // 7. Compute Global Min/Max using Arrow Compute
+    // Column 0 is "min", Column 1 is "max"
+    // We compute Min of "min" column, and Max of "max" column
+
+    // Note: MinMax ignores nulls by default, which handles empty ranks
+    // gracefully.
+    auto min_col = combined_table->column(0);
+    auto max_col = combined_table->column(1);
+
+    auto global_min_scalar =
+        std::static_pointer_cast<arrow::StructScalar>(
+            arrow::compute::MinMax(min_col).ValueOrDie().scalar())
+            ->field(0)
+            .ValueOrDie();
+    auto global_max_scalar =
+        std::static_pointer_cast<arrow::StructScalar>(
+            arrow::compute::MinMax(max_col).ValueOrDie().scalar())
+            ->field(1)
+            .ValueOrDie();
+
+    // 8. Construct the final 1-row table
+    auto schema = local_stats->schema();
+
+    return arrow::Table::Make(
+        schema,
+        {arrow::MakeArrayFromScalar(*global_min_scalar, 1).ValueOrDie(),
+         arrow::MakeArrayFromScalar(*global_max_scalar, 1).ValueOrDie()});
+}
+
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
     // 1. Concatenate all build chunks into one contiguous table
@@ -46,8 +117,11 @@ void CudaHashJoin::FinalizeBuild() {
         GPU_DATA stats_gpu_data = {
             stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
             make_stream_and_event(false)};
-        std::shared_ptr<arrow::Table> stats = convertGPUToArrow(stats_gpu_data);
-        this->min_max_stats.push_back(stats);
+        std::shared_ptr<arrow::Table> local_stats =
+            convertGPUToArrow(stats_gpu_data);
+        std::shared_ptr<arrow::Table> global_stats =
+            SyncAndReduceGlobalStats(local_stats);
+        this->min_max_stats.push_back(global_stats);
     }
 
     // Clear build chunks to free memory

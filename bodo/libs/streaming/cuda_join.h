@@ -1,9 +1,14 @@
 #pragma once
 #include <../../bodo/libs/_bodo_common.h>
+#include <arrow/array/util.h>
+#include <arrow/compute/api_aggregate.h>
 #include <arrow/scalar.h>
+#include <memory>
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
+#include "../_distributed.h"
+#include "../_utils.h"
 
 struct CudaHashJoin {
    private:
@@ -82,6 +87,7 @@ struct CudaHashJoin {
         return min_max_stats;
     }
 };
+
 #else
 struct CudaHashJoin {};
 #endif
