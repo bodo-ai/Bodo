@@ -287,13 +287,6 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
             // type.
             auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
             duckdb::LogicalType result_type = bfe.return_type;
-            // std::shared_ptr<arrow::DataType> result_type = nullptr;
-
-            // if (bfe.bind_info) {
-            //     BodoScalarFunctionData& scalar_func_data =
-            //         bfe.bind_info->Cast<BodoScalarFunctionData>();
-            //     result_type = scalar_func_data.out_schema->field(0)->type();
-            // }
 
             if (bfe.bind_info &&
                 (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
