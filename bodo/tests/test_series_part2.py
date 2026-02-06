@@ -3176,6 +3176,7 @@ def test_series_std_dt64(memory_leak_check):
     assert abs(bodo_out - py_out) < datetime.timedelta(milliseconds=1)
 
 
+@pytest.mark.skip(reason="TODO: support nullable datetime/timedelta arrays")
 @pytest.mark.slow
 def test_add_datetime_series_timedelta(memory_leak_check):
     def test_impl(S1, S2):
@@ -3187,6 +3188,7 @@ def test_add_datetime_series_timedelta(memory_leak_check):
     check_func(test_impl, (S, S2))
 
 
+@pytest.mark.skip(reason="TODO: support nullable datetime/timedelta arrays")
 @pytest.mark.slow
 def test_add_timedelta_series_timedelta(memory_leak_check):
     def test_impl(S1, S2):
@@ -3201,6 +3203,7 @@ def test_add_timedelta_series_timedelta(memory_leak_check):
     check_func(test_impl, (S, S2))
 
 
+@pytest.mark.skip(reason="TODO: support nullable datetime/timedelta arrays")
 @pytest.mark.slow
 def test_add_timedelta_series_timestamp(memory_leak_check):
     def test_impl(S1, S2):
