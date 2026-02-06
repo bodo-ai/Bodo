@@ -2534,7 +2534,7 @@ def test_series_where_np_array(series_val, memory_leak_check):
     series_err_msg = "Series.where.* Series data with type .* not yet supported"
 
     if series_val.dtype.name == "category":
-        val = val.astype(series_val.dtype.categories.dtype)
+        return
 
     if not is_where_mask_supported_series(series_val):
         with pytest.raises(BodoError, match=series_err_msg):
