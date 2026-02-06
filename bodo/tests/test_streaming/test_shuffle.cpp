@@ -919,7 +919,12 @@ static bodo::tests::suite tests([] {
                     }
                 }
                 if (shuffle_result.has_value()) {
-                    shuffle_table = shuffle_result.value();
+                    if (shuffle_table == nullptr) {
+                        shuffle_table = shuffle_result.value();
+                    } else {
+                        shuffle_table = concat_tables(
+                            {shuffle_table, shuffle_result.value()});
+                    }
                 }
             } while (!finish_flag || !shuffle_state.SendRecvEmpty());
 
@@ -939,25 +944,15 @@ static bodo::tests::suite tests([] {
                 if (myrank == 0) {
                     bodo::tests::check(out_table == nullptr);
                 } else {
-                    std::vector<int> expected_col(10);
-                    std::iota(expected_col.begin(), expected_col.end(), 0);
-                    std::shared_ptr<table_info> expected_table =
-                        bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
-                    std::stringstream ss_expected;
-                    std::stringstream ss_result;
-                    DEBUG_PrintTable(ss_expected, expected_table);
-                    DEBUG_PrintTable(ss_result, out_table);
-                    std::cout << "EXPECTED " << myrank << ss_expected.str()
-                              << std::endl;
-                    std::cout << "RESULT " << myrank << ss_result.str()
-                              << std::endl;
+                    bodo::tests::check(out_table != nullptr &&
+                                       out_table->nrows() == 10);
                 }
             }
 
             // 2. Send single source table to multiple ranks
             {
                 std::shared_ptr<table_info> table = nullptr;
-                if (myrank == 0) {
+                if (myrank == 1) {
                     std::vector<int> int_col(10);
                     std::iota(int_col.begin(), int_col.end(), 0);
                     table = bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
@@ -966,7 +961,7 @@ static bodo::tests::suite tests([] {
                                                    std::vector<int>());
                 }
 
-                auto out_table = test_src_dest_shuffle(table, {0}, {0, 1});
+                auto out_table = test_src_dest_shuffle(table, {1}, {0, 1});
 
                 std::vector<int> expected_col(5);
                 std::iota(expected_col.begin(), expected_col.end(), myrank * 5);
@@ -976,12 +971,8 @@ static bodo::tests::suite tests([] {
                 std::stringstream ss_result;
                 DEBUG_PrintTable(ss_expected, expected_table);
                 DEBUG_PrintTable(ss_result, out_table);
-                std::cout << "EXPECTED " << myrank << ss_expected.str()
-                          << std::endl;
-                std::cout << "RESULT " << myrank << ss_result.str()
-                          << std::endl;
+                bodo::tests::check(ss_expected.str() == ss_result.str());
             }
-
             // 3. Send multi source table to multiple ranks (same number of
             // ranks)
             {
@@ -990,18 +981,71 @@ static bodo::tests::suite tests([] {
                 std::shared_ptr<table_info> table =
                     bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
 
-                auto out_table = test_src_dest_shuffle(table, {0, 1}, {0, 1});
+                auto out_table = test_src_dest_shuffle(table, {0, 1}, {1, 0});
 
                 std::stringstream ss_expected;
                 std::stringstream ss_result;
-                DEBUG_PrintTable(ss_expected, table);
-                DEBUG_PrintTable(ss_result, out_table);
-                std::cout << "EXPECTED " << myrank << ss_expected.str()
-                          << std::endl;
-                std::cout << "RESULT " << myrank << ss_result.str()
-                          << std::endl;
+                std::vector<int> new_int_col(5);
+                std::iota(new_int_col.begin(), new_int_col.end(),
+                          (1 - myrank) * 5);
+                std::shared_ptr<table_info> expected_table =
+                    bodo::tests::cppToBodo({"A"}, {true}, {}, new_int_col);
+                bodo::tests::check(ss_expected.str() == ss_result.str());
             }
         } else if (n_pes == 3) {
+            // Send sources to fewer ranks
+            {
+                std::vector<int> int_col(5);
+                std::iota(int_col.begin(), int_col.end(), myrank * 5);
+                auto table = bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
+                auto out_table =
+                    test_src_dest_shuffle(table, {2, 1, 0}, {1, 2});
+                if (myrank == 0) {
+                    bodo::tests::check(out_table == nullptr);
+                } else if (myrank == 1) {
+                    bodo::tests::check(out_table != nullptr &&
+                                       out_table->nrows() == 10);
+                } else {
+                    bodo::tests::check(out_table != nullptr &&
+                                       out_table->nrows() == 5);
+                }
+            }
+
+            // Send fewer sources to more ranks
+            {
+                auto table = bodo::tests::cppToBodo({"A"}, {true}, {},
+                                                    std::vector<int>());
+                if (myrank != 1) {
+                    std::vector<int> int_col(5 + myrank);
+                    std::iota(int_col.begin(), int_col.end(), myrank * 5);
+                    table = bodo::tests::cppToBodo({"A"}, {true}, {}, int_col);
+                }
+                auto out_table =
+                    test_src_dest_shuffle(table, {2, 0}, {1, 2, 0});
+                std::shared_ptr<table_info> expected_table = nullptr;
+                if (myrank == 0) {
+                    std::vector<int> expected_col(5);
+                    std::iota(expected_col.begin(), expected_col.end(), 0);
+                    expected_table =
+                        bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
+                } else if (myrank == 1) {
+                    std::vector<int> expected_col(4);
+                    std::iota(expected_col.begin(), expected_col.end(), 10);
+                    expected_table =
+                        bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
+                } else {
+                    std::vector<int> expected_col(3);
+                    std::iota(expected_col.begin(), expected_col.end(), 14);
+                    expected_table =
+                        bodo::tests::cppToBodo({"A"}, {true}, {}, expected_col);
+                }
+                std::stringstream ss_expected;
+                std::stringstream ss_result;
+                DEBUG_PrintTable(ss_result, out_table);
+                DEBUG_PrintTable(ss_expected, expected_table);
+                bodo::tests::check(ss_expected.str() == ss_result.str());
+            }
+
         } else {
             std::cout
                 << "Skipping test_send_src_dest_shuffle: requires 2 or 3 ranks."
