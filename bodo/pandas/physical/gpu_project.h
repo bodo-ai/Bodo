@@ -23,6 +23,15 @@ struct PhysicalGPUProjectionMetrics {
     time_t expr_eval_time = 0;
 };
 
+inline bool gpu_capable(duckdb::LogicalProjection& logical_project) {
+    for (auto& expr : logical_project.expressions) {
+        if (!gpu_capable(expr)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * @brief Physical node for projection.
  *
