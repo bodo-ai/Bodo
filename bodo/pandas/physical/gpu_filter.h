@@ -151,9 +151,12 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
             TimerMetric("expr_eval_time", this->metrics.expr_eval_time));
         metrics_out.emplace_back(
             TimerMetric("filtering_time", this->metrics.filtering_time));
-        MetricBase::BlobValue selectivity_value(
-            std::to_string(static_cast<double>(this->metrics.output_row_count) /
-                           static_cast<double>(this->metrics.input_row_count)));
+        double selectivity = 0.0;
+        if (this->metrics.input_row_count > 0) {
+            selectivity = static_cast<double>(this->metrics.output_row_count) /
+                          static_cast<double>(this->metrics.input_row_count);
+        }
+        MetricBase::BlobValue selectivity_value(std::to_string(selectivity));
         metrics_out.emplace_back(BlobMetric("selectivity", selectivity_value));
     }
 };
