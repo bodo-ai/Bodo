@@ -414,6 +414,118 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
     return buildPhysicalGPUExprTree(*expr, col_ref_map, no_scalars);
 }
 
+bool gpu_capable(duckdb::Expression& expr) {
+    duckdb::ExpressionClass expr_class = expr.GetExpressionClass();
+
+    switch (expr_class) {
+        case duckdb::ExpressionClass::BOUND_COMPARISON: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundComparisonExpression>();
+            return gpu_capable(bce.left) && gpu_capable(bce.right);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_COLUMN_REF:
+            return true;
+        case duckdb::ExpressionClass::BOUND_CONSTANT:
+            return true;
+        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundConjunctionExpression>();
+            return gpu_capable(bce.children[0]) && gpu_capable(bce.children[1]);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_OPERATOR: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& boe = expr.Cast<duckdb::BoundOperatorExpression>();
+            switch (boe.children.size()) {
+                case 1:
+                    return gpu_capable(boe.children[0]);
+                case 2:
+                    return gpu_capable(boe.children[0]) &&
+                           gpu_capable(boe.children[1]);
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children for bound operator");
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
+
+            if (bfe.bind_info &&
+                (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
+                 !bfe.bind_info->Cast<BodoScalarFunctionData>()
+                      .arrow_func_name.empty())) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+
+                for (auto& child_expr : bfe.children) {
+                    if (!gpu_capable(child_expr)) {
+                        return false;
+                    }
+                }
+
+                if (!scalar_func_data.arrow_func_name.empty()) {
+                    throw std::runtime_error("Unimplemented");
+                } else if (scalar_func_data.args) {
+                    return false;
+                }
+            } else {
+                switch (bfe.children.size()) {
+                    case 1:
+                        return gpu_capable(bfe.children[0]);
+                    case 2:
+                        return gpu_capable(bfe.children[0]) &&
+                               gpu_capable(bfe.children[1]);
+                    default:
+                        throw std::runtime_error(
+                            "Unsupported number of children " +
+                            std::to_string(bfe.children.size()) +
+                            " for bound function");
+                }
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CAST: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundCastExpression>();
+            return gpu_capable(bce.child);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_BETWEEN: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bbe = expr.Cast<duckdb::BoundBetweenExpression>();
+            return gpu_capable(bbe.input) && gpu_capable(bbe.lower) &&
+                   gpu_capable(bbe.upper);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CASE: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundCaseExpression>();
+            if (bce.case_checks.size() != 1) {
+                throw std::runtime_error(
+                    "Only single WHEN case expressions are supported.");
+            }
+            auto& caseCheck = bce.case_checks[0];
+            return gpu_capable(caseCheck.when_expr) &&
+                   gpu_capable(caseCheck.then_expr) &&
+                   gpu_capable(bce.else_expr);
+        } break;  // suppress wrong fallthrough error
+        default:
+            throw std::runtime_error(
+                "Unsupported duckdb expression class " +
+                std::to_string(static_cast<int>(expr_class)));
+    }
+    throw std::logic_error("Control should never reach here");
+}
+
+bool gpu_capable(duckdb::unique_ptr<duckdb::Expression>& expr) {
+    return gpu_capable(*expr);
+}
+
 std::shared_ptr<ExprGPUResult> PhysicalGPUUDFExpression::ProcessBatch(
     GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
     throw std::runtime_error(

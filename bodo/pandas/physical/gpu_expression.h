@@ -864,6 +864,10 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     bool no_scalars = false);
 
+bool gpu_capable(duckdb::unique_ptr<duckdb::Expression> &expr);
+
+bool gpu_capable(duckdb::Expression &expr);
+
 struct PhysicalGPUUDFExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t cpp_to_py_time = 0;
