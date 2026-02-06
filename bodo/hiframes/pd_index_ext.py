@@ -1142,13 +1142,14 @@ def pd_date_range_overload(
     tz=None,
     normalize=False,
     name=None,
-    closed=None,
+    inclusive="both",
+    unit=None,
 ):
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
 
-    unsupported_args = {"tz": tz, "normalize": normalize, "closed": closed}
-    arg_defaults = {"tz": None, "normalize": False, "closed": None}
+    unsupported_args = {"tz": tz, "normalize": normalize, "inclusive": inclusive}
+    arg_defaults = {"tz": None, "normalize": False, "inclusive": "both"}
     check_unsupported_args(
         "pandas.date_range",
         unsupported_args,
@@ -1183,7 +1184,7 @@ def pd_date_range_overload(
 
     # TODO: check start and end for NaT
 
-    func_text = "def bodo_pd_date_range_overload(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None):\n"
+    func_text = "def bodo_pd_date_range_overload(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, inclusive='both', unit=None):\n"
 
     func_text += freq_set
 
