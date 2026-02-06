@@ -4620,11 +4620,18 @@ def _validate_self_other_mask_where(
         or (
             isinstance(
                 other,
-                (types.Array, IntegerArrayType, FloatingArrayType, BooleanArrayType),
+                (
+                    types.Array,
+                    IntegerArrayType,
+                    FloatingArrayType,
+                    BooleanArrayType,
+                    bodo.types.DatetimeArrayType,
+                ),
             )
             and other.ndim >= 1
             and other.ndim <= max_ndim
         )
+        or other == bodo.types.timedelta_array_type
         or (
             isinstance(other, SeriesType)
             and (
