@@ -11,6 +11,7 @@
 #include "physical/cte.h"
 #include "physical/filter.h"
 #if USE_CUDF
+#include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_project.h"
 #endif
@@ -100,11 +101,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::variant<std::shared_ptr<PhysicalProjection>,
                  std::shared_ptr<PhysicalGPUProjection>>
         physical_op;
-#else
-    std::variant<std::shared_ptr<PhysicalProjection>> physical_op;
-#endif
 
-#ifdef USE_CUDF
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         physical_op = std::make_shared<PhysicalGPUProjection>(
@@ -113,10 +110,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
         physical_op = std::make_shared<PhysicalProjection>(
             source_cols, op.expressions, in_table_schema);
     }
-#else
+#else   // USE_CUDF
+    std::variant<std::shared_ptr<PhysicalProjection>> physical_op;
     physical_op = std::make_shared<PhysicalProjection>(
         source_cols, op.expressions, in_table_schema);
-#endif
+#endif  // USE_CUDF
+
     std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
                physical_op);
 }
@@ -136,19 +135,27 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
         return;
     }
 
-    std::shared_ptr<PhysicalExpression> physExprTree =
-        buildPhysicalExprTree(op.expressions[0], col_ref_map);
-    for (size_t i = 1; i < op.expressions.size(); ++i) {
-        std::shared_ptr<PhysicalExpression> subExprTree =
-            buildPhysicalExprTree(op.expressions[i], col_ref_map);
-        physExprTree = std::static_pointer_cast<PhysicalExpression>(
-            std::make_shared<PhysicalConjunctionExpression>(
-                physExprTree, subExprTree,
-                duckdb::ExpressionType::CONJUNCTION_AND));
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalFilter>,
+                 std::shared_ptr<PhysicalGPUFilter>>
+        physical_op;
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op = std::make_shared<PhysicalGPUFilter>(
+            op, op.expressions, in_table_schema, col_ref_map);
+    } else {
+        physical_op = std::make_shared<PhysicalFilter>(
+            op, op.expressions, in_table_schema, col_ref_map);
     }
-    std::shared_ptr<PhysicalFilter> physical_op =
-        std::make_shared<PhysicalFilter>(op, physExprTree, in_table_schema);
-    this->active_pipeline->AddOperator(physical_op);
+#else
+    std::variant<std::shared_ptr<PhysicalFilter>> physical_op;
+    physical_op = std::make_shared<PhysicalFilter>(
+        op, op.expressions, in_table_schema, col_ref_map);
+#endif  // USE_CUDF
+
+    std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
+               physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {

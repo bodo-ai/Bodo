@@ -206,15 +206,15 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ExprGPUResult> left_res,
     std::shared_ptr<ExprGPUResult> right_res,
     const cudf::binary_operator &comparator, std::shared_ptr<StreamAndEvent> se,
-    const std::shared_ptr<cudf::data_type> result_type = nullptr);
+    const cudf::data_type &cudf_result_type);
 
 /**
  * @brief Convert ExprGPUResult to arrow and cast to the requested type.
  *
  */
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
-    std::shared_ptr<ExprGPUResult> left_res,
-    const duckdb::LogicalType &return_type, std::shared_ptr<StreamAndEvent> se);
+    std::shared_ptr<ExprGPUResult> left_res, cudf::data_type &cudf_result_type,
+    std::shared_ptr<StreamAndEvent> se);
 
 /**
  * @brief Convert ExprGPUResult to arrow and run case compute on them.
@@ -235,7 +235,9 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
     PhysicalGPUComparisonExpression(
         std::shared_ptr<PhysicalGPUExpression> left,
         std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype) {
+        duckdb::ExpressionType etype, duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -277,8 +279,8 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
         std::shared_ptr<ExprGPUResult> right_res =
             children[1]->ProcessBatch(input_batch, se);
 
-        auto result =
-            do_cudf_compute_binary(left_res, right_res, comparator, se);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -309,6 +311,7 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
 };
 
@@ -486,7 +489,9 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
     PhysicalGPUConjunctionExpression(
         std::shared_ptr<PhysicalGPUExpression> left,
         std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype) {
+        duckdb::ExpressionType etype, duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -516,8 +521,8 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
         std::shared_ptr<ExprGPUResult> right_res =
             children[1]->ProcessBatch(input_batch, se);
 
-        auto result =
-            do_cudf_compute_binary(left_res, right_res, comparator, se);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -548,6 +553,7 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
 };
 
@@ -558,9 +564,9 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
 class PhysicalGPUCastExpression : public PhysicalGPUExpression {
    public:
     PhysicalGPUCastExpression(std::shared_ptr<PhysicalGPUExpression> left,
-                              duckdb::LogicalType _return_type)
-        : return_type(_return_type) {
+                              duckdb::LogicalType _return_type) {
         children.push_back(left);
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
     }
 
     virtual ~PhysicalGPUCastExpression() = default;
@@ -603,7 +609,7 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
     }
 
    protected:
-    duckdb::LogicalType return_type;
+    cudf::data_type return_type;
 };
 
 /**
@@ -704,12 +710,12 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
  */
 class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
    public:
-    PhysicalGPUBinaryExpression(
-        std::shared_ptr<PhysicalGPUExpression> left,
-        std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+    PhysicalGPUBinaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
+                                std::shared_ptr<PhysicalGPUExpression> right,
+                                duckdb::ExpressionType etype,
+                                duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -720,11 +726,12 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         }
     }
 
-    PhysicalGPUBinaryExpression(
-        std::shared_ptr<PhysicalGPUExpression> left,
-        std::shared_ptr<PhysicalGPUExpression> right, const std::string &opstr,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+    PhysicalGPUBinaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
+                                std::shared_ptr<PhysicalGPUExpression> right,
+                                const std::string &opstr,
+                                duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         if (opstr == "+") {
@@ -759,8 +766,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         std::shared_ptr<ExprGPUResult> right_res =
             children[1]->ProcessBatch(input_batch, se);
 
-        auto result =
-            do_cudf_compute_binary(left_res, right_res, comparator, se);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -791,8 +798,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
-    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 /**
@@ -873,12 +880,12 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     PhysicalGPUUDFExpression(
         std::vector<std::shared_ptr<PhysicalGPUExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
-        const std::shared_ptr<arrow::DataType> &_result_type)
+        duckdb::LogicalType _return_type)
         : PhysicalGPUExpression(children),
           scalar_func_data(_scalar_func_data),
-          result_type(_result_type),
           cfunc_ptr(nullptr),
           init_state(nullptr) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
         throw std::runtime_error("PhysicalGPUUDFExpression unimplemented ");
     }
 
@@ -913,7 +920,7 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
 
    protected:
     BodoScalarFunctionData scalar_func_data;
-    const std::shared_ptr<arrow::DataType> result_type;
+    cudf::data_type return_type;
     PhysicalGPUUDFExpressionMetrics metrics;
     std::future<table_udf_t> compile_future;
     table_udf_t cfunc_ptr;

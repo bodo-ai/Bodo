@@ -25,7 +25,7 @@
 #endif
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_GPU_SELECTOR
+#define DEBUG_GPU_SELECTOR
 #ifdef DEBUG_GPU_SELECTOR
 #include <iostream>
 #endif
@@ -127,7 +127,7 @@ class DevicePlanNode {
                 return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_FILTER:
-                return false;
+                return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY:
                 return false;

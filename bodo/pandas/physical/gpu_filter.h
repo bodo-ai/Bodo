@@ -1,13 +1,14 @@
 #pragma once
 
+#include <cudf/stream_compaction.hpp>
 #include <memory>
 #include <utility>
 #include "../../libs/_query_profile_collector.h"
 #include "../libs/_array_utils.h"
-#include "expression.h"
+#include "gpu_expression.h"
 #include "operator.h"
 
-struct PhysicalFilterMetrics {
+struct PhysicalGPUFilterMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
 
@@ -20,9 +21,9 @@ struct PhysicalFilterMetrics {
  * @brief Physical node for filter.
  *
  */
-class PhysicalFilter : public PhysicalProcessBatch {
+class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
    public:
-    explicit PhysicalFilter(
+    explicit PhysicalGPUFilter(
         duckdb::LogicalFilter& logical_filter,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
         std::shared_ptr<bodo::Schema> input_schema,
@@ -53,19 +54,21 @@ class PhysicalFilter : public PhysicalProcessBatch {
         }
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+        arrow_output_schema = this->output_schema->ToArrowSchema();
 
-        expression = buildPhysicalExprTree(exprs[0], col_ref_map);
+        expression = buildPhysicalGPUExprTree(exprs[0], col_ref_map);
         for (size_t i = 1; i < exprs.size(); ++i) {
-            std::shared_ptr<PhysicalExpression> subExprTree =
-                buildPhysicalExprTree(exprs[i], col_ref_map);
-            expression = std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalConjunctionExpression>(
+            std::shared_ptr<PhysicalGPUExpression> subExprTree =
+                buildPhysicalGPUExprTree(exprs[i], col_ref_map);
+            expression = std::static_pointer_cast<PhysicalGPUExpression>(
+                std::make_shared<PhysicalGPUConjunctionExpression>(
                     expression, subExprTree,
-                    duckdb::ExpressionType::CONJUNCTION_AND));
+                    duckdb::ExpressionType::CONJUNCTION_AND,
+                    exprs[i]->return_type));
         }
     }
 
-    virtual ~PhysicalFilter() = default;
+    virtual ~PhysicalGPUFilter() = default;
 
     void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
@@ -84,51 +87,46 @@ class PhysicalFilter : public PhysicalProcessBatch {
      * @param input_batch - the input data to be filtered
      * @return the filtered batch from applying the expression to the input.
      */
-    std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch,
-        OperatorResult prev_op_result) override {
-        this->metrics.input_row_count += input_batch->nrows();
+    std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
+        this->metrics.input_row_count += input_batch.table->num_rows();
         time_pt start_expr_eval = start_timer();
         // Evaluate the Physical expression tree with the given input batch.
-        std::shared_ptr<ExprResult> expr_output =
-            expression->ProcessBatch(input_batch);
+        std::shared_ptr<ExprGPUResult> expr_output =
+            expression->ProcessBatch(input_batch, se);
         // Make sure that the output of the expression tree is a bitmask in
         // the form of a boolean array.
-        std::shared_ptr<ArrayExprResult> arr_output =
-            std::dynamic_pointer_cast<ArrayExprResult>(expr_output);
+        std::shared_ptr<ArrayExprGPUResult> arr_output =
+            std::dynamic_pointer_cast<ArrayExprGPUResult>(expr_output);
         if (!arr_output) {
             throw std::runtime_error(
                 "Filter expression tree did not result in an array");
         }
-        std::shared_ptr<array_info> bitmask = arr_output->result;
-        if (bitmask->dtype != Bodo_CTypes::_BOOL) {
+        GPU_COLUMN bitmask = std::move(arr_output->result);
+        if (bitmask->type().id() != cudf::type_id::BOOL8) {
             throw std::runtime_error(
                 "Filter expression tree did not result in a boolean array " +
-                std::to_string(static_cast<int>(bitmask->dtype)));
+                std::to_string(static_cast<int>(bitmask->type().id())));
         }
         this->metrics.expr_eval_time += end_timer(start_expr_eval);
 
         time_pt start_filtering = start_timer();
         // Apply the bitmask to the input_batch to do row filtering.
-        std::shared_ptr<table_info> filtered_table =
-            RetrieveTable(input_batch, bitmask);
+        auto filtered_table = cudf::apply_boolean_mask(
+            input_batch.table->view(), bitmask->view(), se->stream);
 
-        std::vector<std::shared_ptr<array_info>> out_cols;
-        for (size_t i = 0; i < this->kept_cols.size(); i++) {
-            out_cols.emplace_back(filtered_table->columns[this->kept_cols[i]]);
-        }
-        std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
-            out_cols, filtered_table->nrows(), output_schema->column_names,
-            output_schema->metadata);
+        GPU_DATA out_table_info(std::move(filtered_table), arrow_output_schema,
+                                se);
         this->metrics.filtering_time += end_timer(start_filtering);
 
-        this->metrics.output_row_count += out_table->nrows();
+        this->metrics.output_row_count += out_table_info.table->num_rows();
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
-        return {out_table, prev_op_result == OperatorResult::FINISHED
-                               ? OperatorResult::FINISHED
-                               : OperatorResult::NEED_MORE_INPUT};
+        return {out_table_info, prev_op_result == OperatorResult::FINISHED
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::NEED_MORE_INPUT};
     }
 
     /**
@@ -142,10 +140,11 @@ class PhysicalFilter : public PhysicalProcessBatch {
     }
 
    private:
-    std::shared_ptr<PhysicalExpression> expression;
+    std::shared_ptr<PhysicalGPUExpression> expression;
     std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<arrow::Schema> arrow_output_schema;
     std::vector<uint64_t> kept_cols;
-    PhysicalFilterMetrics metrics;
+    PhysicalGPUFilterMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
         metrics_out.reserve(3);
         metrics_out.emplace_back(
