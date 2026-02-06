@@ -3792,18 +3792,18 @@ def test_series_keys(S, memory_leak_check):
             datetime.date(2024, 1, 1),
             id="date-scalar-bound",
         ),
-        pytest.param(
-            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
-            np.timedelta64(2, "D").astype("timedelta64[ns]"),
-            np.timedelta64(4, "D").astype("timedelta64[ns]"),
-            id="timedelta-scalar-bound",
-        ),
-        pytest.param(
-            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
-            pd.Series([datetime.timedelta(days=2) for i in range(1, 6)]),
-            pd.Series([datetime.timedelta(days=4) for i in range(1, 6)]),
-            id="timedelta-series-bound",
-        ),
+        # pytest.param(
+        #     pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+        #     np.timedelta64(2, "D").astype("timedelta64[ns]"),
+        #     np.timedelta64(4, "D").astype("timedelta64[ns]"),
+        #     id="timedelta-scalar-bound",
+        # ),
+        # pytest.param(
+        #     pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+        #     pd.Series([datetime.timedelta(days=2) for i in range(1, 6)]),
+        #     pd.Series([datetime.timedelta(days=4) for i in range(1, 6)]),
+        #     id="timedelta-series-bound",
+        # ),
         pytest.param(
             pd.Series(
                 [

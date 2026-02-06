@@ -1761,6 +1761,7 @@ def overload_series_clip(
             )
         )
         or S.data == bodo.types.dict_str_arr_type
+        or S.data == bodo.types.timedelta_array_type
         or isinstance(
             S.data,
             (
