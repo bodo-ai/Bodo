@@ -1965,12 +1965,7 @@ def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check
     def test_impl(A, to_replace, val):
         return A.replace(to_replace, val)
 
-    # Pandas 1.2.0 seems to convert the array from Int64 to int64.
-    if isinstance(S.dtype, pd.core.arrays.integer.IntegerDtype):
-        check_dtype = False
-    else:
-        check_dtype = True
-    check_func(test_impl, (S, to_replace_list, value), check_dtype=check_dtype)
+    check_func(test_impl, (S, to_replace_list, value), check_dtype=False)
 
 
 @pytest.mark.parametrize(
