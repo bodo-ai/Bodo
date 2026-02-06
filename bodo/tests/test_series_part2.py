@@ -2894,7 +2894,7 @@ def test_series_mask_cat_literal(memory_leak_check):
 @pytest.mark.parametrize(
     "value, downcast",
     [
-        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"] * 2), "float"),
+        (pd.Series(["1.4", "2.3333", "4.3", "1.22", "555.1"] * 2), "float"),
         (pd.Series([1, 2, 9, 11, 3]), "integer"),
         (pd.Series(["1", "3", "12", "4", None, "-555"]), "integer"),
         # string array with invalid element
