@@ -2268,8 +2268,27 @@ def test_series_value_counts(memory_leak_check):
             pd.Timestamp("2017-01-11"),
             pd.Timestamp("2017-01-7"),
         ]
+    ).astype("datetime64[ns]")
+    # Correct for ns precision loss in Pandas 3 for first interval boundary
+    py_out = impl4(S_dt)
+    py_out.index = pd.IntervalIndex(
+        [
+            pd.Interval(
+                pd.Timestamp(pd.Timestamp("2017-01-01").value - 1),
+                pd.Timestamp("2017-01-05"),
+            )
+        ]
+        + py_out.index[1:].tolist()
     )
-    check_func(impl4, (S_dt,), check_dtype=False, is_out_distributed=False)
+    check_func(
+        impl4,
+        (S_dt,),
+        check_dtype=False,
+        is_out_distributed=False,
+        atol=1e-2,
+        rtol=1e-2,
+        py_output=py_out,
+    )
     check_func(impl5, (S_int,), check_dtype=False, is_out_distributed=False)
     check_func(impl5, (S_dt,), check_dtype=False, is_out_distributed=False)
 

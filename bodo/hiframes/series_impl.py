@@ -2491,7 +2491,12 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     else:
         func_text += "      out_arr[i] = -1\n"
     func_text += "      continue\n"
-    func_text += "    val = arr[i]\n"
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+        func_text += (
+            "    val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(arr[i].value)\n"
+        )
+    else:
+        func_text += "    val = arr[i]\n"
     func_text += "    if include_lowest and val == bins[0]:\n"
     func_text += "      ind = 1\n"
     func_text += "    else:\n"
@@ -2786,12 +2791,16 @@ def _gen_bins_handling(bins, dtype):
     if isinstance(bins, types.Integer):
         func_text += "    min_val = bodo.libs.array_ops.array_op_min(arr)\n"
         func_text += "    max_val = bodo.libs.array_ops.array_op_max(arr)\n"
-        if dtype == bodo.types.datetime64ns:
+        if dtype == bodo.types.datetime64ns or isinstance(
+            dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+        ):
             # Timestamp to int
             func_text += "    min_val = min_val.value\n"
             func_text += "    max_val = max_val.value\n"
         func_text += "    bins = compute_bins(bins, min_val, max_val, right)\n"
-        if dtype == bodo.types.datetime64ns:
+        if dtype == bodo.types.datetime64ns or isinstance(
+            dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+        ):
             # compute_bins() returns float values, should be converted to datetime64
             func_text += (
                 "    bins = bins.astype(np.int64).view(np.dtype('datetime64[ns]'))\n"
