@@ -149,6 +149,7 @@ class RankBatchGenerator {
                 // cudf::table Adjust the following to match your cuDF version:
                 std::unique_ptr<cudf::table> tbl = std::move(result.tbl);
 
+                // advance to next row group in this part
                 ++current_rg_;
 
                 if (!tbl || tbl->num_rows() == 0) {
@@ -175,9 +176,6 @@ class RankBatchGenerator {
                     "PhysicalGPUReadParquet(): read_parquet failed " +
                     part.path + " " + std::string(e.what()));
             }
-
-            // advance to next row group in this part
-            ++current_rg_;
         }
 
         // Determine EOF: true if we've consumed all parts and current_rg_ >=
