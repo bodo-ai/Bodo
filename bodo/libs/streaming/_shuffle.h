@@ -1417,6 +1417,10 @@ class IsLastState {
         CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
                   "IsLastState: MPI error on MPI_Comm_dup:");
     }
+    IsLastState(MPI_Comm parent_comm) {
+        CHECK_MPI(MPI_Comm_dup(parent_comm, &this->is_last_comm),
+                  "IsLastState: MPI error on MPI_Comm_dup:");
+    }
     ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
 };
 

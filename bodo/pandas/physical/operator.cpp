@@ -1,10 +1,21 @@
 #include "operator.h"
+#include <arrow/array/builder_base.h>
+
+#ifdef USE_CUDF
+#include "../../libs/gpu_utils.h"
+#endif
 
 int64_t PhysicalOperator::next_op_id = 1;
 
 int get_streaming_batch_size() {
     char *env_str = std::getenv("BODO_STREAMING_BATCH_SIZE");
     return (env_str != nullptr) ? std::stoi(env_str) : 32768;
+}
+
+int get_gpu_streaming_batch_size() {
+    char *env_str = std::getenv("BODO_GPU_STREAMING_BATCH_SIZE");
+    // TODO: tune batch size
+    return (env_str != nullptr) ? std::stoi(env_str) : 32768 * 10;
 }
 
 // Maximum Parquet file size for streaming Parquet write
@@ -21,14 +32,18 @@ extern const bool G_USE_ASYNC = false;
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
-    return ConsumeBatch(cpu_batch, prev_op_result);
+    auto [cpu_batch_fragment, exchange_result] =
+        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+    return ConsumeBatch(cpu_batch_fragment, exchange_result);
 }
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
                                    OperatorResult prev_op_result) {
     auto cpu_batch = convertGPUToTable(input_batch);
-    return ProcessBatch(cpu_batch, prev_op_result);
+    auto [cpu_batch_fragment, exchange_result] =
+        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+    return ProcessBatch(cpu_batch_fragment, exchange_result);
 }
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
@@ -41,9 +56,11 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    auto [cpu_batch_fragment, exchange_result] =
+        cpu_to_gpu_exchange(input_batch, prev_op_result);
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-    auto gpu_batch = convertTableToGPU(input_batch);
-    return ConsumeBatchGPU(gpu_batch, prev_op_result, se);
+    auto gpu_batch = convertTableToGPU(cpu_batch_fragment);
+    return ConsumeBatchGPU(gpu_batch, exchange_result, se);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
@@ -57,8 +74,10 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-    auto gpu_batch = convertTableToGPU(input_batch);
-    return ProcessBatchGPU(gpu_batch, prev_op_result, se);
+    auto [cpu_batch_fragment, exchange_result] =
+        cpu_to_gpu_exchange(input_batch, prev_op_result);
+    auto gpu_batch = convertTableToGPU(cpu_batch_fragment);
+    return ProcessBatchGPU(gpu_batch, exchange_result, se);
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
@@ -84,10 +103,31 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
     arrow::TableBatchReader reader(*combined_table);
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result =
         reader.Next();
-    if (!batch_result.ok() || batch_result.ValueOrDie() == nullptr) {
+    if (!batch_result.ok()) {
         throw std::runtime_error("Failed to extract batch from Arrow table");
     }
     arrow_batch = batch_result.ValueOrDie();
+
+    // End of stream (Create RecordBatch of empty arrays for cudf)
+    if (!arrow_batch) {
+        std::vector<std::shared_ptr<arrow::Array>> empty_arrays;
+        empty_arrays.reserve(combined_table->num_columns());
+        for (auto &field : combined_table->schema()->fields()) {
+            std::unique_ptr<arrow::ArrayBuilder> builder;
+            if (!arrow::MakeBuilder(arrow::default_memory_pool(), field->type(),
+                                    &builder)
+                     .ok()) {
+                throw std::runtime_error("Failed to create Arrow ArrayBuilder");
+            }
+            std::shared_ptr<arrow::Array> arr;
+            if (!builder->Finish(&arr).ok()) {
+                throw std::runtime_error("Failed to finish Arrow Array");
+            }
+            empty_arrays.push_back(arr);
+        }
+        arrow_batch =
+            arrow::RecordBatch::Make(combined_table->schema(), 0, empty_arrays);
+    }
 
     // Export to C Data Interface Structs
     // These are lightweight structs that hold pointers to the CPU data.
@@ -181,6 +221,202 @@ std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
     table = table->ReplaceSchemaMetadata(batch.schema->metadata());
     return table;
+}
+
+/**
+ * @brief State for sending contiguous chunks for data from source ranks to
+ * destination ranks.
+ */
+class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
+   public:
+    using dict_hashes_t = bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>;
+
+    SrcDestIncrementalShuffleState(
+        std::shared_ptr<bodo::Schema> schema_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>> &dict_builders_,
+        const std::vector<int> &src_ranks_, const std::vector<int> &dest_ranks_,
+        const uint64_t &curr_iter_, int64_t &sync_freq_, int64_t parent_op_id_)
+        : IncrementalShuffleState(std::move(schema_), dict_builders_,
+                                  static_cast<uint64_t>(0), curr_iter_,
+                                  sync_freq_, parent_op_id_),
+          src_ranks(src_ranks_),
+          dest_ranks(dest_ranks_) {}
+
+    /**
+     * @brief Get the table to be shuffle and list of destination ranks to send
+     to.
+     *
+     * @return std::tuple<std::shared_ptr<table_info>,
+               std::shared_ptr<dict_hashes_t>,
+               std::shared_ptr<uint32_t[]>,
+               std::unique_ptr<uint8_t[]>>
+               The table to be shuffled, empty dict hashes (not used here),
+     destination ranks per row, and nullptr keep_row_bitmask (not used here).
+     */
+    std::tuple<std::shared_ptr<table_info>, std::shared_ptr<dict_hashes_t>,
+               std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
+    GetShuffleTableAndHashes() override {
+        std::shared_ptr<table_info> shuffle_table =
+            this->table_buffer->data_table;
+        auto dict_hashes = std::make_shared<dict_hashes_t>();
+
+        int rank;
+        MPI_Comm_rank(this->shuffle_comm, &rank);
+        auto rank_it = std::ranges::find(src_ranks, rank);
+        if (rank_it == src_ranks.end()) {
+            throw std::runtime_error(
+                "SrcDestIncrementalShuffleState::GetShuffleTableAndHashes: "
+                "Current rank not in source ranks list");
+        }
+        int rank_idx = std::distance(src_ranks.begin(), rank_it);
+
+        std::shared_ptr<uint32_t[]> shuffle_hashes =
+            std::make_shared<uint32_t[]>(shuffle_table->nrows());
+        // Case 1: send many sources to fewer (or equal) destinations
+        // Assign each source rank a single destination rank to send to.
+        if (src_ranks.size() >= dest_ranks.size()) {
+            uint32_t dest_rank =
+                dest_ranks[(rank_idx * dest_ranks.size()) / src_ranks.size()];
+            std::fill(shuffle_hashes.get(),
+                      shuffle_hashes.get() + shuffle_table->nrows(), dest_rank);
+        }
+        // Case 2: send fewer sources to many destinations
+        // Distribute destination ranks evenly among source ranks.
+        // Send contiguous blocks of rows to each destination rank.
+        else {
+            int dests_per_rank = dest_ranks.size() / src_ranks.size();
+            int rem = dest_ranks.size() % src_ranks.size();
+            int start_idx = rank_idx * dests_per_rank + std::min(rank_idx, rem);
+            int local_n_dest = dests_per_rank + (rank_idx < rem ? 1 : 0);
+
+            for (size_t i = 0; i < shuffle_table->nrows(); i++) {
+                uint32_t dest_rank =
+                    dest_ranks[start_idx +
+                               ((i * local_n_dest) / shuffle_table->nrows())];
+                shuffle_hashes[i] = dest_rank;
+            }
+        }
+
+        return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
+                               std::unique_ptr<uint8_t[]>(nullptr));
+    }
+
+   private:
+    const std::vector<int> src_ranks;
+    const std::vector<int> dest_ranks;
+};
+
+RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
+    // Create a communicator for all ranks on the node
+    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                                  MPI_INFO_NULL, &this->shuffle_comm),
+              "RankDataExchange::RankDataExchange:: MPI error on "
+              "MPI_Comm_split_type:");
+    this->is_last_state = std::make_unique<IsLastState>(this->shuffle_comm);
+
+    // Get a list of all GPU ranks
+    int n_pes;
+    MPI_Comm_size(this->shuffle_comm, &n_pes);
+    bool has_gpu = get_gpu_id().value() >= 0;
+    int local = has_gpu ? 1 : 0;
+    std::vector<int> has_gpu_all(n_pes);
+    CHECK_MPI(
+        MPI_Allgather(&local, 1, MPI_INT, has_gpu_all.data(), 1, MPI_INT,
+                      this->shuffle_comm),
+        "RankDataExchange::RankDataExchange: MPI error on MPI_Allgather:");
+    for (size_t i = 0; i < has_gpu_all.size(); i++) {
+        if (has_gpu_all[i] == 1) {
+            this->gpu_ranks.push_back(i);
+        }
+        this->cpu_ranks.push_back(i);
+    }
+}
+
+std::tuple<std::shared_ptr<table_info>, OperatorResult>
+RankDataExchange::operator()(std::shared_ptr<table_info> input_batch,
+                             OperatorResult prev_op_result) {
+    if (!this->shuffle_state) {
+        Initialize(input_batch.get());
+    }
+
+    // Shuffle data to destination ranks (either all ranks or GPU ranks)
+    // and append result to output builder
+    std::vector<bool> append_rows(input_batch->nrows(), true);
+    this->shuffle_state->AppendBatch(input_batch, append_rows);
+    auto result = this->shuffle_state->ShuffleIfRequired(true);
+    // TODO: Start data transfer for CPU->GPU as soon as it's available
+    if (result.has_value()) {
+        std::shared_ptr<table_info> shuffled_table = result.value();
+        collected_rows->builder->UnifyDictionariesAndAppend(shuffled_table);
+    }
+
+    // Determine whether we need more input, have more output, or are finished
+    // with the exchange.
+    bool request_input =
+        !(this->shuffle_state->BuffersFull() &&
+          (collected_rows->builder->total_remaining >
+           (2 * collected_rows->builder->active_chunk_capacity)));
+    bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
+                         (this->shuffle_state->SendRecvEmpty());
+    bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
+        is_last_state.get(), static_cast<int32_t>(local_is_last)));
+    auto [output_batch, _] = collected_rows->builder->PopChunk(
+        /*force_return*/ global_is_last);
+
+    bool finished =
+        global_is_last && this->collected_rows->builder->total_remaining == 0;
+
+    if (finished) {
+        this->shuffle_state->Finalize();
+        this->collected_rows->builder->Finalize();
+    }
+    return std::make_tuple(
+        output_batch, finished
+                          ? OperatorResult::FINISHED
+                          : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                           : OperatorResult::HAVE_MORE_OUTPUT));
+}
+
+void RankDataExchange::Initialize(table_info *input_batch) {
+    std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+    collected_rows = std::make_unique<ChunkedTableBuilderState>(
+        input_batch->schema(), GetOutBatchSize());
+
+    InitializeShuffleState(input_batch, collected_rows->dict_builders);
+}
+
+RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
+
+int64_t CPUtoGPUExchange::GetOutBatchSize() {
+    return get_gpu_streaming_batch_size();
+}
+
+void CPUtoGPUExchange::InitializeShuffleState(
+    table_info *input_batch,
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
+
+    this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
+        input_batch->schema(), dict_builders, cpu_ranks, gpu_ranks, curr_iter,
+        sync_freq, this->op_id);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
+}
+
+int64_t GPUtoCPUExchange::GetOutBatchSize() {
+    return get_streaming_batch_size();
+}
+
+void GPUtoCPUExchange::InitializeShuffleState(
+    table_info *input_batch,
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
+
+    this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
+        input_batch->schema(), dict_builders, gpu_ranks, cpu_ranks, curr_iter,
+        sync_freq, this->op_id);
+    this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 #else
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,

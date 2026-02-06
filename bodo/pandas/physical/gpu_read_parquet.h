@@ -6,6 +6,7 @@
 #include <utility>
 #include "../_util.h"
 #include "../io/parquet_reader.h"
+#include "../libs/gpu_utils.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
@@ -19,6 +20,7 @@
 #include <cudf/table/table_view.hpp>
 
 #include <arrow/io/file.h>
+#include <mpi_proto.h>
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
 
@@ -42,21 +44,24 @@ class RankBatchGenerator {
    public:
     RankBatchGenerator(std::string dataset_path, std::size_t target_rows,
                        const std::vector<std::string> &_selected_columns,
-                       std::shared_ptr<arrow::Schema> _arrow_schema)
+                       std::shared_ptr<arrow::Schema> _arrow_schema,
+                       MPI_Comm comm)
         : path_(std::move(dataset_path)),
           target_rows_(target_rows),
           selected_columns(_selected_columns),
           arrow_schema(_arrow_schema) {
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
-        MPI_Comm_size(MPI_COMM_WORLD, &size_);
-
         files_ = list_parquet_files(path_);
-        if (files_.empty()) {
+
+        // Only assign parts to GPU-pinned ranks
+        if (files_.empty() || comm == MPI_COMM_NULL) {
             // nothing to do
             parts_ = {};
             current_part_idx_ = 0;
             return;
         }
+
+        MPI_Comm_rank(comm, &rank_);
+        MPI_Comm_size(comm, &size_);
 
         if (files_.size() == 1) {
             // single file -> partition by row groups
@@ -439,10 +444,15 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         }
 
         this->metrics.init_time += end_timer(start_init);
+
+        this->comm = get_gpu_mpi_comm(get_gpu_id());
     }
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);
         Py_XDECREF(this->schema_fields);
+        if (this->comm != MPI_COMM_NULL) {
+            MPI_Comm_free(&this->comm);
+        }
     }
 
     void FinalizeSource() override {
@@ -507,16 +517,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     std::shared_ptr<RankBatchGenerator> batch_gen;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
+    // Communicator for GPU ranks (for part assignments)
+    MPI_Comm comm;
+
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
     }
 
     void init_batch_gen() {
-        auto batch_size =
-            get_streaming_batch_size();  // TO-DO different for GPU
+        auto batch_size = get_gpu_streaming_batch_size();
 
         batch_gen = std::make_shared<RankBatchGenerator>(
-            path, batch_size, output_schema->column_names, arrow_schema);
+            path, batch_size, output_schema->column_names, arrow_schema, comm);
     }
 };
