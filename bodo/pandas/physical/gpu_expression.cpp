@@ -151,8 +151,7 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
             throw std::runtime_error(
                 "do_cudf_compute_case else is neither array nor scalar.");
         }
-    }
-    {
+    } else {
         throw std::runtime_error(
             "do_cudf_compute_case then is neither array nor scalar.");
     }
