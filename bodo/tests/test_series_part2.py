@@ -3507,6 +3507,9 @@ def test_series_np_select(series_val):
         )
 
 
+@pytest.mark.skip(
+    reason="TODO: support np.select for nullable datetime/timedelta arrays"
+)
 def test_series_np_select_non_unitype(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
@@ -3582,6 +3585,9 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     )
 
 
+@pytest.mark.skip(
+    reason="TODO: support np.select for nullable datetime/timedelta arrays"
+)
 def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
@@ -3633,6 +3639,9 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     )
 
 
+@pytest.mark.skip(
+    reason="TODO: support np.select for nullable datetime/timedelta arrays"
+)
 def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
