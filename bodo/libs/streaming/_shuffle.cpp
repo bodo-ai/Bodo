@@ -651,15 +651,7 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
     }
 }
 
-/**
- * @brief Get the max allowed MPI tag value.
- * Ref:
- * https://stackoverflow.com/questions/61662466/can-the-tag-of-mpi-send-be-a-long-int,
- * https://www.intel.com/content/www/us/en/developer/articles/technical/large-mpi-tags-with-the-intel-mpi.html
- *
- * @return int
- */
-static int get_max_allowed_tag_value() {
+int get_max_allowed_tag_value() {
     int flag = 0;
     void* tag_ub;
     CHECK_MPI(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
