@@ -698,6 +698,11 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       "bodo/tests/test_javascript.cpp"
       )
   endif()
+  if (USE_CUDF)
+        set(test_list "${test_list}"
+        "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
+        )
+  endif()
   list(APPEND sources_list "${test_list}")
   list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
@@ -716,7 +721,8 @@ cmake_print_variables(NO_HDF5)
 if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/physical/gpu_expression.cpp"
-    "bodo/libs/streaming/cuda_join.cpp")
+    "bodo/libs/streaming/cuda_join.cpp"
+    "bodo/libs/gpu_utils.cpp")
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
@@ -883,16 +889,23 @@ if(USE_CUDF)
   add_library(libcudart SHARED IMPORTED)
   set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
 
+  # nccl
+  find_library(NCCL_LIB NAMES libnccl.so)
+  get_filename_component(NCCL_LIBDIR "${NCCL_LIB}" DIRECTORY)
+  message(STATUS "libnccl lib: ${NCCL_LIB} libdir: ${NCCL_LIBDIR}")
+  add_library(nccl SHARED IMPORTED)
+  set_target_properties(nccl PROPERTIES IMPORTED_LOCATION "${NCCL_LIB}")
+
   # RPATH
   set_target_properties(ext PROPERTIES
-    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
-    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR}"
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
   )
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
-  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR})
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart
+  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
       libkvikio

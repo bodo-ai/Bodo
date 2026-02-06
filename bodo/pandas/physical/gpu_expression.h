@@ -85,9 +85,7 @@ class ArrayExprGPUResult : public ExprGPUResult {
  */
 class ScalarExprGPUResult : public ExprGPUResult {
    public:
-    ScalarExprGPUResult(GPU_SCALAR val) : result(std::move(val)) {
-        assert(val->length == 1);
-    }
+    ScalarExprGPUResult(GPU_SCALAR val) : result(std::move(val)) {}
     virtual ~ScalarExprGPUResult() = default;
     const GPU_SCALAR result;
 };
