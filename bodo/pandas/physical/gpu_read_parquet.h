@@ -445,7 +445,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         this->metrics.init_time += end_timer(start_init);
 
-        this->comm = get_gpu_mpi_comm();
+        this->comm = get_gpu_mpi_comm(get_gpu_id());
     }
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);

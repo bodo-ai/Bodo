@@ -262,7 +262,6 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
 
         int rank;
         MPI_Comm_rank(this->shuffle_comm, &rank);
-        std::shared_ptr<uint32_t[]> shuffle_hashes = nullptr;
         auto rank_it = std::ranges::find(src_ranks, rank);
         if (rank_it == src_ranks.end()) {
             throw std::runtime_error(
@@ -271,13 +270,13 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
         }
         int rank_idx = std::distance(src_ranks.begin(), rank_it);
 
+        std::shared_ptr<uint32_t[]> shuffle_hashes =
+            std::make_shared<uint32_t[]>(shuffle_table->nrows());
         // Case 1: send many sources to fewer (or equal) destinations
         // Assign each source rank a single destination rank to send to.
         if (src_ranks.size() >= dest_ranks.size()) {
             uint32_t dest_rank =
                 dest_ranks[(rank_idx * dest_ranks.size()) / src_ranks.size()];
-            shuffle_hashes =
-                std::make_shared<uint32_t[]>(shuffle_table->nrows());
             std::fill(shuffle_hashes.get(),
                       shuffle_hashes.get() + shuffle_table->nrows(), dest_rank);
         }
@@ -285,8 +284,6 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
         // Distribute destination ranks evenly among source ranks.
         // Send contiguous blocks of rows to each destination rank.
         else {
-            shuffle_hashes =
-                std::make_shared<uint32_t[]>(shuffle_table->nrows());
             int dests_per_rank = dest_ranks.size() / src_ranks.size();
             int rem = dest_ranks.size() % src_ranks.size();
             int start_idx = rank_idx * dests_per_rank + std::min(rank_idx, rem);
