@@ -1760,7 +1760,6 @@ def fillna_series(request):
             lambda S: S.bfill(),
         ),  # S.backfill() is a deprecated alias for S.bfill()
         ("ffill", lambda S: S.ffill()),
-        ("pad", lambda S: S.pad()),
     ],
 )
 def test_series_fillna_specific_method(
