@@ -619,10 +619,15 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
 )
 def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=None):
     # Mean is supported for integer, float, datetime, and boolean Series
-    if not isinstance(S.dtype, (types.Number)) and S.dtype not in [
-        bodo.types.datetime64ns,
-        types.bool_,
-    ]:
+    if (
+        not isinstance(S.dtype, (types.Number))
+        and S.dtype
+        not in [
+            bodo.types.datetime64ns,
+            types.bool_,
+        ]
+        and not isinstance(S.data, bodo.types.DatetimeArrayType)
+    ):
         raise BodoError(f"Series.mean(): Series with type '{S}' not supported")
     unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
     arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
