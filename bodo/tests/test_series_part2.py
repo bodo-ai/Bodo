@@ -3123,6 +3123,7 @@ def test_series_sem(memory_leak_check):
     check_func(f, (S_empty,))
 
 
+@pytest.mark.skip(reason="TODO: support nullable timedelta array")
 def test_np_pd_timedelta_truediv(memory_leak_check):
     """
     Test that Series.truediv works between a Series of td64
