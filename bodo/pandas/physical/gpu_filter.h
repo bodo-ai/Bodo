@@ -17,6 +17,16 @@ struct PhysicalGPUFilterMetrics {
     time_t expr_eval_time = 0;
     time_t filtering_time = 0;
 };
+
+inline bool gpu_capable(duckdb::LogicalFilter& logical_filter) {
+    for (auto& expr : logical_filter.expressions) {
+        if (!gpu_capable(expr)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * @brief Physical node for filter.
  *
@@ -31,10 +41,12 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
             col_ref_map) {
         this->output_schema = std::make_shared<bodo::Schema>();
         if (logical_filter.projection_map.empty()) {
+            has_projection_map = false;
             for (size_t i = 0; i < input_schema->ncols(); i++) {
                 this->kept_cols.push_back(i);
             }
         } else {
+            has_projection_map = true;
             for (const auto& c : logical_filter.projection_map) {
                 this->kept_cols.push_back(c);
             }
@@ -113,8 +125,19 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
 
         time_pt start_filtering = start_timer();
         // Apply the bitmask to the input_batch to do row filtering.
-        auto filtered_table = cudf::apply_boolean_mask(
+        std::unique_ptr<cudf::table> filtered_table = cudf::apply_boolean_mask(
             input_batch.table->view(), bitmask->view(), se->stream);
+
+        if (has_projection_map) {
+            std::vector<GPU_COLUMN> out_cols;
+            out_cols.reserve(this->kept_cols.size());
+            for (size_t i = 0; i < this->kept_cols.size(); i++) {
+                out_cols.push_back(std::make_unique<cudf::column>(
+                    filtered_table->get_column(this->kept_cols[i])));
+            }
+            filtered_table =
+                std::make_unique<cudf::table>(std::move(out_cols), se->stream);
+        }
 
         GPU_DATA out_table_info(std::move(filtered_table), arrow_output_schema,
                                 se);
@@ -145,6 +168,7 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
     std::shared_ptr<arrow::Schema> arrow_output_schema;
     std::vector<uint64_t> kept_cols;
     PhysicalGPUFilterMetrics metrics;
+    bool has_projection_map;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
         metrics_out.reserve(3);
         metrics_out.emplace_back(
