@@ -3787,7 +3787,14 @@ def create_fillna_specific_method_overload(overload_name):
             bodo.types.timedelta64ns,
         )
         if (
-            not isinstance(series_type, (types.Integer, types.Float))
+            not isinstance(
+                series_type,
+                (
+                    types.Integer,
+                    types.Float,
+                    bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+                ),
+            )
             and series_type not in valid_obj_types
         ):
             raise BodoError(

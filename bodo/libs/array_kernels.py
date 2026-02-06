@@ -3133,7 +3133,10 @@ def ffill_bfill_overload(A, method, parallel=False):
     elif _dtype == types.bool_:
         null_value = "False"
     elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-        null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
+        if _dtype.tz is not None:
+            null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
+        else:
+            null_value = "pd.Timestamp(0)"
     elif _dtype == bodo.types.datetime64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
