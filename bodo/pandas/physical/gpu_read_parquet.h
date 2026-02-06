@@ -14,6 +14,7 @@
 #include <mpi.h>
 
 #include <cudf/concatenate.hpp>
+#include <cudf/copying.hpp>
 #include <cudf/io/parquet.hpp>  // cudf::io::read_parquet, options
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
@@ -93,6 +94,27 @@ class RankBatchGenerator {
         std::vector<std::unique_ptr<cudf::table>> gpu_tables;
         std::size_t rows_accum = 0;
 
+        if (leftover_tbl) {
+            std::size_t n = leftover_tbl->num_rows();
+            if (n <= target_rows_) {
+                rows_accum += n;
+                gpu_tables.emplace_back(std::move(leftover_tbl));
+            } else {
+                cudf::table_view tv = leftover_tbl->view();
+                auto batch = cudf::slice(tv, {0, (int)target_rows_})[0];
+                auto remain = cudf::slice(tv, {(int)target_rows_, (int)n})[0];
+                gpu_tables.push_back(std::make_unique<cudf::table>(batch));
+                leftover_tbl = std::make_unique<cudf::table>(remain);
+                rows_accum = target_rows_;
+            }
+        }
+
+        // If leftover satisfied the batch, return early
+        if (rows_accum >= target_rows_) {
+            se->event.record(se->stream);
+            return {std::move(gpu_tables[0]), false};
+        }
+
         // accumulate whole row groups until target reached or parts exhausted
         while (current_part_idx_ < static_cast<int>(parts_.size()) &&
                rows_accum < target_rows_) {
@@ -129,12 +151,22 @@ class RankBatchGenerator {
 
                 if (!tbl || tbl->num_rows() == 0) {
                     // no rows in this row group (rare) — advance
-                    ++current_rg_;
                     continue;
                 }
 
-                rows_accum += static_cast<std::size_t>(tbl->num_rows());
-                gpu_tables.push_back(std::move(tbl));
+                std::size_t tbl_n = tbl->num_rows();
+                if (rows_accum + tbl_n <= target_rows_) {
+                    rows_accum += tbl_n;
+                    gpu_tables.push_back(std::move(tbl));
+                } else {
+                    std::size_t need = target_rows_ - rows_accum;
+                    cudf::table_view tv = tbl->view();
+                    auto batch = cudf::slice(tv, {0, (int)need})[0];
+                    auto remain = cudf::slice(tv, {(int)need, (int)tbl_n})[0];
+                    gpu_tables.push_back(std::make_unique<cudf::table>(batch));
+                    leftover_tbl = std::make_unique<cudf::table>(remain);
+                    rows_accum = target_rows_;
+                }
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
                 throw std::runtime_error(
@@ -146,11 +178,15 @@ class RankBatchGenerator {
             ++current_rg_;
         }
 
+        // Determine EOF: true if we've consumed all parts and current_rg_ >=
+        // end of last part
+        bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()) &&
+                    (!leftover_tbl || leftover_tbl->num_rows() == 0));
+
         // If we collected no tables (e.g., parts exhausted), return EOF
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()));
             se->event.record(se->stream);
             return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
         }
@@ -169,18 +205,6 @@ class RankBatchGenerator {
         } else {
             // concatenate returns a std::unique_ptr<cudf::table>
             batch = cudf::concatenate(views, se->stream);
-        }
-
-        // Determine EOF: true if we've consumed all parts and current_rg_ >=
-        // end of last part
-        bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()));
-        if (!eof) {
-            // if current_part_idx_ points to a part and current_rg_ >= end, we
-            // may have just finished last part
-            if (current_part_idx_ == static_cast<int>(parts_.size()) - 1 &&
-                current_rg_ >= parts_.back().end_row_group) {
-                eof = true;
-            }
         }
 
         se->event.record(se->stream);
@@ -305,6 +329,9 @@ class RankBatchGenerator {
     // current position
     int current_part_idx_{0};
     int current_rg_{0};
+
+    // leftover rows from previous oversized row-group read
+    std::unique_ptr<cudf::table> leftover_tbl;
 };
 
 struct PhysicalGPUReadParquetMetrics {
@@ -418,7 +445,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         this->metrics.init_time += end_timer(start_init);
 
-        this->comm = get_gpu_mpi_comm();
+        this->comm = get_gpu_mpi_comm(get_gpu_id());
     }
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);

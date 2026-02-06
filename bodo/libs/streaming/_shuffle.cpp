@@ -651,15 +651,7 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
     }
 }
 
-/**
- * @brief Get the max allowed MPI tag value.
- * Ref:
- * https://stackoverflow.com/questions/61662466/can-the-tag-of-mpi-send-be-a-long-int,
- * https://www.intel.com/content/www/us/en/developer/articles/technical/large-mpi-tags-with-the-intel-mpi.html
- *
- * @return int
- */
-static int get_max_allowed_tag_value() {
+int get_max_allowed_tag_value() {
     int flag = 0;
     void* tag_ub;
     CHECK_MPI(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
@@ -1160,7 +1152,6 @@ SrcDestIncrementalShuffleState::GetShuffleTableAndHashes() {
 
     int rank;
     MPI_Comm_rank(this->shuffle_comm, &rank);
-    std::shared_ptr<uint32_t[]> shuffle_hashes = nullptr;
     auto rank_it = std::ranges::find(src_ranks, rank);
     if (rank_it == src_ranks.end()) {
         throw std::runtime_error(
@@ -1169,12 +1160,12 @@ SrcDestIncrementalShuffleState::GetShuffleTableAndHashes() {
     }
     int rank_idx = std::distance(src_ranks.begin(), rank_it);
 
+    auto shuffle_hashes = std::make_shared<uint32_t[]>(shuffle_table->nrows());
     // Case 1: send many sources to fewer (or equal) destinations
     // Assign each source rank a single destination rank to send to.
     if (src_ranks.size() >= dest_ranks.size()) {
         uint32_t dest_rank =
             dest_ranks[(rank_idx * dest_ranks.size()) / src_ranks.size()];
-        shuffle_hashes = std::make_shared<uint32_t[]>(shuffle_table->nrows());
         std::fill(shuffle_hashes.get(),
                   shuffle_hashes.get() + shuffle_table->nrows(), dest_rank);
     }
