@@ -3785,6 +3785,7 @@ def create_fillna_specific_method_overload(overload_name):
             types.bool_,
             bodo.types.datetime64ns,
             bodo.types.timedelta64ns,
+            bodo.types.pd_timedelta_type,
         )
         if (
             not isinstance(

@@ -3145,6 +3145,8 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
+    elif _dtype == bodo.types.pd_timedelta_type:  # pragma: no cover
+        null_value = "pd.to_timedelta(0)"
     elif _dtype == bodo.types.pd_datetime_tz_naive_type:  # pragma: no cover
         null_value = "NOT_A_TIME"
         global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
