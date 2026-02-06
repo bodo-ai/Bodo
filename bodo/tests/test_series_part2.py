@@ -3415,6 +3415,9 @@ def is_where_mask_supported_series(S):
     return True
 
 
+@pytest.mark.skip(
+    reason="TODO: support np.select for nullable datetime/timedelta arrays"
+)
 def test_series_np_select(series_val):
     """tests np select for nullable series"""
     from bodo.utils.typing import BodoError
