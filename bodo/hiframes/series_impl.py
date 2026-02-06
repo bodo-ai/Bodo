@@ -5561,6 +5561,14 @@ def overload_np_where(condition, x, y):
         out_dtype = types.Array(x_dtype, 1, "C")
     elif y_dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]:
         out_dtype = types.Array(y_dtype, 1, "C")
+    elif isinstance(x_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
+    elif isinstance(y_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
+    elif x_dtype == bodo.types.pd_timedelta_type:
+        out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
+    elif y_dtype == bodo.types.pd_timedelta_type:
+        out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
     else:
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
