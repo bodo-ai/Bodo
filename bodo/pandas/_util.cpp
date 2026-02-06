@@ -1430,9 +1430,13 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
                         "Unsupported Arrow timestamp unit");
             }
         }
+        case Type::DATE32: {
+            return cudf::data_type{type_id::TIMESTAMP_DAYS};
+        }
 
         default:
-            throw std::runtime_error("Unsupported Arrow type");
+            throw std::runtime_error("Unsupported Arrow type: " +
+                                     t->ToString());
     }
 }
 

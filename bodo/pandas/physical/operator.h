@@ -2,6 +2,7 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cstdint>
 #ifdef USE_CUDF
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
@@ -10,6 +11,9 @@
 #include <typeinfo>
 #include <utility>
 
+#include "../../libs/_bodo_common.h"
+#include "../../libs/_chunked_table_builder.h"
+#include "../../libs/streaming/_shuffle.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
@@ -128,6 +132,94 @@ struct GPU_DATA {
              std::shared_ptr<StreamAndEvent> se)
         : table(t), schema(s), stream_event(se) {}
 };
+
+/**
+ * @brief Base class for sending data to/from ranks with pinned resources (GPUs)
+ *
+ */
+class RankDataExchange {
+   public:
+    RankDataExchange(int64_t op_id_);
+
+    /**
+     * @brief Exchange data between ranks with pinned resources (GPUs)
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<std::shared_ptr<table_info>, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    ~RankDataExchange();
+
+   protected:
+    /** @brief Initialize the RankDataExchange state including output builders
+     * and shuffle state.
+     *
+     * @param input_batch Sample input batch to determine column types.
+     */
+    void Initialize(table_info* input_batch);
+
+    /**
+     * @brief Initialize shuffle state for sending data between CPU and GPU
+     * ranks asynchronously.
+     *
+     * @param input_batch
+     * @param dict_builders
+     */
+    virtual void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) = 0;
+
+    virtual int64_t GetOutBatchSize() = 0;
+
+    int64_t op_id;
+
+    std::vector<int> gpu_ranks;
+    std::vector<int> cpu_ranks;
+    MPI_Comm shuffle_comm;
+
+    // State for synchronizing after all ranks have sent their last batch
+    // to/from GPU ranks.
+    std::unique_ptr<IsLastState> is_last_state;
+    std::unique_ptr<IncrementalShuffleState> shuffle_state;
+    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+};
+
+/**
+ * @brief Class for managing data exchange between CPU ranks (all ranks on the
+ * node) and GPU-pinned ranks.
+ *
+ */
+class CPUtoGPUExchange : public RankDataExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+   private:
+    int64_t GetOutBatchSize() override;
+    void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+};
+
+/**
+ * @brief Class for managing data exchange between GPU-pinned ranks and CPU
+ * ranks (all ranks on the node).
+ *
+ */
+class GPUtoCPUExchange : public RankDataExchange {
+   public:
+    GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+    int64_t GetOutBatchSize() override;
+    void InitializeShuffleState(
+        table_info* input_batch,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+};
 #else
 
 struct GPU_DATA {};
@@ -206,6 +298,13 @@ class PhysicalSink : public PhysicalOperator {
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+#ifdef USE_CUDF
+    PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -234,6 +333,13 @@ class PhysicalProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+#ifdef USE_CUDF
+    PhysicalProcessBatch() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -292,6 +398,13 @@ class PhysicalGPUSink : public PhysicalOperator {
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+#ifdef USE_CUDF
+    PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 
 /**
@@ -323,6 +436,13 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+#ifdef USE_CUDF
+    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->op_id) {}
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 /**
  * @brief Get the streaming batch size from environment variable.
@@ -332,6 +452,13 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
  * @return int batch size to be used in streaming operators
  */
 int get_streaming_batch_size();
+
+/**
+ * @brief Get the streaming batch size from environment variable.
+ *
+ * @return int batch size to be used in gpu streaming operators
+ */
+int get_gpu_streaming_batch_size();
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size();
