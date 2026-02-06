@@ -1606,8 +1606,20 @@ def test_series_unique(series_val, memory_leak_check):
     def test_impl(A):
         return A.unique()
 
+    if isinstance(series_val.dtype, pd.ArrowDtype) and pa.types.is_list(
+        series_val.dtype.pyarrow_dtype
+    ):
+        # Arrow doesn't support unique for list type
+        return
+
     # sorting since output order is not consistent
-    check_func(test_impl, (series_val,), sort_output=True, is_out_distributed=False)
+    check_func(
+        test_impl,
+        (series_val,),
+        sort_output=True,
+        is_out_distributed=False,
+        use_dict_encoded_strings=False,
+    )
 
 
 @pytest.mark.slow
