@@ -1,5 +1,21 @@
 #include "gpu_expression.h"
+#include <memory>
+#include <stdexcept>
+#include <vector>
 #include "_util.h"
+
+#include <cudf/binaryop.hpp>
+#include <cudf/column/column.hpp>
+#include <cudf/column/column_view.hpp>
+#include <cudf/scalar/scalar.hpp>
+#include <cudf/stream_compaction.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+#include <cudf/types.hpp>
+
+#include "duckdb/planner/filter/conjunction_filter.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ExprGPUResult> left_res,
@@ -550,3 +566,295 @@ void PhysicalGPUExpression::join_expr_batch(
 }
 
 PhysicalGPUExpression* PhysicalGPUExpression::cur_join_expr = nullptr;
+
+// CudfExpr tree like Arrow expression tree
+
+// Helper constructors
+std::unique_ptr<CudfExpr> make_column_ref(int col_idx) {
+    auto e = std::make_unique<CudfExpr>();
+    e->kind = CudfExpr::Kind::COLUMN_REF;
+    e->column_index = col_idx;
+    return e;
+}
+
+std::unique_ptr<CudfExpr> make_literal(const duckdb::Value& v) {
+    auto e = std::make_unique<CudfExpr>();
+    e->kind = CudfExpr::Kind::LITERAL;
+    e->literal = v;
+    return e;
+}
+
+std::unique_ptr<CudfExpr> make_binary(CudfExpr::Kind k,
+                                      std::unique_ptr<CudfExpr> lhs,
+                                      std::unique_ptr<CudfExpr> rhs) {
+    auto e = std::make_unique<CudfExpr>();
+    e->kind = k;
+    e->left = std::move(lhs);
+    e->right = std::move(rhs);
+    return e;
+}
+
+std::unique_ptr<CudfExpr> make_and(std::unique_ptr<CudfExpr> lhs,
+                                   std::unique_ptr<CudfExpr> rhs) {
+    return make_binary(CudfExpr::Kind::AND, std::move(lhs), std::move(rhs));
+}
+
+std::unique_ptr<CudfExpr> make_or(std::unique_ptr<CudfExpr> lhs,
+                                  std::unique_ptr<CudfExpr> rhs) {
+    return make_binary(CudfExpr::Kind::OR, std::move(lhs), std::move(rhs));
+}
+
+// Map DuckDB comparison type → CudfExpr::Kind
+CudfExpr::Kind comparisonTypeToCudfKind(duckdb::ExpressionType t) {
+    using ET = duckdb::ExpressionType;
+    switch (t) {
+        case ET::COMPARE_EQUAL:
+            return CudfExpr::Kind::EQ;
+        case ET::COMPARE_NOTEQUAL:
+            return CudfExpr::Kind::NE;
+        case ET::COMPARE_GREATERTHAN:
+            return CudfExpr::Kind::GT;
+        case ET::COMPARE_LESSTHAN:
+            return CudfExpr::Kind::LT;
+        case ET::COMPARE_GREATERTHANOREQUALTO:
+            return CudfExpr::Kind::GE;
+        case ET::COMPARE_LESSTHANOREQUALTO:
+            return CudfExpr::Kind::LE;
+        default:
+            throw std::runtime_error("Unhandled comparison type");
+    }
+}
+
+// =====================================
+// 2. Literal column construction helper
+// =====================================
+
+std::unique_ptr<cudf::scalar> duckdbValueToCudfScalar(
+    const duckdb::Value& value) {
+    duckdb::LogicalTypeId type = value.type().id();
+    switch (type) {
+        case duckdb::LogicalTypeId::TINYINT:
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(
+                value.GetValue<int8_t>());
+        case duckdb::LogicalTypeId::SMALLINT:
+            return std::make_unique<cudf::numeric_scalar<int16_t>>(
+                value.GetValue<int16_t>());
+        case duckdb::LogicalTypeId::INTEGER:
+            return std::make_unique<cudf::numeric_scalar<int32_t>>(
+                value.GetValue<int32_t>());
+        case duckdb::LogicalTypeId::BIGINT:
+            return std::make_unique<cudf::numeric_scalar<int64_t>>(
+                value.GetValue<int64_t>());
+        case duckdb::LogicalTypeId::UTINYINT:
+            return std::make_unique<cudf::numeric_scalar<uint8_t>>(
+                value.GetValue<uint8_t>());
+        case duckdb::LogicalTypeId::USMALLINT:
+            return std::make_unique<cudf::numeric_scalar<uint16_t>>(
+                value.GetValue<uint16_t>());
+        case duckdb::LogicalTypeId::UINTEGER:
+            return std::make_unique<cudf::numeric_scalar<uint32_t>>(
+                value.GetValue<uint32_t>());
+        case duckdb::LogicalTypeId::UBIGINT:
+            return std::make_unique<cudf::numeric_scalar<uint64_t>>(
+                value.GetValue<uint64_t>());
+        case duckdb::LogicalTypeId::FLOAT:
+            return std::make_unique<cudf::numeric_scalar<float>>(
+                value.GetValue<float>());
+        case duckdb::LogicalTypeId::DOUBLE:
+            return std::make_unique<cudf::numeric_scalar<double>>(
+                value.GetValue<double>());
+        case duckdb::LogicalTypeId::BOOLEAN:
+            return std::make_unique<cudf::numeric_scalar<bool>>(
+                value.GetValue<bool>());
+        case duckdb::LogicalTypeId::VARCHAR:
+            return std::make_unique<cudf::string_scalar>(
+                value.GetValue<std::string>());
+        default:
+            throw std::runtime_error("extractValue unhandled type." +
+                                     std::to_string(static_cast<int>(type)));
+    }
+}
+
+std::unique_ptr<cudf::column> make_literal_column(duckdb::Value const& v,
+                                                  cudf::size_type n_rows) {
+    if (v.IsNull()) {
+        // For brevity, make a BOOL8 all-null column
+        auto col =
+            cudf::make_fixed_width_column(cudf::data_type{cudf::type_id::BOOL8},
+                                          n_rows, cudf::mask_state::ALL_NULL);
+        return col;
+    }
+    return cudf::make_column_from_scalar(*duckdbValueToCudfScalar(v), n_rows);
+}
+
+// =====================================
+// 3. Evaluate CudfExpr → cudf::column
+// =====================================
+
+std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
+                                             cudf::table_view input) {
+    using Kind = CudfExpr::Kind;
+
+    switch (expr.kind) {
+        case Kind::COLUMN_REF: {
+            // Return a *copy* of the column as a new owning column
+            return std::make_unique<cudf::column>(
+                input.column(expr.column_index));
+        }
+
+        case Kind::LITERAL: {
+            return make_literal_column(expr.literal, input.num_rows());
+        }
+
+        case Kind::EQ:
+        case Kind::NE:
+        case Kind::LT:
+        case Kind::LE:
+        case Kind::GT:
+        case Kind::GE:
+        case Kind::AND:
+        case Kind::OR: {
+            auto lhs_col = eval_cudf_expr(*expr.left, input);
+            auto rhs_col = eval_cudf_expr(*expr.right, input);
+
+            cudf::binary_operator op;
+            switch (expr.kind) {
+                case Kind::EQ:
+                    op = cudf::binary_operator::EQUAL;
+                    break;
+                case Kind::NE:
+                    op = cudf::binary_operator::NOT_EQUAL;
+                    break;
+                case Kind::LT:
+                    op = cudf::binary_operator::LESS;
+                    break;
+                case Kind::LE:
+                    op = cudf::binary_operator::LESS_EQUAL;
+                    break;
+                case Kind::GT:
+                    op = cudf::binary_operator::GREATER;
+                    break;
+                case Kind::GE:
+                    op = cudf::binary_operator::GREATER_EQUAL;
+                    break;
+                case Kind::AND:
+                    op = cudf::binary_operator::LOGICAL_AND;
+                    break;
+                case Kind::OR:
+                    op = cudf::binary_operator::LOGICAL_OR;
+                    break;
+                default:
+                    throw std::runtime_error("Unexpected binary op");
+            }
+
+            auto result =
+                cudf::binary_operation(lhs_col->view(), rhs_col->view(), op,
+                                       cudf::data_type{cudf::type_id::BOOL8});
+            return result;
+        }
+    }
+
+    throw std::runtime_error("Unknown CudfExpr kind");
+}
+
+// =====================================
+// 4. DuckDB TableFilter → CudfExpr
+// =====================================
+
+std::unique_ptr<CudfExpr> tableFilterToCudfExpr(
+    duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter>& tf) {
+    using TF = duckdb::TableFilterType;
+
+    switch (tf->filter_type) {
+        case TF::CONSTANT_COMPARISON: {
+            auto cf =
+                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(std::move(tf));
+            auto cmp_kind = comparisonTypeToCudfKind(cf->comparison_type);
+            auto col_ref = make_column_ref(static_cast<int>(col_idx));
+            auto lit = make_literal(cf->constant);
+            return make_binary(cmp_kind, std::move(col_ref), std::move(lit));
+        } break;  // prevent fallthrough error
+
+        case TF::CONJUNCTION_AND: {
+            auto af = dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                std::move(tf));
+            if (af->child_filters.size() < 2) {
+                throw std::runtime_error("AND filter with <2 children");
+            }
+            auto expr = tableFilterToCudfExpr(col_idx, af->child_filters[0]);
+            for (std::size_t i = 1; i < af->child_filters.size(); ++i) {
+                expr = make_and(
+                    std::move(expr),
+                    tableFilterToCudfExpr(col_idx, af->child_filters[i]));
+            }
+            return expr;
+        } break;  // prevent fallthrough error
+
+        case TF::CONJUNCTION_OR: {
+            auto of = dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                std::move(tf));
+            if (of->child_filters.size() < 2) {
+                throw std::runtime_error("OR filter with <2 children");
+            }
+            auto expr = tableFilterToCudfExpr(col_idx, of->child_filters[0]);
+            for (std::size_t i = 1; i < of->child_filters.size(); ++i) {
+                expr = make_or(
+                    std::move(expr),
+                    tableFilterToCudfExpr(col_idx, of->child_filters[i]));
+            }
+            return expr;
+        } break;  // prevent fallthrough error
+
+        case TF::OPTIONAL_FILTER: {
+            auto of =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                return tableFilterToCudfExpr(col_idx, of->child_filter);
+            } catch (...) {
+                // No-op: literal true
+                return make_literal(duckdb::Value::BOOLEAN(true));
+            }
+        } break;  // prevent fallthrough error
+
+        default:
+            throw std::runtime_error("Unsupported TableFilterType");
+    }
+}
+
+// =====================================
+// 5. TableFilterSet → filtered cudf::table
+// =====================================
+
+std::unique_ptr<CudfExpr> tableFilterSetToCudf(
+    duckdb::TableFilterSet& filters) {
+    std::unique_ptr<CudfExpr> root_expr;
+
+    if (filters.filters.empty()) {
+        return nullptr;
+    }
+
+    // Combine all filters with AND
+    for (auto& pair : filters.filters) {
+        duckdb::idx_t col_idx = pair.first;
+        auto& tf = pair.second;
+
+        auto sub_expr = tableFilterToCudfExpr(col_idx, tf);
+
+        if (!root_expr) {
+            root_expr = std::move(sub_expr);
+        } else {
+            root_expr = make_and(std::move(root_expr), std::move(sub_expr));
+        }
+    }
+
+    return root_expr;
+}
+
+std::unique_ptr<cudf::table> CudfExpr::eval(cudf::table& input) {
+    // Evaluate expression to a BOOL8 mask column
+    auto mask_col = eval_cudf_expr(*this, input.view());
+
+    // Apply boolean mask
+    auto filtered = cudf::apply_boolean_mask(input.view(), mask_col->view());
+    return filtered;
+}

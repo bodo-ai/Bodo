@@ -930,3 +930,23 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     table_udf_t cfunc_ptr;
     PyObject *init_state;
 };
+
+struct CudfExpr {
+    enum class Kind { COLUMN_REF, LITERAL, EQ, NE, LT, LE, GT, GE, AND, OR };
+
+    Kind kind;
+
+    // For COLUMN_REF
+    int column_index = -1;
+
+    // For LITERAL
+    duckdb::Value literal;
+
+    // For binary ops
+    std::unique_ptr<CudfExpr> left;
+    std::unique_ptr<CudfExpr> right;
+
+    std::unique_ptr<cudf::table> eval(cudf::table &input);
+};
+
+std::unique_ptr<CudfExpr> tableFilterSetToCudf(duckdb::TableFilterSet &filters);

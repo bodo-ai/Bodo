@@ -9,6 +9,7 @@
 #include "../libs/gpu_utils.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "gpu_expression.h"
 #include "operator.h"
 
 #include <mpi.h>
@@ -366,6 +367,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     const std::vector<int> selected_columns;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
+    std::unique_ptr<CudfExpr> cudfExprTree;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -382,8 +384,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         time_pt start_init = start_timer();
 
         if (filter_exprs.filters.size() != 0) {
-            throw std::runtime_error(
-                "PhysicalGPUReadParquet(): filters not yet implemented");
+            cudfExprTree = tableFilterSetToCudf(filter_exprs);
         }
 
         if (py_path && PyUnicode_Check(py_path)) {
@@ -486,6 +487,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
             batch_gen->next(se);
+        if (cudfExprTree) {
+            next_batch_tup.first = cudfExprTree->eval(*(next_batch_tup.first));
+        }
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
