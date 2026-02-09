@@ -1528,7 +1528,7 @@ def _test_equal(
                 )
                 py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(object)
 
-            # Convert string/binary/date columns to pyarrow dtype
+            # Convert string/binary/date/.. columns to pyarrow dtype
             if isinstance(bodo_dtype, pd.ArrowDtype) and (
                 pa.types.is_binary(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
@@ -1537,6 +1537,8 @@ def _test_equal(
                 or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_null(bodo_dtype.pyarrow_dtype)
                 or pa.types.is_decimal(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_list(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_large_list(bodo_dtype.pyarrow_dtype)
             ):
                 in_arr = py_out[py_out.columns[i]]
                 # Avoid np.nan in object arrays which causes PyArrow errors
@@ -1559,6 +1561,14 @@ def _test_equal(
                 py_out[py_out.columns[i]] = pd.array(
                     py_out[py_out.columns[i]], dtype=bodo_dtype
                 )
+
+            # Make sure string storage and NAs match
+            if (
+                isinstance(bodo_dtype, pd.StringDtype)
+                and isinstance(py_dtype, pd.StringDtype)
+                and bodo_dtype != py_dtype
+            ):
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(bodo_dtype)
 
             # Avoid NA mismatch for object columns
             if bodo_dtype == np.object_ and py_dtype == np.object_:
