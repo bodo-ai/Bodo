@@ -51,7 +51,8 @@ pytestmark = pytest_slow_unless_codegen
                         None,
                         pd.Timestamp("1968-1-1"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "months": pd.Series(
                     [
@@ -65,7 +66,8 @@ pytestmark = pytest_slow_unless_codegen
                         None,
                         pd.Timestamp("2013-11-1"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "weeks": pd.Series(
                     [
@@ -79,7 +81,8 @@ pytestmark = pytest_slow_unless_codegen
                         None,
                         pd.Timestamp("2017-1-16"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "days": pd.Series(
                     [
@@ -93,7 +96,8 @@ pytestmark = pytest_slow_unless_codegen
                         None,
                         pd.Timestamp("2017-11-12"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             },
             id="all_vector",
@@ -175,7 +179,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                 pd.Series(
                     [pd.Timestamp("2015-03-14")] * 3
                     + [None]
-                    + [pd.Timestamp("2015-03-14")] * 2
+                    + [pd.Timestamp("2015-03-14")] * 2,
+                    dtype="datetime64[ns]",
                 ),
             ),
             {
@@ -187,7 +192,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-5-4 10:00:00"),
                         pd.Timestamp("1940-7-21 15:00:00"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "minutes": pd.Series(
                     [
@@ -197,7 +203,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-3-14 20:34:00"),
                         pd.Timestamp("2013-12-14 14:39:00"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "seconds": pd.Series(
                     [
@@ -207,7 +214,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-3-14 00:20:34"),
                         pd.Timestamp("2015-3-6 10:14:39"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "milliseconds": pd.Series(
                     [
@@ -217,7 +225,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-3-14 00:00:01.234000"),
                         pd.Timestamp("2015-03-13 23:49:05.679000"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "microseconds": pd.Series(
                     [
@@ -227,7 +236,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-3-14 00:00:00.001234"),
                         pd.Timestamp("2015-03-13 23:59:59.345679"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "nanoseconds": pd.Series(
                     [
@@ -237,7 +247,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         None,
                         pd.Timestamp("2015-3-14 00:00:00.000001234"),
                         pd.Timestamp("2015-03-13 23:59:59.999345679"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             },
             id="all_vector",
@@ -255,7 +266,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2023-4-29 1:42:30.151121521"),
                         pd.Timestamp("2030-5-2 1:42:30.151121521"),
                         pd.Timestamp("2142-6-24 1:42:30.151121521"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "minutes": pd.Series(
                     [
@@ -264,7 +276,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2022-11-12 05:58:30.151121521"),
                         pd.Timestamp("2022-12-24 21:58:30.151121521"),
                         pd.Timestamp("2024-11-06 13:58:30.151121521"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "seconds": pd.Series(
                     [
@@ -273,7 +286,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2022-11-09 10:50:46.151121521"),
                         pd.Timestamp("2022-11-10 03:54:46.151121521"),
                         pd.Timestamp("2022-11-21 12:58:46.151121521"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "milliseconds": pd.Series(
                     [
@@ -282,7 +296,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2022-11-09 09:42:34.247121521"),
                         pd.Timestamp("2022-11-09 09:43:35.687121521"),
                         pd.Timestamp("2022-11-09 09:59:58.727121521"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "microseconds": pd.Series(
                     [
@@ -291,7 +306,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2022-11-09 09:42:30.155217521"),
                         pd.Timestamp("2022-11-09 09:42:30.216657521"),
                         pd.Timestamp("2022-11-09 09:42:31.199697521"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "nanoseconds": pd.Series(
                     [
@@ -300,7 +316,8 @@ def test_add_interval_date_units(unit, args, answers, memory_leak_check):
                         pd.Timestamp("2022-11-09 09:42:30.151125617"),
                         pd.Timestamp("2022-11-09 09:42:30.151187057"),
                         pd.Timestamp("2022-11-09 09:42:30.152170097"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             },
             id="vector_scalar",
