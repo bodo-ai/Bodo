@@ -1,4 +1,5 @@
 #include "cuda_join.h"
+#include <arrow/array/util.h>
 #include <arrow/compute/api_aggregate.h>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/concatenate.hpp>
