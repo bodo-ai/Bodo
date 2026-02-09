@@ -1137,6 +1137,8 @@ def test_df_dtypes(df_value):
     for i in range(len(df_value.columns)):
         if isinstance(py_output.iloc[i], pd.StringDtype):
             py_output.iloc[i] = pd.StringDtype("pyarrow", pd.NA)
+        if py_output.iloc[0] == np.dtype("datetime64[ns]"):
+            py_output.iloc[0] = bodo.types.datetime64ns
         if py_output.iloc[i] == np.object_:
             if df_type.data[i] == bodo.types.boolean_array_type:
                 py_output.iloc[i] = pd.BooleanDtype()
