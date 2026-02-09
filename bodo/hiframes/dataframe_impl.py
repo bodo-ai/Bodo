@@ -2042,7 +2042,9 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 def _is_describe_type(data):
     """Check if df.data has supported datatype for describe"""
     return (
-        isinstance(data, (IntegerArrayType, FloatingArrayType))
+        isinstance(
+            data, (IntegerArrayType, FloatingArrayType, bodo.types.DatetimeArrayType)
+        )
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
         or data.dtype == bodo.types.datetime64ns
     )
@@ -2084,6 +2086,7 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
     # number of datetime columns
     num_dt = sum(
         df.data[df.column_index[c]].dtype == bodo.types.datetime64ns
+        or isinstance(df.data[df.column_index[c]], bodo.types.DatetimeArrayType)
         for c in numeric_cols
     )
 
@@ -2092,7 +2095,9 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
         columns to match Pandas.
         https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L179
         """
-        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns
+        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns or isinstance(
+            df.data[col_ind], bodo.types.DatetimeArrayType
+        )
         if num_dt and num_dt != len(numeric_cols):
             if is_dt:
                 return f"des_{col_ind} + (np.nan,)"
