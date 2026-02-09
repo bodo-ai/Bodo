@@ -567,8 +567,6 @@ void PhysicalGPUExpression::join_expr_batch(
 
 PhysicalGPUExpression* PhysicalGPUExpression::cur_join_expr = nullptr;
 
-// CudfExpr tree like Arrow expression tree
-
 // Helper constructors
 std::unique_ptr<CudfExpr> make_column_ref(int col_idx) {
     auto e = std::make_unique<CudfExpr>();
@@ -624,10 +622,6 @@ CudfExpr::Kind comparisonTypeToCudfKind(duckdb::ExpressionType t) {
             throw std::runtime_error("Unhandled comparison type");
     }
 }
-
-// =====================================
-// 2. Literal column construction helper
-// =====================================
 
 std::unique_ptr<cudf::scalar> duckdbValueToCudfScalar(
     const duckdb::Value& value) {
@@ -686,10 +680,6 @@ std::unique_ptr<cudf::column> make_literal_column(duckdb::Value const& v,
     }
     return cudf::make_column_from_scalar(*duckdbValueToCudfScalar(v), n_rows);
 }
-
-// =====================================
-// 3. Evaluate CudfExpr → cudf::column
-// =====================================
 
 std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
                                              cudf::table_view input) {
@@ -757,10 +747,6 @@ std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
     throw std::runtime_error("Unknown CudfExpr kind");
 }
 
-// =====================================
-// 4. DuckDB TableFilter → CudfExpr
-// =====================================
-
 std::unique_ptr<CudfExpr> tableFilterToCudfExpr(
     duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter>& tf) {
     using TF = duckdb::TableFilterType;
@@ -821,12 +807,8 @@ std::unique_ptr<CudfExpr> tableFilterToCudfExpr(
     }
 }
 
-// =====================================
-// 5. TableFilterSet → filtered cudf::table
-// =====================================
-
 std::unique_ptr<CudfExpr> tableFilterSetToCudf(
-    duckdb::TableFilterSet& filters) {
+    duckdb::TableFilterSet& filters, const std::map<int, int>& column_map) {
     std::unique_ptr<CudfExpr> root_expr;
 
     if (filters.filters.empty()) {
@@ -836,6 +818,14 @@ std::unique_ptr<CudfExpr> tableFilterSetToCudf(
     // Combine all filters with AND
     for (auto& pair : filters.filters) {
         duckdb::idx_t col_idx = pair.first;
+        auto column_map_iter = column_map.find(col_idx);
+        // If there are selected columns then use the column map to
+        // get the mapping from the TableFilterSet column number in
+        // col_idx to what column it will be after columns are
+        // selected via cudf.
+        if (column_map_iter != column_map.end()) {
+            col_idx = column_map_iter->second;
+        }
         auto& tf = pair.second;
 
         auto sub_expr = tableFilterToCudfExpr(col_idx, tf);

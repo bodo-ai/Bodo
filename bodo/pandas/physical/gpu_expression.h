@@ -931,6 +931,7 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     PyObject *init_state;
 };
 
+// CudfExpr tree like Arrow expression tree
 struct CudfExpr {
     enum class Kind { COLUMN_REF, LITERAL, EQ, NE, LT, LE, GT, GE, AND, OR };
 
@@ -949,4 +950,11 @@ struct CudfExpr {
     std::unique_ptr<cudf::table> eval(cudf::table &input);
 };
 
-std::unique_ptr<CudfExpr> tableFilterSetToCudf(duckdb::TableFilterSet &filters);
+/*
+ * @brief Convert a duckdb TableFilterSet to a CudfExpr.  Since we have to
+ *        filter after columns are reduced (as supported in cudf), we have
+ *        to map the original column indices that TableFilterSet uses to
+ *        column indices after the column set is reduced.
+ */
+std::unique_ptr<CudfExpr> tableFilterSetToCudf(
+    duckdb::TableFilterSet &filters, const std::map<int, int> &column_map);

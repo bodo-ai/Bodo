@@ -383,8 +383,15 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
+        std::map<int, int> old_to_new_column_map;
+        // Generate map of original column indices to selected column indices.
+        for (size_t i = 0; i < selected_columns.size(); ++i) {
+            old_to_new_column_map.insert({selected_columns[i], i});
+        }
+
         if (filter_exprs.filters.size() != 0) {
-            cudfExprTree = tableFilterSetToCudf(filter_exprs);
+            cudfExprTree =
+                tableFilterSetToCudf(filter_exprs, old_to_new_column_map);
         }
 
         if (py_path && PyUnicode_Check(py_path)) {
