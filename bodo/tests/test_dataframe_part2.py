@@ -2663,6 +2663,7 @@ def test_df_fillna_binary_inplace(memory_leak_check):
     check_func(test_impl, (df_str,), copy_input=True, py_output=out)
 
 
+@pytest.mark.skip("TODO: Pandas 3 doesn't support inplace updates like this")
 def test_df_alias(memory_leak_check):
     """Test alias analysis for df data arrays. Without proper alias info, the fillna
     changes in data array will be optimized away incorrectly.
