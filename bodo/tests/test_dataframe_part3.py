@@ -953,7 +953,7 @@ def test_astype_dtypes_optimization(memory_leak_check):
     df1 = pd.DataFrame(
         {
             # timestamp to cast to date
-            "A": pd.date_range("2018-04-09", periods=5, freq="2D1h"),
+            "A": pd.date_range("2018-04-09", periods=5, freq="2D1h", unit="ns"),
             # Column that shouldn't be converted
             "B": ["a", "b", "c", "d", "e"],
             # Int to cast to string

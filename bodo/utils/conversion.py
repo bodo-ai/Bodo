@@ -2025,6 +2025,7 @@ def overload_fix_arr_dtype(
     ):
         # This operation isn't defined in Pandas, so we opt to implement it as
         # truncating to the date, which best resembles a cast.
+        convert_tz = data_is_tz_aware and data.dtype.tz is not None
 
         def impl_date(
             data, new_dtype, copy=None, nan_to_str=False, from_series=False
@@ -2035,7 +2036,7 @@ def overload_fix_arr_dtype(
                 if bodo.libs.array_kernels.isna(data, i):
                     bodo.libs.array_kernels.setna(out_arr, i)
                 else:
-                    if data_is_tz_aware:
+                    if convert_tz:
                         out_arr[i] = bodo.utils.conversion.box_if_dt64(
                             data[i].tz_convert(None)
                         ).date()
