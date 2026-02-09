@@ -2658,7 +2658,9 @@ def test_df_fillna_binary_inplace(memory_leak_check):
             "B": [b"ab", b"", None, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
         }
     )
-    check_func(test_impl, (df_str,), copy_input=True)
+    out = df_str.copy()
+    out["B"] = out["B"].fillna(b"kjlkas")
+    check_func(test_impl, (df_str,), copy_input=True, py_output=out)
 
 
 def test_df_alias(memory_leak_check):
