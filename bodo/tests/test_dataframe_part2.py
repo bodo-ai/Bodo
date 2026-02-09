@@ -1041,7 +1041,7 @@ def test_df_apply_df_output_multicolumn(memory_leak_check):
     """test DataFrame.apply() with dataframe output with multiple columns"""
 
     def test_impl(df):
-        return df.apply(lambda a: pd.Series([a[0], a[1]]), axis=1)
+        return df.apply(lambda a: pd.Series([a.iloc[0], a.iloc[1]]), axis=1)
 
     df = pd.DataFrame({"A": np.arange(20), "B": ["hi", "there"] * 10})
     check_func(test_impl, (df,))

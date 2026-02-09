@@ -1501,7 +1501,6 @@ heter_series_unsupported_methods = {
     "get",
     "at",
     "iat",
-    "iloc",
     "loc",
     "__iter__",
     "items",
