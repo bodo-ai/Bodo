@@ -827,6 +827,9 @@ std::unique_ptr<CudfExpr> tableFilterSetToCudf(
         // selected via cudf.
         if (column_map_iter != column_map.end()) {
             col_idx = column_map_iter->second;
+        } else {
+            throw std::runtime_error(
+                "tableFilterSetToCudf(): col_idx not found in column_map");
         }
         auto& tf = pair.second;
 
