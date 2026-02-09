@@ -78,7 +78,10 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
     else:
         ctx["array_conv"] = ""
 
-    if in_col == bodo.types.dict_str_arr_type:
+    if (
+        in_col == bodo.types.dict_str_arr_type
+        or in_col == bodo.types.timedelta_array_type
+    ):
         result_type = in_col
     else:
         result_type = to_nullable_type(dtype_to_array_type(in_col.dtype))
@@ -118,6 +121,7 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
                 ),
             )
             or in_col == bodo.types.datetime_date_array_type
+            or in_col == bodo.types.timedelta_array_type
             else "default_arr.ctypes"
         )
         ctx["fill_val"] = (
