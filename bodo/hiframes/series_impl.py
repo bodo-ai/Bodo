@@ -1133,7 +1133,26 @@ def overload_series_rename_axis(
 def overload_series_abs(S):
     out_arr_type = S.data
 
-    # TODO: timedelta
+    if S.data == bodo.types.timedelta_array_type:
+
+        def impl(S):  # pragma: no cover
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            numba.parfors.parfor.init_prange()
+            n = len(A)
+            out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(A, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+                    continue
+                out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                    np.abs(A[i].value)
+                )
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)

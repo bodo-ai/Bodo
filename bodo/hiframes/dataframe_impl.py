@@ -1290,6 +1290,7 @@ def overload_dataframe_abs(df):
         if not (
             isinstance(arr_typ.dtype, types.Number)
             or arr_typ.dtype == bodo.types.timedelta64ns
+            or arr_typ == bodo.types.timedelta_array_type
         ):
             raise_bodo_error(
                 f"DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype {arr_typ.dtype}"
