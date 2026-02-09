@@ -2229,7 +2229,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
                 isinstance(column_type.dtype, (types.Number))
                 or column_type.dtype == bodo.types.datetime64ns
             )
-        ):
+        ) and not isinstance(column_type, bodo.types.DatetimeArrayType):
             # TODO: Link to supported Column input types.
             raise BodoError(
                 f"DataFrame.diff() column input type {column_type} not supported."
@@ -2248,6 +2248,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
         # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
         f"bodo.hiframes.series_impl.dt64_arr_sub(data_{i}, bodo.hiframes.rolling.shift(data_{i}, periods, False))"
         if df.data[i] == types.Array(bodo.types.datetime64ns, 1, "C")
+        or isinstance(df.data[i], bodo.types.DatetimeArrayType)
         else f"data_{i} - bodo.hiframes.rolling.shift(data_{i}, periods, False)"
         for i in range(len(df.columns))
     )

@@ -1608,8 +1608,17 @@ def integer_to_dt64(typingctx, val=None):
 def dt64_to_integer(typingctx, val=None):
     """Cast a datetime64 value to integer"""
 
-    def codegen(context, builder, sig, args):
-        return args[0]
+    if val == bodo.types.pd_timestamp_tz_naive_type:
+
+        def codegen(context, builder, sig, args):
+            timestamp = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return timestamp.value
+    else:
+
+        def codegen(context, builder, sig, args):
+            return args[0]
 
     return types.int64(val), codegen
 

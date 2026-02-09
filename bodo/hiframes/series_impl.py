@@ -4188,7 +4188,9 @@ def overload_series_diff(S, periods=1):
         raise BodoError("Series.diff(): 'periods' input must be an integer.")
 
     # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
-    if S.data == types.Array(bodo.types.datetime64ns, 1, "C"):
+    if S.data == types.Array(bodo.types.datetime64ns, 1, "C") or isinstance(
+        S.data, bodo.types.DatetimeArrayType
+    ):
 
         def impl_datetime(S, periods=1):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -5195,8 +5197,12 @@ def dt64_arr_sub(arg1, arg2):  # pragma: no cover
 
 @overload(dt64_arr_sub, no_unliteral=True, jit_options={"cache": True})
 def overload_dt64_arr_sub(arg1, arg2):
-    assert arg1 == types.Array(bodo.types.datetime64ns, 1, "C") and arg2 == types.Array(
-        bodo.types.datetime64ns, 1, "C"
+    assert (
+        arg1 == types.Array(bodo.types.datetime64ns, 1, "C")
+        or isinstance(arg1, bodo.types.DatetimeArrayType)
+    ) and (
+        arg2 == types.Array(bodo.types.datetime64ns, 1, "C")
+        or isinstance(arg2, bodo.types.DatetimeArrayType)
     )
     td64_dtype = np.dtype("timedelta64[ns]")
 
