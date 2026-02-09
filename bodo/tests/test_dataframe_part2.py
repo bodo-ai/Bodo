@@ -2134,7 +2134,7 @@ def test_iloc_setitem(memory_leak_check):
 
     # set column with full slice
     def impl1(df):
-        df.iloc[:, 1] = 1.3
+        df.iloc[:, 1] = 1
         return df
 
     # set values with bool index
