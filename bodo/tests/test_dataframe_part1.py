@@ -1091,6 +1091,9 @@ def test_df_values_nullable_int(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_to_numpy(numeric_df_value, memory_leak_check):
+    if numeric_df_value.dtypes.iloc[0] == np.dtype("datetime64[ns]"):
+        pytest.skip("df.to_numpy() does not support datetime64 dtype")
+
     def impl(df):
         return df.to_numpy()
 
