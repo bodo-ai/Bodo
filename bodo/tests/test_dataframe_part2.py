@@ -907,7 +907,7 @@ def test_df_apply_func_case2(memory_leak_check):
         test_impl, all_args_distributed_block=True, all_returns_distributed=True
     )(_get_dist_arg(df, False))
     res = bodo.allgatherv(res)
-    py_res = df.apply(lambda r: 2 * np.arange(r[0]).sum(), axis=1)
+    py_res = df.apply(lambda r: 2 * np.arange(r.iloc[0]).sum(), axis=1)
     pd.testing.assert_series_equal(res, py_res, check_dtype=False)
 
 
