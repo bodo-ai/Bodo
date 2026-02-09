@@ -1018,15 +1018,15 @@ def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
 
     def impl1(df):
-        return df.apply(lambda a: pd.Series([a[0], "AA"]), axis=1)
+        return df.apply(lambda a: pd.Series([a.iloc[0], "AA"]), axis=1)
 
     def impl2(df):
         def g(a):
             # TODO: support assert in UDFs properly
             # assert a > 0.0
-            if a[0] > 3:
-                return pd.Series([a[0], 2 * a[0]], ["A", "B"])
-            return pd.Series([a[0], 3 * a[0]], ["A", "B"])
+            if a.iloc[0] > 3:
+                return pd.Series([a.iloc[0], 2 * a.iloc[0]], ["A", "B"])
+            return pd.Series([a.iloc[0], 3 * a.iloc[0]], ["A", "B"])
 
         return df.apply(g, axis=1)
 
