@@ -165,6 +165,52 @@ else:
 
     pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
+    def _maybe_convert_setitem_value(self, value):
+        """Maybe convert value to be pyarrow compatible."""
+        from pandas.core.dtypes.common import is_scalar
+        from pandas.core.dtypes.missing import isna
+
+        if is_scalar(value):
+            if isna(value):
+                value = None
+            elif not isinstance(value, str):
+                raise TypeError(
+                    f"Invalid value '{value}' for dtype 'str'. Value should be a "
+                    f"string or missing value, got '{type(value).__name__}' instead."
+                )
+        # Bodo change: avoid converting to object array to handle dict-encoded string
+        # arrays from Bodo properly
+        elif isinstance(value, pd.core.arrays.string_arrow.ArrowStringArray):
+            return value._pa_array
+        else:
+            value = np.array(value, dtype=object, copy=True)
+            value[isna(value)] = None
+            for v in value:
+                if not (v is None or isinstance(v, str)):
+                    raise TypeError(
+                        "Invalid value for dtype 'str'. Value should be a "
+                        "string or missing value (or array of those)."
+                    )
+        return super(
+            pd.core.arrays.string_arrow.ArrowStringArray, self
+        )._maybe_convert_setitem_value(value)
+
+    if _check_pandas_change:
+        lines = inspect.getsource(
+            pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value
+        )
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "f682cc4462f98a59bc4081c972050f33eecea909444909945ba707f8b5f3dc05"
+        ):  # pragma: no cover
+            warnings.warn(
+                "pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value has changed"
+            )
+
+    pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value = (
+        _maybe_convert_setitem_value
+    )
+
 
 @classmethod
 def _concat_same_type(cls, to_concat):
