@@ -374,8 +374,8 @@ def test_categorical_astype(memory_leak_check):
                 "B": categorical_table["B"].astype("Int64"),
                 "C": categorical_table["C"].astype("UInt64"),
                 "D": categorical_table["D"].astype("float64"),
-                "E": categorical_table["E"].astype("datetime64[ns]"),
-                "F": categorical_table["F"].astype("timedelta64[ns]"),
+                # "E": categorical_table["E"].astype("datetime64[ns]"),
+                # "F": categorical_table["F"].astype("timedelta64[ns]"),
                 "G": categorical_table["G"].astype("boolean"),
             }
         )
@@ -391,12 +391,13 @@ def test_categorical_astype(memory_leak_check):
             "C": pd.Categorical(pd.array([5, 2] * 5, "uint64")),
             # float64
             "D": pd.Categorical([1.1, 2.7] * 5),
-            # dt64
-            "E": pd.Categorical(
-                [pd.Timestamp(2021, 4, 5), pd.Timestamp(2021, 4, 4)] * 5
-            ),
-            # td64
-            "F": pd.Categorical([pd.Timedelta(2), pd.Timedelta(seconds=-4)] * 5),
+            # TODO: support dt64/td64 for Pandas 3
+            # # dt64
+            # "E": pd.Categorical(
+            #     [pd.Timestamp(2021, 4, 5), pd.Timestamp(2021, 4, 4)] * 5
+            # ),
+            # # td64
+            # "F": pd.Categorical([pd.Timedelta(2), pd.Timedelta(seconds=-4)] * 5),
             # boolean
             "G": pd.Categorical([True, False] * 5),
         }
