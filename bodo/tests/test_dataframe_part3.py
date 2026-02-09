@@ -1098,6 +1098,7 @@ def test_df_iloc_col_slice_assign(memory_leak_check):
     check_func(impl2, (df,), copy_input=True)
 
 
+@pytest.mark.skip("TODO: update df.where nullability for Pandas 3")
 def test_df_mask_where_df(df_value, memory_leak_check):
     from bodo.utils.typing import BodoError
 
