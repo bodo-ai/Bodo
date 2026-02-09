@@ -2634,7 +2634,15 @@ def test_df_fillna_str_inplace(memory_leak_check):
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", None, "c", "bdd", "c", "a"]}
     )
-    check_func(test_impl, (df_str,), copy_input=True, use_dict_encoded_strings=False)
+    out = df_str.copy()
+    out["B"] = out["B"].fillna("ABC")
+    check_func(
+        test_impl,
+        (df_str,),
+        copy_input=True,
+        use_dict_encoded_strings=False,
+        py_output=out,
+    )
 
 
 def test_df_fillna_binary_inplace(memory_leak_check):
