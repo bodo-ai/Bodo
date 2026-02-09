@@ -113,7 +113,7 @@ std::shared_ptr<arrow::Buffer> SerializeTableToIPC(
     auto writer =
         arrow::ipc::MakeStreamWriter(sink, table->schema()).ValueOrDie();
     CHECK_ARROW_BASE(writer->WriteTable(*table),
-                     "Faileed to write Arrow Table to IPC stream");
+                     "Failed to write Arrow Table to IPC stream");
     CHECK_ARROW_BASE(writer->Close(),
                      "Failed to close Arrow IPC stream writer");
     return sink->Finish().ValueOrDie();
