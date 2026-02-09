@@ -220,7 +220,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
-        return {output_gpu_data, prev_op_result};
+        return {output_gpu_data,
+                prev_op_result == OperatorResult::FINISHED &&
+                        !cuda_join->gpu_shuffle_manager.inflight_exists()
+                    ? OperatorResult::FINISHED
+                    : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**

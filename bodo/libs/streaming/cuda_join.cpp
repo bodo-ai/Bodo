@@ -5,6 +5,7 @@
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/reduction.hpp>
+#include <rmm/cuda_stream_view.hpp>
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 
@@ -131,7 +132,6 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
     // Store the incoming build chunk for later finalization
     _build_chunks.push_back(std::move(build_chunk));
 }
-
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk) {
     if (!_join_handle) {
@@ -139,77 +139,89 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
             "Hash table not built. Call FinalizeBuild first.");
     }
 
-    // Perform the join using the pre-built hash table
-    cudf::table_view probe_view = probe_chunk->view();
-
-    auto [probe_indices_ptr, build_indices_ptr] =
-        _join_handle->inner_join(probe_view.select(this->probe_key_indices));
-
-    cudf::table_view selected_probe_view = probe_chunk->select(
-        this->probe_kept_cols.begin(), this->probe_kept_cols.end());
-    cudf::table_view selected_build_view = _build_table->select(
-        this->build_kept_cols.begin(), this->build_kept_cols.end());
-
-    // Check for empty result to avoid errors
-    if (probe_indices_ptr->size() == 0) {
-        std::vector<std::unique_ptr<cudf::column>> final_columns;
-        for (auto& col : selected_probe_view) {
-            std::unique_ptr<cudf::column> empty_col = cudf::empty_like(col);
-            final_columns.push_back(std::move(empty_col));
-        }
-
-        // Move columns from build side
-        for (auto& col : selected_build_view) {
-            std::unique_ptr<cudf::column> empty_col = cudf::empty_like(col);
-            final_columns.push_back(std::move(empty_col));
-        }
-
-        // Return empty table
-        std::unique_ptr<cudf::table> empty_out =
-            std::make_unique<cudf::table>(std::move(final_columns));
-        return empty_out;
+    // Send local data to appropriate ranks
+    if (probe_chunk->num_rows() != 0) {
+        gpu_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
     }
 
-    // 2. Create column_views from the raw indices
-    // We wrap the raw device memory in a column_view.
-    // NOTE: The underlying uvectors must outlive these views (they do here).
-    cudf::column_view probe_idx_view(
-        cudf::data_type{
-            cudf::type_id::INT32},  // indices are always size_type (int32)
-        probe_indices_ptr->size(), probe_indices_ptr->data(),
-        nullptr,  // no null mask
-        0         // null count
-    );
+    //    Receive data destined for this rank
+    std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
+        gpu_shuffle_manager.progress();
+
+    if (shuffled_probe_chunks.empty()) {
+        return create_empty_result(probe_chunk->view(), _build_table->view());
+    }
+
+    // Concatenate all incoming chunks into one contiguous table and join
+    // against it
+    std::vector<cudf::table_view> probe_views;
+    probe_views.reserve(shuffled_probe_chunks.size());
+    for (const auto& chunk : shuffled_probe_chunks) {
+        probe_views.push_back(chunk->view());
+    }
+    std::unique_ptr<cudf::table> coalesced_probe =
+        cudf::concatenate(probe_views);
+    std::cout << " coalesced probe has " << coalesced_probe->num_rows()
+              << " rows." << std::endl;
+    std::cout << "shuffle manager inflight "
+              << gpu_shuffle_manager.inflight_exists() << std::endl;
+
+    auto [probe_indices, build_indices] = _join_handle->inner_join(
+        coalesced_probe->select(this->probe_key_indices));
+
+    if (probe_indices->size() == 0) {
+        return create_empty_result(probe_chunk->view(), _build_table->view());
+    }
+
+    // Create views for the columns we want to keep
+    cudf::table_view probe_kept_view = coalesced_probe->select(
+        this->probe_kept_cols.begin(), this->probe_kept_cols.end());
+    cudf::table_view build_kept_view = _build_table->select(
+        this->build_kept_cols.begin(), this->build_kept_cols.end());
+
+    // Create column views of the indices from the indices buffers
+    cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
+                                     probe_indices->size(),
+                                     probe_indices->data(), nullptr, 0);
 
     cudf::column_view build_idx_view(cudf::data_type{cudf::type_id::INT32},
-                                     build_indices_ptr->size(),
-                                     build_indices_ptr->data(), nullptr, 0);
+                                     build_indices->size(),
+                                     build_indices->data(), nullptr, 0);
 
-    // Gather the actual data
-    // This creates new tables containing only the matching rows
-    std::unique_ptr<cudf::table> gathered_probe =
-        cudf::gather(selected_probe_view, probe_idx_view);
-    std::unique_ptr<cudf::table> gathered_build =
-        cudf::gather(selected_build_view, build_idx_view);
+    // Materialize the selected rows
+    auto gathered_probe = cudf::gather(probe_kept_view, probe_idx_view);
+    auto gathered_build = cudf::gather(build_kept_view, build_idx_view);
 
-    // Assemble the final result
-    // We extract the columns from the gathered tables and combine them into one
-    // vector.
+    // Assemble Final Result
     std::vector<std::unique_ptr<cudf::column>> final_columns;
 
-    // Move columns from probe side
     for (auto& col : gathered_probe->release()) {
         final_columns.push_back(std::move(col));
     }
-
-    // Move columns from build side
     for (auto& col : gathered_build->release()) {
         final_columns.push_back(std::move(col));
     }
 
-    // Construct the final joined table
-    std::unique_ptr<cudf::table> result_table =
-        std::make_unique<cudf::table>(std::move(final_columns));
+    return std::make_unique<cudf::table>(std::move(final_columns));
+}
 
-    return result_table;
+std::unique_ptr<cudf::table> CudaHashJoin::create_empty_result(
+    const cudf::table_view probe_ref, const cudf::table_view build_ref) {
+    std::vector<std::unique_ptr<cudf::column>> cols;
+
+    // Create empty columns matching probe schema
+    auto probe_view = probe_ref.select(this->probe_kept_cols.begin(),
+                                       this->probe_kept_cols.end());
+    for (const auto& col : probe_view) {
+        cols.push_back(cudf::empty_like(col));
+    }
+
+    // Create empty columns matching build schema
+    auto build_view = build_ref.select(this->build_kept_cols.begin(),
+                                       this->build_kept_cols.end());
+    for (const auto& col : build_view) {
+        cols.push_back(cudf::empty_like(col));
+    }
+
+    return std::make_unique<cudf::table>(std::move(cols));
 }

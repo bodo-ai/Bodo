@@ -27,9 +27,6 @@ GpuShuffleManager::GpuShuffleManager()
         return;
     }
 
-    // There's probably a more robust way to handle this
-    CHECK_CUDA(cudaSetDevice(this->gpu_id.value()));
-
     // Get rank and size
     MPI_Comm_rank(mpi_comm, &this->rank);
     MPI_Comm_size(mpi_comm, &this->n_ranks);
@@ -101,7 +98,7 @@ void GpuShuffleManager::shuffle_table(
 
     // Each shuffle will use 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
-    if (inflight_shuffles.size() * 3 < static_cast<size_t>(MAX_TAG_VAL)) {
+    if (inflight_shuffles.size() * 3 > static_cast<size_t>(MAX_TAG_VAL)) {
         throw std::runtime_error(
             "Exceeded maxiumum number of inflight shuffles");
     }

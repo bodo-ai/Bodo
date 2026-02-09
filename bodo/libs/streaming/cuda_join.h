@@ -1,6 +1,7 @@
 #pragma once
-#include <../../bodo/libs/_bodo_common.h>
 #include <arrow/scalar.h>
+#include "../libs/_bodo_common.h"
+#include "../libs/gpu_utils.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
@@ -22,6 +23,16 @@ struct CudaHashJoin {
      */
     void build_hash_table(
         const std::vector<std::shared_ptr<cudf::table>>& build_chunks);
+
+    /**
+     * @brief Helper to create an empty result table with the correct schema
+     * when the join produces no matches
+     * @param probe_ref Reference probe table
+     * @param build_ref Reference build table
+     * @return Empty result table with correct schema
+     */
+    std::unique_ptr<cudf::table> create_empty_result(
+        const cudf::table_view probe_ref, const cudf::table_view build_ref);
 
     // What input columns to join on
     std::vector<cudf::size_type> build_key_indices;
@@ -81,6 +92,10 @@ struct CudaHashJoin {
     std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() {
         return min_max_stats;
     }
+
+    // Public so PhysicalGPUJoin can access to determine if there are pending
+    // shuffles
+    GpuShuffleManager gpu_shuffle_manager;
 };
 #else
 struct CudaHashJoin {};
