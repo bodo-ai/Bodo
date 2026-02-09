@@ -1383,7 +1383,7 @@ def test_concat_nulls(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["ABC", None, "AA", "B", None, "AA"],
-            "D": pd.date_range(start="2017-01-12", periods=6),
+            "D": pd.date_range(start="2017-01-12", periods=6, unit="ns"),
         }
     )
     df2 = pd.DataFrame(
@@ -1393,7 +1393,13 @@ def test_concat_nulls(memory_leak_check):
             "E": pd.timedelta_range(start=3, periods=n, unit="ns"),
         }
     )
-    check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
+    check_func(
+        test_impl_concat,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
