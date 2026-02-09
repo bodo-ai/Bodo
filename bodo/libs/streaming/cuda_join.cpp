@@ -1,9 +1,11 @@
 #include "cuda_join.h"
+#include <arrow/compute/api_aggregate.h>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/reduction.hpp>
 #include "../../pandas/physical/operator.h"
+#include "../_utils.h"
 
 std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
     std::shared_ptr<arrow::Table> local_stats) {
