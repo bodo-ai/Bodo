@@ -1339,6 +1339,12 @@ def _test_equal_guard(
                 expected_output[expected_output.columns[i]], dtype=bodo_dtype
             )
 
+        # Convert object columns created by Spark usually
+        if py_dtype == np.object_ and bodo_dtype != np.object_:
+            expected_output[expected_output.columns[i]] = expected_output[
+                expected_output.columns[i]
+            ].astype(bodo_dtype)
+
     # Convert datetime64[us] to datetime64[ns] for comparison
     for i, dtype in enumerate(expected_output.dtypes):
         if dtype == np.dtype("datetime64[us]"):
