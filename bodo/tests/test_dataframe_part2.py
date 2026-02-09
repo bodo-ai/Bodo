@@ -2901,6 +2901,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     # check_func(impl9, (df,), copy_input=True)
 
 
+@pytest.mark.skip("TODO: Pandas 3 copy semantics are different")
 def test_df_copy_update(memory_leak_check):
     """
     Test if df.copy() works as expected with
