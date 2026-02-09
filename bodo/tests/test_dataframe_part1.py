@@ -1135,6 +1135,8 @@ def test_df_dtypes(df_value):
     py_output = df_value.dtypes
     df_type = bodo.typeof(df_value)
     for i in range(len(df_value.columns)):
+        if isinstance(py_output.iloc[i], pd.StringDtype):
+            py_output.iloc[i] = pd.StringDtype("pyarrow", pd.NA)
         if py_output.iloc[i] == np.object_:
             if df_type.data[i] == bodo.types.boolean_array_type:
                 py_output.iloc[i] = pd.BooleanDtype()
@@ -1142,7 +1144,7 @@ def test_df_dtypes(df_value):
                 bodo.types.string_array_type,
                 bodo.types.dict_str_arr_type,
             ):
-                py_output.iloc[i] = pd.StringDtype()
+                py_output.iloc[i] = pd.StringDtype("pyarrow", pd.NA)
         # Bodo reads all bool arrays as nullable
         if py_output.iloc[i] == np.bool_:
             py_output.iloc[i] = pd.BooleanDtype()
