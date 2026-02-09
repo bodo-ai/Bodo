@@ -1671,6 +1671,8 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, bodo.types.DatetimeArrayType)
+            or coltype == bodo.types.timedelta_array_type
             or isinstance(
                 coltype,
                 (
@@ -1719,6 +1721,8 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, bodo.types.DatetimeArrayType)
+            or coltype == bodo.types.timedelta_array_type
             or isinstance(
                 coltype,
                 (
