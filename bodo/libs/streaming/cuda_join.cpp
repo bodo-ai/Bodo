@@ -7,36 +7,36 @@
 
 std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
     std::shared_ptr<arrow::Table> local_stats) {
-    // 1. Serialize local stats to bytes
+    // Serialize local stats to bytes
     auto local_buf = SerializeTableToIPC(local_stats);
     int local_size = static_cast<int>(local_buf->size());
 
-    // 2. Gather sizes from all ranks
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-    std::vector<int> recv_counts(world_size);
+    // Gather sizes from all ranks
+    int n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    std::vector<int> recv_counts(n_pes);
     CHECK_MPI(MPI_Allgather(&local_size, 1, MPI_INT, recv_counts.data(), 1,
                             MPI_INT, MPI_COMM_WORLD),
               "Failed to gather local stats sizes");
 
-    // 3. Calculate displacements (offsets) for the variable-length gather
-    std::vector<int> displs(world_size);
+    // Calculate displacements
+    std::vector<int> displs(n_pes);
     int total_bytes = 0;
-    for (int i = 0; i < world_size; ++i) {
+    for (int i = 0; i < n_pes; ++i) {
         displs[i] = total_bytes;
         total_bytes += recv_counts[i];
     }
 
-    // 4. Gather all IPC buffers into one large blob
+    // Gather all IPC buffers into one large blob on each rank
     std::vector<uint8_t> recv_buffer(total_bytes);
     CHECK_MPI(MPI_Allgatherv(local_buf->data(), local_size, MPI_BYTE,
                              recv_buffer.data(), recv_counts.data(),
                              displs.data(), MPI_BYTE, MPI_COMM_WORLD),
               "Failed to gather local stats buffers");
 
-    // 5. Deserialize all tables
+    // Deserialize all tables
     std::vector<std::shared_ptr<arrow::Table>> all_tables;
-    for (int i = 0; i < world_size; ++i) {
+    for (int i = 0; i < n_pes; ++i) {
         if (recv_counts[i] > 0) {
             std::shared_ptr<arrow::Buffer> buf = arrow::Buffer::Wrap(
                 recv_buffer.data() + displs[i], recv_counts[i]);
@@ -44,15 +44,11 @@ std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
         }
     }
 
-    // 6. Concatenate into a single table (N rows, where N = number of ranks)
-    auto combined_table = arrow::ConcatenateTables(all_tables).ValueOrDie();
+    auto concat_options =
+        arrow::ConcatenateTablesOptions{.unify_schemas = true};
+    auto combined_table =
+        arrow::ConcatenateTables(all_tables, concat_options).ValueOrDie();
 
-    // 7. Compute Global Min/Max using Arrow Compute
-    // Column 0 is "min", Column 1 is "max"
-    // We compute Min of "min" column, and Max of "max" column
-
-    // Note: MinMax ignores nulls by default, which handles empty ranks
-    // gracefully.
     auto min_col = combined_table->column(0);
     auto max_col = combined_table->column(1);
 
@@ -67,7 +63,7 @@ std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
             ->field(1)
             .ValueOrDie();
 
-    // 8. Construct the final 1-row table
+    // Construct the final 1 row table
     auto schema = local_stats->schema();
 
     return arrow::Table::Make(
