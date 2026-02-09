@@ -21,7 +21,9 @@
 #include <cmath>
 #include <vector>
 
+#include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
+#include "physical/gpu_project.h"
 #endif
 
 // enable and build to print debug info on the pipeline
@@ -131,10 +133,10 @@ class DevicePlanNode {
                 return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
-                return true;
+                return ::gpu_capable(op.Cast<duckdb::LogicalProjection>());
 
             case duckdb::LogicalOperatorType::LOGICAL_FILTER:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalFilter>());
 
             case duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY:
                 return false;

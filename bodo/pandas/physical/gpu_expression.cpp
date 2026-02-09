@@ -4,8 +4,8 @@
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ExprGPUResult> left_res,
     std::shared_ptr<ExprGPUResult> right_res,
-    const cudf::binary_operator& comparator,
-    const std::shared_ptr<cudf::data_type> result_type) {
+    const cudf::binary_operator& comparator, std::shared_ptr<StreamAndEvent> se,
+    const cudf::data_type& cudf_result_type) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprGPUResult> left_as_array =
@@ -17,47 +17,35 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ScalarExprGPUResult> right_as_scalar =
         std::dynamic_pointer_cast<ScalarExprGPUResult>(right_res);
 
-    cudf::data_type cudf_result_type;
-    if (result_type) {
-        cudf_result_type = *result_type;
-    }
-
     GPU_COLUMN res;
     if (left_as_array) {
-        if (!result_type) {
-            cudf_result_type = left_as_array->result->view().type();
-        }
         if (right_as_array) {
-            res = cudf::binary_operation(left_as_array->result->view(),
-                                         right_as_array->result->view(),
-                                         comparator, cudf_result_type);
+            res = cudf::binary_operation(
+                left_as_array->result->view(), right_as_array->result->view(),
+                comparator, cudf_result_type, se->stream);
         } else if (right_as_scalar) {
             res = cudf::binary_operation(left_as_array->result->view(),
                                          *(right_as_scalar->result), comparator,
-                                         cudf_result_type);
+                                         cudf_result_type, se->stream);
         } else {
             throw std::runtime_error(
-                "do_cudf_compute right is neither array nor scalar.");
+                "do_cudf_compute_binary right is neither array nor scalar.");
         }
     } else if (left_as_scalar) {
         if (right_as_array) {
-            if (!result_type) {
-                cudf_result_type = right_as_array->result->view().type();
-            }
-            res = cudf::binary_operation(*(left_as_scalar->result),
-                                         right_as_array->result->view(),
-                                         comparator, cudf_result_type);
+            res = cudf::binary_operation(
+                *(left_as_scalar->result), right_as_array->result->view(),
+                comparator, cudf_result_type, se->stream);
         } else if (right_as_scalar) {
             throw std::runtime_error(
-                "do_cudf_compute both left and right are scalar.");
+                "do_cudf_compute_binary both left and right are scalar.");
         } else {
             throw std::runtime_error(
-                "do_cudf_compute right is neither array nor scalar.");
+                "do_cudf_compute_binary right is neither array nor scalar.");
         }
-    }
-    {
+    } else {
         throw std::runtime_error(
-            "do_cudf_compute left is neither array nor scalar.");
+            "do_cudf_compute_binary left is neither array nor scalar.");
     }
 
     return std::move(res);
@@ -65,7 +53,7 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
     std::shared_ptr<ExprGPUResult> left_res,
-    const cudf::unary_operator& comparator,
+    const cudf::unary_operator& comparator, std::shared_ptr<StreamAndEvent> se,
     const arrow::compute::FunctionOptions* func_options) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
@@ -75,7 +63,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
         std::dynamic_pointer_cast<ScalarExprGPUResult>(left_res);
 
     if (left_as_array) {
-        return cudf::unary_operation(left_as_array->result->view(), comparator);
+        return cudf::unary_operation(left_as_array->result->view(), comparator,
+                                     se->stream);
     } else if (left_as_scalar) {
         throw std::runtime_error(
             "do_cudf_compute_unary for scalar not yet implemented.");
@@ -86,8 +75,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
 }
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
-    std::shared_ptr<ExprGPUResult> left_res,
-    const duckdb::LogicalType& return_type) {
+    std::shared_ptr<ExprGPUResult> left_res, cudf::data_type& cudf_result_type,
+    std::shared_ptr<StreamAndEvent> se) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprGPUResult> left_as_array =
@@ -95,10 +84,9 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
     std::shared_ptr<ScalarExprGPUResult> left_as_scalar =
         std::dynamic_pointer_cast<ScalarExprGPUResult>(left_res);
 
-    cudf::data_type cudf_result_type = duckdb_logicaltype_to_cudf(return_type);
-
     if (left_as_array) {
-        return cudf::cast(left_as_array->result->view(), cudf_result_type);
+        return cudf::cast(left_as_array->result->view(), cudf_result_type,
+                          se->stream);
     } else if (left_as_scalar) {
         throw std::runtime_error(
             "do_cudf_compute_cast cast of scalar not yet implemented.");
@@ -110,7 +98,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
 
 GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
                                 std::shared_ptr<ExprGPUResult> then_res,
-                                std::shared_ptr<ExprGPUResult> else_res) {
+                                std::shared_ptr<ExprGPUResult> else_res,
+                                std::shared_ptr<StreamAndEvent> se) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprGPUResult> when_as_array =
@@ -141,11 +130,11 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
         if (else_as_array) {
             res = std::move(cudf::copy_if_else(then_as_array->result->view(),
                                                else_as_array->result->view(),
-                                               when_col));
+                                               when_col, se->stream));
         } else if (else_as_scalar) {
             res = std::move(cudf::copy_if_else(then_as_array->result->view(),
                                                *(else_as_scalar->result),
-                                               when_col));
+                                               when_col, se->stream));
         } else {
             throw std::runtime_error(
                 "do_cudf_compute_case right is neither array nor scalar.");
@@ -154,7 +143,7 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
         if (else_as_array) {
             res = std::move(cudf::copy_if_else(*(then_as_scalar->result),
                                                else_as_array->result->view(),
-                                               when_col));
+                                               when_col, se->stream));
         } else if (else_as_scalar) {
             throw std::runtime_error(
                 "do_cudf_compute_case both then and else are scalar.");
@@ -162,8 +151,7 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
             throw std::runtime_error(
                 "do_cudf_compute_case else is neither array nor scalar.");
         }
-    }
-    {
+    } else {
         throw std::runtime_error(
             "do_cudf_compute_case then is neither array nor scalar.");
     }
@@ -200,7 +188,7 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                     buildPhysicalGPUExprTree(bce.left, col_ref_map, no_scalars),
                     buildPhysicalGPUExprTree(bce.right, col_ref_map,
                                              no_scalars),
-                    expr_type));
+                    expr_type, bce.return_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -212,7 +200,6 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
             return std::static_pointer_cast<PhysicalGPUExpression>(
                 std::make_shared<PhysicalGPUColumnRefExpression>(
                     col_idx, bce.GetName()));
-            // binding.table_index, binding.column_index));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONSTANT: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -265,7 +252,7 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                                              no_scalars),
                     buildPhysicalGPUExprTree(bce.children[1], col_ref_map,
                                              no_scalars),
-                    expr_type));
+                    expr_type, bce.return_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_OPERATOR: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -286,7 +273,7 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                                                      col_ref_map, no_scalars),
                             buildPhysicalGPUExprTree(boe.children[1],
                                                      col_ref_map, no_scalars),
-                            expr_type));
+                            expr_type, boe.return_type));
                 } break;
                 default:
                     throw std::runtime_error(
@@ -298,13 +285,7 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
-            std::shared_ptr<arrow::DataType> result_type = nullptr;
-
-            if (bfe.bind_info) {
-                BodoScalarFunctionData& scalar_func_data =
-                    bfe.bind_info->Cast<BodoScalarFunctionData>();
-                result_type = scalar_func_data.out_schema->field(0)->type();
-            }
+            duckdb::LogicalType result_type = bfe.return_type;
 
             if (bfe.bind_info &&
                 (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
@@ -382,7 +363,8 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                         bbe.lower_inclusive
                             ? duckdb::ExpressionType::
                                   COMPARE_GREATERTHANOREQUALTO
-                            : duckdb::ExpressionType::COMPARE_GREATERTHAN));
+                            : duckdb::ExpressionType::COMPARE_GREATERTHAN,
+                        bbe.return_type));
 
             std::shared_ptr<PhysicalGPUExpression> right =
                 std::static_pointer_cast<PhysicalGPUExpression>(
@@ -391,11 +373,13 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                         bbe.upper_inclusive
                             ? duckdb::ExpressionType::
                                   COMPARE_GREATERTHANOREQUALTO
-                            : duckdb::ExpressionType::COMPARE_GREATERTHAN));
+                            : duckdb::ExpressionType::COMPARE_GREATERTHAN,
+                        bbe.return_type));
 
             return std::static_pointer_cast<PhysicalGPUExpression>(
                 std::make_shared<PhysicalGPUConjunctionExpression>(
-                    left, right, duckdb::ExpressionType::CONJUNCTION_AND));
+                    left, right, duckdb::ExpressionType::CONJUNCTION_AND,
+                    bbe.return_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CASE: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -430,8 +414,119 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
     return buildPhysicalGPUExprTree(*expr, col_ref_map, no_scalars);
 }
 
+bool gpu_capable(duckdb::Expression& expr) {
+    duckdb::ExpressionClass expr_class = expr.GetExpressionClass();
+
+    switch (expr_class) {
+        case duckdb::ExpressionClass::BOUND_COMPARISON: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundComparisonExpression>();
+            return gpu_capable(bce.left) && gpu_capable(bce.right);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_COLUMN_REF:
+            return true;
+        case duckdb::ExpressionClass::BOUND_CONSTANT:
+            return true;
+        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundConjunctionExpression>();
+            return gpu_capable(bce.children[0]) && gpu_capable(bce.children[1]);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_OPERATOR: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& boe = expr.Cast<duckdb::BoundOperatorExpression>();
+            switch (boe.children.size()) {
+                case 1:
+                    return gpu_capable(boe.children[0]);
+                case 2:
+                    return gpu_capable(boe.children[0]) &&
+                           gpu_capable(boe.children[1]);
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children for bound operator");
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
+
+            if (bfe.bind_info &&
+                (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
+                 !bfe.bind_info->Cast<BodoScalarFunctionData>()
+                      .arrow_func_name.empty())) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+
+                for (auto& child_expr : bfe.children) {
+                    if (!gpu_capable(child_expr)) {
+                        return false;
+                    }
+                }
+
+                if (!scalar_func_data.arrow_func_name.empty()) {
+                    throw std::runtime_error("Unimplemented");
+                } else if (scalar_func_data.args) {
+                    return false;
+                }
+            } else {
+                switch (bfe.children.size()) {
+                    case 1:
+                        return gpu_capable(bfe.children[0]);
+                    case 2:
+                        return gpu_capable(bfe.children[0]) &&
+                               gpu_capable(bfe.children[1]);
+                    default:
+                        throw std::runtime_error(
+                            "Unsupported number of children " +
+                            std::to_string(bfe.children.size()) +
+                            " for bound function");
+                }
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CAST: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundCastExpression>();
+            return gpu_capable(bce.child);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_BETWEEN: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bbe = expr.Cast<duckdb::BoundBetweenExpression>();
+            return gpu_capable(bbe.input) && gpu_capable(bbe.lower) &&
+                   gpu_capable(bbe.upper);
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CASE: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bce = expr.Cast<duckdb::BoundCaseExpression>();
+            if (bce.case_checks.size() != 1) {
+                throw std::runtime_error(
+                    "Only single WHEN case expressions are supported.");
+            }
+            auto& caseCheck = bce.case_checks[0];
+            return gpu_capable(caseCheck.when_expr) &&
+                   gpu_capable(caseCheck.then_expr) &&
+                   gpu_capable(bce.else_expr);
+        } break;  // suppress wrong fallthrough error
+        default:
+            throw std::runtime_error(
+                "Unsupported duckdb expression class " +
+                std::to_string(static_cast<int>(expr_class)));
+    }
+    throw std::logic_error("Control should never reach here");
+}
+
+bool gpu_capable(duckdb::unique_ptr<duckdb::Expression>& expr) {
+    return gpu_capable(*expr);
+}
+
 std::shared_ptr<ExprGPUResult> PhysicalGPUUDFExpression::ProcessBatch(
-    GPU_DATA input_batch) {
+    GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
     throw std::runtime_error(
         "PhysicalGPUUDFExpression::ProcessBatch unimplemented ");
 }
