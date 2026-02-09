@@ -2352,7 +2352,9 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
         return df.shift(2)
 
     if not is_unsupported:
-        check_func(impl, (df_value,), check_dtype=False)
+        check_func(
+            impl, (df_value,), check_dtype=False, convert_to_nullable_float=False
+        )
         return
 
     with pytest.raises(BodoError, match=r"Dataframe.shift\(\) column input type"):
