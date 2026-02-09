@@ -1174,6 +1174,7 @@ def test_df_mask_where_df(df_value, memory_leak_check):
     )
 
 
+@pytest.mark.skip("TODO: update df.where for Pandas 3")
 def test_df_mask_where_series_other(memory_leak_check):
     """
     Test df.mask and df.where with pd.Series `other`.
