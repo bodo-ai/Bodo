@@ -2392,6 +2392,7 @@ def test_df_set_index(df_value, memory_leak_check):
     """
     Test DataFrame.set_index on all of our df types.
     """
+    import pyarrow as pa
 
     def impl(df):
         return df.set_index("A")
@@ -2407,6 +2408,12 @@ def test_df_set_index(df_value, memory_leak_check):
         df = df_value.rename(columns={df_value.columns[0]: "A"})
     else:
         df = df_value.copy(deep=True)
+
+    if isinstance(df.A.dtype, pd.StringDtype):
+        df["A"] = df["A"].astype(pd.StringDtype("pyarrow", pd.NA))
+
+    if df.A.dtype == object and bodo.typeof(df.A).data == bodo.types.binary_array_type:
+        df["A"] = df["A"].astype(pd.ArrowDtype(pa.large_binary()))
 
     check_func(impl, (df,))
 
