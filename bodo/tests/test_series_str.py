@@ -1406,7 +1406,8 @@ def test_join_splitview_nan_entry(memory_leak_check):
         return B.str.join("-")
 
     S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", None], [4, 3, 1], name="A")
-    check_func(test_impl, (S,), check_typing_issues=False)
+    py_out = S.str.split(",").str.join("-")
+    check_func(test_impl, (S,), check_typing_issues=False, py_output=py_out)
 
 
 @pytest.mark.parametrize(

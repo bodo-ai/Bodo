@@ -1336,6 +1336,12 @@ def _test_equal(
             # Avoid changing the plan of bodo_out
             bodo_out = pd.Series(bodo_out)
 
+        if (
+            bodo_out.dtype == pd.StringDtype("pyarrow", pd.NA)
+            and py_out.dtype == np.object_
+        ):
+            py_out = py_out.astype(bodo_out.dtype)
+
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
             py_out.dtype, pd.ArrowDtype
         ):
