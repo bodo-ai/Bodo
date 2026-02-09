@@ -66,6 +66,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.hiframes.pd_timestamp_ext import timedelta_methods
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_indexing import (
+    HeterogeneousSeriesIlocType,
     SeriesIatType,
     SeriesIlocType,
     SeriesLocType,
@@ -418,6 +419,13 @@ class SeriesPass:
             target_typ.index, HeterogeneousIndexType
         ):
             impl = bodo.hiframes.series_indexing.overload_series_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
+
+        # heterogenous Series.iloc[]
+        if isinstance(target_typ, HeterogeneousSeriesIlocType):
+            impl = bodo.hiframes.series_indexing.overload_heter_series_iloc_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)

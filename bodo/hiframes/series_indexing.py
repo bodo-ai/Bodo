@@ -902,14 +902,14 @@ def init_heter_series_iloc(typingctx, obj):
 
 
 @overload_attribute(HeterogeneousSeriesType, "iloc")
-def overload_series_iloc(s):
+def overload_heter_series_iloc(s):
     return lambda s: bodo.hiframes.series_indexing.init_heter_series_iloc(
         s
     )  # pragma: no cover
 
 
 @overload(operator.getitem, no_unliteral=True)
-def overload_series_iloc_getitem(I, idx):
+def overload_heter_series_iloc_getitem(I, idx):
     if isinstance(I, HeterogeneousSeriesIlocType) and is_overload_constant_int(idx):
         arr_ind = get_overload_const_int(idx)
 

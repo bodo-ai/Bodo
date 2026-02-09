@@ -1057,12 +1057,12 @@ def test_df_apply_df_output_multistring(memory_leak_check):
             s2 = ""
             s3 = ""
             s4 = ""
-            if row[1] == 0:
-                s3 = str(row[0]) + ","
-                s4 = str(row[2]) + ","
-            elif row[1] == 1:
-                s1 = str(row[0]) + ","
-                s2 = str(row[2]) + ","
+            if row.iloc[1] == 0:
+                s3 = str(row.iloc[0]) + ","
+                s4 = str(row.iloc[2]) + ","
+            elif row.iloc[1] == 1:
+                s1 = str(row.iloc[0]) + ","
+                s2 = str(row.iloc[2]) + ","
             return pd.Series([s1, s2, s3, s4], index=["s1", "s2", "s3", "s4"])
 
         return df.apply(f, axis=1)
