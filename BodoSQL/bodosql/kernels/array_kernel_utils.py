@@ -996,6 +996,7 @@ def is_valid_timedelta_arg(arg):
                 is_timedelta64_series_typ(arg)
                 or isinstance(arg, PDTimeDeltaType)
                 or arg.dtype == bodo.types.timedelta64ns
+                or arg == bodo.types.timedelta_array_type
             )
         )
     )
