@@ -467,7 +467,6 @@ bool gpu_capable(duckdb::Expression& expr) {
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_FUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
-            // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
 
