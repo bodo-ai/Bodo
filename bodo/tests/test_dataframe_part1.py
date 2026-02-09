@@ -1063,6 +1063,9 @@ def test_df_columns_nested(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_values(numeric_df_value, memory_leak_check):
+    if numeric_df_value.dtypes.iloc[0] == np.dtype("datetime64[ns]"):
+        pytest.skip("df.values does not support datetime64 dtype")
+
     def impl(df):
         return df.values
 
