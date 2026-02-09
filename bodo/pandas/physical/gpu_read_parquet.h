@@ -28,6 +28,7 @@
 #include <glob.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -82,13 +83,11 @@ class RankBatchGenerator {
         std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
             // nothing assigned to this rank
-            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         // If we've exhausted all parts, signal EOF
         if (current_part_idx_ >= static_cast<int>(parts_.size())) {
-            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
@@ -112,7 +111,6 @@ class RankBatchGenerator {
 
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
-            se->event.record(se->stream);
             return {std::move(gpu_tables[0]), false};
         }
 
@@ -188,7 +186,6 @@ class RankBatchGenerator {
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            se->event.record(se->stream);
             return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
         }
 
@@ -208,7 +205,6 @@ class RankBatchGenerator {
             batch = cudf::concatenate(views, se->stream);
         }
 
-        se->event.record(se->stream);
         return {std::move(batch), eof};
     }
 
@@ -495,8 +491,11 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
             batch_gen->next(se);
         if (cudfExprTree) {
-            next_batch_tup.first = cudfExprTree->eval(*(next_batch_tup.first));
+            next_batch_tup.first =
+                cudfExprTree->eval(*(next_batch_tup.first), se);
         }
+
+        se->event.record(se->stream);
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;

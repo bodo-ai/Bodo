@@ -947,7 +947,8 @@ struct CudfExpr {
     std::unique_ptr<CudfExpr> left;
     std::unique_ptr<CudfExpr> right;
 
-    std::unique_ptr<cudf::table> eval(cudf::table &input);
+    std::unique_ptr<cudf::table> eval(cudf::table &input,
+                                      std::shared_ptr<StreamAndEvent> se);
 };
 
 /*

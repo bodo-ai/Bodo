@@ -623,76 +623,79 @@ CudfExpr::Kind comparisonTypeToCudfKind(duckdb::ExpressionType t) {
 }
 
 std::unique_ptr<cudf::scalar> duckdbValueToCudfScalar(
-    const duckdb::Value& value) {
+    const duckdb::Value& value, std::shared_ptr<StreamAndEvent> se) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
         case duckdb::LogicalTypeId::TINYINT:
             return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                value.GetValue<int8_t>());
+                value.GetValue<int8_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::SMALLINT:
             return std::make_unique<cudf::numeric_scalar<int16_t>>(
-                value.GetValue<int16_t>());
+                value.GetValue<int16_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::INTEGER:
             return std::make_unique<cudf::numeric_scalar<int32_t>>(
-                value.GetValue<int32_t>());
+                value.GetValue<int32_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::BIGINT:
             return std::make_unique<cudf::numeric_scalar<int64_t>>(
-                value.GetValue<int64_t>());
+                value.GetValue<int64_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::UTINYINT:
             return std::make_unique<cudf::numeric_scalar<uint8_t>>(
-                value.GetValue<uint8_t>());
+                value.GetValue<uint8_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::USMALLINT:
             return std::make_unique<cudf::numeric_scalar<uint16_t>>(
-                value.GetValue<uint16_t>());
+                value.GetValue<uint16_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::UINTEGER:
             return std::make_unique<cudf::numeric_scalar<uint32_t>>(
-                value.GetValue<uint32_t>());
+                value.GetValue<uint32_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::UBIGINT:
             return std::make_unique<cudf::numeric_scalar<uint64_t>>(
-                value.GetValue<uint64_t>());
+                value.GetValue<uint64_t>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::FLOAT:
             return std::make_unique<cudf::numeric_scalar<float>>(
-                value.GetValue<float>());
+                value.GetValue<float>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::DOUBLE:
             return std::make_unique<cudf::numeric_scalar<double>>(
-                value.GetValue<double>());
+                value.GetValue<double>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::BOOLEAN:
             return std::make_unique<cudf::numeric_scalar<bool>>(
-                value.GetValue<bool>());
+                value.GetValue<bool>(), !value.IsNull(), se->stream);
         case duckdb::LogicalTypeId::VARCHAR:
             return std::make_unique<cudf::string_scalar>(
-                value.GetValue<std::string>());
+                value.GetValue<std::string>(), !value.IsNull(), se->stream);
         default:
             throw std::runtime_error("extractValue unhandled type." +
                                      std::to_string(static_cast<int>(type)));
     }
 }
 
-std::unique_ptr<cudf::column> make_literal_column(duckdb::Value const& v,
-                                                  cudf::size_type n_rows) {
+std::unique_ptr<cudf::column> make_literal_column(
+    duckdb::Value const& v, cudf::size_type n_rows,
+    std::shared_ptr<StreamAndEvent> se) {
     if (v.IsNull()) {
         // For brevity, make a BOOL8 all-null column
-        auto col =
-            cudf::make_fixed_width_column(cudf::data_type{cudf::type_id::BOOL8},
-                                          n_rows, cudf::mask_state::ALL_NULL);
+        auto col = cudf::make_fixed_width_column(
+            cudf::data_type{cudf::type_id::BOOL8}, n_rows,
+            cudf::mask_state::ALL_NULL, se->stream);
         return col;
     }
-    return cudf::make_column_from_scalar(*duckdbValueToCudfScalar(v), n_rows);
+    return cudf::make_column_from_scalar(*duckdbValueToCudfScalar(v, se),
+                                         n_rows, se->stream);
 }
 
-std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
-                                             cudf::table_view input) {
+std::unique_ptr<cudf::column> eval_cudf_expr(
+    const CudfExpr& expr, cudf::table_view input,
+    std::shared_ptr<StreamAndEvent> se) {
     using Kind = CudfExpr::Kind;
 
     switch (expr.kind) {
         case Kind::COLUMN_REF: {
             // Return a *copy* of the column as a new owning column
             return std::make_unique<cudf::column>(
-                input.column(expr.column_index));
+                input.column(expr.column_index), se->stream);
         }
 
         case Kind::LITERAL: {
-            return make_literal_column(expr.literal, input.num_rows());
+            return make_literal_column(expr.literal, input.num_rows(), se);
         }
 
         case Kind::EQ:
@@ -703,8 +706,8 @@ std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
         case Kind::GE:
         case Kind::AND:
         case Kind::OR: {
-            auto lhs_col = eval_cudf_expr(*expr.left, input);
-            auto rhs_col = eval_cudf_expr(*expr.right, input);
+            auto lhs_col = eval_cudf_expr(*expr.left, input, se);
+            auto rhs_col = eval_cudf_expr(*expr.right, input, se);
 
             cudf::binary_operator op;
             switch (expr.kind) {
@@ -736,9 +739,9 @@ std::unique_ptr<cudf::column> eval_cudf_expr(const CudfExpr& expr,
                     throw std::runtime_error("Unexpected binary op");
             }
 
-            auto result =
-                cudf::binary_operation(lhs_col->view(), rhs_col->view(), op,
-                                       cudf::data_type{cudf::type_id::BOOL8});
+            auto result = cudf::binary_operation(
+                lhs_col->view(), rhs_col->view(), op,
+                cudf::data_type{cudf::type_id::BOOL8}, se->stream);
             return result;
         }
     }
@@ -839,11 +842,13 @@ std::unique_ptr<CudfExpr> tableFilterSetToCudf(
     return root_expr;
 }
 
-std::unique_ptr<cudf::table> CudfExpr::eval(cudf::table& input) {
+std::unique_ptr<cudf::table> CudfExpr::eval(
+    cudf::table& input, std::shared_ptr<StreamAndEvent> se) {
     // Evaluate expression to a BOOL8 mask column
-    auto mask_col = eval_cudf_expr(*this, input.view());
+    auto mask_col = eval_cudf_expr(*this, input.view(), se);
 
     // Apply boolean mask
-    auto filtered = cudf::apply_boolean_mask(input.view(), mask_col->view());
+    auto filtered =
+        cudf::apply_boolean_mask(input.view(), mask_col->view(), se->stream);
     return filtered;
 }
