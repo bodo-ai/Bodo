@@ -28,6 +28,7 @@
 #include <glob.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
