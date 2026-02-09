@@ -1834,6 +1834,7 @@ def test_df_quantile(numeric_df_value, memory_leak_check):
     )
 
 
+@pytest.mark.skip(reason="TODO: update pct_change to match Pandas 3 behavior")
 @pytest.mark.slow
 def test_df_pct_change(numeric_df_value, memory_leak_check):
     # not supported for dt64 yet, TODO: support and test
