@@ -163,20 +163,6 @@
     } while (0)
 #endif
 
-#ifdef USE_CUDF
-std::shared_ptr<cudf::table> make_empty_like(
-    std::shared_ptr<cudf::table> input_table) {
-    cudf::table_view tv = input_table->view();
-
-    // slice produces a vector<table_view>
-    auto sliced = cudf::slice(tv, {0, 0});
-    cudf::table_view empty_view = sliced[0];
-
-    // materialize into a real cudf::table
-    return std::make_shared<cudf::table>(empty_view);
-}
-#endif
-
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
  * say that it HAVE_MORE_OUTPUT in which case we need to call it again for the
@@ -313,6 +299,21 @@ uint64_t Pipeline::Execute() {
     std::variant<std::shared_ptr<table_info>, GPU_DATA> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (rank == 0) {
+        std::cout << "Pipeline Executing: "
+                  << std::visit([](auto &vop) { return vop->ToString(); },
+                                source)
+                  << "  ->  ";
+        for (auto &op : between_ops) {
+            std::cout << std::visit([](auto &vop) { return vop->ToString(); },
+                                    op)
+                      << "  ->  ";
+        }
+        std::cout << std::visit([](auto &vop) { return vop->ToString(); }, sink)
+                  << std::endl;
+    }
+
     while (!finished) {
         batches_processed++;
 

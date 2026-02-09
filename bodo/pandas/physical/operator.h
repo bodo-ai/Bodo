@@ -3,6 +3,7 @@
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
 #include <cstdint>
+#include <cudf/copying.hpp>
 #ifdef USE_CUDF
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
@@ -50,6 +51,15 @@ enum class OperatorResult : uint8_t {
 extern const bool G_USE_ASYNC;
 
 #ifdef USE_CUDF
+
+/**
+ * @brief
+ *
+ * @param input_table
+ * @return std::shared_ptr<cudf::table>
+ */
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table);
 
 struct cuda_event_wrapper {
     cudaEvent_t ev;
@@ -152,7 +162,7 @@ class RankDataExchange {
      * rank) or a table with data. The OperatorResult indicates if the exchange
      * is finished on all ranks.
      */
-    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+    virtual std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
         std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
 
     ~RankDataExchange();
@@ -200,6 +210,10 @@ class CPUtoGPUExchange : public RankDataExchange {
    public:
     CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
 
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override;
+
    private:
     int64_t GetOutBatchSize() override;
     void InitializeShuffleState(
@@ -219,6 +233,20 @@ class GPUtoCPUExchange : public RankDataExchange {
     void InitializeShuffleState(
         table_info* input_batch,
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+};
+
+struct GPUBatchGen {
+    std::vector<GPU_DATA> batches;
+    std::unique_ptr<cudf::table> leftover_tbl;
+    std::shared_ptr<arrow::Schema> arrow_schema;
+    size_t collected_rows = 0;
+
+    GPUBatchGen() = default;
+
+    void append_batch(GPU_DATA batch);
+
+    std::tuple<std::optional<GPU_DATA>, OperatorResult> next(
+        OperatorResult prev_op_result);
 };
 #else
 
@@ -404,6 +432,7 @@ class PhysicalGPUSink : public PhysicalOperator {
 
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
+    GPUBatchGen batch_gen;
 #endif
 };
 
@@ -442,6 +471,7 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
 
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
+    GPUBatchGen batch_gen;
 #endif
 };
 /**
@@ -472,7 +502,8 @@ using PhysicalCpuGpuProcessBatch =
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
 
 #ifdef USE_CUDF
-GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
+                           bool use_async = false);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif

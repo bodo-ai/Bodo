@@ -33,7 +33,7 @@
 #endif
 
 // Always choose GPU as device for supported ops (used for testing)
-// #define ALWAYS_RUN_ON_GPU
+#define ALWAYS_RUN_ON_GPU
 
 enum DEVICE { CPU = 0, GPU = 1 };
 

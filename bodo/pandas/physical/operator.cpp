@@ -1,8 +1,16 @@
 #include "operator.h"
 #include <arrow/array/builder_base.h>
+#include <arrow/util/endian.h>
+#include <string>
 
 #ifdef USE_CUDF
+#include <cudf/concatenate.hpp>
+#include <cudf/copying.hpp>
+#include <cudf/table/table.hpp>
+#include <cudf/table/table_view.hpp>
+
 #include "../../libs/gpu_utils.h"
+#include "../libs/_table_builder_utils.h"
 #endif
 
 int64_t PhysicalOperator::next_op_id = 1;
@@ -28,6 +36,106 @@ int64_t get_parquet_chunk_size() {
 extern const bool G_USE_ASYNC = false;
 
 #ifdef USE_CUDF
+
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table) {
+    cudf::table_view tv = input_table->view();
+
+    // slice produces a vector<table_view>
+    auto sliced = cudf::slice(tv, {0, 0});
+    cudf::table_view empty_view = sliced[0];
+
+    // materialize into a real cudf::table
+    return std::make_shared<cudf::table>(empty_view);
+}
+
+void GPUBatchGen::append_batch(GPU_DATA batch) {
+    // Initialize schema on the first batch
+    if (!arrow_schema) {
+        arrow_schema = batch.schema;
+    }
+    auto n = batch.table->num_rows();
+    if (n == 0) {
+        return;
+    }
+    collected_rows += n;
+    batches.push_back(std::move(batch));
+}
+
+std::tuple<std::optional<GPU_DATA>, OperatorResult> GPUBatchGen::next(
+    OperatorResult prev_op_result) {
+    size_t gpu_batch_size = static_cast<size_t>(get_gpu_streaming_batch_size());
+    bool force_return = (prev_op_result == OperatorResult::FINISHED);
+
+    if (collected_rows < gpu_batch_size && !force_return) {
+        return std::make_tuple(std::nullopt, prev_op_result);
+    }
+
+    auto se = make_stream_and_event(G_USE_ASYNC);
+    std::vector<std::shared_ptr<cudf::table>> gpu_tables;
+    std::size_t rows_accum = 0;
+
+    if (leftover_tbl) {
+        std::size_t n = leftover_tbl->num_rows();
+        if (n <= gpu_batch_size) {
+            rows_accum += n;
+            gpu_tables.push_back(std::move(leftover_tbl));
+        } else {
+            cudf::table_view tv = leftover_tbl->view();
+            auto batch = cudf::slice(tv, {0, (int)gpu_batch_size})[0];
+            auto remain = cudf::slice(tv, {(int)gpu_batch_size, (int)n})[0];
+            gpu_tables.push_back(std::make_unique<cudf::table>(batch));
+            leftover_tbl = std::make_unique<cudf::table>(remain);
+            rows_accum = gpu_batch_size;
+        }
+    }
+
+    while (!batches.empty() && (rows_accum < gpu_batch_size)) {
+        GPU_DATA &batch = batches.front();
+        cudf::table_view tv = batch.table->view();
+        std::size_t n = tv.num_rows();
+
+        if (rows_accum + n <= gpu_batch_size) {
+            rows_accum += n;
+            gpu_tables.push_back(std::move(batch.table));
+        } else {
+            auto batch_part =
+                cudf::slice(tv, {0, (int)(gpu_batch_size - rows_accum)})[0];
+            auto remain_part = cudf::slice(
+                tv, {(int)(gpu_batch_size - rows_accum), (int)n})[0];
+            gpu_tables.push_back(std::make_unique<cudf::table>(batch_part));
+            leftover_tbl = std::make_unique<cudf::table>(remain_part);
+            rows_accum = gpu_batch_size;
+        }
+        batches.erase(batches.begin());
+    }
+    collected_rows -= rows_accum;
+
+    OperatorResult result = prev_op_result;
+    if (result == OperatorResult::FINISHED && collected_rows > 0) {
+        result = OperatorResult::HAVE_MORE_OUTPUT;
+    }
+
+    if (rows_accum == 0) {
+        return std::make_tuple(std::nullopt, result);
+    }
+
+    if (gpu_tables.size() == 1) {
+        se->event.record(se->stream);
+        return std::make_tuple(
+            GPU_DATA(std::move(gpu_tables[0]), arrow_schema, se), result);
+    }
+
+    std::vector<cudf::table_view> table_views;
+    table_views.reserve(gpu_tables.size());
+    for (auto &tptr : gpu_tables) {
+        table_views.emplace_back(tptr->view());
+    }
+    auto batch = cudf::concatenate(table_views, se->stream);
+    se->event.record(se->stream);
+    return std::make_tuple(GPU_DATA(std::move(batch), arrow_schema, se),
+                           result);
+}
 
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
@@ -56,11 +164,22 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [cpu_batch_fragment, exchange_result] =
         cpu_to_gpu_exchange(input_batch, prev_op_result);
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-    auto gpu_batch = convertTableToGPU(cpu_batch_fragment);
-    return ConsumeBatchGPU(gpu_batch, exchange_result, se);
+
+    auto gpu_batch_fragment = convertTableToGPU(cpu_batch_fragment);
+
+    batch_gen.append_batch(gpu_batch_fragment);
+    auto [next_gpu_batch, gpu_gen_batch_result] =
+        batch_gen.next(exchange_result);
+
+    if (!next_gpu_batch.has_value()) {
+        GPU_DATA empty_batch(make_empty_like(gpu_batch_fragment.table),
+                             gpu_batch_fragment.schema, se);
+        return ConsumeBatchGPU(empty_batch, gpu_gen_batch_result, se);
+    }
+    return ConsumeBatchGPU(next_gpu_batch.value(), gpu_gen_batch_result, se);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
@@ -76,8 +195,20 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [cpu_batch_fragment, exchange_result] =
         cpu_to_gpu_exchange(input_batch, prev_op_result);
-    auto gpu_batch = convertTableToGPU(cpu_batch_fragment);
-    return ProcessBatchGPU(gpu_batch, exchange_result, se);
+
+    auto gpu_batch_fragment = convertTableToGPU(cpu_batch_fragment);
+
+    batch_gen.append_batch(gpu_batch_fragment);
+    auto [next_gpu_batch, gpu_gen_batch_result] =
+        batch_gen.next(exchange_result);
+
+    if (!next_gpu_batch.has_value()) {
+        GPU_DATA empty_batch(make_empty_like(gpu_batch_fragment.table),
+                             gpu_batch_fragment.schema, se);
+        return ProcessBatchGPU(empty_batch, gpu_gen_batch_result, se);
+    }
+
+    return ProcessBatchGPU(next_gpu_batch.value(), gpu_gen_batch_result, se);
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
@@ -86,7 +217,7 @@ std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
     return arrow_table_to_bodo(table, nullptr);
 }
 
-GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch, bool use_async) {
     std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(batch);
 
     // Arrow tables can have fragmented columns (chunks). libcudf expects
@@ -171,7 +302,7 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch) {
 
     // Return the cudf::table (moving ownership)
     return GPU_DATA{std::move(result), arrow_batch->schema(),
-                    make_stream_and_event(false)};
+                    make_stream_and_event(use_async)};
 }
 
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
@@ -401,6 +532,45 @@ void CPUtoGPUExchange::InitializeShuffleState(
         input_batch->schema(), dict_builders, cpu_ranks, gpu_ranks, curr_iter,
         sync_freq, this->op_id);
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
+}
+
+std::tuple<std::shared_ptr<table_info>, OperatorResult>
+CPUtoGPUExchange::operator()(std::shared_ptr<table_info> input_batch,
+                             OperatorResult prev_op_result) {
+    if (!this->shuffle_state) {
+        Initialize(input_batch.get());
+    }
+
+    // Shuffle data to destination ranks (either all ranks or GPU ranks)
+    // and append result to output builder
+    std::vector<bool> append_rows(input_batch->nrows(), true);
+    this->shuffle_state->AppendBatch(input_batch, append_rows);
+    auto result = this->shuffle_state->ShuffleIfRequired(true);
+
+    std::shared_ptr<table_info> output_batch;
+    if (result.has_value()) {
+        output_batch = result.value();
+    } else {
+        output_batch = alloc_table_like(input_batch);
+    }
+
+    // Determine whether we need more input, have more output, or are finished
+    // with the exchange.
+    bool request_input = !this->shuffle_state->BuffersFull();
+    bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
+                         (this->shuffle_state->SendRecvEmpty());
+    bool finished = static_cast<bool>(sync_is_last_non_blocking(
+        is_last_state.get(), static_cast<int32_t>(local_is_last)));
+
+    if (finished) {
+        this->shuffle_state->Finalize();
+        this->collected_rows->builder->Finalize();
+    }
+    return std::make_tuple(
+        output_batch, finished
+                          ? OperatorResult::FINISHED
+                          : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                           : OperatorResult::HAVE_MORE_OUTPUT));
 }
 
 int64_t GPUtoCPUExchange::GetOutBatchSize() {
