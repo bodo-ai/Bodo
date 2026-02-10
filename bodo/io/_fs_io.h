@@ -154,7 +154,8 @@ void open_file_appendstream(
  */
 void create_dir_parallel(Bodo_Fs::FsEnum fs_option, int myrank,
                          std::string &dirname, std::string &path_name,
-                         std::string &orig_path, const std::string &file_type);
+                         std::string &orig_path, const std::string &file_type,
+                         bool recreate_if_present = false);
 
 /*
  * Open arrow::io::OutputStream for csv/json/parquet write
