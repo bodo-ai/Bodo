@@ -107,8 +107,6 @@ void GpuShuffleManager::shuffle_table(
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     std::vector<std::unique_ptr<cudf::table>> received_tables;
-    std::cout << "Progressing " << this->inflight_shuffles.size()
-              << " inflight shuffles." << std::endl;
     for (GpuShuffle& shuffle : this->inflight_shuffles) {
         std::optional<std::unique_ptr<cudf::table>> progress_res =
             shuffle.progress();
@@ -317,14 +315,17 @@ GpuShuffle::progress_waiting_for_data() {
 
     if (all_metadata_received && gpu_data_received) {
         // Unpack received tables
-        std::vector<cudf::table_view> table_views(n_ranks);
-        std::vector<cudf::packed_columns> packed_recv_columns(n_ranks);
+        std::vector<cudf::table_view> table_views;
+        std::vector<cudf::packed_columns> packed_recv_columns;
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
              src_rank++) {
-            packed_recv_columns[src_rank] = cudf::packed_columns(
+            if (this->packed_recv_buffers[src_rank]->size() == 0) {
+                continue;
+            }
+            packed_recv_columns.emplace_back(
                 std::move(this->metadata_recv_buffers[src_rank]),
                 std::move(this->packed_recv_buffers[src_rank]));
-            table_views[src_rank] = cudf::unpack(packed_recv_columns[src_rank]);
+            table_views.push_back(cudf::unpack(packed_recv_columns[src_rank]));
         }
         // Deallocate all receive data
         this->metadata_recv_buffers.clear();
