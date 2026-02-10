@@ -309,14 +309,6 @@ uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
-#ifdef USE_CUDF
-    // Assign ranks to cuda devices
-    rmm::cuda_set_device_raii cuda_device_raii =
-        rmm::cuda_set_device_raii(get_gpu_id());
-    std::cout << "Using GPU device " << rmm::get_current_cuda_device().value()
-              << std::endl;
-#endif
-
     uint64_t batches_processed = 0;
     bool finished = false;
     std::variant<std::shared_ptr<table_info>, GPU_DATA> batch;
