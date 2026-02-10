@@ -161,10 +161,6 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     }
     std::unique_ptr<cudf::table> coalesced_probe =
         cudf::concatenate(probe_views);
-    std::cout << " coalesced probe has " << coalesced_probe->num_rows()
-              << " rows." << std::endl;
-    std::cout << "shuffle manager inflight "
-              << gpu_shuffle_manager.inflight_exists() << std::endl;
 
     auto [probe_indices, build_indices] = _join_handle->inner_join(
         coalesced_probe->select(this->probe_key_indices));

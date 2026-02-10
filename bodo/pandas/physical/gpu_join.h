@@ -159,7 +159,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         this->cuda_join = std::make_unique<CudaHashJoin>(
             build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, cudf::null_equality::EQUAL);
+            build_kept_cols, probe_kept_cols, cudf::null_equality::UNEQUAL);
 
         this->output_schema = std::make_shared<bodo::Schema>();
         for (const auto& kept_col : probe_kept_cols) {
@@ -201,7 +201,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        se->event.wait(se->stream);
         cuda_join->BuildConsumeBatch(input_batch.table);
+        se->event.record(se->stream);
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -216,15 +218,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        se->event.wait(se->stream);
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
-        se->event.wait(se->stream);
-        if (prev_op_result != OperatorResult::HAVE_MORE_OUTPUT) {
-            std::cout << "prev_op_result: " << static_cast<int>(prev_op_result)
-                      << std::endl;
-        }
+        se->event.record(se->stream);
         return {output_gpu_data,
                 prev_op_result == OperatorResult::FINISHED &&
                         !cuda_join->gpu_shuffle_manager.inflight_exists()
