@@ -118,8 +118,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     // Remove completed shuffles
     size_t i = 0;
     while (i < this->inflight_shuffles.size()) {
-        std::cout << "inflight shuffles before erase: "
-                  << this->inflight_shuffles.size() << std::endl;
         if (this->inflight_shuffles[i].send_state ==
                 GpuShuffleState::COMPLETED &&
             this->inflight_shuffles[i].recv_state ==
