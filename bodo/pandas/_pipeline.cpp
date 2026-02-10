@@ -1,4 +1,5 @@
 #include "_pipeline.h"
+#include <rmm/cuda_device.hpp>
 #include "physical/operator.h"
 
 #ifdef USE_CUDF
@@ -307,6 +308,11 @@ bool Pipeline::midPipelineExecute(
 uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
+
+#ifdef USE_CUDF
+    // Assign ranks to cuda devices
+    rmm::cuda_set_device_raii({get_gpu_id()});
+#endif
 
     uint64_t batches_processed = 0;
     bool finished = false;

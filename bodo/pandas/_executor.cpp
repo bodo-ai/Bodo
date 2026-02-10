@@ -16,7 +16,6 @@
 #include <cudf/table/table_view.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_buffer.hpp>
-#include "../libs/gpu_utils.h"
 
 #include <algorithm>
 #include <chrono>
@@ -107,7 +106,6 @@ class DevicePlanNode {
     bool gpu_capable;
     uint64_t id;
     DevicePlanNode *cte_root = nullptr;
-    rmm::cuda_set_device_raii set_device{get_gpu_id()};
 
     static uint64_t next_id;
     static std::map<duckdb::idx_t, DevicePlanNode *> cte_map;
