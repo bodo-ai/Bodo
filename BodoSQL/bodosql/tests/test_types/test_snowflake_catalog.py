@@ -2393,15 +2393,15 @@ def test_read_nested_map_in_map_col(test_db_snowflake_catalog):
         {
             "B": pd.array(
                 [
-                    np.nan,
-                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
+                    None,
+                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": None}},
                     {
                         "bodo": {
                             "a": datetime.date(2023, 11, 12),
                             "b": datetime.date(1980, 1, 5),
-                            "c": np.nan,
+                            "c": None,
                         },
-                        "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                        "google": {"ten": datetime.date(2023, 11, 11), "ton": None},
                     },
                 ],
                 dtype=pd.ArrowDtype(
