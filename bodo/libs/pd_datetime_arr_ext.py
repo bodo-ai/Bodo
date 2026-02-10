@@ -520,6 +520,7 @@ def overload_setitem(A, ind, val):
         or isinstance(val, bodo.types.PandasTimestampType)
         or val == bodo.types.datetime64ns
         or val == bodo.types.datetime_datetime_type
+        or val == types.Array(bodo.types.datetime64ns, 1, "C")
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
@@ -528,6 +529,7 @@ def overload_setitem(A, ind, val):
     is_tz_naive_dt = (
         isinstance(val, numba.core.types.scalars.NPDatetime)
         or val == bodo.types.datetime_datetime_type
+        or val == types.Array(bodo.types.datetime64ns, 1, "C")
     )
 
     # Ensure the timezones match, and that, if a datetime 64, we have no time zone
@@ -663,6 +665,27 @@ def overload_setitem(A, ind, val):
 
             return impl_arr
 
+        elif val == types.Array(bodo.types.datetime64ns, 1, "C"):
+
+            def impl_arr(A, ind, val):  # pragma: no cover
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[ind] = val
+                n = len(A)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+
+                # Set the appropriate values in the null bitmap
+                val_idx = 0
+                arr_null_bitmap = A._null_bitmap
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        arr_null_bitmap,
+                        i,
+                        0 if np.isnat(val[val_idx]) else 1,
+                    )
+                    val_idx += 1
+
+            return impl_arr
         else:
             # Scalar case
             def impl_scalar(A, ind, val):  # pragma: no cover
