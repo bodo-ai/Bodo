@@ -1215,7 +1215,15 @@ def is_valid_tz_naive_datetime_arg(arg):
         )
         or (
             bodo.utils.utils.is_array_typ(arg, True)
-            and arg.dtype == bodo.types.datetime64ns
+            and (
+                arg.dtype == bodo.types.datetime64ns
+                or (
+                    isinstance(
+                        arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+                    )
+                    and arg.dtype.tz is None
+                )
+            )
         )
         or (isinstance(arg, bodo.types.DatetimeArrayType) and arg.tz is None)
     )
