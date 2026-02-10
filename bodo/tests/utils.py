@@ -1384,6 +1384,10 @@ def _test_equal(
             ):
                 py_out = py_out.astype(bodo_out.dtype)
 
+            # Handle BodoSQL object arrays with None
+            if pa.types.is_floating(pa_type) and py_out.dtype in (np.object_,):
+                py_out = py_out.astype(bodo_out.dtype)
+
             # Handle all-NA Pandas output stored as float NaNs
             if (
                 py_out.dtype in (np.float64, np.float32)
