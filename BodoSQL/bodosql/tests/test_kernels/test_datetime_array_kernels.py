@@ -36,7 +36,7 @@ pytestmark = pytest_slow_unless_codegen
         pytest.param(
             (
                 pd.Series([1, 1, 2, 2, -1, -1, 16, 16, -50, -50]),
-                pd.Series([pd.Timestamp("2018-1-1"), None] * 5),
+                pd.Series([pd.Timestamp("2018-1-1"), None] * 5, dtype="datetime64[ns]"),
             ),
             {
                 "years": pd.Series(
@@ -105,7 +105,10 @@ pytestmark = pytest_slow_unless_codegen
         pytest.param(
             (
                 100,
-                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11, unit="ns")),
+                pd.Series(
+                    pd.date_range("1999-12-20", "1999-12-30", 11, unit="ns"),
+                    dtype="datetime64[ns]",
+                ),
             ),
             {
                 "years": pd.Series(
@@ -727,7 +730,8 @@ def test_interval_add_date_interval_to_date(
             pd.Series(
                 pd.date_range(
                     "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
-                )
+                ),
+                dtype="datetime64[ns]",
             ),
             pd.DateOffset(months=70),
             id="dateoffset-vector-scalar",
@@ -736,7 +740,8 @@ def test_interval_add_date_interval_to_date(
             pd.Series(
                 pd.date_range(
                     "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
-                )
+                ),
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -760,7 +765,8 @@ def test_interval_add_date_interval_to_date(
             pd.Series(
                 pd.date_range(
                     "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
-                )
+                ),
+                dtype="datetime64[ns]",
             ),
             pd.Timedelta(minutes=70),
             id="timedelta-vector-scalar",
@@ -840,8 +846,8 @@ def make_add_interval_tz_test(amount, start, target, is_vector):
     start_ts = pd.Timestamp(start, tz=tz)
     end_ts = pd.Timestamp(target, tz=tz)
     if is_vector:
-        start_vector = pd.Series([start_ts, None] * 3)
-        end_vector = pd.Series([end_ts, None] * 3)
+        start_vector = pd.Series([start_ts, None] * 3, dtype=f"datetime64[ns, {tz}]")
+        end_vector = pd.Series([end_ts, None] * 3, dtype=f"datetime64[ns, {tz}]")
         return start_vector, end_vector
     else:
         return start_ts, end_ts
@@ -1282,7 +1288,8 @@ def test_add_interval_date(unit, args, answers, memory_leak_check):
                     for d in pd.date_range(
                         "1970-01-01", "2108-01-01", periods=20, unit="ns"
                     )
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="vector",
         ),
@@ -1641,7 +1648,8 @@ def test_weekofyear_yearofweek_columns(memory_leak_check):
             pd.Timestamp("1972-02-14"),
             pd.Timestamp("2000-01-01"),
         ]
-        * 4
+        * 4,
+        dtype="datetime64[ns]",
     )
 
     week_of_year_output = pd.Series([48, 37, 8, 1] * 4)
@@ -1716,7 +1724,10 @@ def test_int_to_days(days, memory_leak_check):
     "dt, date_part",
     [
         pytest.param(
-            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20, unit="ns")),
+            pd.Series(
+                pd.date_range("2019-01-01", "2020-01-01", periods=20, unit="ns"),
+                dtype="datetime64[ns]",
+            ),
             "month",
             id="timestamp-vector",
         ),
@@ -1755,7 +1766,8 @@ def test_int_to_days(days, memory_leak_check):
                     pd.Timestamp("2017-02-1", tz="US/Pacific"),
                     pd.Timestamp("2020-03-1", tz="US/Pacific"),
                     pd.Timestamp("2024-11-1", tz="US/Pacific"),
-                ]
+                ],
+                dtype="datetime64[ns, US/Pacific]",
             ),
             "year",
             id="timestamp-tzaware-vector",
@@ -2007,7 +2019,8 @@ def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
         pd.Series(
             [None] * 2
             + list(pd.date_range("2020-10-01", freq="11D", periods=30, unit="ns"))
-            + [None]
+            + [None],
+            dtype="datetime64[ns]",
         ).values,
     ],
 )
@@ -2049,7 +2062,8 @@ def test_to_days(arg, memory_leak_check):
         pd.Series(
             [None] * 2
             + list(pd.date_range("2020-10-01", freq="11D", periods=30, unit="ns"))
-            + [None]
+            + [None],
+            dtype="datetime64[ns]",
         ).values,
         pd.Series(
             [None] * 2
@@ -2058,7 +2072,8 @@ def test_to_days(arg, memory_leak_check):
                     "2020-10-01", freq="11D", periods=30, tz="US/Pacific", unit="ns"
                 )
             )
-            + [None]
+            + [None],
+            dtype="datetime64[ns, US/Pacific]",
         ).array,
     ],
 )
@@ -2353,7 +2368,8 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
                     "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
                 )
             )
-            + [None] * 2
+            + [None] * 2,
+            dtype="datetime64[ns, US/Pacific]",
         ),
     ],
 )
@@ -2404,7 +2420,8 @@ def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
                     "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
                 )
             )
-            + [None] * 2
+            + [None] * 2,
+            dtype="datetime64[ns, US/Pacific]",
         ),
     ],
 )
@@ -2496,7 +2513,8 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                         unit="ns",
                     )
                 )
-                + [None] * 2
+                + [None] * 2,
+                dtype="datetime64[ns]",
             ).values,
             id="vector-tz-naive",
         ),
@@ -2512,7 +2530,8 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                         unit="ns",
                     )
                 )
-                + [None] * 2
+                + [None] * 2,
+                dtype="datetime64[ns, US/Pacific]",
             ).array,
             id="vector-tz-aware",
         ),
@@ -3386,7 +3405,8 @@ def test_date_from_parts(construct_date_data, memory_leak_check):
                         "2023-2-28",
                         "2024-3-14",
                     ]
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series([-366, -1, 0, -367, -292]),
             id="day-date-timestamp",
@@ -3403,7 +3423,8 @@ def test_date_from_parts(construct_date_data, memory_leak_check):
                         None,
                         "2025-1-1",
                     ]
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -3982,7 +4003,8 @@ def test_create_timestamp_optional(memory_leak_check):
                     None,
                     pd.Timestamp("2015-3-6 10:14:39"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             "%d %S",
             pd.Series(["14 01", "19 30", "13 50", None, "06 39"] * 4),
@@ -4068,7 +4090,8 @@ def test_months_between_scalars(arg0, arg1, answer, memory_leak_check):
                     pd.Timestamp("2003-08-31"),
                     pd.Timestamp("2013-08-19"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -4077,7 +4100,8 @@ def test_months_between_scalars(arg0, arg1, answer, memory_leak_check):
                     pd.Timestamp("2023-02-28"),
                     pd.Timestamp("2023-08-10"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             pd.Series([7.032258, -120.0, -234.0, -119.709677] * 4),
             id="timestamp-series",
@@ -4090,7 +4114,8 @@ def test_months_between_scalars(arg0, arg1, answer, memory_leak_check):
                     pd.Timestamp("2003-08-31"),
                     pd.Timestamp("2013-08-19"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             pd.Timestamp("2023-01-18"),
             pd.Series(
@@ -4206,15 +4231,15 @@ def test_add_months_scalars(arg0, num_months, answer, memory_leak_check):
     "arg0, num_months, answer",
     [
         pytest.param(
-            pd.Series([pd.Timestamp("2018-06-15")] * 4),
+            pd.Series([pd.Timestamp("2018-06-15")] * 4, dtype="datetime64[ns]"),
             3,
-            pd.Series([pd.Timestamp("2018-09-15")] * 4),
+            pd.Series([pd.Timestamp("2018-09-15")] * 4, dtype="datetime64[ns]"),
             id="basic",
         ),
         pytest.param(
-            pd.Series([pd.Timestamp("2018-06-15")] * 4),
+            pd.Series([pd.Timestamp("2018-06-15")] * 4, dtype="datetime64[ns]"),
             pd.Series([3] * 4),
-            pd.Series([pd.Timestamp("2018-09-15")] * 4),
+            pd.Series([pd.Timestamp("2018-09-15")] * 4, dtype="datetime64[ns]"),
             id="basic-2",
         ),
     ],
@@ -4424,7 +4449,8 @@ def test_time_slice_week_scalars(start_day, answer, memory_leak_check):
                     pd.Timestamp(2035, 10, 30, 20, 50, 59),
                     pd.Timestamp(2015, 10, 30, 20, 50, 59),
                     pd.Timestamp(2005, 10, 30, 20, 50, 59),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series([100, 2, 10, 10, 66, 7, 10, 22]),
             "DAY",
@@ -4440,7 +4466,8 @@ def test_time_slice_week_scalars(start_day, answer, memory_leak_check):
                     pd.Timestamp(2035, 10, 25),
                     pd.Timestamp(2015, 10, 22),
                     pd.Timestamp(2005, 10, 12),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="basic",
         ),
@@ -4489,6 +4516,7 @@ def test_time_slice_columns(
                     pd.Timestamp("2023-11-05 03:00:00.432423244"),
                     None,
                 ],
+                dtype="datetime64[ns]",
             ),
             "s",
             pd.array(
@@ -4527,6 +4555,7 @@ def test_time_slice_columns(
                     pd.Timestamp("2023-11-05 00:00:00.4314", tz="US/Pacific"),
                     pd.Timestamp("2023-11-05 03:00:00.432423244", tz="US/Pacific"),
                 ],
+                dtype="datetime64[ns, US/Pacific]",
             ),
             "us",
             pd.array(
@@ -4594,7 +4623,8 @@ def test_get_epoch_optional(memory_leak_check):
                     pd.Timestamp("2023-11-05"),
                     pd.Timestamp("2023-11-06"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns]",
             ),
             "hr",
             pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
@@ -4616,7 +4646,8 @@ def test_get_epoch_optional(memory_leak_check):
                     pd.Timestamp("2023-11-05", tz="US/Pacific"),
                     pd.Timestamp("2023-11-06", tz="US/Pacific"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns, US/Pacific]",
             ),
             "hr",
             pd.array([-8, -7, None, -7, -8] * 3, dtype="Int32"),
@@ -4631,7 +4662,8 @@ def test_get_epoch_optional(memory_leak_check):
                     pd.Timestamp("2023-11-05", tz="Asia/Kathmandu"),
                     pd.Timestamp("2023-11-06", tz="Asia/Kathmandu"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns, Asia/Kathmandu]",
             ),
             "min",
             pd.array([45, 45, None, 45, 45] * 3, dtype="Int32"),
@@ -4647,7 +4679,8 @@ def test_get_epoch_optional(memory_leak_check):
                     pd.Timestamp("2023-09-05", tz="Australia/Lord_Howe"),
                     pd.Timestamp("2023-12-06", tz="Australia/Lord_Howe"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns, Australia/Lord_Howe]",
             ),
             "min",
             pd.array([0, 30, None, 30, 0] * 3, dtype="Int32"),
@@ -4663,7 +4696,8 @@ def test_get_epoch_optional(memory_leak_check):
                     pd.Timestamp("2023-11-05", tz="Pacific/Marquesas"),
                     pd.Timestamp("2023-11-06", tz="Pacific/Marquesas"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns, Pacific/Marquesas]",
             ),
             "min",
             pd.array([-30, -30, None, -30, -30] * 3, dtype="Int32"),
