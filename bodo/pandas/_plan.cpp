@@ -1230,6 +1230,13 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+#ifdef USE_CUDF
+    // Assign ranks to cuda devices
+    rmm::cuda_set_device_raii cuda_device_raii =
+        rmm::cuda_set_device_raii(get_gpu_id());
+    std::cout << "Using GPU device " << rmm::get_current_cuda_device().value()
+              << std::endl;
+#endif
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::variant<std::shared_ptr<table_info>, PyObject *> output =

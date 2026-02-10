@@ -162,13 +162,6 @@ class Executor {
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
 
-#ifdef USE_CUDF
-        // Assign ranks to cuda devices
-        rmm::cuda_set_device_raii cuda_device_raii =
-            rmm::cuda_set_device_raii(get_gpu_id());
-        std::cout << "Using GPU device "
-                  << rmm::get_current_cuda_device().value() << std::endl;
-#endif
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         DEBUG_PIPELINE_CONTENTS(rank, pipelines);
