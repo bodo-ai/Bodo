@@ -236,7 +236,8 @@ pytestmark = pytest_slow_unless_codegen
                     pd.Timedelta(days=-1, seconds=1),
                     None,
                     pd.Timedelta(minutes=30),
-                ]
+                ],
+                dtype="timedelta64[ns]",
             ),
             pd.Timedelta(days=3),
             False,

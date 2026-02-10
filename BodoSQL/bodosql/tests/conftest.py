@@ -905,7 +905,8 @@ def bodosql_nullable_numeric_types(request):
                             np.timedelta64(4, "s"),
                             np.timedelta64("NaT"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                     "B": pd.Series(
                         [
@@ -915,7 +916,8 @@ def bodosql_nullable_numeric_types(request):
                             np.timedelta64("NaT"),
                             np.timedelta64(5, "m"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                     "C": pd.Series(
                         [
@@ -925,7 +927,8 @@ def bodosql_nullable_numeric_types(request):
                             np.timedelta64(8, "W"),
                             np.timedelta64(6, "h"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                 }
             ),

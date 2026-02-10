@@ -301,7 +301,8 @@ def test_time_plus_minus_intervals(query, answer, memory_leak_check):
             pd.Timedelta(minutes=-200),
             pd.Timedelta(hours=4, minutes=3, seconds=2, microseconds=1),
             pd.Timedelta(seconds=3, milliseconds=500),
-        ]
+        ],
+        dtype="timedelta64[ns]",
     )
     ctx = {"TABLE1": pd.DataFrame({"TI": TI, "TD": TD})}
     expected_output = pd.DataFrame({0: answer})

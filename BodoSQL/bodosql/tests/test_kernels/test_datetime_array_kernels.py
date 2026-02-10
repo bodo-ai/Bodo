@@ -592,7 +592,8 @@ def test_interval_add_interval_to_time(interval_input, memory_leak_check):
                     pd.Timedelta(microseconds=15),
                     pd.Timedelta(minutes=15),
                 ]
-                * 4
+                * 4,
+                dtype="timedelta64[ns]",
             ),
             id="timedelta-all-vector",
         ),
@@ -785,7 +786,8 @@ def test_interval_add_date_interval_to_date(
                     pd.Timedelta(milliseconds=15),
                     pd.Timedelta(nanoseconds=15),
                 ]
-                * 4
+                * 4,
+                dtype="timedelta64[ns]",
             ),
             id="timedelta-all-vector",
         ),
@@ -2900,7 +2902,8 @@ def test_timestamp_tz_extract(fname, extra_args, answer, memory_leak_check):
                     pd.Timedelta(microseconds=15),
                     pd.Timedelta(days=-1, minutes=15),
                 ]
-                * 6
+                * 6,
+                dtype="timedelta64[ns]",
             ).values,
             id="timedelta-vector",
         ),
@@ -2987,7 +2990,8 @@ def test_interval_multiply(interval_input, memory_leak_check):
                     pd.Timedelta(microseconds=15),
                     pd.Timedelta(days=-1, minutes=15),
                 ]
-                * 6
+                * 6,
+                dtype="timedelta64[ns]",
             ).values,
             id="timedelta-vector",
         ),
