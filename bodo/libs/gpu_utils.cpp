@@ -107,6 +107,8 @@ void GpuShuffleManager::shuffle_table(
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     std::vector<std::unique_ptr<cudf::table>> received_tables;
+    std::cout << "Progressing " << this->inflight_shuffles.size()
+              << " inflight shuffles." << std::endl;
     for (GpuShuffle& shuffle : this->inflight_shuffles) {
         std::optional<std::unique_ptr<cudf::table>> progress_res =
             shuffle.progress();
