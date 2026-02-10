@@ -659,8 +659,13 @@ def test_array_agg_any_value(memory_leak_check):
     answer = pd.DataFrame(
         {
             "key_a": ["A", "B", "C"],
-            "res_i": [[0, 1, 2], [], [-1]],
-            "res_s": [["0.0", "3.14", "2.718"], [], ["-1.5"]],
+            "res_i": pd.array(
+                [[0, 1, 2], [], [-1]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+            ),
+            "res_s": pd.array(
+                [["0.0", "3.14", "2.718"], [], ["-1.5"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
         }
     )
 
