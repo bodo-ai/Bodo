@@ -100,7 +100,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         bool run_on_gpu) override;
 
     bool canRunOnGPU(bool has_filters, bool has_limit) override {
-        return !has_filters && !has_limit;
+        return !has_limit;
     }
 
     // Parquet dataset path
