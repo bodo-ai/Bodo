@@ -133,6 +133,9 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 }
 
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
+    std::cout << "Progressing shuffle with send state "
+              << static_cast<int>(this->send_state) << " and recv state "
+              << static_cast<int>(this->recv_state) << std::endl;
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
             this->progress_sending_sizes();
