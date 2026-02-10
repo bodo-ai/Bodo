@@ -1059,7 +1059,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-29 22:00:00"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "minutes": pd.Series(
                     [
@@ -1073,7 +1074,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-31 23:10:00"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "seconds": pd.Series(
                     [
@@ -1087,7 +1089,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-31 23:59:10"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "milliseconds": pd.Series(
                     [
@@ -1101,7 +1104,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-31 23:59:59.950"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "microseconds": pd.Series(
                     [
@@ -1115,7 +1119,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-31 23:59:59.999950"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "nanoseconds": pd.Series(
                     [
@@ -1129,7 +1134,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         None,
                         pd.Timestamp("2017-12-31 23:59:59.999999950"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             },
             id="all_vector",
