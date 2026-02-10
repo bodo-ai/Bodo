@@ -140,9 +140,9 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     }
 
     // Send local data to appropriate ranks
-    if (probe_chunk->num_rows() != 0) {
-        gpu_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
-    }
+    // if (probe_chunk->num_rows() != 0) {
+    gpu_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
+    //}
 
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
