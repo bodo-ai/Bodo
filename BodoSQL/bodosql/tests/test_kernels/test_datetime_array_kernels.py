@@ -612,7 +612,7 @@ def test_interval_add_time_interval_to_date(
         if pd.isna(date) or pd.isna(interval):
             return None
         else:
-            return pd.Timestamp(date) + interval
+            return pd.Timestamp(date).as_unit("ns") + interval
 
     answer = vectorized_sol(
         (
