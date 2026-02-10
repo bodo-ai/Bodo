@@ -495,7 +495,7 @@ def test_add_interval_to_date_leapyear_edgecases(
                     pd.Timedelta(microseconds=15),
                     pd.Timedelta(days=-1, minutes=15),
                 ]
-            ).values,
+            ).values.astype("timedelta64[ns]"),
             id="timedelta-vector",
         ),
     ],
