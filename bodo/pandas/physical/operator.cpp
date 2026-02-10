@@ -51,9 +51,6 @@ std::shared_ptr<cudf::table> make_empty_like(
 }
 
 void GPUBatchGenerator::append_batch(GPU_DATA batch) {
-    // std::cout << " Appending batch with " << batch.table->num_rows() << "
-    // rows to GPU batch generator"
-    //          << std::endl;
     auto n = batch.table->num_rows();
     if (n == 0) {
         return;
@@ -64,15 +61,8 @@ void GPUBatchGenerator::append_batch(GPU_DATA batch) {
 
 GPU_DATA GPUBatchGenerator::next(bool force_return) {
     auto se = make_stream_and_event(G_USE_ASYNC);
-    // std::cout << " Created stream and event for GPU batch generator" <<
-    // std::endl;
 
     if (collected_rows < out_batch_size && !force_return) {
-        // std::cout << "Not enough rows collected for GPU batch generator
-        // (collected: " << collected_rows
-        //           << ", batch size: " << gpu_batch_size
-        //           << "). Waiting for more batches to be appended." <<
-        //           std::endl;
         return GPU_DATA(make_empty_like(dummy_table), arrow_schema, se);
     }
 
@@ -116,22 +106,13 @@ GPU_DATA GPUBatchGenerator::next(bool force_return) {
     collected_rows -= rows_accum;
 
     if (rows_accum == 0) {
-        // std::cout << "No rows accumulated for GPU batch generator. Returning
-        // empty batch." << std::endl;
         return GPU_DATA(make_empty_like(dummy_table), arrow_schema, se);
     }
 
     if (gpu_tables.size() == 1) {
-        // std::cout << "Returning single batch with " <<
-        // gpu_tables[0]->num_rows() << " rows from GPU batch generator." <<
-        // std::endl;
         se->event.record(se->stream);
         return GPU_DATA(std::move(gpu_tables[0]), arrow_schema, se);
     }
-
-    // std::cout << "Concatenating " << gpu_tables.size() << " batches with
-    // total " << rows_accum
-    //           << " rows for GPU batch generator." << std::endl;
 
     std::vector<cudf::table_view> table_views;
     table_views.reserve(gpu_tables.size());
@@ -188,8 +169,6 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-    // std::cout << "Converting CPU batch with " << input_batch->nrows() << "
-    // rows to GPU batch for processing." << std::endl;
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, prev_op_result);
 
@@ -511,17 +490,13 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     if (!this->shuffle_state) {
         Initialize(input_batch);
     }
-    // std::cout << "Done initializing" << std::endl;
 
     // Shuffle data to destination ranks (either all ranks or GPU ranks)
     // and append result to output builder
-    // std::cout << "Appending shuffle rows" << std::endl;
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
-    // std::cout << "Done shuffling" << std::endl;
 
-    // std::cout << "Appending batch to GPU batch generator" << std::endl;
     if (result.has_value()) {
         gpu_batch_generator->append_batch(convertTableToGPU(result.value()));
     }
@@ -532,13 +507,11 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
                             (2 * gpu_batch_generator->out_batch_size)));
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
-    // std::cout << "Local is last: " << local_is_last << std::endl;
     auto output_batch = gpu_batch_generator->next(local_is_last);
     bool finished =
         static_cast<bool>(sync_is_last_non_blocking(
             is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
         gpu_batch_generator->collected_rows == 0;
-    // std::cout << "Global is last: " << finished << std::endl;
 
     if (finished) {
         this->shuffle_state->Finalize();
@@ -551,15 +524,14 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
 }
 
 void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch) {
-    // std::cout << "Initializing CPU to GPU exchange with input batch of "
-    //           << input_batch->nrows() << " rows" << std::endl;
+    // Initialize GPU batch generator
     auto dummy_gpu_data =
         convertTableToGPU(alloc_table_like(input_batch), false);
     gpu_batch_generator = std::make_unique<GPUBatchGenerator>(
         dummy_gpu_data.table, dummy_gpu_data.schema,
         static_cast<size_t>(get_gpu_streaming_batch_size()));
-    // std::cout << " Done initializing GPU Batch Gen " << std::endl;
-    // std::cout << " Creating dict builders " << std::endl;
+
+    // Initialize Shuffle State
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
@@ -569,12 +541,9 @@ void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch) {
         dict_builders.emplace_back(
             create_dict_builder_for_array(t->copy(), false));
     }
-    // std::cout << " Done creating dict builders " << std::endl;
-    // std::cout << " Creating shuffle state " << std::endl;
     this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
         input_batch->schema(), dict_builders, cpu_ranks, gpu_ranks, curr_iter,
         sync_freq, this->op_id);
-    // std::cout << " Done creating shuffle state " << std::endl;
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 #else
