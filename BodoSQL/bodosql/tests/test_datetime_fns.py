@@ -823,9 +823,11 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"TABLE1": df}
-    D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
+    D = pd.Series(
+        current_time.normalize(), index=np.arange(len(df)), dtype="datetime64[ns]"
+    )
     D[~df.A] = None
-    S = pd.Series(True, index=np.arange(len(df)))
+    S = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     S[~df.A] = None
     py_output = pd.DataFrame(
         {
