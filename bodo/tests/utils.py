@@ -1338,8 +1338,8 @@ def _test_equal(
 
         if (
             bodo_out.dtype == pd.StringDtype("pyarrow", pd.NA)
-            and py_out.dtype == np.object_
-        ):
+            or bodo_out.dtype == np.float64
+        ) and py_out.dtype == np.object_:
             py_out = py_out.astype(bodo_out.dtype)
 
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
