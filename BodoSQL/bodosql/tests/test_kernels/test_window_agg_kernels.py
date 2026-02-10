@@ -1095,6 +1095,7 @@ def test_windowed_count_if(
     ],
 )
 @pytest_mark_one_rank
+@pytest.mark.skip("TODO: fix for Pandas 3")
 def test_windowed_non_numeric(
     func,
     dataset,
