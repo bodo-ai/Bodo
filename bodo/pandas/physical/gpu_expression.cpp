@@ -671,13 +671,6 @@ std::unique_ptr<cudf::scalar> duckdbValueToCudfScalar(
 std::unique_ptr<cudf::column> make_literal_column(
     duckdb::Value const& v, cudf::size_type n_rows,
     std::shared_ptr<StreamAndEvent> se) {
-    if (v.IsNull()) {
-        // For brevity, make a BOOL8 all-null column
-        auto col = cudf::make_fixed_width_column(
-            cudf::data_type{cudf::type_id::BOOL8}, n_rows,
-            cudf::mask_state::ALL_NULL, se->stream);
-        return col;
-    }
     return cudf::make_column_from_scalar(*duckdbValueToCudfScalar(v, se),
                                          n_rows, se->stream);
 }
