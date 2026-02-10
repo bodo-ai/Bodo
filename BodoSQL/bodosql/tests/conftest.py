@@ -217,13 +217,16 @@ def bodosql_numeric_types(request):
                 {
                     "A": [3, 1, 2, 4] * 4,
                     "B": pd.array([1.0, 2.0, 4.0, 3.0] * 4, "Float64"),
-                    "D": [
-                        pd.Timestamp(2021, 5, 19),
-                        pd.Timestamp(1999, 12, 31),
-                        pd.Timestamp(2020, 10, 11),
-                        pd.Timestamp(2025, 1, 1),
-                    ]
-                    * 4,
+                    "D": pd.Series(
+                        [
+                            pd.Timestamp(2021, 5, 19),
+                            pd.Timestamp(1999, 12, 31),
+                            pd.Timestamp(2020, 10, 11),
+                            pd.Timestamp(2025, 1, 1),
+                        ]
+                        * 4,
+                        dtype="datetime64[ns]",
+                    ),
                 }
             ),
             "TABLE3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
@@ -419,12 +422,15 @@ def bodosql_large_numeric_types(request):
                         np.datetime64("2020-12-01T13:56:03.172"),
                     ]
                     * 4,
-                    "C": [
-                        pd.Timestamp(2021, 11, 21),
-                        pd.Timestamp(2022, 1, 12),
-                        pd.Timestamp(2021, 3, 3),
-                    ]
-                    * 4,
+                    "C": pd.Series(
+                        [
+                            pd.Timestamp(2021, 11, 21),
+                            pd.Timestamp(2022, 1, 12),
+                            pd.Timestamp(2021, 3, 3),
+                        ]
+                        * 4,
+                        dtype="datetime64[ns]",
+                    ),
                 }
             ),
         },
@@ -475,22 +481,28 @@ def bodosql_time_types(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        pd.NaT,
-                        pd.Timestamp("2020-01-16 22:06:10.378782"),
-                        pd.Timestamp("2000-01-21 02:23:16.009049"),
-                        pd.Timestamp("2010-01-08 12:10:20.097528"),
-                    ]
+                    "A": pd.Series(
+                        [
+                            pd.NaT,
+                            pd.Timestamp("2020-01-16 22:06:10.378782"),
+                            pd.Timestamp("2000-01-21 02:23:16.009049"),
+                            pd.Timestamp("2010-01-08 12:10:20.097528"),
+                        ],
+                        dtype="datetime64[ns]",
+                    )
                 }
             ),
             "TABLE2": pd.DataFrame(
                 {
-                    "B": [
-                        pd.Timestamp("2013-01-16 05:25:32.145547"),
-                        pd.Timestamp("2019-01-17 01:17:56.740445"),
-                        pd.NaT,
-                        pd.Timestamp("2015-01-29 06:35:09.810264"),
-                    ]
+                    "B": pd.Series(
+                        [
+                            pd.Timestamp("2013-01-16 05:25:32.145547"),
+                            pd.Timestamp("2019-01-17 01:17:56.740445"),
+                            pd.NaT,
+                            pd.Timestamp("2015-01-29 06:35:09.810264"),
+                        ],
+                        dtype="datetime64[ns]",
+                    )
                 }
             ),
         },
@@ -853,7 +865,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("2007-01-01T03:30"),
                             np.datetime64("NaT"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                     "B": pd.Series(
                         [
@@ -863,7 +876,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("NaT"),
                             np.datetime64("2020-11-11T13:21:03.172"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                     "C": pd.Series(
                         [
@@ -873,7 +887,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("2020-12-01T13:56:03.172"),
                             np.datetime64("2020-02-11"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                 }
             ),

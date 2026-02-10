@@ -632,7 +632,8 @@ def test_to_double(input, expected):
                     pd.Timestamp(2023, 10, 19, 0, 30, 30),
                     pd.Timestamp(2024, 11, 20, 10, 40, 40),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns]",
             ),
             "MM/DD/YYYY HH24:MI:SS",
             False,
@@ -657,7 +658,8 @@ def test_to_double(input, expected):
                     None,
                     pd.Timestamp(2024, 11, 20, 10, 40, 40),
                 ]
-                * 2
+                * 2,
+                dtype="datetime64[ns]",
             ),
             pd.array(
                 [

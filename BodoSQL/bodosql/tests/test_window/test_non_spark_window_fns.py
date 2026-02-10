@@ -564,8 +564,11 @@ def test_bool_agg(memory_leak_check):
                     [None, False, True, None, True, True, False, None],
                     dtype=pd.BooleanDtype(),
                 ),
-                "P": [pd.Timestamp("2023-3-14"), pd.Timestamp("2023-7-4")]
-                + [pd.Timestamp("2023-1-1")] * 6,
+                "P": pd.Series(
+                    [pd.Timestamp("2023-3-14"), pd.Timestamp("2023-7-4")]
+                    + [pd.Timestamp("2023-1-1")] * 6,
+                    dtype="datetime64[ns]",
+                ),
                 "O": range(8),
             }
         )

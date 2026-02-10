@@ -705,24 +705,30 @@ def test_tz_aware_having(memory_leak_check):
     """
     df = pd.DataFrame(
         {
-            "A": [
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/2", tz="Poland"),
-                pd.Timestamp("2022/1/3", tz="Poland"),
-                pd.Timestamp("2016/1/1", tz="Poland"),
-                pd.Timestamp("2019/1/4", tz="Poland"),
-            ]
-            * 7,
-            "B": [
-                pd.Timestamp("2021/1/12", tz="Poland"),
-                pd.Timestamp("2022/2/4", tz="Poland"),
-                pd.Timestamp("2021/1/4", tz="Poland"),
-                None,
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2027/1/1", tz="Poland"),
-                None,
-            ]
-            * 5,
+            "A": pd.Series(
+                [
+                    pd.Timestamp("2022/1/1", tz="Poland"),
+                    pd.Timestamp("2022/1/2", tz="Poland"),
+                    pd.Timestamp("2022/1/3", tz="Poland"),
+                    pd.Timestamp("2016/1/1", tz="Poland"),
+                    pd.Timestamp("2019/1/4", tz="Poland"),
+                ]
+                * 7,
+                dtype="datetime64[ns, Poland]",
+            ),
+            "B": pd.Series(
+                [
+                    pd.Timestamp("2021/1/12", tz="Poland"),
+                    pd.Timestamp("2022/2/4", tz="Poland"),
+                    pd.Timestamp("2021/1/4", tz="Poland"),
+                    None,
+                    pd.Timestamp("2022/1/1", tz="Poland"),
+                    pd.Timestamp("2027/1/1", tz="Poland"),
+                    None,
+                ]
+                * 5,
+                dtype="datetime64[ns, Poland]",
+            ),
         }
     )
     ctx = {"TABLE1": df}

@@ -1440,7 +1440,8 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
                         pd.Timestamp("2011-02-26 03:36:01"),
                         pd.Timestamp("2012-05-09 16:43:16.123456"),
                         pd.Timestamp("2013-10-22 05:32:21.987654321"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -1524,7 +1525,8 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
                         pd.Timestamp("2011-02-26 03:36:01"),
                         pd.Timestamp("2012-05-09 16:43:16.123456"),
                         pd.Timestamp("2013-10-22 05:32:21.987654321"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -1590,7 +1592,8 @@ def dateadd_df():
                         pd.Timestamp("2015-4-1 12:00:15"),
                         pd.Timestamp("2020-2-3 05:15:12.501"),
                         pd.Timestamp("2021-12-13 23:15:06.025999500"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             }
         )
@@ -1613,7 +1616,8 @@ def dateadd_fractional_df():
                         pd.Timestamp("2015-4-1 12:00:15"),
                         pd.Timestamp("2020-2-3 05:15:12.501"),
                         pd.Timestamp("2021-12-13 23:15:06.025999500"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             }
         )
@@ -2345,27 +2349,45 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
         ),
         pytest.param(
             "SELECT DATEADD('MONTH', 10, '2022-06-30')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2023-04-30")], dtype="datetime64[ns]")}
+            ),
             id="dateadd-string",
         ),
         pytest.param(
             "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23'::TIMESTAMP)",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [pd.Timestamp("2022-06-30 12:23:53")], dtype="datetime64[ns]"
+                    )
+                }
+            ),
             id="timeadd-timestamp",
         ),
         pytest.param(
             "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [pd.Timestamp("2022-06-30 12:23:53")], dtype="datetime64[ns]"
+                    )
+                }
+            ),
             id="dateadd-string",
         ),
         pytest.param(
             "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30'::TIMESTAMP)",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2022-07-05")], dtype="datetime64[ns]")}
+            ),
             id="timeadd-timestamp",
         ),
         pytest.param(
             "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2022-07-05")], dtype="datetime64[ns]")}
+            ),
             id="dateadd-string",
         ),
     ],
@@ -4648,7 +4670,14 @@ def test_timestamp_from_parts(
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({0: pd.Series([pd.Timestamp(s, tz=tz) for s in answer])})
+    py_output = pd.DataFrame(
+        {
+            0: pd.Series(
+                [pd.Timestamp(s, tz=tz) for s in answer],
+                dtype="datetime64[ns, UTC]" if tz else "datetime64[ns]",
+            )
+        }
+    )
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
@@ -4864,19 +4893,25 @@ def test_add_months(spark_info, date_df, memory_leak_check):
 
 def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
-    df = pd.DataFrame({"A": pd.Series([ts] * 12)})
+    df = pd.DataFrame({"A": pd.Series([ts] * 12, dtype="datetime64[ns]")})
     ctx = {"TABLE1": df}
 
     answer = pd.DataFrame(
         {
-            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12),
-            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t6": pd.Series([pd.Timestamp(2012, 1, 1, 12)] * 12),
-            "t7": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59)] * 12),
-            "t8": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12),
+            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12, dtype="datetime64[ns]"),
+            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t6": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12)] * 12, dtype="datetime64[ns]"
+            ),
+            "t7": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12, 59)] * 12, dtype="datetime64[ns]"
+            ),
+            "t8": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12, dtype="datetime64[ns]"
+            ),
         }
     )
 

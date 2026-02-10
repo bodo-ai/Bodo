@@ -671,7 +671,12 @@ def test_to_timestamp_non_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 4 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
         expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
@@ -794,7 +799,12 @@ def test_to_timestamp_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 2 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
         expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
@@ -829,7 +839,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(1970, 1, 3, 23, 10, 1),
                         pd.Timestamp(2016, 2, 28, 10, 10, 10),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-1",
@@ -853,7 +864,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(2021, 9, 29, 11, 12, 27),
                         pd.Timestamp(2023, 2, 14, 18, 37, 5),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-2",

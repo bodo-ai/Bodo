@@ -306,12 +306,15 @@ def test_interval_literals_addition(interval_addition_values, memory_leak_check)
 
     df = pd.DataFrame(
         {
-            "A": [
-                pd.Timestamp(2020, 1, 2),
-                pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
-                pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
-                pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
-            ]
+            "A": pd.Series(
+                [
+                    pd.Timestamp(2020, 1, 2),
+                    pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
+                    pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
+                    pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
+                ],
+                dtype="datetime64[ns]",
+            )
         }
     )
 

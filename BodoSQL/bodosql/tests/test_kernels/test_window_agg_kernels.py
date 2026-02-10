@@ -708,7 +708,8 @@ def window_kernel_all_types_data():
                     [7 ** int(math.log2(i + 1)) for i in range(50)],
                 )
                 for days in tup
-            ]
+            ],
+            dtype="datetime64[ns]",
         ),
         "date": pd.Series(
             [

@@ -904,7 +904,8 @@ def test_snowflake_catalog_week_policy_parameters(params, answers, memory_leak_c
                     pd.Timestamp("1980-01-02"),
                     pd.Timestamp("1971-02-02"),
                     pd.Timestamp("2000-12-31"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             )
         }
     )

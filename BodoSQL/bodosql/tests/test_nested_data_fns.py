@@ -449,7 +449,13 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             "BOOL": pd.Series([pd.array([True])]),
             "TIME": pd.Series([pd.array([bodo.types.Time(5, 34, 51)])]),
             "DATE": pd.Series([pd.array([datetime.date(2023, 5, 18)])]),
-            "TIMESTAMP": pd.Series([pd.array([pd.Timestamp("2024-06-29 17:00:00")])]),
+            "TIMESTAMP": pd.Series(
+                [
+                    pd.array(
+                        [pd.Timestamp("2024-06-29 17:00:00")], dtype="datetime64[ns]"
+                    )
+                ]
+            ),
         }
     )
     check_query(
@@ -632,10 +638,16 @@ def ignore_scalar_dtype(pa_dtype):
                 pd.Series(
                     [
                         None,
-                        pd.array([pd.Timestamp("2020-01-01 22:00:00")]),
-                        pd.array([pd.Timestamp("2019-1-24")]),
-                        pd.array([pd.Timestamp("2023-7-18")]),
-                        pd.array([pd.Timestamp("2020-01-02 01:23:42.728347")]),
+                        pd.array(
+                            [pd.Timestamp("2020-01-01 22:00:00")],
+                            dtype="datetime64[ns]",
+                        ),
+                        pd.array([pd.Timestamp("2019-1-24")], dtype="datetime64[ns]"),
+                        pd.array([pd.Timestamp("2023-7-18")], dtype="datetime64[ns]"),
+                        pd.array(
+                            [pd.Timestamp("2020-01-02 01:23:42.728347")],
+                            dtype="datetime64[ns]",
+                        ),
                     ]
                     * 4
                 ),

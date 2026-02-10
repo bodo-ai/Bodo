@@ -35,7 +35,8 @@ def smoke_ctx():
         }
     )
     t = pd.Series(
-        [(pd.Timestamp("2020-1-1") + pd.Timedelta(days=i)) for i in range(1461)]
+        [(pd.Timestamp("2020-1-1") + pd.Timedelta(days=i)) for i in range(1461)],
+        dtype="datetime64[ns]",
     )
     t3 = pd.DataFrame(
         {

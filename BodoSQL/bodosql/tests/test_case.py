@@ -460,7 +460,14 @@ def test_nested_case(memory_leak_check):
 
 def test_null_array_to_timezone_aware(memory_leak_check):
     """Test CASE + casting NULL to Timezone-aware type"""
-    df = pd.DataFrame({"A": [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5})
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5,
+                dtype="datetime64[ns, Asia/Dubai]",
+            )
+        }
+    )
     ctx = {"TABLE1": df}
 
     query = """

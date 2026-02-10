@@ -340,9 +340,12 @@ def test_least_datetime_strings(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.Series(
-                [pd.Timestamp("2000-08-17"), pd.Timestamp("1999-08-17")] * 3
+                [pd.Timestamp("2000-08-17"), pd.Timestamp("1999-08-17")] * 3,
+                dtype="datetime64[ns]",
             ),
-            "B": pd.Series([None, pd.Timestamp("1999-08-17")] * 3),
+            "B": pd.Series(
+                [None, pd.Timestamp("1999-08-17")] * 3, dtype="datetime64[ns]"
+            ),
             "C": pd.Series(["1999-09-17", "1999-09-17"] * 3),
         }
     )

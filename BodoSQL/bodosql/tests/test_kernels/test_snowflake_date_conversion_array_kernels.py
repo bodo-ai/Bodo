@@ -684,7 +684,8 @@ def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
                     pd.Timestamp(2022, 11, 10, 21, 30, 25),
                     pd.Timestamp(2023, 5, 2, 12, 55, 5),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             id="series-1",
         ),
@@ -708,7 +709,8 @@ def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
                     pd.Timestamp(2022, 11, 10, 21, 30, 25),
                     pd.Timestamp(2023, 5, 2, 0, 55, 5),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             id="series-2",
         ),

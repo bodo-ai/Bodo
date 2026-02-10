@@ -454,7 +454,8 @@ def test_to_char_datetime_format_str(memory_leak_check):
             pd.Timestamp(1965, 3, 3, 2, 12, 42),
             pd.Timestamp(2010, 12, 25, 4, 12, 52),
         ]
-        * 4
+        * 4,
+        dtype="datetime64[ns]",
     )
     sql_format_str = "MMMM DD, YYYY HH24:MI:SS"
     query = f"SELECT TO_CHAR(A, '{sql_format_str}') as A from table1"

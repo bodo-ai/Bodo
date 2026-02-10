@@ -116,7 +116,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                         pd.Timestamp("2022-12-31"),
                         None,
                         pd.Timestamp("2000-1-1"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -131,7 +132,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                     pd.Timestamp("2022-12-31"),
                     pd.Timestamp(current_date),
                     pd.Timestamp("2000-1-1"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             )
         }
     )

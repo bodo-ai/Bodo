@@ -3310,7 +3310,8 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
             pd.Timestamp(1847, 9, 27, 12, 37, 18, 371003, nanosecond=3),
             pd.Timestamp(1946, 1, 3, 11, 19, 51, 179004, nanosecond=2),
             pd.Timestamp(2014, 4, 7, 3, 33, 56, 570005, nanosecond=1),
-        ]
+        ],
+        dtype="datetime64[ns]",
     )
     check_func(
         impl,
