@@ -734,7 +734,7 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"TABLE1": df}
-    S = pd.Series(True, index=np.arange(len(df)))
+    S = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     S[~df.A] = None
     py_output = pd.DataFrame(
         {
