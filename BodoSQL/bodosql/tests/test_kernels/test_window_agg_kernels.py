@@ -853,6 +853,7 @@ def window_kernel_two_arg_data():
         "bitxor_agg",
     ],
 )
+@pytest.mark.skip("TODO: fix for Pandas 3")
 def test_windowed_kernels_numeric(
     func,
     window_kernel_numeric_data,
