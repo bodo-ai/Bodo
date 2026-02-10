@@ -151,43 +151,9 @@ class RankDataExchange {
    public:
     RankDataExchange(int64_t op_id_);
 
-    /**
-     * @brief Exchange data between ranks with pinned resources (GPUs)
-     *
-     * @param input_batch The input batch to be exchanged.
-     * @param prev_op_result The result of the previous operator, used to
-     * determine if this is the last batch locally.
-     * @return std::tuple<std::shared_ptr<table_info>, OperatorResult> The
-     * exchanged data this will either be empty (if no data assigned to this
-     * rank) or a table with data. The OperatorResult indicates if the exchange
-     * is finished on all ranks.
-     */
-    virtual std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
-        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
-
     ~RankDataExchange();
 
    protected:
-    /** @brief Initialize the RankDataExchange state including output builders
-     * and shuffle state.
-     *
-     * @param input_batch Sample input batch to determine column types.
-     */
-    void Initialize(table_info* input_batch);
-
-    /**
-     * @brief Initialize shuffle state for sending data between CPU and GPU
-     * ranks asynchronously.
-     *
-     * @param input_batch
-     * @param dict_builders
-     */
-    virtual void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) = 0;
-
-    virtual int64_t GetOutBatchSize() = 0;
-
     int64_t op_id;
 
     std::vector<int> gpu_ranks;
@@ -198,7 +164,26 @@ class RankDataExchange {
     // to/from GPU ranks.
     std::unique_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
-    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+};
+
+struct GPUBatchGenerator {
+    std::vector<GPU_DATA> batches;
+    std::unique_ptr<cudf::table> leftover_tbl;
+    std::shared_ptr<cudf::table> dummy_table;
+    std::shared_ptr<arrow::Schema> arrow_schema;
+    size_t out_batch_size;
+    size_t collected_rows = 0;
+
+    GPUBatchGenerator(std::shared_ptr<cudf::table> dummy_table_,
+                      std::shared_ptr<arrow::Schema> arrow_schema_,
+                      size_t out_batch_size_)
+        : dummy_table(std::move(dummy_table_)),
+          arrow_schema(std::move(arrow_schema_)),
+          out_batch_size(out_batch_size_) {}
+
+    void append_batch(GPU_DATA batch);
+
+    GPU_DATA next(bool force_return);
 };
 
 /**
@@ -210,15 +195,24 @@ class CPUtoGPUExchange : public RankDataExchange {
    public:
     CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
 
-    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
-        std::shared_ptr<table_info> input_batch,
-        OperatorResult prev_op_result) override;
+    /**
+     * @brief Send data from all ranks to GPUs.
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<GPU_DATA, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<GPU_DATA, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
 
    private:
-    int64_t GetOutBatchSize() override;
-    void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+    void Initialize(std::shared_ptr<table_info> input_batch);
+
+    std::unique_ptr<GPUBatchGenerator> gpu_batch_generator;
 };
 
 /**
@@ -229,24 +223,25 @@ class CPUtoGPUExchange : public RankDataExchange {
 class GPUtoCPUExchange : public RankDataExchange {
    public:
     GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
-    int64_t GetOutBatchSize() override;
-    void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
-};
 
-struct GPUBatchGen {
-    std::vector<GPU_DATA> batches;
-    std::unique_ptr<cudf::table> leftover_tbl;
-    std::shared_ptr<arrow::Schema> arrow_schema;
-    size_t collected_rows = 0;
+    /**
+     * @brief Send data from GPU-pinned ranks to all ranks.
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<std::shared_ptr<table_info>, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
 
-    GPUBatchGen() = default;
+   private:
+    void Initialize(table_info* input_batch);
 
-    void append_batch(GPU_DATA batch);
-
-    std::tuple<std::optional<GPU_DATA>, OperatorResult> next(
-        OperatorResult prev_op_result);
+    std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
 #else
 
@@ -432,7 +427,6 @@ class PhysicalGPUSink : public PhysicalOperator {
 
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
-    GPUBatchGen batch_gen;
 #endif
 };
 
@@ -471,7 +465,6 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
 
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
-    GPUBatchGen batch_gen;
 #endif
 };
 /**
