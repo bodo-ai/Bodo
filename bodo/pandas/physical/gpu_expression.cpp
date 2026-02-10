@@ -662,6 +662,54 @@ std::unique_ptr<cudf::scalar> duckdbValueToCudfScalar(
         case duckdb::LogicalTypeId::VARCHAR:
             return std::make_unique<cudf::string_scalar>(
                 value.GetValue<std::string>(), !value.IsNull(), se->stream);
+        case duckdb::LogicalTypeId::TIMESTAMP:
+        case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
+            // Define a timestamp type with microsecond precision
+            duckdb::timestamp_t extracted =
+                value.GetValue<duckdb::timestamp_t>();
+            // Create a TimestampScalar with microsecond value
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
+                cudf::timestamp_us{
+                    cuda::std::chrono::microseconds{extracted.value}},
+                !value.IsNull(), se->stream);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_MS: {
+            // Define a timestamp type with millisecond precision
+            duckdb::timestamp_ms_t extracted =
+                value.GetValue<duckdb::timestamp_ms_t>();
+            // Create a TimestampScalar with millisecond value
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                cudf::timestamp_ms{
+                    cuda::std::chrono::milliseconds{extracted.value}},
+                !value.IsNull(), se->stream);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_SEC: {
+            // Define a timestamp type with second precision
+            duckdb::timestamp_sec_t extracted =
+                value.GetValue<duckdb::timestamp_sec_t>();
+            // Create a TimestampScalar with second value
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_s>>(
+                cudf::timestamp_s{cuda::std::chrono::seconds{extracted.value}},
+                !value.IsNull(), se->stream);
+        } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_NS: {
+            // Define a timestamp type with nanosecond precision
+            duckdb::timestamp_ns_t extracted =
+                value.GetValue<duckdb::timestamp_ns_t>();
+            // Create a TimestampScalar with nanosecond value
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                cudf::timestamp_ns{
+                    cuda::std::chrono::nanoseconds{extracted.value}},
+                !value.IsNull(), se->stream);
+        } break;
+        case duckdb::LogicalTypeId::DATE: {
+            // Define a date type
+            duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
+            // Create a DateScalar with the date value
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
+                cudf::timestamp_D{cuda::std::chrono::days{extracted.days}},
+                !value.IsNull(), se->stream);
+        } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
                                      std::to_string(static_cast<int>(type)));
