@@ -82,12 +82,16 @@ class RankBatchGenerator {
         if (parts_.empty()) {
             // nothing assigned to this rank
             se->event.record(se->stream);
+            std::cout << "Rank " << rank_
+                      << ": No files assigned, returning EOF." << std::endl;
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         // If we've exhausted all parts, signal EOF
         if (current_part_idx_ >= static_cast<int>(parts_.size())) {
             se->event.record(se->stream);
+            std::cout << "Rank " << rank_
+                      << ": All parts exhausted, returning EOF." << std::endl;
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
@@ -112,6 +116,9 @@ class RankBatchGenerator {
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
             se->event.record(se->stream);
+            std::cout << "Rank " << rank_
+                      << ": Returning batch from leftover with " << rows_accum
+                      << " rows, EOF=false" << std::endl;
             return {std::move(gpu_tables[0]), false};
         }
 
@@ -182,6 +189,8 @@ class RankBatchGenerator {
         // end of last part
         bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()) &&
                     (!leftover_tbl || leftover_tbl->num_rows() == 0));
+        std::cout << "Rank " << rank_ << ": Returning batch with " << rows_accum
+                  << " rows, EOF=" << eof << std::endl;
 
         // If we collected no tables (e.g., parts exhausted), return EOF
         if (gpu_tables.empty()) {
@@ -489,6 +498,10 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
+        std::cout << "PhysicalGPUReadParquet::ProduceBatchGPU() got batch with "
+                  << (next_batch_tup.first ? next_batch_tup.first->num_rows()
+                                           : 0)
+                  << " rows, result=" << static_cast<int>(result) << std::endl;
 
         std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
             GPU_DATA(std::move(next_batch_tup.first), arrow_schema, se),

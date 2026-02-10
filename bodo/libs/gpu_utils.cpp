@@ -118,10 +118,14 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     // Remove completed shuffles
     size_t i = 0;
     while (i < this->inflight_shuffles.size()) {
+        std::cout << "inflight shuffles before erase: "
+                  << this->inflight_shuffles.size() << std::endl;
         if (this->inflight_shuffles[i].send_state ==
                 GpuShuffleState::COMPLETED &&
             this->inflight_shuffles[i].recv_state ==
                 GpuShuffleState::COMPLETED) {
+            std::cout << "Erasing completed shuffle at index " << i
+                      << std::endl;
             this->inflight_shuffles.erase(this->inflight_shuffles.begin() + i);
         } else {
             i++;
@@ -287,6 +291,7 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
+        std::cout << "GpuShuffle: Started receiving data" << std::endl;
     }
 }
 
@@ -324,6 +329,7 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_reqs->clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
+        std::cout << "GpuShuffle: Completed receiving data" << std::endl;
 
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
@@ -351,6 +357,7 @@ void GpuShuffle::progress_sending_sizes() {
         this->gpu_sizes_send_reqs->clear();
         // Move to next state
         this->send_state = GpuShuffleState::DATA_INFLIGHT;
+        std::cout << "GpuShuffle: Started sending data" << std::endl;
     }
 }
 
