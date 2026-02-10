@@ -385,6 +385,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             old_to_new_column_map.insert({selected_columns[i], i});
         }
 
+        this->filter_exprs = join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
+
         if (filter_exprs.filters.size() != 0) {
             cudfExprTree =
                 tableFilterSetToCudf(filter_exprs, old_to_new_column_map);
