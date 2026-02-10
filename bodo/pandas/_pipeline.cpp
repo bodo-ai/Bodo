@@ -311,7 +311,8 @@ uint64_t Pipeline::Execute() {
 
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
-    rmm::cuda_set_device_raii({get_gpu_id()});
+    rmm::cuda_set_device_raii cuda_device_raii =
+        rmm::cuda_set_device_raii(get_gpu_id());
 #endif
 
     uint64_t batches_processed = 0;
