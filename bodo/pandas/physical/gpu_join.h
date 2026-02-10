@@ -224,9 +224,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
         se->event.record(se->stream);
+        bool local_finished = prev_op_result == OperatorResult::FINISHED &&
+                              !cuda_join->gpu_shuffle_manager.inflight_exists();
+
         return {output_gpu_data,
-                prev_op_result == OperatorResult::FINISHED &&
-                        !cuda_join->gpu_shuffle_manager.inflight_exists()
+                sync_is_last_non_blocking(&this->is_last_state, local_finished)
                     ? OperatorResult::FINISHED
                     : OperatorResult::NEED_MORE_INPUT};
     }
@@ -265,4 +267,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     PhysicalGPUJoinMetrics metrics;
 
     std::unique_ptr<CudaHashJoin> cuda_join;
+
+    IsLastState is_last_state;
 };
