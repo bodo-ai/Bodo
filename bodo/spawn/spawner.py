@@ -237,18 +237,8 @@ class Spawner:
         # Tuple elements can have different distribution info
         if isinstance(output_is_distributed, (tuple, list)):
             return tuple(self._recv_output(d) for d in output_is_distributed)
-        if output_is_distributed:
-            debug_msg(
-                self.logger,
-                "Getting distributed return metadata for distributed output",
-            )
-            distributed_return_metadata = self.worker_intercomm.recv(source=0)
-            res = self.wrap_distributed_result(distributed_return_metadata)
-        else:
-            debug_msg(self.logger, "Getting replicated result")
-            res = self.worker_intercomm.recv(source=0)
 
-        return res
+        return self.worker_intercomm.recv(source=0)
 
     def _recv_updated_args(
         self,
@@ -421,8 +411,8 @@ class Spawner:
         # Get output from workers
         output_is_distributed = self.worker_intercomm.recv(source=0)
         res = self._recv_output(output_is_distributed)
-
         self._recv_updated_args(args, args_meta, kwargs, kwargs_meta)
+        res = self._wrap_distributed_output_res(res, output_is_distributed)
 
         self._is_running = False
         self._run_del_queue()
@@ -467,6 +457,29 @@ class Spawner:
     def lazy_manager_del_func(self, res_id: str):
         self._del_queue.append(res_id)
         self._run_del_queue()
+
+    def _wrap_distributed_output_res(self, res, output_is_distributed):
+        """Wrap distributed output results into
+        BodoDataFrame/BodoSeries/LazyArrowExtensionArray if needed based on distribution
+        info.
+        Separated from _recv_output to avoid hangs when some outputs are distributed but
+        others are not, leading to worker sending the non-distributed ones while the
+        spawner is sending commands for wrapping the distributed outputs.
+        """
+        if isinstance(output_is_distributed, (tuple, list)):
+            return tuple(
+                self._wrap_distributed_output_res(res[i], d)
+                for i, d in enumerate(output_is_distributed)
+            )
+
+        if output_is_distributed:
+            debug_msg(
+                self.logger,
+                "Wrapping distributed result for spawner",
+            )
+            return self.wrap_distributed_result(res)
+
+        return res
 
     def wrap_distributed_result(
         self,
