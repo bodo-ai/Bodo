@@ -224,13 +224,21 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
         se->event.record(se->stream);
-        bool local_finished = prev_op_result == OperatorResult::FINISHED &&
-                              !cuda_join->gpu_shuffle_manager.inflight_exists();
+        bool local_finished = prev_op_result == OperatorResult::FINISHED;
+        if (local_finished) {
+            // If we are finished consuming input but the shuffle is not
+            // complete, we need to wait for the shuffle to complete before we
+            // can be finished
+            cuda_join->gpu_shuffle_manager.complete();
+        }
 
-        return {output_gpu_data,
-                sync_is_last_non_blocking(&this->is_last_state, local_finished)
-                    ? OperatorResult::FINISHED
-                    : OperatorResult::NEED_MORE_INPUT};
+        return {
+            output_gpu_data,
+            sync_is_last_non_blocking(
+                &this->is_last_state,
+                local_finished && cuda_join->gpu_shuffle_manager.all_complete())
+                ? OperatorResult::FINISHED
+                : OperatorResult::NEED_MORE_INPUT};
     }
 
     /**

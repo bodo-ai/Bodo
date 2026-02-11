@@ -46,7 +46,7 @@ static bodo::tests::suite tests([] {
                 bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
             } else {
                 // Should be empty on init
-                bodo::tests::check(manager.inflight_exists() == false);
+                bodo::tests::check(manager.all_complete() == false);
 
                 // Check communicators exist
                 bodo::tests::check(manager.get_nccl_comm() != nullptr);
@@ -123,25 +123,18 @@ static bodo::tests::suite tests([] {
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
-
-        bodo::tests::check(manager.inflight_exists() ==
-                           (device_id.value() >= 0));
+        manager.complete();
 
         std::vector<std::unique_ptr<cudf::table>> received_tables;
 
         // Pump the progress loop
-        bool done = false;
-        while (!done) {
+        while (!manager.all_complete()) {
             auto out_batch = manager.progress();
             // Move received tables into our accumulator
             for (auto& t : out_batch) {
-                if (t)
+                if (t) {
                     received_tables.push_back(std::move(t));
-            }
-
-            // Check if queue is drained
-            if (!manager.inflight_exists()) {
-                done = true;
+                }
             }
         }
 
@@ -164,6 +157,9 @@ static bodo::tests::suite tests([] {
             rows_per_device *
             std::min(get_cluster_cuda_device_count(), n_ranks);
 
+        std::cout << "Rank " << rank << " received " << local_received_rows
+                  << " rows, global total is " << global_received_rows
+                  << ", expected total is " << expected_total_rows << std::endl;
         bodo::tests::check(global_received_rows == expected_total_rows);
 
         // 4. Check schema preservation
@@ -192,26 +188,18 @@ static bodo::tests::suite tests([] {
 
         // Shuffle based on column 0
         manager.shuffle_table(input_ptr, {0});
-
-        // Verify inflight status matches GPU presence
-        bodo::tests::check(manager.inflight_exists() ==
-                           (device_id.value() >= 0));
+        manager.complete();
 
         std::vector<std::unique_ptr<cudf::table>> received_tables;
 
         // Pump the progress loop
-        bool done = false;
-        while (!done) {
+        while (!manager.all_complete()) {
             auto out_batch = manager.progress();
             // Move received tables into our accumulator
             for (auto& t : out_batch) {
-                if (t)
+                if (t) {
                     received_tables.push_back(std::move(t));
-            }
-
-            // Check if queue is drained
-            if (!manager.inflight_exists()) {
-                done = true;
+                }
             }
         }
 
@@ -235,6 +223,10 @@ static bodo::tests::suite tests([] {
         // Even if the table is empty, we expect the schema (column types) to
         // remain INT64
         if (!received_tables.empty()) {
+            std::cout << "Rank " << rank << " received an empty table with "
+                      << received_tables[0]->num_rows() << " rows and "
+                      << received_tables[0]->num_columns() << " columns."
+                      << std::endl;
             bodo::tests::check(received_tables[0]->num_columns() ==
                                input_ptr->num_columns());
             bodo::tests::check(received_tables[0]->get_column(0).type().id() ==

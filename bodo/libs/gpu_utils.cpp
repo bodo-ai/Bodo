@@ -1,4 +1,5 @@
 #include "gpu_utils.h"
+#include <mpi_proto.h>
 
 #ifdef USE_CUDF
 #include <thrust/execution_policy.h>
@@ -77,6 +78,19 @@ void GpuShuffleManager::shuffle_table(
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
+    if (table->num_rows() == 0) {
+        return;
+    }
+    this->tables_to_shuffle.emplace_back(std::move(table), partition_indices);
+}
+
+void GpuShuffleManager::do_shuffle() {
+    auto [table, partition_indices] = std::move(this->tables_to_shuffle.back());
+    this->tables_to_shuffle.pop_back();
+
+    if (mpi_comm == MPI_COMM_NULL) {
+        return;
+    }
     // Hash partition the table
     auto [partitioned_table, partition_start_rows] =
         hash_partition_table(table, partition_indices, n_ranks);
@@ -106,6 +120,42 @@ void GpuShuffleManager::shuffle_table(
 }
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return {};
+    }
+
+    if (this->shuffle_coordination.req == MPI_REQUEST_NULL) {
+        // Coordinate when to shuffle by doing an allreduce, ranks with data
+        // send 1, ranks without data send 0, this way all ranks will know when
+        // a shuffle is needed and can call progress to start it
+        this->shuffle_coordination.has_data =
+            this->tables_to_shuffle.empty() ? 0 : 1;
+        if (this->shuffle_coordination.has_data) {
+            std::cout << "Rank " << this->rank << " has data to shuffle"
+                      << std::endl;
+        }
+        CHECK_MPI(
+            MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
+                           1, MPI_INT, MPI_MAX, mpi_comm,
+                           &this->shuffle_coordination.req),
+            "GpuShuffleManager::progress: MPI_Iallreduce failed:");
+    } else {
+        int coordination_finished;
+        CHECK_MPI(MPI_Test(&this->shuffle_coordination.req,
+                           &coordination_finished, MPI_STATUS_IGNORE),
+                  "GpuShuffleManager::progress: MPI_Test failed:");
+        // std::cout << "Shuffle coordination test: finished = " <<
+        // coordination_finished
+        //           << ", has_data = " << this->shuffle_coordination.has_data
+        //           << std::endl;
+        if (coordination_finished && this->shuffle_coordination.has_data) {
+            // If a shuffle is needed, start it
+            this->do_shuffle();
+            // Reset coordination for next shuffle
+            this->shuffle_coordination.req = MPI_REQUEST_NULL;
+        }
+    }
+
     std::vector<std::unique_ptr<cudf::table>> received_tables;
     for (GpuShuffle& shuffle : this->inflight_shuffles) {
         std::optional<std::unique_ptr<cudf::table>> progress_res =
@@ -388,6 +438,29 @@ void GpuShuffle::progress_sending_data() {
         // Move to completed state
         this->send_state = GpuShuffleState::COMPLETED;
     }
+}
+
+void GpuShuffleManager::complete() {
+    if (global_completion_req == MPI_REQUEST_NULL) {
+        std::cout << "Initiating global completion barrier" << std::endl;
+        CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
+                  "GpuShuffleManager::complete: MPI_Ibarrier failed:");
+    }
+}
+
+bool GpuShuffleManager::all_complete() {
+    if (global_completion_req != MPI_REQUEST_NULL) {
+        CHECK_MPI(MPI_Test(&global_completion_req, &this->global_completion,
+                           MPI_STATUS_IGNORE),
+                  "GpuShuffleManager::all_complete: MPI_Test failed:");
+    }
+    std::cout << "Checking all_complete: inflight shuffles = "
+              << this->inflight_shuffles.size()
+              << ", tables to shuffle = " << this->tables_to_shuffle.size()
+              << ", global completion = " << this->global_completion
+              << std::endl;
+    return this->inflight_shuffles.empty() && this->tables_to_shuffle.empty() &&
+           global_completion;
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
