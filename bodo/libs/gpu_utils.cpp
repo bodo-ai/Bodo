@@ -156,6 +156,11 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         // coordination_finished
         //           << ", has_data = " << this->shuffle_coordination.has_data
         //           << std::endl;
+        if (coordination_finished) {
+            std::cout << "Rank " << this->rank
+                      << " shuffle coordination finished, has_data = "
+                      << this->shuffle_coordination.has_data << std::endl;
+        }
         if (coordination_finished && this->shuffle_coordination.has_data) {
             // If a shuffle is needed, start it
             this->do_shuffle();
