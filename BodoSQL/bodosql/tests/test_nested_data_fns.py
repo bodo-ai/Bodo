@@ -633,7 +633,8 @@ def ignore_scalar_dtype(pa_dtype):
                         pd.Timestamp("2023-7-18"),
                         pd.Timestamp("2020-01-02 01:23:42.728347"),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series(
                     [

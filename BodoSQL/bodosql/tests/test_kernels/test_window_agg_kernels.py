@@ -358,7 +358,8 @@ def test_null_ignoring_shift(
                     [
                         None if y == "n" else pd.Timestamp(f"201{y}")
                         for y in "nn08n000n08155n"
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series([0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 3, 4, 5, 5, 5]),
             ),

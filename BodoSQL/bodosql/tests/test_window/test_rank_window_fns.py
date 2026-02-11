@@ -559,6 +559,7 @@ def test_mrnf_all_ties(memory_leak_check):
                         None,
                         None,
                     ],
+                    dtype="datetime64[ns]",
                 ).values,
                 pd.array(
                     # Resolved by A or B or C

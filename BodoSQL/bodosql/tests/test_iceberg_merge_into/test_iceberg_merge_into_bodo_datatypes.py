@@ -28,7 +28,7 @@ bodo_datatype_cols = {
     # TODO: resolve this issue: https://bodo.atlassian.net/browse/BE-4072
     # "TS_COL": pd.Series(
     #     [pd.Timestamp("2020-01-01", tz="UTC") + pd.Timedelta(days=i) for i in range(10)],
-    # ),
+    # , dtype="datetime64[ns, UTC]"),
     "NON_ASCII_COL": pd.Series(
         [str(i) + "é" for i in range(10)], dtype="string[pyarrow]"
     ),

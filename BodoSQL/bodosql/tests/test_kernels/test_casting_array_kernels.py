@@ -126,7 +126,8 @@ def numeric_arrays(request):
         pytest.param(
             (
                 pd.Series(
-                    pd.date_range("01-01-2020", "01-01-2022", 10, None, unit="ns")
+                    pd.date_range("01-01-2020", "01-01-2022", 10, None, unit="ns"),
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="dt_array",
@@ -614,7 +615,10 @@ def test_cast_interval(args, memory_leak_check):
         pytest.param(
             pd.Series(
                 [None] * 3
-                + list(pd.date_range("2022-1-1", periods=21, freq="40D5h4s", unit="ns"))
+                + list(
+                    pd.date_range("2022-1-1", periods=21, freq="40D5h4s", unit="ns")
+                ),
+                dtype="datetime64[ns]",
             ).values,
             id="timestamp-vector",
         ),
@@ -764,7 +768,8 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
                         tz="US/Pacific",
                         unit="ns",
                     )
-                )
+                ),
+                dtype="datetime64[ns, US/Pacific]",
             ).array,
             id="vector",
         ),

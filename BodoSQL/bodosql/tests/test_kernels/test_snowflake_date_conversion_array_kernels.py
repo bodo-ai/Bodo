@@ -48,12 +48,14 @@ pytestmark = pytest_slow_unless_codegen
         ("2201-12-01T12:12:02.21",),
         (
             pd.Series(
-                pd.date_range(start="1/2/2013", end="3/13/2021", periods=12, unit="ns")
+                pd.date_range(start="1/2/2013", end="3/13/2021", periods=12, unit="ns"),
+                dtype="datetime64[ns]",
             ).astype(str),
         ),
         (
             pd.Series(
-                pd.date_range(start="1/2/2013", end="1/3/2013", periods=113, unit="ns")
+                pd.date_range(start="1/2/2013", end="1/3/2013", periods=113, unit="ns"),
+                dtype="datetime64[ns]",
             ).astype(str),
         ),
     ]
@@ -293,7 +295,7 @@ def invalid_to_date_strings_with_format_str(request):
                     pd.date_range(
                         start="1/2/2013", end="1/3/2013", periods=113, unit="ns"
                     )
-                ).astype("datetime64[ns]"),
+                ),
             ),
             id="non_null_dt_series",
         ),
@@ -317,8 +319,9 @@ def invalid_to_date_strings_with_format_str(request):
                         pd.Timestamp("4/2/2003"),
                         None,
                     ]
-                    * 4
-                ).astype("datetime64[ns]"),
+                    * 4,
+                    dtype="datetime64[ns]",
+                ),
             ),
             id="nullable_dt_series",
         ),
@@ -327,7 +330,8 @@ def invalid_to_date_strings_with_format_str(request):
                 pd.Series(
                     pd.date_range(
                         "2018", "2025", periods=13, tz="US/Pacific", unit="ns"
-                    )
+                    ),
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
             ),
             id="tz_series",

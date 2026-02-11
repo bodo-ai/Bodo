@@ -71,7 +71,8 @@ def smoke_shipping_ctx():
                         )
                     )
                     for i in range(10**6)
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             "STORE_ID": pd.Series(
                 [1234 + (i % np.round(np.sqrt(i + 1))) for i in range(10**6)],

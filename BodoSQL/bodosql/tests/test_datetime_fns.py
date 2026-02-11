@@ -2293,7 +2293,8 @@ def tz_dateadd_data(request, tz_dateadd_args):
                 "DT_COL": pd.Series(
                     [pd.Timestamp("2022-3-12 20:30:00", tz=request.param)] * 3
                     + [None]
-                    + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3
+                    + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3,
+                    dtype=f"datetime64[ns, {request.param}]",
                 ),
                 "BOOL_COL": pd.Series([True] * 7),
             }
@@ -2305,7 +2306,8 @@ def tz_dateadd_data(request, tz_dateadd_args):
             0: pd.Series(
                 [pd.Timestamp(springRes, tz=request.param)] * 3
                 + [None]
-                + [pd.Timestamp(fallRes, tz=request.param)] * 3
+                + [pd.Timestamp(fallRes, tz=request.param)] * 3,
+                dtype=f"datetime64[ns, {request.param}]",
             )
         }
     )
@@ -2592,13 +2594,15 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
         [
             None if s is None else pd.Timestamp(s, tz="US/Pacific")
             for s in timestamp_strings
-        ]
+        ],
+        dtype="datetime64[ns, US/Pacific]",
     )
     res = pd.Series(
         [
             None if s is None else pd.Timestamp(s, tz="US/Pacific")
             for s in adjusted_timestamp_strings
-        ]
+        ],
+        dtype="datetime64[ns, US/Pacific]",
     )
     ctx = {
         "TABLE1": pd.DataFrame(

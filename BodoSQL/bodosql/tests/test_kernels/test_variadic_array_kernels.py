@@ -566,7 +566,8 @@ def test_coalesce_str_array_optimized(memory_leak_check):
                             "2018-03-01", "2018-07-02", freq="ME", unit="ns"
                         ),
                     ]
-                    * 2
+                    * 2,
+                    dtype="datetime64[ns]",
                 ),
                 np.datetime64(pd.Timestamp("2018-02-28"), "ns"),
                 np.datetime64(pd.Timestamp("2018-02-01"), "ns"),
@@ -574,7 +575,10 @@ def test_coalesce_str_array_optimized(memory_leak_check):
                 np.datetime64(pd.Timestamp("2018-03-01"), "ns"),
                 np.datetime64(pd.Timestamp("2018-05-30"), "ns"),
                 np.datetime64(pd.Timestamp("2018-05-01"), "ns"),
-                pd.Series(pd.date_range("2018", "2019-11-01", freq="ME", unit="ns")),
+                pd.Series(
+                    pd.date_range("2018", "2019-11-01", freq="ME", unit="ns"),
+                    dtype="datetime64[ns]",
+                ),
             ),
             id="date_vector_output",
             marks=pytest.mark.slow,
@@ -1008,7 +1012,8 @@ def test_concat_ws_binary(memory_leak_check):
                         None,
                         None,
                         pd.Timestamp("2020-10-31"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             ),
             pd.Series(
@@ -1019,7 +1024,8 @@ def test_concat_ws_binary(memory_leak_check):
                     None,
                     pd.Timestamp("2024-7-4"),
                     pd.Timestamp("2020-10-31"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="date_col-naive_col",
         ),
@@ -1043,7 +1049,8 @@ def test_concat_ws_binary(memory_leak_check):
                         None,
                         None,
                         pd.Timestamp("2020-3-31", tz="US/Pacific"),
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
             ),
             pd.Series(
@@ -1054,7 +1061,8 @@ def test_concat_ws_binary(memory_leak_check):
                     None,
                     pd.Timestamp("2020-7-4", tz="US/Pacific"),
                     pd.Timestamp("2020-3-31", tz="US/Pacific"),
-                ]
+                ],
+                dtype="datetime64[ns, US/Pacific]",
             ),
             id="date_col-tz_col",
         ),
@@ -1068,7 +1076,8 @@ def test_concat_ws_binary(memory_leak_check):
                         None,
                         pd.Timestamp("2020-6-30"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 datetime.date(1999, 12, 31),
             ),
@@ -1080,7 +1089,8 @@ def test_concat_ws_binary(memory_leak_check):
                     pd.Timestamp("1999-12-31"),
                     pd.Timestamp("2020-6-30"),
                     pd.Timestamp("1999-12-31"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="naive_col-date_scalar",
         ),
@@ -1094,7 +1104,8 @@ def test_concat_ws_binary(memory_leak_check):
                         None,
                         None,
                         pd.Timestamp("2020-3-31", tz="US/Pacific"),
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
                 pd.Timestamp("2020-01-01", tz="US/Pacific"),
             ),
@@ -1106,7 +1117,8 @@ def test_concat_ws_binary(memory_leak_check):
                     pd.Timestamp("2020-01-01", tz="US/Pacific"),
                     pd.Timestamp("2020-01-01", tz="US/Pacific"),
                     pd.Timestamp("2020-3-31", tz="US/Pacific"),
-                ]
+                ],
+                dtype="datetime64[ns, US/Pacific]",
             ),
             id="pd_datetime_tz_col-ts_tz_col",
         ),
@@ -1171,7 +1183,8 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
                         pd.Timestamp("2022-02-15"),
                         pd.Timestamp("2032-02-14"),
                     ]
-                    * 5
+                    * 5,
+                    dtype="datetime64[ns]",
                 ),
                 pd.Timestamp("2017-08-17"),
                 pd.Series(
@@ -1180,7 +1193,8 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
                         pd.Timestamp("2032-02-15"),
                         pd.Timestamp("2022-02-14"),
                     ]
-                    * 5
+                    * 5,
+                    dtype="datetime64[ns]",
                 ),
             ),
             (
@@ -1190,7 +1204,8 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
                         pd.Timestamp("2017-08-17"),
                         pd.Timestamp("2017-08-17"),
                     ]
-                    * 5
+                    * 5,
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series(
                     [
@@ -1198,7 +1213,8 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
                         pd.Timestamp("2032-02-15"),
                         pd.Timestamp("2032-02-14"),
                     ]
-                    * 5
+                    * 5,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="timestamp-mix",
@@ -2827,7 +2843,8 @@ def test_object_construct_optional(
                         pd.Timestamp("1999-12-31 23:59:59.999250"),
                         None,
                         pd.Timestamp("2024-7-4 6:30:00"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             ),
             (True, False),
@@ -2858,7 +2875,8 @@ def test_object_construct_optional(
                         pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
                         None,
                         pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
             ),
             (True, False),
@@ -2891,7 +2909,8 @@ def test_object_construct_optional(
                         pd.Timestamp("1999-12-31 23:59:59.999250"),
                         pd.Timestamp("2023-1-1"),
                         None,
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series(
                     [
@@ -2900,7 +2919,8 @@ def test_object_construct_optional(
                         pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
                         None,
                         pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
             ),
             (False, False),

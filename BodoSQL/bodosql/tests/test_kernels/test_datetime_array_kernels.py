@@ -112,16 +112,20 @@ pytestmark = pytest_slow_unless_codegen
             ),
             {
                 "years": pd.Series(
-                    pd.date_range("2099-12-20", "2099-12-30", 11, unit="ns")
+                    pd.date_range("2099-12-20", "2099-12-30", 11, unit="ns"),
+                    dtype="datetime64[ns]",
                 ),
                 "months": pd.Series(
-                    pd.date_range("2008-04-20", "2008-04-30", 11, unit="ns")
+                    pd.date_range("2008-04-20", "2008-04-30", 11, unit="ns"),
+                    dtype="datetime64[ns]",
                 ),
                 "weeks": pd.Series(
-                    pd.date_range("2001-11-19", "2001-11-29", 11, unit="ns")
+                    pd.date_range("2001-11-19", "2001-11-29", 11, unit="ns"),
+                    dtype="datetime64[ns]",
                 ),
                 "days": pd.Series(
-                    pd.date_range("2000-03-29", "2000-04-08", 11, unit="ns")
+                    pd.date_range("2000-03-29", "2000-04-08", 11, unit="ns"),
+                    dtype="datetime64[ns]",
                 ),
             },
             id="scalar_vector",
@@ -776,7 +780,8 @@ def test_interval_add_date_interval_to_date(
             pd.Series(
                 pd.date_range(
                     "1999-12-20 00:01:40", "1999-12-30 00:01:40", 20, unit="ns"
-                )
+                ),
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -1168,17 +1173,20 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                 "hours": pd.Series(
                     pd.date_range(
                         "1999-12-24 04:00:00", "2000-01-03 04:00:00", 11, unit="ns"
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 "minutes": pd.Series(
                     pd.date_range(
                         "1999-12-20 01:40:00", "1999-12-30 01:40:00", 11, unit="ns"
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 "seconds": pd.Series(
                     pd.date_range(
                         "1999-12-20 00:01:40", "1999-12-30 00:01:40", 11, unit="ns"
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 "milliseconds": pd.Series(
                     pd.date_range(
@@ -1186,7 +1194,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         "1999-12-30 00:00:00.100",
                         11,
                         unit="ns",
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 "microseconds": pd.Series(
                     pd.date_range(
@@ -1194,7 +1203,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         "1999-12-30 00:00:00.000100",
                         11,
                         unit="ns",
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 "nanoseconds": pd.Series(
                     pd.date_range(
@@ -1202,7 +1212,8 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
                         "1999-12-30 00:00:00.000000100",
                         11,
                         unit="ns",
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
             },
             id="scalar_vector",
@@ -2155,7 +2166,10 @@ def test_from_days(arg, memory_leak_check):
     "dt, dow_str",
     [
         pytest.param(
-            pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20, unit="ns")),
+            pd.Series(
+                pd.date_range("2018-01-01", "2019-01-01", periods=20, unit="ns"),
+                dtype="datetime64[ns]",
+            ),
             pd.Series(["su"] * 20),
             id="timestamp-vector",
         ),
@@ -3491,7 +3505,8 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
                     pd.Timestamp("2022-7-11 01:00:00"),
                     pd.Timestamp("2022-7-10 23:00:00"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns]",
             ),
             pd.array(
                 [
@@ -3499,7 +3514,8 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
                     pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
                     pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns, US/Pacific]",
             ),
             pd.array([0, -1, 1] * 5),
             pd.array([0, -2, 2] * 5),
@@ -3512,7 +3528,8 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
                     pd.Timestamp("2022-7-09 01:00:00"),
                     pd.Timestamp("2022-7-07 23:00:00"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns]",
             ),
             pd.Timestamp("2022-7-08 17:00:00", tz="Poland"),
             pd.array([-3, -1, 1] * 5),
@@ -3527,7 +3544,8 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
                     pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
                     pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns, US/Pacific]",
             ),
             None,
             pd.array([None, None, None] * 5, dtype="Int64"),

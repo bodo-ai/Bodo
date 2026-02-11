@@ -957,7 +957,8 @@ def test_bool_equal_null(args, is_scalar_a, is_scalar_b, answer, memory_leak_che
                             pd.Timestamp("2022-11-02 00:00:00"),
                         ]
                         * 2
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 pd.Timestamp("2022"),
                 None,
@@ -1601,7 +1602,8 @@ def test_option_is_functions(memory_leak_check):
                         None,
                     ]
                 ]
-                * 7
+                * 7,
+                dtype="datetime64[ns, UTC]",
             ),
             pd.Series([-1, 0, 1, 2, 3, 4, 5]),
             False,
@@ -1614,7 +1616,8 @@ def test_option_is_functions(memory_leak_check):
                     pd.Timestamp("1999-09-09 09:09:09", tz="UTC"),
                     None,
                     None,
-                ]
+                ],
+                dtype="datetime64[ns, UTC]",
             ),
             marks=pytest.mark.slow,
             id="timestamp_tz_array-vector-vector",
@@ -1628,7 +1631,8 @@ def test_option_is_functions(memory_leak_check):
                         pd.Timestamp("2022-01-01 13:01:59"),
                     ]
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns]",
             ),
             pd.Series([-1, 0, 1, 2, -1]),
             False,
@@ -1639,7 +1643,8 @@ def test_option_is_functions(memory_leak_check):
                     pd.Timestamp("2023-11-27 21:11:54.764555"),
                     pd.Timestamp("2022-01-01 13:01:59"),
                     None,
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             marks=pytest.mark.slow,
             id="timestamp_ntz_array-vector-vector",
@@ -1994,7 +1999,8 @@ def test_option_arr_get(memory_leak_check):
                     pd.Timestamp("2023-11-27 21:11:54.764555+0000", tz="UTC"),
                     pd.Timestamp("2001-01-01", tz="UTC"),
                 ]
-                * 6
+                * 6,
+                dtype="datetime64[ns, UTC]",
             ),
             False,
             False,
@@ -2368,7 +2374,8 @@ internal_struct_type = pa.struct(
                         pd.Timestamp("2000-01-01"),
                         pd.Timestamp("2111-11-11"),
                     ]
-                    * 9
+                    * 9,
+                    dtype="datetime64[ns]",
                 ),
             ),
             marks=pytest.mark.slow,

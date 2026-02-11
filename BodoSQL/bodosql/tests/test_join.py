@@ -378,7 +378,10 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "D": pd.Series(list(pd.date_range("2011", "2018", 5, unit="ns")) * 20),
+                "D": pd.Series(
+                    list(pd.date_range("2011", "2018", 5, unit="ns")) * 20,
+                    dtype="datetime64[ns]",
+                ),
                 "S": pd.Series(
                     [
                         None if i % 7 == 0 else chr(65 + (i**2) % 8 + i // 48)

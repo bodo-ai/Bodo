@@ -548,7 +548,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -572,7 +573,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00", tz="Australia/Sydney"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999", tz="Australia/Sydney"),
-                ]
+                ],
+                dtype="datetime64[ns, Australia/Sydney]",
             ),
             pd.Series(
                 [
@@ -916,7 +918,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00"),
                     pd.Timestamp("2024-08-16 13:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             None,
             pd.Series(
@@ -926,7 +929,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 17:30:00"),
                     pd.Timestamp("2024-08-16 16:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ntz-west_to_east",
         ),
@@ -939,7 +943,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-08-16 16:45:20", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "America/Los_Angeles",
             pd.Series(
@@ -949,7 +954,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 10:30:00"),
                     pd.Timestamp("2024-08-16 12:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ltz_west-utc_to_east",
         ),
