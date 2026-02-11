@@ -415,6 +415,9 @@ GpuShuffle::progress_waiting_for_data() {
 
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
+        std::cout << "GpuShuffle: Received table with "
+                  << shuffle_res->num_rows() << " rows and "
+                  << shuffle_res->num_columns() << " columns" << std::endl;
 
         return {std::move(shuffle_res)};
     }
