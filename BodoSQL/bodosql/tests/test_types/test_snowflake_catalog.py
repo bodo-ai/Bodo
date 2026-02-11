@@ -664,7 +664,7 @@ def test_current_timestamp_case(
     normalize_val = current_timestamp.normalize()
     S = pd.Series(normalize_val, index=np.arange(len(df)))
     S[~df.A] = None
-    V = pd.Series(True, index=np.arange(len(df)))
+    V = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     V[~df.A] = None
     py_output = pd.DataFrame(
         {
