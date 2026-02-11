@@ -1622,7 +1622,7 @@ def _show_schemas_snowflake_sample_data_output(terse=True):
                     "SNOWFLAKE_SAMPLE_DATA",
                 ]
                 * 7,
-                "KIND": [None] * 7,
+                "KIND": pd.array([None] * 7, dtype=pd.ArrowDtype(pa.string())),
             }
         )
     else:
