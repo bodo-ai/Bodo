@@ -58,7 +58,7 @@ void GPUBatchGenerator::append_batch(GPU_DATA batch) {
         return;
     }
     collected_rows += n;
-    batches.push_back(std::move(batch));
+    batches.push_back(batch);
 }
 
 GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
@@ -523,7 +523,6 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     auto result = this->shuffle_state->ShuffleIfRequired(true);
 
     if (result.has_value()) {
-        // TODO: Pass the stream here
         gpu_batch_generator->append_batch(
             convertTableToGPU(result.value(), se));
     }
