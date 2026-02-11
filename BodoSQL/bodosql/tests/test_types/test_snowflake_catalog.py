@@ -2102,9 +2102,9 @@ def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    [pd.NA, 12.4, -0.57],
+                    [None, 12.4, -0.57],
                     [-1235.0, 0.01234567890123456789],
-                    [10.0, 10.0, pd.NA],
+                    [10.0, 10.0, None],
                     [12345678901234567890.0],
                     [np.nan, np.inf, -np.inf],
                     None,
