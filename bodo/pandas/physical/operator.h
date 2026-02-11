@@ -3,8 +3,8 @@
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
 #include <cstdint>
-#include <cudf/copying.hpp>
 #ifdef USE_CUDF
+#include <cudf/copying.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #endif

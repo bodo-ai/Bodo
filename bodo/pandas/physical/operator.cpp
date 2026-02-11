@@ -2,7 +2,6 @@
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
 #include <memory>
-#include <rmm/cuda_stream_view.hpp>
 #include <string>
 
 #ifdef USE_CUDF
@@ -10,6 +9,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <rmm/cuda_stream_view.hpp>
 
 #include "../../libs/gpu_utils.h"
 #include "../libs/_table_builder_utils.h"
