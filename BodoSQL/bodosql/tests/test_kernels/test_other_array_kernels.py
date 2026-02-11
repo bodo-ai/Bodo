@@ -1603,7 +1603,6 @@ def test_option_is_functions(memory_leak_check):
                     ]
                 ]
                 * 7,
-                dtype="datetime64[ns, UTC]",
             ),
             pd.Series([-1, 0, 1, 2, 3, 4, 5]),
             False,
@@ -1632,7 +1631,6 @@ def test_option_is_functions(memory_leak_check):
                     ]
                 ]
                 * 5,
-                dtype="datetime64[ns]",
             ),
             pd.Series([-1, 0, 1, 2, -1]),
             False,
