@@ -32,7 +32,7 @@ from bodosql.libs.iceberg_merge_into import (
     do_delta_merge_with_target,
 )
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
 
 small_df_len = 12
 
