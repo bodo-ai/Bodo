@@ -2578,8 +2578,10 @@ def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
     def date_trunc_scalar_fn(datetime_part_strings, ts_input):
         return generate_date_trunc_func(datetime_part_strings)(ts_input)
 
+    dtype = ts_input.dtype if isinstance(ts_input, (pd.Series, np.ndarray)) else None
+
     answer = vectorized_sol(
-        (datetime_part_strings, ts_input), date_trunc_scalar_fn, None
+        (datetime_part_strings, ts_input), date_trunc_scalar_fn, dtype
     )
     check_func(
         impl,
