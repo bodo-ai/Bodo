@@ -2255,11 +2255,14 @@ def test_read_nested_array_in_array_col(test_db_snowflake_catalog, memory_leak_c
 
     py_output = pd.DataFrame(
         {
-            "A": [
-                np.nan,
-                [[10.0, 10.0], np.nan],
-                [[pd.NA], [12.4, -0.57]],
-            ],
+            "A": pd.array(
+                [
+                    None,
+                    [[10.0, 10.0], None],
+                    [[None], [12.4, -0.57]],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.float64()))),
+            ),
         }
     )
     queryA = "SELECT A FROM NESTED_ARRAY_TEST ORDER BY idx"
