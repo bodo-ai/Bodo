@@ -231,6 +231,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // can be finished
             cuda_join->gpu_shuffle_manager.complete();
         }
+        if (cuda_join->gpu_shuffle_manager.all_complete()) {
+            cudaStreamSynchronize(cuda_join->gpu_shuffle_manager.get_stream());
+        }
 
         return {
             output_gpu_data,
