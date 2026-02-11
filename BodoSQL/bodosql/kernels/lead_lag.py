@@ -120,6 +120,10 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
                 ),
             )
             or in_col == bodo.types.datetime_date_array_type
+            or (
+                isinstance(in_col, bodo.types.DatetimeArrayType)
+                and in_col.tz is not None
+            )
             else "default_arr.ctypes"
         )
         ctx["fill_val"] = (
