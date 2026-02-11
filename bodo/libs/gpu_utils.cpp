@@ -85,24 +85,39 @@ void GpuShuffleManager::shuffle_table(
 }
 
 void GpuShuffleManager::do_shuffle() {
-    auto [table, partition_indices] = std::move(this->tables_to_shuffle.back());
-    this->tables_to_shuffle.pop_back();
+    std::vector<cudf::packed_table> packed_tables;
+    if (!this->tables_to_shuffle.empty()) {
+        auto [table, partition_indices] =
+            std::move(this->tables_to_shuffle.back());
+        this->tables_to_shuffle.pop_back();
 
-    if (mpi_comm == MPI_COMM_NULL) {
-        return;
+        // Hash partition the table
+        auto [partitioned_table, partition_start_rows] =
+            hash_partition_table(table, partition_indices, n_ranks);
+
+        assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+        // Contiguous splits requires the split indices excluding the first 0
+        // So we create a new vector from partition_start_rows[1..end]
+        std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
+            partition_start_rows.begin() + 1, partition_start_rows.end());
+        // Pack the tables for sending
+        std::vector<cudf::packed_table> packed_tables =
+            cudf::contiguous_split(partitioned_table->view(), splits, stream);
+    } else {
+        // If we have no data to shuffle, we still need to create empty packed
+        // tables for each rank so that the shuffle can proceed without special
+        // casing empty sends/receives
+        cudf::table empty_table(
+            cudf::table_view(std::vector<cudf::column_view>{}));
+
+        for (int i = 0; i < n_ranks; i++) {
+            cudf::packed_columns empty_packed_columns =
+                cudf::pack(empty_table.view(), stream);
+            cudf::packed_table empty_packed_table(
+                empty_table.view(), std::move(empty_packed_columns));
+            packed_tables.push_back(std::move(empty_packed_table));
+        }
     }
-    // Hash partition the table
-    auto [partitioned_table, partition_start_rows] =
-        hash_partition_table(table, partition_indices, n_ranks);
-
-    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
-    // Contiguous splits requires the split indices excluding the first 0
-    // So we create a new vector from partition_start_rows[1..end]
-    std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
-        partition_start_rows.begin() + 1, partition_start_rows.end());
-    // Pack the tables for sending
-    std::vector<cudf::packed_table> packed_tables =
-        cudf::contiguous_split(partitioned_table->view(), splits, stream);
 
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
