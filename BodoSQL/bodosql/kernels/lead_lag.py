@@ -116,7 +116,6 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
                 in_col,
                 (
                     bodo.types.DecimalArrayType,
-                    bodo.types.DatetimeArrayType,
                     bodo.types.TimeArrayType,
                 ),
             )
