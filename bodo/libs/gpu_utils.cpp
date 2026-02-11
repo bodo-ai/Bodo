@@ -172,8 +172,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
                 GpuShuffleState::COMPLETED &&
             this->inflight_shuffles[i].recv_state ==
                 GpuShuffleState::COMPLETED) {
-            std::cout << "Erasing completed shuffle at index " << i
-                      << std::endl;
             this->inflight_shuffles.erase(this->inflight_shuffles.begin() + i);
         } else {
             i++;
@@ -183,9 +181,9 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
 }
 
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
-    std::cout << "Progressing shuffle with send state "
-              << static_cast<int>(this->send_state) << " and recv state "
-              << static_cast<int>(this->recv_state) << std::endl;
+    // std::cout << "Progressing shuffle with send state "
+    //           << static_cast<int>(this->send_state) << " and recv state "
+    //           << static_cast<int>(this->recv_state) << std::endl;
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
             this->progress_sending_sizes();
