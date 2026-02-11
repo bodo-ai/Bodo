@@ -36,7 +36,9 @@ static bodo::tests::suite tests([] {
         // Ensure we have a GPU context for this rank
         // Note: In a real test runner, this might be handled by a fixture
         rmm::cuda_device_id device_id = get_gpu_id();
-        rmm::cuda_set_device_raii set_device(device_id);
+        if (device_id.value() > 0) {
+            rmm::cuda_set_device_raii set_device(device_id);
+        }
 
         try {
             GpuShuffleManager manager;
@@ -107,9 +109,8 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        rmm::cuda_set_device_raii set_device(device_id);
         if (device_id.value() > 0) {
-            cudaSetDevice(device_id.value());
+            rmm::cuda_set_device_raii set_device(device_id);
         }
 
         // Setup: Create 10 rows per rank with a gpu assigned
@@ -178,7 +179,9 @@ static bodo::tests::suite tests([] {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        rmm::cuda_set_device_raii set_device(device_id);
+        if (device_id.value() > 0) {
+            rmm::cuda_set_device_raii set_device(device_id);
+        }
         if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
