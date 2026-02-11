@@ -1755,6 +1755,17 @@ def create_cmp_op_overload_arr(op):
     return overload_date_arr_cmp
 
 
+@overload(operator.setitem, no_unliteral=True)
+def dt_timedelta_arr_setitem(A, ind, val):
+    if A != types.Array(bodo.types.timedelta64ns, 1, "C") or val != pd_timedelta_type:
+        return
+
+    def impl(A, ind, val):  # pragma: no cover
+        A[ind] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+
+    return impl
+
+
 timedelta_unsupported_attrs = [
     "asm8",
     "resolution_string",
