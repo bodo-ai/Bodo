@@ -9,6 +9,7 @@
 from contextlib import contextmanager
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -311,14 +312,20 @@ def test_iceberg_describe_view_basic(
             "TYPE": ["VARCHAR(16777216)", "DOUBLE", "BOOLEAN"],
             "KIND": ["COLUMN", "COLUMN", "COLUMN"],
             "NULL?": ["N", "N", "N"],
-            "DEFAULT": [None, None, None],
+            "DEFAULT": pd.array([None, None, None], dtype=pd.ArrowDtype(pa.string())),
             "PRIMARY_KEY": ["N", "N", "N"],
             "UNIQUE_KEY": ["N", "N", "N"],
-            "CHECK": [None, None, None],
-            "EXPRESSION": [None, None, None],
-            "COMMENT": [None, None, None],
-            "POLICY NAME": [None, None, None],
-            "PRIVACY DOMAIN": [None, None, None],
+            "CHECK": pd.array([None, None, None], dtype=pd.ArrowDtype(pa.string())),
+            "EXPRESSION": pd.array(
+                [None, None, None], dtype=pd.ArrowDtype(pa.string())
+            ),
+            "COMMENT": pd.array([None, None, None], dtype=pd.ArrowDtype(pa.string())),
+            "POLICY NAME": pd.array(
+                [None, None, None], dtype=pd.ArrowDtype(pa.string())
+            ),
+            "PRIVACY DOMAIN": pd.array(
+                [None, None, None], dtype=pd.ArrowDtype(pa.string())
+            ),
         }
     )
     with view_helper_nontrivialview(
