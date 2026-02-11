@@ -7,6 +7,7 @@
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/types.hpp>
+#include <rmm/cuda_device.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_buffer.hpp>
 
@@ -35,6 +36,7 @@ static bodo::tests::suite tests([] {
         // Ensure we have a GPU context for this rank
         // Note: In a real test runner, this might be handled by a fixture
         rmm::cuda_device_id device_id = get_gpu_id();
+        rmm::cuda_set_device_raii set_device(device_id);
 
         try {
             GpuShuffleManager manager;
@@ -105,6 +107,7 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
+        rmm::cuda_set_device_raii set_device(device_id);
         if (device_id.value() > 0) {
             cudaSetDevice(device_id.value());
         }
@@ -175,6 +178,7 @@ static bodo::tests::suite tests([] {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         rmm::cuda_device_id device_id = get_gpu_id();
+        rmm::cuda_set_device_raii set_device(device_id);
         if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
