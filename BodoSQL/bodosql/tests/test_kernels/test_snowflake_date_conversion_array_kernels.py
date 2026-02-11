@@ -765,7 +765,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-05 01:30:00"),
                     pd.Timestamp("2024-04-04 22:30:00"),
                     pd.Timestamp("2024-04-04 23:30:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ).to_numpy(),
             id="no_tz",
         ),
@@ -781,7 +782,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-04 17:30:00", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ).to_numpy(),
             id="with_tz_LA",
         ),
@@ -797,7 +799,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
                     pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
                     pd.Timestamp("2024-04-05 6:15:00", tz="Asia/Kathmandu"),
-                ]
+                ],
+                dtype="datetime64[ns, Asia/Kathmandu]",
             ).to_numpy(),
             id="with_tz_KTM",
         ),
@@ -1001,7 +1004,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07"),
                     pd.Timestamp("2024-04-05 06:07:08"),
                     pd.Timestamp("2025-05-06 07:08:09"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             False,
             None,
@@ -1025,7 +1029,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07"),
                     pd.Timestamp("2024-04-05 06:07:08"),
                     pd.Timestamp("2025-05-06 07:08:09"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             False,
             "America/Los_Angeles",
@@ -1049,7 +1054,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-05 06:07:08", tz="America/Los_Angeles"),
                     pd.Timestamp("2025-05-06 07:08:09", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             False,
             "Asia/Kathmandu",
@@ -1391,7 +1397,8 @@ def test_convert_timezone_ntz_scalar(
                     pd.Timestamp("2023-05-09 12:00:00"),
                     pd.Timestamp("2023-07-16 12:00:00"),
                     pd.Timestamp("2023-11-25 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="same_tz",
         ),
@@ -1406,7 +1413,8 @@ def test_convert_timezone_ntz_scalar(
                     pd.Timestamp("2023-05-09 11:00:00"),
                     pd.Timestamp("2023-07-16 11:00:00"),
                     pd.Timestamp("2023-11-25 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="berlin-casablanca",
             marks=pytest.mark.slow,
@@ -1422,7 +1430,8 @@ def test_convert_timezone_ntz_vector(source_tz, target_tz, answer, memory_leak_c
             pd.Timestamp("2023-05-09 12:00:00"),
             pd.Timestamp("2023-07-16 12:00:00"),
             pd.Timestamp("2023-11-25 12:00:00"),
-        ]
+        ],
+        dtype="datetime64[ns]",
     )
 
     def impl(data):
