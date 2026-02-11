@@ -452,11 +452,11 @@ bool GpuShuffleManager::all_complete() {
                            MPI_STATUS_IGNORE),
                   "GpuShuffleManager::all_complete: MPI_Test failed:");
     }
-    std::cout << "Checking all_complete: inflight shuffles = "
-              << this->inflight_shuffles.size()
-              << ", tables to shuffle = " << this->tables_to_shuffle.size()
-              << ", global completion = " << this->global_completion
-              << std::endl;
+    // std::cout << "Checking all_complete: inflight shuffles = "
+    //           << this->inflight_shuffles.size()
+    //           << ", tables to shuffle = " << this->tables_to_shuffle.size()
+    //           << ", global completion = " << this->global_completion
+    //           << std::endl;
     return this->inflight_shuffles.empty() && this->tables_to_shuffle.empty() &&
            global_completion;
 }
