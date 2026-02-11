@@ -8,6 +8,7 @@ from copy import deepcopy
 from decimal import Decimal
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 import snowflake.connector
 
@@ -2112,12 +2113,12 @@ def test_describe_view_on_table(
             ],
             "KIND": ["COLUMN"] * 16,
             "NULL?": ["N"] * 16,
-            "DEFAULT": [None] * 16,
+            "DEFAULT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "PRIMARY_KEY": ["N"] * 16,
             "UNIQUE_KEY": ["N"] * 16,
-            "CHECK": [None] * 16,
-            "EXPRESSION": [None] * 16,
-            "COMMENT": [None] * 16,
+            "CHECK": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "EXPRESSION": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "COMMENT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "POLICY NAME": [None] * 16,
             "PRIVACY DOMAIN": [None] * 16,
         }
