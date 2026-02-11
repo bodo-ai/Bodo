@@ -35,7 +35,7 @@ int64_t get_parquet_chunk_size() {
                                 : 256e6;  // Default to 256 MiB
 }
 
-extern const bool G_USE_ASYNC = false;
+extern const bool G_USE_ASYNC = true;
 
 #ifdef USE_CUDF
 
@@ -47,7 +47,6 @@ std::shared_ptr<cudf::table> make_empty_like(
     // slice produces a vector<table_view>
     auto sliced = cudf::slice(tv, {0, 0}, se->stream);
     cudf::table_view empty_view = sliced[0];
-    se->event.record(se->stream);
 
     // materialize into a real cudf::table
     return std::make_shared<cudf::table>(empty_view);
@@ -78,6 +77,7 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
         if (n <= out_batch_size) {
             rows_accum += n;
             gpu_tables.push_back(*leftover_data);
+            leftover_data.reset();
         } else {
             std::shared_ptr<StreamAndEvent> &leftover_se =
                 leftover_data->stream_event;
@@ -123,7 +123,7 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
                 batch_se);
             rows_accum = out_batch_size;
         }
-        batches.erase(batches.begin());
+        batches.pop_front();
     }
     collected_rows -= rows_accum;
 
@@ -146,7 +146,6 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
     }
     std::unique_ptr<cudf::table> batch =
         cudf::concatenate(table_views, se->stream);
-    se->event.record(se->stream);
     return GPU_DATA(std::move(batch), dummy_gpu_data->schema, se);
 }
 
@@ -281,7 +280,6 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
     // the copy.
     std::unique_ptr<cudf::table> result =
         cudf::from_arrow_host(&arrow_schema, &device_array, se->stream);
-    se->event.record(se->stream);
 
     // Clean up the C structs (Arrow requires manual release if not imported,
     // but Export gives us ownership, so we must release the release callbacks)

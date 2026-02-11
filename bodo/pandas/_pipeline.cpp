@@ -210,9 +210,11 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch = GPU_DATA(
-                                make_empty_like(x.table, x.stream_event),
-                                x.schema, x.stream_event);
+                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            x.stream_event->event.wait(empty_se->stream);
+                            batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                             x.schema, empty_se);
+                            empty_se->event.record(empty_se->stream);
 #endif
                         }
                     },
@@ -280,9 +282,11 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch = GPU_DATA(
-                                make_empty_like(x.table, x.stream_event),
-                                x.schema, x.stream_event);
+                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            x.stream_event->event.wait(empty_se->stream);
+                            batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                             x.schema, empty_se);
+                            empty_se->event.record(empty_se->stream);
 #endif
                         }
                     },
@@ -348,9 +352,11 @@ uint64_t Pipeline::Execute() {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
 #ifdef USE_CUDF
-                        batch =
-                            GPU_DATA(make_empty_like(x.table, x.stream_event),
-                                     x.schema, x.stream_event);
+                        auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                        x.stream_event->event.wait(empty_se->stream);
+                        batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                         x.schema, empty_se);
+                        empty_se->event.record(empty_se->stream);
 #endif
                     }
                 },

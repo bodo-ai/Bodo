@@ -162,7 +162,7 @@ class RankDataExchange {
 };
 
 struct GPUBatchGenerator {
-    std::vector<GPU_DATA> batches;
+    std::deque<GPU_DATA> batches;
     std::unique_ptr<GPU_DATA> leftover_data;
     std::shared_ptr<GPU_DATA> dummy_gpu_data;
     size_t out_batch_size;

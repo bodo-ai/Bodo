@@ -3,6 +3,7 @@
 #include <mpi.h>
 #include <mpi_proto.h>
 #include <cudf/concatenate.hpp>
+#include <numeric>
 #include <sstream>
 #include "../../pandas/physical/operator.h"
 #include "../libs/_table_builder_utils.h"
@@ -110,13 +111,31 @@ static bodo::tests::suite tests([] {
                 auto last_batch = gpu_batch_generator.next(last_se, true);
                 gpu_datas.push_back(last_batch);
 
+                // Append another batch to make sure that leftover data is
+                // handled correctly.
+                auto big_se2 = make_stream_and_event(use_async);
+                auto big_gpu_data2 = convertTableToGPU(big_table, big_se);
+                gpu_batch_generator.append_batch(big_gpu_data2);
+                auto next_se = make_stream_and_event(use_async);
+                auto next_batch = gpu_batch_generator.next(next_se, false);
+                gpu_datas.push_back(next_batch);
+
                 std::shared_ptr<table_info> collected_table =
                     combine_output_batches(gpu_datas, use_async);
 
                 std::stringstream ss_result;
                 DEBUG_PrintTable(ss_result, collected_table);
+
+                auto last_batch_expected_data = std::vector<int>(8);
+                std::iota(last_batch_expected_data.begin(),
+                          last_batch_expected_data.end(), 0);
+                auto expected_last_batch_table = bodo::tests::cppToBodo(
+                    {"A"}, {true}, {}, last_batch_expected_data);
+
+                auto expected_table =
+                    concat_tables({big_table, expected_last_batch_table});
                 std::stringstream ss_expected;
-                DEBUG_PrintTable(ss_expected, big_table);
+                DEBUG_PrintTable(ss_expected, expected_table);
                 bodo::tests::check(ss_result.str() == ss_expected.str());
             }
         }
