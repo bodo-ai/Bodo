@@ -457,8 +457,13 @@ bool GpuShuffleManager::all_complete() {
     //           << ", tables to shuffle = " << this->tables_to_shuffle.size()
     //           << ", global completion = " << this->global_completion
     //           << std::endl;
-    return this->inflight_shuffles.empty() && this->tables_to_shuffle.empty() &&
-           global_completion;
+    bool all_complete = this->inflight_shuffles.empty() &&
+                        this->tables_to_shuffle.empty() && global_completion;
+    if (all_complete) {
+        std::cout << "All shuffles complete and global barrier reached"
+                  << std::endl;
+    }
+    return all_complete;
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
