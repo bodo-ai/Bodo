@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
@@ -115,7 +116,7 @@ def between_clause(request):
                     b"zebra ",
                     b"\t",
                 ],
-                None,
+                pd.ArrowDtype(pa.large_binary()),
             ),
             id="binary",
         ),
@@ -204,7 +205,6 @@ def comparison_query_args(request):
 def test_comparison_operators_within_table(
     comparison_df,
     comparison_query_args,
-    spark_info,
     memory_leak_check,
 ):
     cmp_op, use_case = comparison_query_args
@@ -215,15 +215,12 @@ def test_comparison_operators_within_table(
                                 ELSE 'F' END FROM table1"
     else:
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
-    is_binary = isinstance(comparison_df["TABLE1"]["A"].iloc[-1], bytes)
-    convert_columns_bytearray = ["A", "B"] if is_binary else []
     check_query(
         query,
         comparison_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )
 
