@@ -1244,6 +1244,7 @@ def is_valid_tz_aware_datetime_arg(arg):
     return (isinstance(arg, bodo.types.PandasTimestampType) and arg.tz is not None) or (
         bodo.utils.utils.is_array_typ(arg, True)
         and isinstance(arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+        and arg.dtype.tz is not None
     )
 
 
