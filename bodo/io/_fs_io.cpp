@@ -308,22 +308,22 @@ void create_dir_posix(int myrank, std::string &dirname, std::string &path_name,
                       bool recreate_if_present) {
     // create output directory
     int error = 0;
-    if (std::filesystem::exists(dirname)) {
-        if (recreate_if_present) {
-            std::filesystem::remove_all(dirname);
-            CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
-                      "create_dir_posix: MPI error on MPI_Barrier:");
-            std::filesystem::create_directories(dirname);
-        } else {
+    if (recreate_if_present) {
+        std::filesystem::remove_all(dirname);
+        CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+                  "create_dir_posix: MPI error on MPI_Barrier:");
+        std::filesystem::create_directories(dirname);
+    } else {
+        if (std::filesystem::exists(dirname)) {
             if (!std::filesystem::is_directory(dirname)) {
                 error = 1;
             }
+        } else {
+            // for the parallel case, 'dirname' is the directory where the
+            // different parts of the distributed table are stored (each as
+            // a file)
+            std::filesystem::create_directories(dirname);
         }
-    } else {
-        // for the parallel case, 'dirname' is the directory where the
-        // different parts of the distributed table are stored (each as
-        // a file)
-        std::filesystem::create_directories(dirname);
     }
     CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
                             MPI_COMM_WORLD),
