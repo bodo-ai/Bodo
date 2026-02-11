@@ -124,6 +124,14 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         return {};
     }
 
+    // If complete has been signaled and there are no inflight shuffles or
+    // tables to shuffle, we can start the global completion barrier
+    if (this->complete_signaled && global_completion_req == MPI_REQUEST_NULL &&
+        inflight_shuffles.empty() && tables_to_shuffle.empty()) {
+        CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
+                  "GpuShuffleManager::complete: MPI_Ibarrier failed:");
+    }
+
     if (this->shuffle_coordination.req == MPI_REQUEST_NULL) {
         // Coordinate when to shuffle by doing an allreduce, ranks with data
         // send 1, ranks without data send 0, this way all ranks will know when
@@ -438,13 +446,7 @@ void GpuShuffle::progress_sending_data() {
     }
 }
 
-void GpuShuffleManager::complete() {
-    if (global_completion_req == MPI_REQUEST_NULL) {
-        std::cout << "Initiating global completion barrier" << std::endl;
-        CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
-                  "GpuShuffleManager::complete: MPI_Ibarrier failed:");
-    }
-}
+void GpuShuffleManager::complete() { this->complete_signaled = true; }
 
 bool GpuShuffleManager::all_complete() {
     if (global_completion_req != MPI_REQUEST_NULL) {

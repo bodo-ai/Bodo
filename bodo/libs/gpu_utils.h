@@ -208,6 +208,7 @@ class GpuShuffleManager {
     // IBarrier to know when all ranks are done sending data
     MPI_Request global_completion_req = MPI_REQUEST_NULL;
     int global_completion = false;
+    bool complete_signaled = false;
 
     std::vector<
         std::pair<std::shared_ptr<cudf::table>, std::vector<cudf::size_type>>>
