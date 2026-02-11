@@ -101,7 +101,7 @@ void GpuShuffleManager::do_shuffle() {
         std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
             partition_start_rows.begin() + 1, partition_start_rows.end());
         // Pack the tables for sending
-        std::vector<cudf::packed_table> packed_tables =
+        packed_tables =
             cudf::contiguous_split(partitioned_table->view(), splits, stream);
     } else {
         // If we have no data to shuffle, we still need to create empty packed
