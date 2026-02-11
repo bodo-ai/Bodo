@@ -36,8 +36,9 @@ static bodo::tests::suite tests([] {
         // Ensure we have a GPU context for this rank
         // Note: In a real test runner, this might be handled by a fixture
         rmm::cuda_device_id device_id = get_gpu_id();
+        std::cout << "Rank GPU ID: " << device_id.value() << std::endl;
         if (device_id.value() > 0) {
-            rmm::cuda_set_device_raii set_device(device_id);
+            cudaSetDevice(device_id.value());
         }
 
         try {
@@ -110,7 +111,7 @@ static bodo::tests::suite tests([] {
 
         rmm::cuda_device_id device_id = get_gpu_id();
         if (device_id.value() > 0) {
-            rmm::cuda_set_device_raii set_device(device_id);
+            cudaSetDevice(device_id.value());
         }
 
         // Setup: Create 10 rows per rank with a gpu assigned
@@ -180,7 +181,7 @@ static bodo::tests::suite tests([] {
 
         rmm::cuda_device_id device_id = get_gpu_id();
         if (device_id.value() > 0) {
-            rmm::cuda_set_device_raii set_device(device_id);
+            cudaSetDevice(device_id.value());
         }
         if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());

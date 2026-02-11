@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <rmm/cuda_device.hpp>
 #include <utility>
 
 #include <arrow/api.h>
@@ -14,6 +15,7 @@
 #include "_bodo_scan_function.h"
 #include "_bodo_write_function.h"
 #include "_executor.h"
+#include "cuda_runtime_api.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/enums/cte_materialize.hpp"
 #include "duckdb/common/types.hpp"
@@ -1232,15 +1234,25 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
-    rmm::cuda_set_device_raii cuda_device_raii =
-        rmm::cuda_set_device_raii(get_gpu_id());
-    std::cout << "Using GPU device " << rmm::get_current_cuda_device().value()
-              << std::endl;
+    int prev_device = -1;
+    rmm::cuda_device_id gpu_id = get_gpu_id();
+    if (gpu_id.value() != -1) {
+        cudaGetDevice(&prev_device);
+        cudaSetDevice(gpu_id.value());
+    }
 #endif
+
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::variant<std::shared_ptr<table_info>, PyObject *> output =
         executor.ExecutePipelines();
+
+#ifdef USE_CUDF
+    // Reset to previous cuda device
+    if (gpu_id.value() != -1) {
+        cudaSetDevice(prev_device);
+    }
+#endif
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
