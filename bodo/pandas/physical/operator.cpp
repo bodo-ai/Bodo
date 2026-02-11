@@ -2,6 +2,7 @@
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
 #include <memory>
+#include <rmm/cuda_stream_view.hpp>
 #include <string>
 
 #ifdef USE_CUDF
@@ -78,8 +79,9 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
             rows_accum += n;
             gpu_tables.push_back(*leftover_data);
         } else {
-            auto &leftover_se = leftover_data->stream_event;
-            auto &leftover_stream = leftover_se->stream;
+            std::shared_ptr<StreamAndEvent> &leftover_se =
+                leftover_data->stream_event;
+            rmm::cuda_stream_view &leftover_stream = leftover_se->stream;
             cudf::table_view tv = leftover_data->table->view();
             auto batch =
                 cudf::slice(tv, {0, (int)out_batch_size}, leftover_stream)[0];
@@ -99,7 +101,7 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
     while (!batches.empty() && (rows_accum < out_batch_size)) {
         GPU_DATA &batch = batches.front();
         cudf::table_view tv = batch.table->view();
-        auto &batch_se = batch.stream_event;
+        std::shared_ptr<StreamAndEvent> &batch_se = batch.stream_event;
         std::size_t n = tv.num_rows();
 
         if (rows_accum + n <= out_batch_size) {
@@ -142,7 +144,8 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
         tptr.stream_event->event.wait(se->stream);
         table_views.emplace_back(tptr.table->view());
     }
-    auto batch = cudf::concatenate(table_views, se->stream);
+    std::unique_ptr<cudf::table> batch =
+        cudf::concatenate(table_views, se->stream);
     se->event.record(se->stream);
     return GPU_DATA(std::move(batch), dummy_gpu_data->schema, se);
 }

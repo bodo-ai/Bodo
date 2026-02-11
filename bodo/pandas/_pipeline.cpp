@@ -301,21 +301,6 @@ uint64_t Pipeline::Execute() {
     std::variant<std::shared_ptr<table_info>, GPU_DATA> batch;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    if (rank == 0) {
-        std::cout << "Pipeline Executing: "
-                  << std::visit([](auto &vop) { return vop->ToString(); },
-                                source)
-                  << "  ->  ";
-        for (auto &op : between_ops) {
-            std::cout << std::visit([](auto &vop) { return vop->ToString(); },
-                                    op)
-                      << "  ->  ";
-        }
-        std::cout << std::visit([](auto &vop) { return vop->ToString(); }, sink)
-                  << std::endl;
-    }
-
     while (!finished) {
         batches_processed++;
 

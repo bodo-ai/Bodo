@@ -1,6 +1,7 @@
 #include <arrow/util/bit_util.h>
 #include <fmt/core.h>
 #include <mpi.h>
+#include <mpi_proto.h>
 #include <cudf/concatenate.hpp>
 #include <sstream>
 #include "../../pandas/physical/operator.h"
@@ -11,9 +12,12 @@
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_gpu_batch_gen", [] {
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        if (myrank != 0) {
+        int npes;
+        MPI_Comm_size(MPI_COMM_WORLD, &npes);
+        if (npes != 1) {
+            std::cout << "Skipping test_gpu_batch_gen since it is only "
+                         "designed to run with 1 process."
+                      << std::endl;
             return;
         }
 
@@ -46,7 +50,7 @@ static bodo::tests::suite tests([] {
                 GPU_DATA(std::move(concatenated), arrow_schema, se_concat));
         };
 
-        std::vector<bool> use_async_options = {true};  // {false, true};
+        std::vector<bool> use_async_options = {false, true};
         for (bool use_async : use_async_options) {
             // Calling next when generator is empty:
             {
@@ -83,28 +87,38 @@ static bodo::tests::suite tests([] {
                 DEBUG_PrintTable(ss_expected, expected_table);
                 bodo::tests::check(ss_result.str() == ss_expected.str());
             }
+
+            // Append a large batch:
+            {
+                std::vector<GPU_DATA> gpu_datas;
+                std::vector<int> big_vec(100);
+                std::iota(big_vec.begin(), big_vec.end(), 0);
+                auto big_table =
+                    bodo::tests::cppToBodo({"A"}, {true}, {}, big_vec);
+                auto big_se = make_stream_and_event(use_async);
+                auto big_gpu_data = convertTableToGPU(big_table, big_se);
+
+                auto gpu_batch_generator = make_gpu_generator(use_async);
+                gpu_batch_generator.append_batch(big_gpu_data);
+
+                for (int i = 0; i < 12; i++) {
+                    auto batch_se = make_stream_and_event(use_async);
+                    auto batch = gpu_batch_generator.next(batch_se, false);
+                    gpu_datas.push_back(batch);
+                }
+                auto last_se = make_stream_and_event(use_async);
+                auto last_batch = gpu_batch_generator.next(last_se, true);
+                gpu_datas.push_back(last_batch);
+
+                std::shared_ptr<table_info> collected_table =
+                    combine_output_batches(gpu_datas, use_async);
+
+                std::stringstream ss_result;
+                DEBUG_PrintTable(ss_result, collected_table);
+                std::stringstream ss_expected;
+                DEBUG_PrintTable(ss_expected, big_table);
+                bodo::tests::check(ss_result.str() == ss_expected.str());
+            }
         }
-
-        // Append a large batch:
-        // {
-        //     std::vector<GPU_DATA> gpu_datas;
-        //     std::vector<int> big_vec(100, 1);
-        //     auto big_table = bodo::tests::cppToBodo(
-        //                 {"A"}, {false}, {}, big_vec);
-
-        //     auto big_se = make_stream_and_event(use_async);
-        //     auto big_gpu_data = convertTableToGPU(big_table, big_se);
-        //     GPUBatchGenerator gpu_batch_generator(empty_data, 8);
-        //     gpu_batch_generator.append_batch(big_gpu_data);
-
-        //     for (int i = 0; i < 12; i++) {
-        //         auto batch_se = make_stream_and_event(use_async);
-        //         auto batch = gpu_batch_generator.next(batch_se, false);
-        //         gpu_datas.push_back(batch);
-        //     }
-        //     auto last_se = make_stream_and_event(use_async);
-        //     auto last_batch = gpu_batch_generator.next(last_se, false);
-        //     gpu_datas.push_back(last_batch);
-        // }
     });
 });
