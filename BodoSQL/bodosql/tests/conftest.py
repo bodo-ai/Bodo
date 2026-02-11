@@ -551,24 +551,33 @@ def bodosql_date_types(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        np.timedelta64(100, "h"),
-                        np.timedelta64(9, "h"),
-                        np.timedelta64(8, "W"),
-                    ]
-                    * 4,
-                    "B": [
-                        np.timedelta64("nat"),
-                        np.timedelta64(6, "h"),
-                        np.timedelta64(5, "m"),
-                    ]
-                    * 4,
-                    "C": [
-                        np.timedelta64(4, "s"),
-                        np.timedelta64(3, "ms"),
-                        np.timedelta64(2000000, "us"),
-                    ]
-                    * 4,
+                    "A": pd.Series(
+                        [
+                            np.timedelta64(100, "h"),
+                            np.timedelta64(9, "h"),
+                            np.timedelta64(8, "W"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
+                    "B": pd.Series(
+                        [
+                            np.timedelta64("nat"),
+                            np.timedelta64(6, "h"),
+                            np.timedelta64(5, "m"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
+                    "C": pd.Series(
+                        [
+                            np.timedelta64(4, "s"),
+                            np.timedelta64(3, "ms"),
+                            np.timedelta64(2000000, "us"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
                 }
             )
         },
