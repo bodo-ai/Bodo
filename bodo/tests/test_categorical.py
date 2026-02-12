@@ -419,7 +419,7 @@ def test_replace_list(memory_leak_check):
 @pytest.mark.slow
 def test_replace_const_string():
     def test_impl(A):
-        return pd.Series(A).replace("CC", "ZZZZ")
+        return pd.Series(A).replace("CC", "D")
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))
