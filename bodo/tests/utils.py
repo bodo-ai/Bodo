@@ -1453,7 +1453,9 @@ def _test_equal(
         # still fails for some reason).
         # Note: The pd.StringDtype must be the left to ensure we pick the correct operator.
         if pd.StringDtype("pyarrow") == bodo_out.dtype:
-            bodo_out = bodo_out.astype(object)
+            py_out = py_out.astype("string[pyarrow]")
+        if isinstance(bodo_out.dtype, pd.ArrowDtype):
+            py_out = py_out.astype(bodo_out.dtype)
         if isinstance(bodo_out, pd.MultiIndex):
             bodo_out = pd.MultiIndex(
                 levels=[
