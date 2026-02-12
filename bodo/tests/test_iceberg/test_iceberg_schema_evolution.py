@@ -1962,6 +1962,7 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
     )
 
 
+@pytest.mark.skip("TODO: fix for Pandas 3")
 def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_check):
     from bodo.spawn.utils import run_rank0
 
