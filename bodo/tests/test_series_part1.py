@@ -2057,6 +2057,7 @@ def test_series_setitem_slice(series_val, memory_leak_check):
     check_func(test_impl, (series_val, val), dist_test=False, copy_input=True)
 
 
+@pytest.mark.skip("Pandas 3 doesn't support seitem properly")
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_check):
