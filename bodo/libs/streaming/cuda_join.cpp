@@ -96,6 +96,9 @@ void CudaHashJoin::build_hash_table(
 }
 
 void CudaHashJoin::FinalizeBuild() {
+    std::cout << "Finalizing GPU Join build phase by building hash table and "
+                 "collecting stats."
+              << std::endl;
     this->build_hash_table(this->_build_chunks);
 
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
