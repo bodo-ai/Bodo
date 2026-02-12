@@ -7,6 +7,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -777,6 +778,8 @@ def test_pivot_na_index(df, memory_leak_check):
 
     # sort_output becuase row order isn't maintained by pivot.
     # reorder_columns because the column order is consistent but not defined.
+    out = impl(df).astype(pd.ArrowDtype(pa.int64()))
+    out.index = out.index.astype(pd.ArrowDtype(pa.int64()))
     check_func(
         impl,
         (df,),
@@ -786,7 +789,7 @@ def test_pivot_na_index(df, memory_leak_check):
         reorder_columns=True,
         # Use py_output because Bodo keeps the values an int64, but Pandas
         # uses a float
-        py_output=impl(df).astype("Int64"),
+        py_output=out,
     )
 
 
