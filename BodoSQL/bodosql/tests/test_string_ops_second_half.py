@@ -1,6 +1,7 @@
 import uuid
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -213,6 +214,9 @@ def test_concat_ws_scalars_binary(bodosql_binary_types, spark_info, memory_leak_
     df = bodosql_binary_types["TABLE1"]
     # If "A IS NOT NULL" is false, then CONCAT_WS(A, B, C) will also be null, so we can just use CONCAT_WS(TO_BINARY('2c'), C, A)
     answer = df["C"] + b"2c" + df["A"]
+    answer = answer.where(answer.notnull(), None).astype(
+        pd.ArrowDtype(pa.large_binary())
+    )
     check_query(
         query,
         bodosql_binary_types,
