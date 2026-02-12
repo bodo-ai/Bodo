@@ -95,7 +95,8 @@ struct CudaHashJoin {
 
     // Public so PhysicalGPUJoin can access to determine if there are pending
     // shuffles
-    GpuShuffleManager gpu_shuffle_manager;
+    GpuShuffleManager build_shuffle_manager;
+    GpuShuffleManager probe_shuffle_manager;
 };
 #else
 struct CudaHashJoin {};
