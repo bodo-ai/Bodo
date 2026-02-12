@@ -584,7 +584,10 @@ def test_index_slice_name(index, memory_leak_check):
             pd.Index([b"A", b"L", b"P", b"H", b"A"]),
         ),
         (pd.Index([1, 5, 4, 2, 1, 5], name="bar"), pd.Index(list("aeiouy"))),
-        (pd.date_range("2018-01-01", "2018-12-01", periods=6), pd.RangeIndex(0, 6, 1)),
+        (
+            pd.date_range("2018-01-01", "2018-12-01", periods=6, unit="ns"),
+            pd.RangeIndex(0, 6, 1),
+        ),
         (
             pd.TimedeltaIndex(["1 days", "7 days", "3 days", "4 hours", "2 days"]),
             pd.Index(list("98765")),
