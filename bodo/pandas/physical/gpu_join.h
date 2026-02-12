@@ -234,6 +234,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // can be finished
             cuda_join->gpu_shuffle_manager.complete();
         }
+        std::cout << "ProbeProcessBatch: produced "
+                  << output_gpu_data.table->num_rows()
+                  << " output rows, local_finished = " << local_finished
+                  << ", shuffle all_complete = "
+                  << cuda_join->gpu_shuffle_manager.all_complete() << std::endl;
 
         return {
             output_gpu_data,
