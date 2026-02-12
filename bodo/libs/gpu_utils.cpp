@@ -155,10 +155,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         // a shuffle is needed and can call progress to start it
         this->shuffle_coordination.has_data =
             this->tables_to_shuffle.empty() ? 0 : 1;
-        if (this->shuffle_coordination.has_data) {
-            std::cout << "Rank " << this->rank << " has data to shuffle"
-                      << std::endl;
-        }
         CHECK_MPI(
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,
@@ -370,7 +366,7 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
-        std::cout << "GpuShuffle: Started receiving data" << std::endl;
+        // std::cout << "GpuShuffle: Started receiving data" << std::endl;
     }
 }
 
@@ -411,7 +407,7 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_reqs->clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
-        std::cout << "GpuShuffle: Completed receiving data" << std::endl;
+        // std::cout << "GpuShuffle: Completed receiving data" << std::endl;
 
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
@@ -442,7 +438,7 @@ void GpuShuffle::progress_sending_sizes() {
         this->gpu_sizes_send_reqs->clear();
         // Move to next state
         this->send_state = GpuShuffleState::DATA_INFLIGHT;
-        std::cout << "GpuShuffle: Started sending data" << std::endl;
+        // std::cout << "GpuShuffle: Started sending data" << std::endl;
     }
 }
 

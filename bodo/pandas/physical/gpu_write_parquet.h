@@ -202,9 +202,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             // this one.
             prev_batch_se->event.wait(se->stream);
         }
-        std::cout << "PhysicalGPUWriteParquet: Consuming batch with "
-                  << (input_batch.table ? input_batch.table->num_rows() : 0)
-                  << " rows" << std::endl;
         prev_batch_se = se;
 
         if (finished) {
