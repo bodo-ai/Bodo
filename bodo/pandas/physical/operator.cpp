@@ -79,21 +79,17 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
             gpu_tables.push_back(*leftover_data);
             leftover_data.reset();
         } else {
-            std::shared_ptr<StreamAndEvent> &leftover_se =
-                leftover_data->stream_event;
-            rmm::cuda_stream_view &leftover_stream = leftover_se->stream;
             cudf::table_view tv = leftover_data->table->view();
+            leftover_data->stream_event->event.wait(se->stream);
             auto batch =
-                cudf::slice(tv, {0, (int)out_batch_size}, leftover_stream)[0];
-            leftover_se->event.record(leftover_stream);
-
-            auto remain = cudf::slice(tv, {(int)out_batch_size, (int)n},
-                                      leftover_stream)[0];
+                cudf::slice(tv, {0, (int)out_batch_size}, se->stream)[0];
+            auto remain =
+                cudf::slice(tv, {(int)out_batch_size, (int)n}, se->stream)[0];
             gpu_tables.emplace_back(std::make_shared<cudf::table>(batch),
-                                    leftover_data->schema, leftover_se);
+                                    leftover_data->schema, se);
             leftover_data = std::make_unique<GPU_DATA>(
                 std::make_shared<cudf::table>(remain), leftover_data->schema,
-                leftover_se);
+                se);
             rows_accum = out_batch_size;
         }
     }
@@ -111,8 +107,6 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
             auto batch_part =
                 cudf::slice(tv, {0, (int)(out_batch_size - rows_accum)},
                             batch_se->stream)[0];
-            batch_se->event.record(batch_se->stream);
-
             auto remain_part =
                 cudf::slice(tv, {(int)(out_batch_size - rows_accum), (int)n},
                             batch_se->stream)[0];
