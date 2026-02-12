@@ -482,6 +482,9 @@ bool GpuShuffleManager::all_complete() {
             this->global_completion_req = MPI_REQUEST_NULL;
         }
     }
+    std::cout << "Rank " << this->rank
+              << " all_complete check: global_completion = "
+              << this->global_completion << std::endl;
     return this->global_completion;
 }
 
