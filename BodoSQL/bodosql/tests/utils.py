@@ -1408,8 +1408,17 @@ def convert_spark_string(df, columns):
     """
     Converts Spark String columns to bytes to match BodoSQL.
     """
+
+    def convert(x):
+        if isinstance(x, str):
+            return x.encode("utf-8")
+        elif isinstance(x, float) and np.isnan(x):
+            return None
+        else:
+            return x
+
     df[columns] = df[columns].apply(
-        lambda x: [y.encode("utf-8") if isinstance(y, str) else y for y in x],
+        lambda x: [convert(y) for y in x],
         axis=1,
         result_type="expand",
     )
