@@ -307,35 +307,23 @@ void open_file_appendstream(
 void create_dir_posix(int myrank, std::string &dirname, std::string &path_name,
                       bool recreate_if_present) {
     // create output directory
-    int error = 0;
-    if (recreate_if_present) {
-        std::filesystem::remove_all(dirname);
-        CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
-                  "create_dir_posix: MPI error on MPI_Barrier:");
-        std::filesystem::create_directories(dirname);
-    } else {
+    if (myrank == 0) {
         if (std::filesystem::exists(dirname)) {
-            if (!std::filesystem::is_directory(dirname)) {
-                error = 1;
+            if (recreate_if_present) {
+                std::filesystem::remove_all(dirname);
+                std::filesystem::create_directories(dirname);
+            } else if (!std::filesystem::is_directory(dirname)) {
+                std::cerr << "Bodo parquet write ERROR: a process reports "
+                             "that path "
+                          << path_name << " exists and is not a directory"
+                          << std::endl;
             }
         } else {
-            // for the parallel case, 'dirname' is the directory where the
-            // different parts of the distributed table are stored (each as
-            // a file)
             std::filesystem::create_directories(dirname);
         }
     }
-    CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
-                            MPI_COMM_WORLD),
-              "create_dir_posix: MPI error on MPI_Allreduce:");
-    if (error) {
-        if (myrank == 0) {
-            std::cerr << "Bodo parquet write ERROR: a process reports "
-                         "that path "
-                      << path_name << " exists and is not a directory"
-                      << std::endl;
-        }
-    }
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "create_dir_posix: MPI error on MPI_Barrier:");
 }
 
 void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
