@@ -297,12 +297,12 @@ def test_distributed_range_index(memory_leak_check):
         np.ones(3, dtype=np.int64),  # Int64Index: array of int64
         np.arange(3),  # Int64Ind: array input
         pd.date_range(
-            start="2018-04-24", end="2018-04-27", periods=3
+            start="2018-04-24", end="2018-04-27", periods=3, unit="ns"
         ),  # datetime range
         pd.timedelta_range(start="1D", end="3D", unit="ns"),  # deltatime range
-        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3),
+        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3, unit="ns"),
         pd.date_range(
-            start="2018-04-10", end="2018-04-27", periods=3
+            start="2018-04-10", end="2018-04-27", periods=3, unit="ns"
         ).to_series(),  # deltatime series
         pd.Series(["hello world", "lsskasbdf", ""] * 3),
         pytest.param(

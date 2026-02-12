@@ -872,7 +872,11 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             return pd.RangeIndex(data, name=name)
 
     # Datetime index:
-    elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
+    elif (
+        isinstance(data, DatetimeIndexType)
+        or elem_type == types.NPDatetime("ns")
+        or isinstance(elem_type, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+    ):
 
         def impl(
             data=None, dtype=None, copy=False, name=None, tupleize_cols=True
@@ -880,7 +884,11 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             return pd.DatetimeIndex(data, name=name)
 
     # Timedelta index:
-    elif isinstance(data, TimedeltaIndexType) or elem_type == types.NPTimedelta("ns"):
+    elif (
+        isinstance(data, TimedeltaIndexType)
+        or elem_type == types.NPTimedelta("ns")
+        or elem_type == bodo.types.pd_timedelta_type
+    ):
 
         def impl(
             data=None, dtype=None, copy=False, name=None, tupleize_cols=True
