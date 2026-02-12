@@ -169,15 +169,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         CHECK_MPI(MPI_Test(&this->shuffle_coordination.req,
                            &coordination_finished, MPI_STATUS_IGNORE),
                   "GpuShuffleManager::progress: MPI_Test failed:");
-        // std::cout << "Shuffle coordination test: finished = " <<
-        // coordination_finished
-        //           << ", has_data = " << this->shuffle_coordination.has_data
-        //           << std::endl;
-        if (coordination_finished) {
-            std::cout << "Rank " << this->rank
-                      << " shuffle coordination finished, has_data = "
-                      << this->shuffle_coordination.has_data << std::endl;
-        }
         if (coordination_finished) {
             if (this->shuffle_coordination.has_data) {
                 // If a shuffle is needed, start it
@@ -417,9 +408,6 @@ GpuShuffle::progress_waiting_for_data() {
 
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
-        std::cout << "GpuShuffle: Received table with "
-                  << shuffle_res->num_rows() << " rows and "
-                  << shuffle_res->num_columns() << " columns" << std::endl;
 
         return {std::move(shuffle_res)};
     }
@@ -481,6 +469,8 @@ bool GpuShuffleManager::all_complete() {
                            MPI_STATUS_IGNORE),
                   "GpuShuffleManager::all_complete: MPI_Test failed:");
         if (global_completion) {
+            std::cout << "Rank " << this->rank
+                      << " global completion barrier finished" << std::endl;
             // If global completion is reached, we can cancel any inflight
             // shuffle coordination since we know all data has been sent
             if (this->shuffle_coordination.req != MPI_REQUEST_NULL) {
