@@ -104,11 +104,9 @@ void CudaHashJoin::FinalizeBuild() {
         this->build_hash_table(this->_build_chunks);
     }
 
-    std::cout << ": Completed building local hash table, starting to collect "
-                 "global stats."
-              << std::endl;
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
         this->build_table_schema->ToArrowSchema();
+    std::cout << "Created arrow schema" << std::endl;
     int mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     std::cout << "Rank " << mpi_rank
