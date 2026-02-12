@@ -1,5 +1,6 @@
 #include "gpu_utils.h"
 #include <mpi_proto.h>
+#include "vendored/simd-block-fixed-fpp.h"
 
 #ifdef USE_CUDF
 #include <thrust/execution_policy.h>
@@ -480,8 +481,9 @@ bool GpuShuffleManager::all_complete() {
     //           << ", tables to shuffle = " << this->tables_to_shuffle.size()
     //           << ", global completion = " << this->global_completion
     //           << std::endl;
-    bool all_complete = this->inflight_shuffles.empty() &&
-                        this->tables_to_shuffle.empty() && global_completion;
+    bool all_complete =
+        this->inflight_shuffles.empty() && this->tables_to_shuffle.empty() &&
+        this->shuffle_coordination.req == MPI_REQUEST_NULL && global_completion;
     if (all_complete) {
         std::cout << "All shuffles complete and global barrier reached"
                   << std::endl;
