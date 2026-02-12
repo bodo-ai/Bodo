@@ -100,6 +100,8 @@ void CudaHashJoin::FinalizeBuild() {
 
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
         this->build_table_schema->ToArrowSchema();
+    int mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     for (const auto& col_idx : this->build_key_indices) {
         auto [min, max] =
             cudf::minmax(this->_build_table->get_column(col_idx).view());
@@ -123,6 +125,8 @@ void CudaHashJoin::FinalizeBuild() {
             SyncAndReduceGlobalStats(local_stats);
         this->min_max_stats.push_back(global_stats);
     }
+    std::cout << "Rank " << mpi_rank << ": Completed building hash table with "
+              << _build_table->num_rows() << " rows" << std::endl;
 
     // Clear build chunks to free memory
     this->_build_chunks.clear();
