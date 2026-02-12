@@ -141,7 +141,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     // to be called on all ranks even without GPUs assigned so they know when
     // they can exit the pipeline.
     if (this->complete_signaled && inflight_shuffles.empty() &&
-        tables_to_shuffle.empty()) {
+        tables_to_shuffle.empty() &&
+        global_completion_req == MPI_REQUEST_NULL && !global_completion) {
         std::cout << "Rank " << this->rank
                   << " starting global completion barrier" << std::endl;
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
