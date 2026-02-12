@@ -76,6 +76,7 @@ def test_setitem_int(date_arr_value, memory_leak_check):
     check_func(test_impl, (date_arr_value, val))
 
 
+@pytest.mark.skip("Pandas 3 doesn't fully support setitem")
 @pytest.mark.smoke
 def test_setitem_arr(date_arr_value, memory_leak_check):
     def test_impl(A, idx, val):
