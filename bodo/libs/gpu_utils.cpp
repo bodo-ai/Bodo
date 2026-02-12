@@ -145,7 +145,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
                   "GpuShuffleManager::complete: MPI_Ibarrier failed:");
     }
 
-    if (mpi_comm == MPI_COMM_NULL) {
+    if (mpi_comm == MPI_COMM_NULL || this->global_completion) {
         return {};
     }
 
@@ -165,15 +165,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         CHECK_MPI(MPI_Test(&this->shuffle_coordination.req,
                            &coordination_finished, MPI_STATUS_IGNORE),
                   "GpuShuffleManager::progress: MPI_Test failed:");
-        // std::cout << "Shuffle coordination test: finished = " <<
-        // coordination_finished
-        //           << ", has_data = " << this->shuffle_coordination.has_data
-        //           << std::endl;
-        if (coordination_finished) {
-            std::cout << "Rank " << this->rank
-                      << " shuffle coordination finished, has_data = "
-                      << this->shuffle_coordination.has_data << std::endl;
-        }
         if (coordination_finished && this->shuffle_coordination.has_data) {
             // If a shuffle is needed, start it
             this->do_shuffle();
@@ -366,7 +357,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
-        // std::cout << "GpuShuffle: Started receiving data" << std::endl;
     }
 }
 
@@ -407,13 +397,9 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_reqs->clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
-        // std::cout << "GpuShuffle: Completed receiving data" << std::endl;
 
         std::unique_ptr<cudf::table> shuffle_res =
             cudf::concatenate(table_views);
-        std::cout << "GpuShuffle: Received table with "
-                  << shuffle_res->num_rows() << " rows and "
-                  << shuffle_res->num_columns() << " columns" << std::endl;
 
         return {std::move(shuffle_res)};
     }
@@ -438,7 +424,6 @@ void GpuShuffle::progress_sending_sizes() {
         this->gpu_sizes_send_reqs->clear();
         // Move to next state
         this->send_state = GpuShuffleState::DATA_INFLIGHT;
-        // std::cout << "GpuShuffle: Started sending data" << std::endl;
     }
 }
 
@@ -475,17 +460,8 @@ bool GpuShuffleManager::all_complete() {
                            MPI_STATUS_IGNORE),
                   "GpuShuffleManager::all_complete: MPI_Test failed:");
     }
-    // std::cout << "Checking all_complete: inflight shuffles = "
-    //           << this->inflight_shuffles.size()
-    //           << ", tables to shuffle = " << this->tables_to_shuffle.size()
-    //           << ", global completion = " << this->global_completion
-    //           << std::endl;
     bool all_complete = this->inflight_shuffles.empty() &&
                         this->tables_to_shuffle.empty() && global_completion;
-    if (all_complete) {
-        std::cout << "All shuffles complete and global barrier reached"
-                  << std::endl;
-    }
     return all_complete;
 }
 
