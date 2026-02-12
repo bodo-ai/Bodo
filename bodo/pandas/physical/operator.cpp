@@ -166,6 +166,13 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
     return ProcessBatch(cpu_batch_fragment, exchange_result);
 }
 
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUSource::ProduceBatch() {
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
+    auto gpu_result = ProduceBatchGPU(se);
+    se->event.record(se->stream);
+    return gpu_result;
+}
+
 OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
                                              OperatorResult prev_op_result) {
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
