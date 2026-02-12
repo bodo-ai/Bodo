@@ -678,7 +678,7 @@ def test_index_to_series(args):
         pd.MultiIndex.from_product([[1, 2, 3], ["A", "B"]], names=["x", "y"]),
         pd.MultiIndex.from_arrays(
             [[1, 5, 2, 1, 0], [1, 5, 2, 1, 3], ["A", "A", "B", "A", "B"]],
-            names=[6, 7, 8],
+            names=["A", "B", "C"],
         ),
     ],
 )
