@@ -1928,7 +1928,7 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
         ["2015-8-3", "1990-11-21"],  # TODO: other time formats
         ["2015-8-3", "NaT", "", "1990-11-21"],  # NaT cases
         pd.Series(["2015-8-3", "1990-11-21"]),
-        pd.DatetimeIndex(["2015-8-3", "1990-11-21"]),
+        pd.DatetimeIndex(["2015-8-3", "1990-11-21"]).astype("datetime64[ns]"),
         np.array([datetime.date(2020, 1, 1) + datetime.timedelta(i) for i in range(7)]),
     ],
 )
@@ -1937,7 +1937,8 @@ def test_datetime_index_constructor(data, memory_leak_check):
         return pd.DatetimeIndex(d)
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
+    out = test_impl(data).astype("datetime64[ns]")
+    pd.testing.assert_index_equal(bodo_func(data), out)
 
 
 def test_init_datetime_index_array_analysis(memory_leak_check):
