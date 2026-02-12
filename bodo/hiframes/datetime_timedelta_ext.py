@@ -1216,10 +1216,20 @@ def timedelta_abs(lhs):
 @intrinsic
 def cast_numpy_timedelta_to_int(typingctx, val=None):
     """Cast timedelta64 value to int"""
-    assert val in (types.NPTimedelta("ns"), types.int64)
+    assert val in (types.NPTimedelta("ns"), types.int64, bodo.types.pd_timedelta_type)
 
-    def codegen(context, builder, signature, args):
-        return args[0]
+    if val == bodo.types.pd_timedelta_type:
+
+        def codegen(context, builder, signature, args):
+            time_delta = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return time_delta.value
+
+    else:
+
+        def codegen(context, builder, signature, args):
+            return args[0]
 
     return types.int64(val), codegen
 

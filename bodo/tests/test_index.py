@@ -2031,7 +2031,8 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.TimedeltaIndex(np.arange(10, dtype=np.int64)), marks=pytest.mark.slow
+            pd.TimedeltaIndex(np.arange(10, dtype=np.int64)).astype("timedelta64[ns]"),
+            marks=pytest.mark.slow,
         ),
     ],
 )
