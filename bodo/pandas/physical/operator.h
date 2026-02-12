@@ -387,7 +387,9 @@ class PhysicalGPUSource : public PhysicalOperator {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatch() {
         std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-        return ProduceBatchGPU(se);
+        auto gpu_result = ProduceBatchGPU(se);
+        se->event.record(se->stream);
+        return gpu_result;
     }
 
     virtual std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(

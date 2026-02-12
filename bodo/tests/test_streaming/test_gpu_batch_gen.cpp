@@ -29,6 +29,7 @@ static bodo::tests::suite tests([] {
             auto se_empty = make_stream_and_event(use_async);
             auto empty_data =
                 convertTableToGPU(alloc_table_like(bodo_table), se_empty);
+            se_empty->event.record(se_empty->stream);
             return GPUBatchGenerator(empty_data, 8);
         };
 
@@ -70,6 +71,7 @@ static bodo::tests::suite tests([] {
                     auto gpu_data = convertTableToGPU(bodo_table, se_batch);
                     gpu_batch_generator.append_batch(gpu_data);
                     auto batch = gpu_batch_generator.next(se_batch, false);
+                    se_batch->event.record(se_batch->stream);
                     gpu_datas.push_back(batch);
                 }
                 auto se_last_batch = make_stream_and_event(use_async);
@@ -98,6 +100,7 @@ static bodo::tests::suite tests([] {
                     bodo::tests::cppToBodo({"A"}, {true}, {}, big_vec);
                 auto big_se = make_stream_and_event(use_async);
                 auto big_gpu_data = convertTableToGPU(big_table, big_se);
+                big_se->event.record(big_se->stream);
 
                 auto gpu_batch_generator = make_gpu_generator(use_async);
                 gpu_batch_generator.append_batch(big_gpu_data);
@@ -113,11 +116,10 @@ static bodo::tests::suite tests([] {
 
                 // Append another batch to make sure that leftover data is
                 // handled correctly.
-                auto big_se2 = make_stream_and_event(use_async);
-                auto big_gpu_data2 = convertTableToGPU(big_table, big_se);
-                gpu_batch_generator.append_batch(big_gpu_data2);
-                auto next_se = make_stream_and_event(use_async);
-                auto next_batch = gpu_batch_generator.next(next_se, false);
+                auto other_se = make_stream_and_event(use_async);
+                auto other_gpu_data = convertTableToGPU(big_table, other_se);
+                gpu_batch_generator.append_batch(other_gpu_data);
+                auto next_batch = gpu_batch_generator.next(other_se, false);
                 gpu_datas.push_back(next_batch);
 
                 std::shared_ptr<table_info> collected_table =
@@ -131,7 +133,6 @@ static bodo::tests::suite tests([] {
                           last_batch_expected_data.end(), 0);
                 auto expected_last_batch_table = bodo::tests::cppToBodo(
                     {"A"}, {true}, {}, last_batch_expected_data);
-
                 auto expected_table =
                     concat_tables({big_table, expected_last_batch_table});
                 std::stringstream ss_expected;

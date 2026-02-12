@@ -171,7 +171,9 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     // Wait until previous GPU pipeline processing is done.
     input_batch.stream_event->event.wait(se->stream);
-    return ConsumeBatchGPU(input_batch, prev_op_result, se);
+    auto gpu_result = ConsumeBatchGPU(input_batch, prev_op_result, se);
+    se->event.record(se->stream);
+    return gpu_result;
 }
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
@@ -180,7 +182,9 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
-    return ConsumeBatchGPU(gpu_batch, exchange_result, se);
+    auto gpu_result = ConsumeBatchGPU(gpu_batch, exchange_result, se);
+    se->event.record(se->stream);
+    return gpu_result;
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
@@ -188,7 +192,9 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     // Wait until previous GPU pipeline processing is done.
     input_batch.stream_event->event.wait(se->stream);
-    return ProcessBatchGPU(input_batch, prev_op_result, se);
+    auto gpu_result = ProcessBatchGPU(input_batch, prev_op_result, se);
+    se->event.record(se->stream);
+    return gpu_result;
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
@@ -197,7 +203,9 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
-    return ProcessBatchGPU(gpu_batch, exchange_result, se);
+    auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
+    se->event.record(se->stream);
+    return gpu_result;
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
