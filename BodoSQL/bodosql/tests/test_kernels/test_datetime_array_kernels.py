@@ -3105,6 +3105,9 @@ def test_create_timestamp(arg, memory_leak_check):
             return pd.Timestamp(arg)
 
     answer = vectorized_sol((arg,), days_scalar_fn, None)
+    answer = (
+        answer.astype("datetime64[ns]") if isinstance(answer, pd.Series) else answer
+    )
 
     check_func(
         impl,
