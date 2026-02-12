@@ -99,8 +99,8 @@ void CudaHashJoin::FinalizeBuild() {
     std::cout << "Finalizing GPU Join build phase by building hash table and "
                  "collecting stats."
               << std::endl;
-
-    if (!this->_build_chunks.empty()) {
+    // Build the hash table if we have a gpu assigned to us
+    if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
         this->build_hash_table(this->_build_chunks);
     }
 
