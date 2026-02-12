@@ -204,7 +204,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         se->event.wait(se->stream);
         if (cuda_join->build_shuffle_manager.all_complete()) {
             cudaStreamSynchronize(
-                cuda_join->probe_shuffle_manager.get_stream());
+                cuda_join->build_shuffle_manager.get_stream());
         }
         cuda_join->BuildConsumeBatch(input_batch.table);
         se->event.record(se->stream);
