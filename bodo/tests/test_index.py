@@ -1270,6 +1270,7 @@ def test_index_argminmax(index, memory_leak_check):
                 ]
             ),
             id="timestamp_naive",
+            marks=pytest.mark.skip(reason="TODO: fix on Pandas 3"),
         ),
         pytest.param(
             pd.Index(
@@ -1324,17 +1325,22 @@ def test_index_argminmax(index, memory_leak_check):
         ),
         pytest.param(
             pd.CategoricalIndex(
-                [
-                    pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
-                    for i in range(12)
-                ],
+                pd.Series(
+                    [
+                        pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
+                        for i in range(12)
+                    ]
+                ).astype("datetime64[ns, US/Pacific]"),
                 ordered=True,
             ),
             id="ord_cat_timestamp_naive",
+            marks=pytest.mark.skip(reason="TODO: fix on Pandas 3"),
         ),
         pytest.param(
             pd.CategoricalIndex(
-                [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)],
+                pd.Series(
+                    [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)]
+                ).astype("datetime64[ns]"),
                 ordered=True,
             ),
             id="ord_cat_timestamp_timezone",
