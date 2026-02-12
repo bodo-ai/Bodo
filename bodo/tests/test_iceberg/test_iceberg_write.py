@@ -163,8 +163,8 @@ def test_basic_write_replace(
     passed = None
     if comm.Get_rank() == 0:
         passed = _test_equal_guard(
-            df.convert_dtypes(dtype_backend="pyarrow"),
             py_out,
+            df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=False,
             check_dtype=False,
         )
