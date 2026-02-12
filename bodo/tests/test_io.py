@@ -2211,11 +2211,7 @@ def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
     def impl3(fname):
         total = 0.0
         count_total = 0
-        for i, val in enumerate(
-            pd.read_csv(
-                fname, chunksize=1, nrows=10, skiprows=5, dtype_backend="pyarrow"
-            )
-        ):
+        for i, val in enumerate(pd.read_csv(fname, chunksize=1, nrows=10, skiprows=5)):
             # Empty data on all ranks but 0
             result = val.iloc[:, 0].max()
             total += result
