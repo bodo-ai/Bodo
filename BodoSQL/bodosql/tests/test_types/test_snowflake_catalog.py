@@ -2283,15 +2283,15 @@ def test_read_nested_map_in_array_col(test_db_snowflake_catalog, memory_leak_che
         {
             "B": pd.array(
                 [
-                    np.nan,
-                    [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+                    None,
+                    [None, {"m": datetime.date(2023, 11, 11), "mm": None}],
                     [
                         {
                             "a": datetime.date(2023, 11, 12),
                             "b": datetime.date(1980, 1, 5),
-                            "c": np.nan,
+                            "c": None,
                         },
-                        {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                        {"ten": datetime.date(2023, 11, 11), "ton": None},
                     ],
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.date32()))),
@@ -2316,9 +2316,9 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
         {
             "C": pd.array(
                 [
-                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [None, {"name": "uno", "stat": False, "cnt": None}],
                     [
-                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "dos", "stat": None, "cnt": None},
                         {"name": "tres", "stat": False, "cnt": -2},
                     ],
                     [],
@@ -2369,8 +2369,8 @@ def test_read_nested_array_in_map_col(test_db_snowflake_catalog, memory_leak_che
             "A": pd.Series(
                 [
                     {},
-                    {"bodo": [10.0, 10.0], "databricks": np.nan},
-                    {"a": [np.nan], "b": [12.4, -0.57]},
+                    {"bodo": [10.0, 10.0], "databricks": None},
+                    {"a": [None], "b": [12.4, -0.57]},
                 ],
                 dtype=pd.ArrowDtype(
                     pa.map_(pa.large_string(), pa.large_list(pa.float64()))
