@@ -189,7 +189,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     virtual ~PhysicalGPUJoin() = default;
 
     void FinalizeSink() override {
-        cudaStreamSynchronize(cuda_join->build_shuffle_manager.get_stream());
+        std::cout << "Finalizing GPU Join build phase." << std::endl;
         cuda_join->FinalizeBuild();
     }
 
