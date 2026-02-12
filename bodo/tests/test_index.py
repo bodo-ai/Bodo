@@ -9,6 +9,7 @@ import operator
 import numba  # noqa TID253
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -334,7 +335,10 @@ def test_binary_infer(memory_leak_check):
         impl,
         (
             pd.Index(
-                np.array([b"ajkshdg", b"jhasdgf", b"asdfajd", None] * 3),
+                pd.array(
+                    [b"ajkshdg", b"jhasdgf", b"asdfajd", None] * 3,
+                    dtype=pd.ArrowDtype(pa.large_binary()),
+                ),
                 name="my_index",
             ),
         ),
