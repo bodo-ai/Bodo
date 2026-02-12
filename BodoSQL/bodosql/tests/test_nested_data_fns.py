@@ -2302,7 +2302,12 @@ def test_map_index_column_scalar(sql_object_array_values, syntax, memory_leak_ch
                 output_col.append(row["value"])
 
     py_out = pd.DataFrame(
-        {"OUT_COL": pd.array(output_col), "NULL_COL": [None] * len(output_col)}
+        {
+            "OUT_COL": pd.array(output_col),
+            "NULL_COL": pd.array(
+                [None] * len(output_col), dtype=pd.ArrowDtype(pa.null())
+            ),
+        }
     )
 
     check_query(

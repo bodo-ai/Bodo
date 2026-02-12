@@ -1540,7 +1540,7 @@ def test_window_object_agg(value_data, value_dtype, memory_leak_check):
             pd.array([None] * 40, dtype=pd.ArrowDtype(pa.decimal128(38, 1))),
             -500,
             500,
-            pd.Series([None] * 40),
+            pd.array([None] * 40, dtype=pd.ArrowDtype(pa.decimal128(38, 1))),
             id="all_null-partition_wide",
         ),
         pytest.param(

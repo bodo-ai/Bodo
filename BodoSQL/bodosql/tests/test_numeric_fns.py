@@ -1198,7 +1198,9 @@ def test_to_number_invalid(fn_name, invalid_str):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame({"A": [None]}),
+            expected_output=pd.DataFrame(
+                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            ),
             check_dtype=False,
         )
     else:
@@ -1239,7 +1241,9 @@ def test_to_number_out_of_bounds(fn_name, invalid_str):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame({"A": [None]}),
+            expected_output=pd.DataFrame(
+                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            ),
             check_dtype=False,
         )
     else:

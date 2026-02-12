@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.timezone_common import representative_tz  # noqa
@@ -299,7 +300,7 @@ def test_set_ops_nullable_many_cols(
                 {
                     "A": pd.Series([None], dtype="Int64"),
                     "B": pd.Series([None], dtype="Float64"),
-                    "C": [None],
+                    "C": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 }
             ),
             id="intersect",

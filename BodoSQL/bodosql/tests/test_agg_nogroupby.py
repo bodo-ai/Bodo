@@ -4,6 +4,7 @@ Test correctness of SQL aggregation operations without groupby on BodoSQL
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -586,7 +587,7 @@ def test_any_value_nulls(memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": np.array([None, 1, 1, 1, 1, 1]),
+            "A": pd.array([None, 1, 1, 1, 1, 1], dtype=pd.ArrowDtype(pa.int64())),
         }
     )
     ctx = {"TABLE1": df}
@@ -599,7 +600,9 @@ def test_any_value_nulls(memory_leak_check):
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({0: [None]}),
+        expected_output=pd.DataFrame(
+            {0: pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+        ),
     )
 
 

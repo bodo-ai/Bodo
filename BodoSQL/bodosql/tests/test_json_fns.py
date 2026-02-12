@@ -310,14 +310,14 @@ def test_get_path(
         pytest.param(
             pd.Series(list(range(5)), dtype=np.int32),
             "a",
-            pd.Series([None] * 5),
+            pd.array([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             True,
             id="int_field",
         ),
         pytest.param(
             pd.Series(list(range(5)), dtype=np.int32),
             "[0]",
-            pd.Series([None] * 5),
+            pd.array([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             False,
             id="int_index",
         ),

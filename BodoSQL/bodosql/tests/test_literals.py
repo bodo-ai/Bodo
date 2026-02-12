@@ -724,7 +724,7 @@ def test_dollar_strings(datapath, memory_leak_check):
 
 
 def test_null_variant_literal(memory_leak_check):
-    answer = pd.DataFrame({"0": [None]})
+    answer = pd.DataFrame({"0": pd.array([None], dtype=pd.ArrowDtype(pa.null()))})
     check_query(
         "SELECT NULL::VARIANT",
         {},
