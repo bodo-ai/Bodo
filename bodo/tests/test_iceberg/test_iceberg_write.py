@@ -1447,7 +1447,7 @@ def truncate_impl(x: pd.Series, W: int):
     Returns:
         Truncated array
     """
-    if x.dtype in ["str", "object", "string[python]"]:
+    if x.dtype in ["str", "object", "string[python]", "string[pyarrow]"]:
         return x.str.slice(stop=W)
     elif x.dtype in ["int32", "Int32", "int64", "Int64"]:
         return x - (((x % W) + W) % W)
