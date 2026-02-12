@@ -2119,8 +2119,8 @@ def test_describe_view_on_table(
             "CHECK": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "EXPRESSION": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "COMMENT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
-            "POLICY NAME": [None] * 16,
-            "PRIVACY DOMAIN": [None] * 16,
+            "POLICY NAME": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "PRIVACY DOMAIN": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
         }
     )
 
