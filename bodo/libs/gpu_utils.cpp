@@ -492,14 +492,7 @@ bool GpuShuffleManager::all_complete() {
             this->global_completion_req = MPI_REQUEST_NULL;
         }
     }
-    // std::cout << "Checking all_complete: inflight shuffles = "
-    //           << this->inflight_shuffles.size()
-    //           << ", tables to shuffle = " << this->tables_to_shuffle.size()
-    //           << ", global completion = " << this->global_completion
-    //           << std::endl;
-    bool all_complete = this->inflight_shuffles.empty() &&
-                        this->tables_to_shuffle.empty() && global_completion;
-    return all_complete;
+    return this->global_completion;
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>

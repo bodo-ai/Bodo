@@ -214,7 +214,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // can be finished
             cuda_join->build_shuffle_manager.complete();
         }
-
+        std::cout << "BuildConsumeBatch: consumed "
+                  << input_batch.table->num_rows() << " rows, prev_op_result = "
+                  << static_cast<int>(prev_op_result)
+                  << ", shuffle all_complete = "
+                  << cuda_join->build_shuffle_manager.all_complete()
+                  << std::endl;
         return prev_op_result == OperatorResult::FINISHED &&
                        cuda_join->build_shuffle_manager.all_complete()
                    ? OperatorResult::FINISHED
