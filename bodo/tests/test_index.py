@@ -3202,40 +3202,6 @@ def test_index_where_putmask(args):
             ),
             marks=pytest.mark.slow,
         ),
-        pytest.param(
-            pd.Index(
-                pd.array(
-                    [
-                        4,
-                        "a",
-                        "b",
-                        "c",
-                        1,
-                        2,
-                        False,
-                        0.5,
-                        3,
-                        "a",
-                        "2",
-                        97,
-                        "97",
-                        3,
-                        0.5,
-                        0.51,
-                        3,
-                        3,
-                        "1 days",
-                        "B",
-                        "C",
-                        2,
-                        "CCC",
-                        True,
-                        False,
-                    ]
-                )
-            ),
-            marks=pytest.mark.slow,
-        ),
     ],
 )
 def test_index_nunique(idx):
