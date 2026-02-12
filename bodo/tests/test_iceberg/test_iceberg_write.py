@@ -1866,8 +1866,8 @@ def test_write_sorted(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -1998,8 +1998,8 @@ def test_write_part_sort(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -2068,8 +2068,8 @@ def test_write_part_sort_return_orig(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            df.convert_dtypes(dtype_backend="pyarrow"),
             out,
+            df.convert_dtypes(dtype_backend="pyarrow"),
             # Do not sort since that defeats the purpose
             sort_output=False,
             check_dtype=False,
@@ -2143,8 +2143,8 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         passed = 1
         if bodo.get_rank() == 0:
             passed = _test_equal_guard(
-                exp_df.convert_dtypes(dtype_backend="pyarrow"),
                 bodo_read_out,
+                exp_df.convert_dtypes(dtype_backend="pyarrow"),
                 sort_output=True,
                 reset_index=True,
                 check_dtype=False,
