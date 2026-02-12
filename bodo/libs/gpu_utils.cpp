@@ -142,6 +142,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     // they can exit the pipeline.
     if (this->complete_signaled && inflight_shuffles.empty() &&
         tables_to_shuffle.empty()) {
+        std::cout << "Rank " << this->rank
+                  << " starting global completion barrier" << std::endl;
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
                   "GpuShuffleManager::complete: MPI_Ibarrier failed:");
     }
@@ -496,12 +498,6 @@ bool GpuShuffleManager::all_complete() {
     //           << std::endl;
     bool all_complete = this->inflight_shuffles.empty() &&
                         this->tables_to_shuffle.empty() && global_completion;
-    std::cout << "inflight shuffles = " << this->inflight_shuffles.size()
-              << ", tables to shuffle = " << this->tables_to_shuffle.size()
-              << ", shuffle coordination req = "
-              << (this->shuffle_coordination.req != MPI_REQUEST_NULL)
-              << ", global completion = " << this->global_completion
-              << ", all_complete = " << all_complete << std::endl;
     return all_complete;
 }
 
