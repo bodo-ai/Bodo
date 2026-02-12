@@ -128,7 +128,7 @@ pytestmark = pytest_pandas
                             ),
                             pd.Series(data=[None], index=[4]),
                         ]
-                    ),
+                    ).astype("datetime64[ns]"),
                     ordered=True,
                 ),
                 "D": pd.Categorical(
@@ -139,7 +139,7 @@ pytestmark = pytest_pandas
                             ),
                             pd.Series(data=[None], index=[4]),
                         ]
-                    ),
+                    ).astype("timedelta64[ns]"),
                     ordered=True,
                 ),
             }
