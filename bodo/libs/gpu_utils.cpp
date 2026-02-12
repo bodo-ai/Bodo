@@ -145,7 +145,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
                   "GpuShuffleManager::complete: MPI_Ibarrier failed:");
     }
 
-    if (mpi_comm == MPI_COMM_NULL) {
+    if (mpi_comm == MPI_COMM_NULL || this->all_complete()) {
         return {};
     }
 
