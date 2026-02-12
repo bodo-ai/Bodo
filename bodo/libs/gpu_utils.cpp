@@ -175,9 +175,11 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
                       << " shuffle coordination finished, has_data = "
                       << this->shuffle_coordination.has_data << std::endl;
         }
-        if (coordination_finished && this->shuffle_coordination.has_data) {
-            // If a shuffle is needed, start it
-            this->do_shuffle();
+        if (coordination_finished) {
+            if (this->shuffle_coordination.has_data) {
+                // If a shuffle is needed, start it
+                this->do_shuffle();
+            }
             // Reset coordination for next shuffle
             this->shuffle_coordination.req = MPI_REQUEST_NULL;
         }
