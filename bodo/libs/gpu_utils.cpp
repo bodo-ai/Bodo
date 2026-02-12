@@ -497,10 +497,12 @@ bool GpuShuffleManager::all_complete() {
     bool all_complete =
         this->inflight_shuffles.empty() && this->tables_to_shuffle.empty() &&
         this->shuffle_coordination.req == MPI_REQUEST_NULL && global_completion;
-    if (all_complete) {
-        std::cout << "All shuffles complete and global barrier reached"
-                  << std::endl;
-    }
+    std::cout << "inflight shuffles = " << this->inflight_shuffles.size()
+              << ", tables to shuffle = " << this->tables_to_shuffle.size()
+              << ", shuffle coordination req = "
+              << (this->shuffle_coordination.req != MPI_REQUEST_NULL)
+              << ", global completion = " << this->global_completion
+              << ", all_complete = " << all_complete << std::endl;
     return all_complete;
 }
 
