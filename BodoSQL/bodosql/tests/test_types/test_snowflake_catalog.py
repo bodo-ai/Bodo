@@ -2169,10 +2169,10 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
             "A": pd.Series(
                 [
                     None,
-                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
-                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"int": 10.0, "null": None, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": None},
                     {"/\\\\/\\\\": np.nan, "\\u2912": -np.inf, 'inf\\"ity': np.inf},
-                    {"int20": 12345678901234567890.0, "null3": np.nan},
+                    {"int20": 12345678901234567890.0, "null3": None},
                     {"dec": 0.01234567890123456789, "neg_int": -1235.0},
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.float64())),
