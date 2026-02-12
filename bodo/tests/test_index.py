@@ -1762,7 +1762,7 @@ def test_datetime_sub(dti_val, memory_leak_check):
 def test_datetimeindex_constant_lowering(memory_leak_check):
     dti = pd.to_datetime(
         ["1/1/2018", np.datetime64("2018-01-01"), datetime.datetime(2018, 1, 1)]
-    )
+    ).astype("datetime64[ns]")
 
     def impl():
         return dti
