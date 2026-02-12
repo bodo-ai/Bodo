@@ -208,7 +208,7 @@ def test_concat_cols_binary(bodosql_binary_types, spark_info, memory_leak_check)
 
 
 @pytest.mark.slow
-def test_concat_ws_scalars_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_concat_ws_scalars_binary(bodosql_binary_types, memory_leak_check):
     """Checks that the concat_ws function is working for scalar values"""
     query = "SELECT CASE WHEN A IS NOT NULL THEN CONCAT_WS(TO_BINARY('2c'), C, A) ELSE CONCAT_WS(A, B, C) END AS A0 FROM table1"
     df = bodosql_binary_types["TABLE1"]
