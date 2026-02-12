@@ -102,10 +102,11 @@ void CudaHashJoin::FinalizeBuild() {
     // Build the hash table if we have a gpu assigned to us
     if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
         this->build_hash_table(this->_build_chunks);
-        std::shared_ptr<arrow::Schema> build_table_arrow_schema =
-            this->build_table_schema->ToArrowSchema();
     }
 
+    std::cout << "Before arrow schema" << std::endl;
+    std::shared_ptr<arrow::Schema> build_table_arrow_schema =
+        this->build_table_schema->ToArrowSchema();
     std::cout << "Created arrow schema" << std::endl;
     int mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
