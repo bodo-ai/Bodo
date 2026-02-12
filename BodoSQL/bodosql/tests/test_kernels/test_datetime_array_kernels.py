@@ -2984,6 +2984,12 @@ def test_interval_multiply(interval_input, memory_leak_check):
         vector_integer_answer = vectorized_sol(
             (interval_input, int_array), interval_scalar_fn, None
         )
+        vector_integer_answer = (
+            vector_integer_answer.astype("timedelta64[ns]")
+            if isinstance(vector_integer_answer, pd.Series)
+            and vector_integer_answer.dtype == np.dtype("timedelta64[us]")
+            else vector_integer_answer
+        )
         check_func(
             impl,
             (interval_input, int_array),
