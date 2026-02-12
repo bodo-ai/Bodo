@@ -1739,8 +1739,8 @@ def test_write_partitioned(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
