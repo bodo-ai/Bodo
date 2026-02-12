@@ -106,12 +106,7 @@ def test_read_schema_evolved_table(
         py_output=py_out,
         sort_output=True,
         reset_index=True,
-        # When Spark reads TZ aware columns and converts it to
-        # Pandas, the datatype is 'datetime64[ns]' whereas when
-        # Bodo reads it, it's 'datetime64[ns, UTC]'.
-        check_dtype=(
-            False if ("TZ_AWARE" in table_name) or ("DT_TSZ" in table_name) else True
-        ),
+        check_dtype=False,
         convert_columns_to_pandas=True,
     )
 
