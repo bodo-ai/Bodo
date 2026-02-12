@@ -477,6 +477,17 @@ bool GpuShuffleManager::all_complete() {
         CHECK_MPI(MPI_Test(&global_completion_req, &this->global_completion,
                            MPI_STATUS_IGNORE),
                   "GpuShuffleManager::all_complete: MPI_Test failed:");
+        if (global_completion) {
+            // If global completion is reached, we can cancel any inflight
+            // shuffle coordination since we know all data has been sent
+            if (this->shuffle_coordination.req != MPI_REQUEST_NULL) {
+                CHECK_MPI(
+                    MPI_Cancel(&this->shuffle_coordination.req),
+                    "GpuShuffleManager::all_complete: MPI_Cancel failed:");
+            }
+            this->shuffle_coordination.req = MPI_REQUEST_NULL;
+            this->global_completion_req = MPI_REQUEST_NULL;
+        }
     }
     // std::cout << "Checking all_complete: inflight shuffles = "
     //           << this->inflight_shuffles.size()
