@@ -21,6 +21,7 @@
 #include <cmath>
 #include <vector>
 
+#include "physical/gpu_aggregate.h"
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_project.h"
@@ -139,7 +140,7 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalFilter>());
 
             case duckdb::LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalAggregate>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CTE_REF:
                 return false;
@@ -169,7 +170,7 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_DISTINCT:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalDistinct>());
 
             case duckdb::LogicalOperatorType::LOGICAL_EMPTY_RESULT:
                 return false;

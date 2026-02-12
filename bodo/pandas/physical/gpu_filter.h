@@ -144,6 +144,7 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
         this->metrics.filtering_time += end_timer(start_filtering);
 
         this->metrics.output_row_count += out_table_info.table->num_rows();
+        se->event.record(se->stream);
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
