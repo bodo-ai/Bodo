@@ -1013,7 +1013,7 @@ def major_types_nullable(request):
                     ),
                     "C": np.array([None, b"poiu", b"fewfqqqqq", b"3f3"] * 3, object),
                 }
-            ).astype(pd.ArrowDtype(pa.large_binary())),
+            )
         ),
     ]
 )
