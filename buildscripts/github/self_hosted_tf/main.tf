@@ -129,11 +129,6 @@ module "runners" {
         runner_name_prefix = "${local.prefix}_single_gpu_"
         # Max # of Runners of this Size
         runners_maximum_count = 1
-        # Configure docker to use the NVIDIA runtime for GPU access
-        userdata_pre_install = <<-EOT
-            #!/bin/bash
-            echo 1
-          EOT
       })
     }
   }
