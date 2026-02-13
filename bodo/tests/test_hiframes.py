@@ -489,7 +489,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AAA", "AB,CC", None, "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
+        _test_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_get_parallel(self):
         from bodo.tests.utils_jit import get_start_end
