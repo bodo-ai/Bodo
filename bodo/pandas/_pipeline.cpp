@@ -163,20 +163,6 @@
     } while (0)
 #endif
 
-#ifdef USE_CUDF
-std::shared_ptr<cudf::table> make_empty_like(
-    std::shared_ptr<cudf::table> input_table) {
-    cudf::table_view tv = input_table->view();
-
-    // slice produces a vector<table_view>
-    auto sliced = cudf::slice(tv, {0, 0});
-    cudf::table_view empty_view = sliced[0];
-
-    // materialize into a real cudf::table
-    return std::make_shared<cudf::table>(empty_view);
-}
-#endif
-
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
  * say that it HAVE_MORE_OUTPUT in which case we need to call it again for the
@@ -224,8 +210,11 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch = GPU_DATA(make_empty_like(x.table), x.schema,
-                                             make_stream_and_event(false));
+                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            x.stream_event->event.wait(empty_se->stream);
+                            batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                             x.schema, empty_se);
+                            empty_se->event.record(empty_se->stream);
 #endif
                         }
                     },
@@ -293,8 +282,11 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            batch = GPU_DATA(make_empty_like(x.table), x.schema,
-                                             make_stream_and_event(false));
+                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            x.stream_event->event.wait(empty_se->stream);
+                            batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                             x.schema, empty_se);
+                            empty_se->event.record(empty_se->stream);
 #endif
                         }
                     },
@@ -373,8 +365,11 @@ uint64_t Pipeline::Execute() {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
 #ifdef USE_CUDF
-                        batch = GPU_DATA(make_empty_like(x.table), x.schema,
-                                         make_stream_and_event(false));
+                        auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                        x.stream_event->event.wait(empty_se->stream);
+                        batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                         x.schema, empty_se);
+                        empty_se->event.record(empty_se->stream);
 #endif
                     }
                 },

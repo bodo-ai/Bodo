@@ -4,6 +4,7 @@
 #include <arrow/table.h>
 #include <cstdint>
 #ifdef USE_CUDF
+#include <cudf/copying.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #endif
@@ -122,6 +123,10 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
     }
 }
 
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table,
+    std::shared_ptr<StreamAndEvent> se);
+
 struct GPU_DATA {
    public:
     std::shared_ptr<cudf::table> table;
@@ -141,8 +146,95 @@ class RankDataExchange {
    public:
     RankDataExchange(int64_t op_id_);
 
+    ~RankDataExchange();
+
+   protected:
+    int64_t op_id;
+
+    std::vector<int> gpu_ranks;
+    std::vector<int> cpu_ranks;
+    MPI_Comm shuffle_comm;
+
+    // State for synchronizing after all ranks have sent their last batch
+    // to/from GPU ranks.
+    std::unique_ptr<IsLastState> is_last_state;
+    std::unique_ptr<IncrementalShuffleState> shuffle_state;
+};
+
+struct GPUBatchGenerator {
+    std::deque<GPU_DATA> batches;
+    std::unique_ptr<GPU_DATA> leftover_data;
+    std::shared_ptr<GPU_DATA> dummy_gpu_data;
+    size_t out_batch_size;
+    size_t collected_rows = 0;
+
+    GPUBatchGenerator(GPU_DATA dummy_gpu_data_, size_t out_batch_size_)
+        : dummy_gpu_data(std::make_shared<GPU_DATA>(dummy_gpu_data_)),
+          out_batch_size(out_batch_size_) {}
+
+    void append_batch(GPU_DATA batch);
+
     /**
-     * @brief Exchange data between ranks with pinned resources (GPUs)
+     * @brief Combine smaller tables into a GPU batch.
+     *
+     * @param se Stream used for creating batch.
+     * @param force_return Whether to flush the remaining rows.
+     * @return GPU_DATA (returns dummy data if no batch is ready and
+     * force_return is false)
+     */
+    GPU_DATA next(std::shared_ptr<StreamAndEvent> se, bool force_return);
+};
+
+/**
+ * @brief Class for managing data exchange between CPU ranks (all ranks on the
+ * node) and GPU-pinned ranks.
+ *
+ */
+class CPUtoGPUExchange : public RankDataExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    /**
+     * @brief Send data from all ranks to GPUs.
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param se The stream and event to associate with the batch.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<GPU_DATA, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<GPU_DATA, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch,
+        std::shared_ptr<StreamAndEvent> se, OperatorResult prev_op_result);
+
+   private:
+    /**
+     * @brief Initialize the state for the exchange (Shuffle state and GPU batch
+     * generator)
+     *
+     * @param input_batch Sample input batch for schema information
+     * @param se The stream and event for creating sample GPU data
+     */
+    void Initialize(std::shared_ptr<table_info> input_batch,
+                    std::shared_ptr<StreamAndEvent> se);
+
+    std::unique_ptr<GPUBatchGenerator> gpu_batch_generator;
+};
+
+/**
+ * @brief Class for managing data exchange between GPU-pinned ranks and CPU
+ * ranks (all ranks on the node).
+ *
+ */
+class GPUtoCPUExchange : public RankDataExchange {
+   public:
+    GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    /**
+     * @brief Send data from GPU-pinned ranks to all ranks.
      *
      * @param input_batch The input batch to be exchanged.
      * @param prev_op_result The result of the previous operator, used to
@@ -155,70 +247,10 @@ class RankDataExchange {
     std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
         std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
 
-    ~RankDataExchange();
-
-   protected:
-    /** @brief Initialize the RankDataExchange state including output builders
-     * and shuffle state.
-     *
-     * @param input_batch Sample input batch to determine column types.
-     */
+   private:
     void Initialize(table_info* input_batch);
 
-    /**
-     * @brief Initialize shuffle state for sending data between CPU and GPU
-     * ranks asynchronously.
-     *
-     * @param input_batch
-     * @param dict_builders
-     */
-    virtual void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) = 0;
-
-    virtual int64_t GetOutBatchSize() = 0;
-
-    int64_t op_id;
-
-    std::vector<int> gpu_ranks;
-    std::vector<int> cpu_ranks;
-    MPI_Comm shuffle_comm;
-
-    // State for synchronizing after all ranks have sent their last batch
-    // to/from GPU ranks.
-    std::unique_ptr<IsLastState> is_last_state;
-    std::unique_ptr<IncrementalShuffleState> shuffle_state;
-    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
-};
-
-/**
- * @brief Class for managing data exchange between CPU ranks (all ranks on the
- * node) and GPU-pinned ranks.
- *
- */
-class CPUtoGPUExchange : public RankDataExchange {
-   public:
-    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
-
-   private:
-    int64_t GetOutBatchSize() override;
-    void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
-};
-
-/**
- * @brief Class for managing data exchange between GPU-pinned ranks and CPU
- * ranks (all ranks on the node).
- *
- */
-class GPUtoCPUExchange : public RankDataExchange {
-   public:
-    GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
-    int64_t GetOutBatchSize() override;
-    void InitializeShuffleState(
-        table_info* input_batch,
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders) override;
+    std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
 #else
 
@@ -353,10 +385,7 @@ class PhysicalGPUSource : public PhysicalOperator {
         return OperatorType::GPU_SOURCE;
     }
 
-    std::pair<GPU_DATA, OperatorResult> ProduceBatch() {
-        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
-        return ProduceBatchGPU(se);
-    }
+    std::pair<GPU_DATA, OperatorResult> ProduceBatch();
 
     virtual std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) = 0;
@@ -472,7 +501,8 @@ using PhysicalCpuGpuProcessBatch =
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
 
 #ifdef USE_CUDF
-GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
+                           std::shared_ptr<StreamAndEvent> se);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif
