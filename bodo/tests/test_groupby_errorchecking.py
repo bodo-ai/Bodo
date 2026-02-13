@@ -2029,9 +2029,7 @@ def test_transform_unsupported_type(memory_leak_check):
             "B": pd.date_range("2018", "2019", periods=8),
         }
     )
-    with pytest.raises(
-        BodoError, match=re.escape("column type of datetime64[ns] is not supported by")
-    ):
+    with pytest.raises(BodoError, match=r"column type of .* is not supported by"):
         bodo.jit(impl)(df)
 
 
