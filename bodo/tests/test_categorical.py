@@ -239,6 +239,7 @@ def test_setitem_cat_array_runtime_err(cat_arr_value):
             bodo.jit(test_impl)(cat_arr_value, idx, val)
 
 
+@pytest.mark.skip("Pandas 3 doesn't support setitem properly")
 @pytest.mark.slow
 def test_setitem_categories(cat_arr_value, memory_leak_check):
     """
