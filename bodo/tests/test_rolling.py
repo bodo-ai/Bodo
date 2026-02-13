@@ -131,13 +131,20 @@ def test_fixed_index_groupby():
 
     df = pd.DataFrame(
         {
-            "A": [1, 2, 24, None] * 5,
+            "A": pd.array([1, 2, 24, None] * 5, dtype="Int64"),
             "B": ["421", "f31"] * 10,
             "C": [1.51, 2.421, 233232, 12.21] * 5,
         }
     )
     # Groupby ordering isn't defined so we must sort.
-    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.slow
