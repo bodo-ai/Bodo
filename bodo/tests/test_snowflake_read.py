@@ -1253,9 +1253,9 @@ def test_read_map_col(memory_leak_check):
         {
             "a": pd.Series(
                 [
-                    {"int20": 12345678901234567890.0, "null3": np.nan},
-                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
-                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"int20": 12345678901234567890.0, "null3": None},
+                    {"int": 10.0, "null": None, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": None},
                     {"dec": 0.01234567890123456789, "neg_int": -1235.0},
                     {
                         "/\\/\\": np.nan,
