@@ -110,27 +110,49 @@ void CudaHashJoin::FinalizeBuild() {
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     // Debug Hand between here and the print
     for (const auto& col_idx : this->build_key_indices) {
-        auto [min, max] =
-            cudf::minmax(this->_build_table->get_column(col_idx).view());
-        std::vector<std::unique_ptr<cudf::column>> columns;
-        columns.emplace_back(cudf::make_column_from_scalar(*min, 1));
-        columns.emplace_back(cudf::make_column_from_scalar(*max, 1));
-        std::shared_ptr<cudf::table> stats_table =
-            std::make_shared<cudf::table>(std::move(columns));
+        if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
+            auto [min, max] =
+                cudf::minmax(this->_build_table->get_column(col_idx).view());
+            std::vector<std::unique_ptr<cudf::column>> columns;
+            columns.emplace_back(cudf::make_column_from_scalar(*min, 1));
+            columns.emplace_back(cudf::make_column_from_scalar(*max, 1));
+            std::shared_ptr<cudf::table> stats_table =
+                std::make_shared<cudf::table>(std::move(columns));
 
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("min",
-                         build_table_arrow_schema->field(col_idx)->type()),
-            arrow::field("max",
-                         build_table_arrow_schema->field(col_idx)->type())};
-        GPU_DATA stats_gpu_data = {
-            stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
-            make_stream_and_event(false)};
-        std::shared_ptr<arrow::Table> local_stats =
-            convertGPUToArrow(stats_gpu_data);
-        std::shared_ptr<arrow::Table> global_stats =
-            SyncAndReduceGlobalStats(local_stats);
-        this->min_max_stats.push_back(global_stats);
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
+                arrow::field("min",
+                             build_table_arrow_schema->field(col_idx)->type()),
+                arrow::field("max",
+                             build_table_arrow_schema->field(col_idx)->type())};
+            GPU_DATA stats_gpu_data = {
+                stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
+                make_stream_and_event(false)};
+            std::shared_ptr<arrow::Table> local_stats;
+            local_stats = convertGPUToArrow(stats_gpu_data);
+            std::shared_ptr<arrow::Table> global_stats =
+                SyncAndReduceGlobalStats(std::move(local_stats));
+            this->min_max_stats.push_back(global_stats);
+        } else {
+            // If we don't have a GPU, we still need to participate in the
+            // global stats reduction, so we create an table with null vals
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
+                arrow::field("min",
+                             build_table_arrow_schema->field(col_idx)->type()),
+                arrow::field("max",
+                             build_table_arrow_schema->field(col_idx)->type())};
+            std::shared_ptr<arrow::Table> local_stats;
+            local_stats = arrow::Table::Make(
+                std::make_shared<arrow::Schema>(std::move(fields)),
+                {arrow::MakeArrayOfNull(
+                     build_table_arrow_schema->field(col_idx)->type(), 1)
+                     .ValueOrDie(),
+                 arrow::MakeArrayOfNull(
+                     build_table_arrow_schema->field(col_idx)->type(), 1)
+                     .ValueOrDie()});
+            std::shared_ptr<arrow::Table> global_stats =
+                SyncAndReduceGlobalStats(std::move(local_stats));
+            this->min_max_stats.push_back(global_stats);
+        }
     }
     std::cout << "Rank " << mpi_rank << ": Completed building hash table with "
               << _build_table->num_rows() << " rows" << std::endl;
