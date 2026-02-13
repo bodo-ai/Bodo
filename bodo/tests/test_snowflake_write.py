@@ -1135,7 +1135,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             ]
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result.sort_values("datetime_col").reset_index(drop=True),
                 df.sort_values("datetime_col").reset_index(drop=True),
                 check_dtype=False,
