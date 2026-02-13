@@ -562,6 +562,7 @@ def test_pivot_basic(df, memory_leak_check):
     check_func(impl3, (df,), check_names=False, check_dtype=False, sort_output=True)
 
 
+@pytest.mark.skip("Pandas 3 NA handling issue in testing")
 @pytest.mark.parametrize(
     "df",
     [
