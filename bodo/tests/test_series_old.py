@@ -268,6 +268,7 @@ class TestSeries(unittest.TestCase):
         test_impl(A2, 0)
         np.testing.assert_array_equal(A1.values, A2.values)
 
+    @pytest.mark.skip(reason="Setitem not supported by Pandas 3")
     def test_setitem_series3(self):
         def test_impl(A, i):
             S = pd.Series(A)
