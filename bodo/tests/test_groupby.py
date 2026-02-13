@@ -2088,6 +2088,7 @@ def test_agg_dt64(memory_leak_check):
     check_func(test_impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.skip("TODO: update for Pandas 3")
 @pytest_mark_pandas
 def test_agg_td64(memory_leak_check):
     """
