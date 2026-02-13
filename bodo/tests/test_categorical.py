@@ -72,9 +72,9 @@ def test_unbox_dtype(dtype, memory_leak_check):
         ),
         pytest.param(
             pd.Categorical(
-                np.array(
+                pd.to_datetime(
                     ["2020-01-14", "2020-01-15", "2020-01-16", "2020-01-17", "NAT"],
-                    dtype="datetime64[ns]",
+                    unit="ns",
                 )
             )
         ),

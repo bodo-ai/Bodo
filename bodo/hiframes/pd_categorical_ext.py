@@ -925,7 +925,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
     """
     labels = {}
     for i in range(len(vals)):
-        val = vals[i]
+        val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(vals[i])
         labels[val] = i
 
     return labels

@@ -1834,7 +1834,7 @@ def overload_fix_arr_dtype(
                 if bodo.libs.array_kernels.isna(data, i):
                     bodo.libs.array_kernels.setna(A, i)
                     continue
-                val = data[i]
+                val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(data[i])
                 codes[i] = label_dict[val]
 
             return A
