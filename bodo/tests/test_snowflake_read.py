@@ -1316,32 +1316,45 @@ def test_read_struct_col(memory_leak_check):
     py_output = pd.DataFrame(
         {
             "idx": [1, 2, 3, 4, 5, 6],
-            "a": [
-                np.nan,
-                {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": np.nan,
-                    "b": 10.0,
-                    "c": np.nan,
-                    "d": True,
-                    "e": datetime.date(2023, 11, 1),
-                },
-                {
-                    "a": "test",
-                    "b": -0.853,
-                    "c": np.nan,
-                    "d": False,
-                    "e": datetime.date(1980, 10, 1),
-                },
-                {"a": "once", "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": "none",
-                    "b": 1635.0,
-                    "c": np.nan,
-                    "d": np.nan,
-                    "e": datetime.date(1970, 1, 1),
-                },
-            ],
+            "a": pd.array(
+                [
+                    None,
+                    {"a": None, "b": None, "c": None, "d": None, "e": None},
+                    {
+                        "a": None,
+                        "b": 10.0,
+                        "c": None,
+                        "d": True,
+                        "e": datetime.date(2023, 11, 1),
+                    },
+                    {
+                        "a": "test",
+                        "b": -0.853,
+                        "c": None,
+                        "d": False,
+                        "e": datetime.date(1980, 10, 1),
+                    },
+                    {"a": "once", "b": np.nan, "c": None, "d": None, "e": None},
+                    {
+                        "a": "none",
+                        "b": 1635.0,
+                        "c": None,
+                        "d": None,
+                        "e": datetime.date(1970, 1, 1),
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("a", pa.large_string()),
+                            pa.field("b", pa.float64()),
+                            pa.field("c", pa.null()),
+                            pa.field("d", pa.bool_()),
+                            pa.field("e", pa.date32()),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 
