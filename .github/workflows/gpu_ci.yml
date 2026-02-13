@@ -10,19 +10,21 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
       - name: Configure docker
         run: |
           set -eo pipefail
 
+          sudo curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo   -o /etc/yum.repos.d/nvidia-container-toolkit.repo
           sudo dnf install -y nvidia-container-toolkit
           sudo nvidia-ctk runtime configure --runtime=docker
           sudo systemctl restart docker
           docker run --rm --gpus all nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 nvidia-smi
+
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Show GPU info
         run: nvidia-smi
