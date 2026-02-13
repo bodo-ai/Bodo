@@ -1667,43 +1667,56 @@ def test_read_nested_in_struct_col(memory_leak_check):
 
     py_output = pd.DataFrame(
         {
-            "i": [
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": np.nan,
-                },
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": {"creator": "mark", "at": np.nan, "atnew": np.nan},
-                },
-                {
-                    "group": "dirt",
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": [-1.15e3, -164, 100056],
-                    "created": {
-                        "creator": np.nan,
-                        "at": np.nan,
-                        "atnew": [2010, 10, 10],
+            "i": pd.array(
+                [
+                    {
+                        "group": None,
+                        "values": None,
+                        "created": None,
                     },
-                },
-                {
-                    "group": "gravel",
-                    # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
-                    "values": [10.0, 10.1],
-                    "created": {
-                        "creator": np.nan,
-                        "at": datetime.date(1990, 5, 5),
-                        "atnew": np.nan,
+                    {
+                        "group": None,
+                        "values": None,
+                        "created": {"creator": "mark", "at": None, "atnew": None},
                     },
-                },
-            ],
+                    {
+                        "group": "dirt",
+                        "values": [-1.15e3, -164.0, 100056.0],
+                        "created": {
+                            "creator": None,
+                            "at": None,
+                            "atnew": [2010, 10, 10],
+                        },
+                    },
+                    {
+                        "group": "gravel",
+                        "values": [10.0, 10.1],
+                        "created": {
+                            "creator": None,
+                            "at": datetime.date(1990, 5, 5),
+                            "atnew": None,
+                        },
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("group", pa.large_string()),
+                            pa.field("values", pa.large_list(pa.float64())),
+                            pa.field(
+                                "created",
+                                pa.struct(
+                                    [
+                                        pa.field("creator", pa.large_string()),
+                                        pa.field("at", pa.date32()),
+                                        pa.field("atnew", pa.large_list(pa.int64())),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 
