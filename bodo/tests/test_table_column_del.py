@@ -1737,7 +1737,7 @@ def test_table_del_astype(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename, dtype_backend="pyarrow")
+        df = pd.read_parquet(filename)
         df1 = df.astype({"Column3": np.float32, "Column36": pd.Int8Dtype()})
         return df1[["Column3", "Column37", "Column59"]]
 
@@ -2389,7 +2389,7 @@ def test_sort_table_dels(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
+        df1 = pd.read_parquet(filename)
         df2 = df1.sort_values(by=["Column9", "Column6", "Column13", "Column11"])
         return df2["Column11"], df2["Column8"], df2["Column3"], df1["Column1"]
 
