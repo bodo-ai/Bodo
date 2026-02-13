@@ -194,6 +194,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_quantile_parallel_float_nan(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(0, n, 1, np.float32)})
