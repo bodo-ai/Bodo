@@ -137,8 +137,6 @@ set -eux
 dnf install -y nvidia-container-toolkit
 
 nvidia-ctk runtime configure --runtime=docker
-
-systemctl restart docker
 EOF
       })
     }
