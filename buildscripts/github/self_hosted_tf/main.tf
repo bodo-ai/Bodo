@@ -123,6 +123,7 @@ module "runners" {
       fifo = false
 
       runner_config = merge(local.base_runner_config, {
+        instance_target_capacity_type = "on-demand"
         # Instance Type(s) (Multiple Options to Choose for Spot)
         instance_types = ["g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge", "g6e.2xlarge"]
         # Prefix runners with the environment name
