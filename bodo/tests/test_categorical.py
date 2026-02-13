@@ -438,7 +438,7 @@ def test_replace_const():
 @pytest.mark.slow
 def test_replace_const_list():
     def test_impl(A):
-        return pd.Series(A).replace([2, 3, 7], 5)
+        return pd.Series(A).replace([2, 3, 7], 4)
 
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     check_func(test_impl, (A,))
