@@ -647,6 +647,10 @@ def test_any(bodo_arr_val, memory_leak_check):
         # Python's logical or won't return a bool so set to bool
         return bool(np.any(A))
 
+    if pd.api.types.is_string_dtype(bodo_arr_val):
+        # Not supported for string arrays
+        return
+
     if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
         # Reduce op is not supported on integer arrays
         # This tests that there is a parallel version for a Numpy Array type
@@ -665,6 +669,10 @@ def test_all(bodo_arr_val, memory_leak_check):
     def test_impl(A):
         # Python's logical and won't return a bool so set to bool
         return bool(np.all(A))
+
+    if pd.api.types.is_string_dtype(bodo_arr_val):
+        # Not supported for string arrays
+        return
 
     if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
         # Reduce op is not supported on integer arrays
@@ -1007,6 +1015,7 @@ def test_setna_getitem(mutable_bodo_arr, memory_leak_check):
 
 
 # TODO: Add memory leak check when constant lowering memory leak is fixed.
+@pytest.mark.skip("Setitem isn't fully supported in Pandas 3")
 @pytest.mark.slow
 def test_bad_setitem(mutable_bodo_arr):
     """
