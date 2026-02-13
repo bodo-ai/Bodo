@@ -292,13 +292,16 @@ def test_apply_raw_false(memory_leak_check):
         {
             "A": [5, 12, 21, 3.2, 3],
             "B": [0, 1, 2, 1.9, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         },
         index=[3, 1, 5, 11, 3],
     )
@@ -363,17 +366,20 @@ def test_groupby_rolling(is_slow_run):
         {
             "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
             "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
-            "time": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-                pd.Timestamp("20130101 09:00:08"),
-                pd.Timestamp("20130101 09:00:10"),
-                pd.Timestamp("20130101 09:00:11"),
-            ],
+            "time": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                    pd.Timestamp("20130101 09:00:07"),
+                    pd.Timestamp("20130101 09:00:08"),
+                    pd.Timestamp("20130101 09:00:10"),
+                    pd.Timestamp("20130101 09:00:11"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl3, (df,), sort_output=True, reset_index=True, check_dtype=False)
@@ -444,13 +450,16 @@ def test_rolling_error_checking():
         {
             "A": [5, 12, 21, np.nan, 3],
             "B": [0, 1, 2, np.nan, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     with pytest.raises(BodoError, match=r"rolling\(\): center must be a boolean"):
@@ -618,25 +627,31 @@ class TestRolling(unittest.TestCase):
         df1 = pd.DataFrame(
             {
                 "B": [0, 1, 2, np.nan, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:00"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:05"),
-                    pd.Timestamp("20130101 09:00:06"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         df2 = pd.DataFrame(
             {
                 "B": [0, 1, 2, -2, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:01"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:04"),
-                    pd.Timestamp("20130101 09:00:09"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:01"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:04"),
+                        pd.Timestamp("20130101 09:00:09"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         wins = ("2s",)
@@ -685,25 +700,31 @@ class TestRolling(unittest.TestCase):
         df1 = pd.DataFrame(
             {
                 "B": [0, 1, 2, np.nan, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:00"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:05"),
-                    pd.Timestamp("20130101 09:00:06"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         df2 = pd.DataFrame(
             {
                 "B": [0, 1, 2, -2, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:01"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:04"),
-                    pd.Timestamp("20130101 09:00:09"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:01"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:04"),
+                        pd.Timestamp("20130101 09:00:09"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         wins = ("2s",)
