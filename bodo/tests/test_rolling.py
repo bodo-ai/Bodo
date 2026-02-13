@@ -199,13 +199,16 @@ def test_column_select(memory_leak_check):
         {
             "A": [5, 12, 21, np.nan, 3],
             "B": [0, 1, 2, np.nan, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl1, (df,), check_dtype=False)
@@ -245,14 +248,17 @@ def test_min_periods(memory_leak_check):
         {
             "A": [5, 12, np.nan, np.nan, 3, np.nan],
             "B": [0, 1, 2, np.nan, 4, np.nan],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                    pd.Timestamp("20130101 09:00:07"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl1, (df, False, 1), check_dtype=False)
