@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     count_array_OneDs,
     count_array_REPs,
@@ -410,9 +411,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", None, "g\t f"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(
-            bodo_func(df), test_impl(df), check_names=False, check_dtype=False
-        )
+        _test_equal(bodo_func(df), test_impl(df), check_names=False, check_dtype=False)
 
     def test_str_split2(self):
         def test_impl(df):
