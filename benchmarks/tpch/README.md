@@ -49,7 +49,7 @@ This script assumes `tpch-dbgen` is in the same directory. If you downloaded it 
 
 ## 3. Running the Benchmarks
 
-This section describes how to reproduce benchmark results for both single node and multi-node configurations for the libraries listed below:
+This section describes how to run the benchmark for both the single node and multi-node configurations for the libraries listed below:
 
 ### Software versions
 
@@ -74,8 +74,6 @@ conda activate tpch_bodo
 ```
 
 ### Single Node
-
-<!-- TODO: describe final cluster settings -->
 
 Single-node libraries include Polars, DuckDB, and Pandas. In addition to these options, the distributed engines Dask, PySpark and Bodo can be run on a single node as well. Single node implementations can be found in the `pds-benchmark/queries` directory, which contains Polars, DuckDB queries from the [Polars Decision Support Benchmark repo](https://github.com/pola-rs/polars-benchmark) as well as Dask queries from [here](https://github.com/coiled/benchmarks/blob/main/tests/tpch/dask_queries.py), Bodo and PySpark (Pandas API) queries.
 
@@ -110,13 +108,11 @@ There is a known issue where Bodo sometimes will hang when running back-to-back 
 
 ### Multi-Node
 
-<!-- TODO: describe final cluster settings -->
-
-Distributed libraries like Bodo, Dask, and PySpark also have the option running on multiple nodes. Because of the different infrastructure requirements for running these libraries, the scripts for reproducing the multi-node results can be found in separate `impl/` directories.
+Distributed libraries like Bodo, Dask, and PySpark also have the option running on multiple nodes. Because of the different infrastructure requirements for running these libraries, the scripts for reproducing the multi-node results can be found in separate `<impl>/` directories.
 
 #### Bodo
 
-We use Bodo Platform to create the Bodo cluster. Follow [the instructions here](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi#bodo) to set up a Bodo Platform account through AWS marketplace and set up access tokens. You can then run the benchmark using the command below (note that bodosdk will have to be installed separately):
+We use the Bodo Platform to create the Bodo cluster. Follow [the instructions here](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi#bodo) to set up a Bodo Platform account through AWS marketplace and set up access tokens. You can then run the benchmark using the command below (note that bodosdk will have to be installed separately):
 
 ``` shell
 cd bodo
@@ -175,6 +171,24 @@ Finally, to clean up resources:
 terraform destroy
 ```
 
-## 4. Results
+## 4. Distributed Results (SF1000)
 
-TODO
+For each distributed system tested: Bodo, PySpark and, Dask, we used a cluster consisting of 4x`r6i.16xlarge` AWS instances (256 vcpus, 2048 GiB Memory). Dask was provisioned an additional instance (`c6i.xlarge`, 4 vcpu/8GiB Memory) for the scheduler and PySpark was provisioned a Primary Instance for cluster management(`c6i.xlarge`) in addition to the 4 core instances.
+
+The table below summarizes the total runtimes for all 22 queries for scale factor (SF) 1000:
+
+| System      | Total Execution Time (s)  |
+|----------------|----------------|
+| Bodo DataFrames  | 931.8   |
+| PySpark | 5086.3   |
+| Dask  | 114507.7 |
+
+The following graph shows a breakdown of the individual query times for all systems for SF1000:
+
+<img src="../img/tpch-query-breakdown.png" alt="SF1000 TPCH Individual Query Times" title="SF1000 TPCH Individual Query Times">
+
+The following graph shows a breakdown of the individual query times for Bodo and PySpark for SF1000:
+
+<img src="../img/tpch-bodo-pyspark-queries.png" alt="SF1000 TPCH Individual Query Times: Bodo vs PySpark" title="SF1000 TPCH Individual Query Times: Bodo vs PySpark">
+
+Results were last updated February 4th, 2026. For a full analysis of the results, refer to [our blogpost](https://www.bodo.ai/blog/bodo-dataframes-vs-spark-and-dask-on-tpc-h-benchmarks).
