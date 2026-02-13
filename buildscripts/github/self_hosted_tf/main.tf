@@ -113,7 +113,7 @@ module "runners" {
       })
     }
 
-  "single-gpu" = {
+    "single-gpu" = {
       matcherConfig : {
         labelMatchers = [["self-hosted", "single-gpu"], ["self-hosted-single-gpu"]]
         exactMatch    = true
