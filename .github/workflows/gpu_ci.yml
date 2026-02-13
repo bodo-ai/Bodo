@@ -22,13 +22,12 @@ jobs:
                     nvidia-container-runtime
           sudo nvidia-ctk runtime configure --runtime=docker
           sudo systemctl restart docker
-          docker run --rm --gpus all nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 nvidia-smi
+          sudo docker run --rm --gpus all nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 nvidia-smi
 
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Show GPU info
-        run: nvidia-smi
+
 
