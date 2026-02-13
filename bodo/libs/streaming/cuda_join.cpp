@@ -104,15 +104,11 @@ void CudaHashJoin::FinalizeBuild() {
         this->build_hash_table(this->_build_chunks);
     }
 
-    std::cout << "Before arrow schema" << std::endl;
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
         this->build_table_schema->ToArrowSchema();
-    std::cout << "Created arrow schema" << std::endl;
     int mpi_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    std::cout << "Rank " << mpi_rank
-              << ": Starting to collect min/max stats for build table"
-              << std::endl;
+    // Debug Hand between here and the print
     for (const auto& col_idx : this->build_key_indices) {
         auto [min, max] =
             cudf::minmax(this->_build_table->get_column(col_idx).view());
