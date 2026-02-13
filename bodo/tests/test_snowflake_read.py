@@ -1424,7 +1424,9 @@ def test_read_null_variant_col_correctness(memory_leak_check):
     SELECT to_variant(null) as V
     FROM table(generator(rowcount=>500))
     """
-    py_output = pd.DataFrame({"v": pd.array([None] * 500)})
+    py_output = pd.DataFrame(
+        {"v": pd.array([None] * 500, dtype=pd.ArrowDtype(pa.string()))}
+    )
 
     check_func(impl, (query, conn), py_output=py_output, check_dtype=False)
 
