@@ -16,6 +16,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
@@ -1593,9 +1594,7 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
             pandas_df = pd.read_parquet(pandas_filename, dtype_backend="pyarrow")
             bodo_df = pd.read_parquet(bodo_filename, dtype_backend="pyarrow")
             try:
-                pd.testing.assert_frame_equal(
-                    pandas_df, bodo_df, check_column_type=False, check_dtype=False
-                )
+                _test_equal(pandas_df, bodo_df, check_dtype=False)
                 return 1
             except Exception:
                 return 0
