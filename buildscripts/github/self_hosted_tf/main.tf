@@ -129,6 +129,17 @@ module "runners" {
         runner_name_prefix = "${local.prefix}_single_gpu_"
         # Max # of Runners of this Size
         runners_maximum_count = 1
+        # Configure docker to use the NVIDIA runtime for GPU access
+        userdata_post_install = <<-EOF
+#!/bin/bash
+set -eux
+
+dnf install -y nvidia-container-toolkit
+
+nvidia-ctk runtime configure --runtime=docker
+
+systemctl restart docker
+EOF
       })
     }
   }
