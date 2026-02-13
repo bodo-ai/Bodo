@@ -381,6 +381,7 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace():
     def test_impl(A, to_replace, value):
@@ -400,6 +401,7 @@ def test_replace():
     check_func(test_impl, (A, to_replace, value))
 
 
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace_list(memory_leak_check):
     def test_impl(A, to_replace, value):
@@ -426,6 +428,7 @@ def test_replace_const_string():
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 def test_replace_const():
     def test_impl(A):
         return pd.Series(A).replace(2, 5)
@@ -445,6 +448,7 @@ def test_replace_const_list():
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace_delete():
     def test_impl(A, to_replace, value):
