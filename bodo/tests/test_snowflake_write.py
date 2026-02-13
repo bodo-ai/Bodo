@@ -2383,7 +2383,7 @@ def test_create_table_with_comments(memory_leak_check):
         ], "Wrong column nullability"
         assert column_info["comment"].to_list() == [
             "Index of events",
-            None,
+            np.nan,
             "Date of notable event",
         ], "Wrong column comments"
 
