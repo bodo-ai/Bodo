@@ -498,8 +498,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
                 cudfExprTree->eval(*(next_batch_tup.first), se);
         }
 
-        se->event.record(se->stream);
-
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
 
