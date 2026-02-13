@@ -32,7 +32,7 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
     std::cout << "gpu_capable for LogicalAggregate "
               << !logical_aggregate.groups.empty() << std::endl;
     // Temporarily don't support count_start and quantile on GPU.
-    if (!logical_aggregate.groups.empty()) {
+    if (logical_aggregate.groups.empty()) {
         return false;
     }
 
