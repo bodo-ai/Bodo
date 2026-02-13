@@ -148,13 +148,16 @@ def test_variable_on_index(memory_leak_check):
     bodo_func = bodo.jit(impl)
     df = pd.DataFrame(
         {"B": [0, 1, 2, np.nan, 4]},
-        [
-            pd.Timestamp("20130101 09:00:00"),
-            pd.Timestamp("20130101 09:00:02"),
-            pd.Timestamp("20130101 09:00:03"),
-            pd.Timestamp("20130101 09:00:05"),
-            pd.Timestamp("20130101 09:00:06"),
-        ],
+        pd.array(
+            [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+            dtype="datetime64[ns]",
+        ),
     )
     pd.testing.assert_frame_equal(bodo_func(df), impl(df), check_column_type=False)
 
