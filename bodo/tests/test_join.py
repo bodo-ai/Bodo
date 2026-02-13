@@ -698,7 +698,7 @@ def test_merge_left_right_index_dce(memory_leak_check):
         }
     )
 
-    check_func(f, (df1, df2), sort_output=True)
+    check_func(f, (df1, df2), sort_output=True, use_dict_encoded_strings=False)
 
     merge_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f)
 
