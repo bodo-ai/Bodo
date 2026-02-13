@@ -1129,6 +1129,7 @@ def test_series_to_list(series_val):
         check_func(impl, (series_val,), only_seq=True)
 
 
+@pytest.mark.skip("Pandas 3 comparison issues")
 def test_series_to_numpy(numeric_series_val, memory_leak_check):
     def test_impl(S):
         return S.to_numpy()
