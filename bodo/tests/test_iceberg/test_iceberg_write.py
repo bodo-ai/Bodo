@@ -1229,7 +1229,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             write_table_name, db_schema
         )
 
-        assert list(spark_out["B"]).count(None) == 100, (
+        assert spark_out["B"].isna().sum() == 100, (
             "Missing column not filled with nulls on spark read"
         )
 
