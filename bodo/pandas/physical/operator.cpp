@@ -582,6 +582,10 @@ void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch,
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 #else
+std::pair<GPU_DATA, OperatorResult> PhysicalGPUSource::ProduceBatch() {
+    throw std::runtime_error("Should never be called in non-CUDF mode.");
+}
+
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     throw std::runtime_error("Should never be called in non-CUDF mode.");
