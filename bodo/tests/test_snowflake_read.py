@@ -1457,8 +1457,8 @@ def test_read_nested_in_array_col(memory_leak_check):
         {
             "a": pd.Series(
                 [
-                    [[pd.NA], [12.4, -0.57]],
-                    [[10.0, 10.0], np.nan],
+                    [[None], [12.4, -0.57]],
+                    [[10.0, 10.0], None],
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.float64()))),
