@@ -272,10 +272,12 @@ openai = "*"
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
+mold = ">=2.40"
 
 [feature.dev.target.linux-aarch64.dependencies]
 gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
+mold = ">=2.40"
 
 [feature.dev.target.osx-64.dependencies]
 # Adding clang =19 to prevent build errors from upgrading zstd
