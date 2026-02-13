@@ -1644,7 +1644,7 @@ def _test_file_sorted(file_name: str, sort_order: list[SortField]):
         return res.reset_index(drop=True)
 
     sorted_vals = bodo_sort(df_vals)
-    _test_equal(df_vals, sorted_vals, check_dtype=False)
+    _test_equal(sorted_vals, df_vals, check_dtype=False)
 
 
 @pytest.mark.slow
