@@ -277,7 +277,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
                 f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
-            df_load = pd.read_parquet(tmp_folder, dtype_backend="pyarrow")
+            df_load = pd.read_parquet(tmp_folder)
 
         # Row order isn't defined, so sort the data.
         df_in_cols = df_in.columns.to_list()
