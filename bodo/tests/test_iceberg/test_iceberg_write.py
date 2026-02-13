@@ -162,9 +162,14 @@ def test_basic_write_replace(
     comm = MPI.COMM_WORLD
     passed = None
     if comm.Get_rank() == 0:
+        # Make sure the first df is the one with more Arrow dtypes so the testing
+        # function handles it better
+        df1, df2 = df.convert_dtypes(dtype_backend="pyarrow"), py_out
+        if read_behavior == "bodo":
+            df1, df2 = df2, df1
         passed = _test_equal_guard(
-            py_out,
-            df.convert_dtypes(dtype_backend="pyarrow"),
+            df1,
+            df2,
             sort_output=False,
             check_dtype=False,
         )
