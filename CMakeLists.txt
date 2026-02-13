@@ -20,6 +20,11 @@ endif()
 if (NOT WIN32)
     # Use mold for linking on unix systems
     set(CMAKE_LINKER_TYPE MOLD)
+    # Apple Clang doesn't look in the path for -fuse-ld
+    if (NOT LINUX)
+        set(CMAKE_CXX_USING_LINKER_MOLD "--ld-path=mold")
+        set(CMAKE_C_USING_LINKER_MOLD "--ld-path=mold")
+    endif()
 endif()
 
 # ------------------------- Enable Compilation Caches -------------------------
