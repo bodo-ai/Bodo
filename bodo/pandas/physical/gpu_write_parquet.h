@@ -63,31 +63,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return names;
     }
 
-    void create_output_dir(const std::string &path) {
-        int myrank, num_ranks;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-        std::string orig_path(path);
-        std::string path_name;
-        std::string dirname;
-        std::string fname;
-        std::shared_ptr<::arrow::io::OutputStream> out_stream;
-        Bodo_Fs::FsEnum fs_option;
-        bool is_parallel = true;
-        const char *prefix = "";
-
-        extract_fs_dir_path(path.c_str(), is_parallel, prefix, ".parquet",
-                            myrank, num_ranks, &fs_option, &dirname, &fname,
-                            &orig_path, &path_name);
-        // TODO: Support other filesystems.
-        if (fs_option != Bodo_Fs::posix) {
-            throw std::runtime_error(
-                "PhysicalGPUWriteParquet: only posix filesystem is supported.");
-        }
-        create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
-                            "parquet");
-    }
-
     std::shared_ptr<StreamAndEvent> prev_batch_se;
 
    public:
@@ -103,7 +78,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
           chunk_bytes(static_cast<int64_t>(get_parquet_chunk_size())) {
         time_pt start_init = start_timer();
 
-        create_output_dir(this->path);
+        pq_write_create_dir(this->path.c_str());
 
         column_names = get_names_from_arrow(arrow_schema);
 
