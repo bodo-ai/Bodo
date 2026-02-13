@@ -228,6 +228,7 @@ class TestHiFrames(unittest.TestCase):
         A = np.arange(0, n, 1, np.float64)
         np.testing.assert_almost_equal(bodo_func(A), test_impl(A))
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_nunique(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n)})
