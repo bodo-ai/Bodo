@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -48,9 +49,7 @@ def test_fixed_index(test_df, memory_leak_check):
         return df.rolling(2).mean()
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(test_df), impl(test_df), check_column_type=False
-    )
+    _test_equal(bodo_func(test_df), impl(test_df))
 
 
 @pytest.mark.slow
@@ -166,7 +165,7 @@ def test_variable_on_index(memory_leak_check):
             dtype="datetime64[ns]",
         ),
     )
-    pd.testing.assert_frame_equal(bodo_func(df), impl(df), check_column_type=False)
+    _test_equal(bodo_func(df), impl(df))
 
 
 @pytest.mark.slow
@@ -512,13 +511,9 @@ class TestRolling(unittest.TestCase):
 
             for args in itertools.product(wins, centers):
                 df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-                )
+                _test_equal(bodo_func(df, *args), test_impl(df, *args))
                 df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-                )
+                _test_equal(bodo_func(df, *args), test_impl(df, *args))
 
     def test_fixed2(self):
         # test sequentially with generated dfs
@@ -536,9 +531,7 @@ class TestRolling(unittest.TestCase):
             bodo_func = bodo.jit(test_impl)
             for n, w, c in itertools.product(sizes, wins, centers):
                 df = pd.DataFrame({"B": np.arange(n)})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, w, c), test_impl(df, w, c), check_column_type=False
-                )
+                _test_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_apply1(self):
         # test sequentially with manually created dfs
@@ -552,13 +545,9 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         for args in itertools.product(wins, centers):
             df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-            )
+            _test_equal(bodo_func(df, *args), test_impl(df, *args))
             df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-            )
+            _test_equal(bodo_func(df, *args), test_impl(df, *args))
 
     def test_fixed_apply2(self):
         # test sequentially with generated dfs
@@ -574,9 +563,7 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         for n, w, c in itertools.product(sizes, wins, centers):
             df = pd.DataFrame({"B": np.arange(n)})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, w, c), test_impl(df, w, c), check_column_type=False
-            )
+            _test_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_parallel1(self):
         def test_impl(n, w, center):
@@ -667,12 +654,8 @@ class TestRolling(unittest.TestCase):
             # XXX: skipping min/max for this test since the behavior of Pandas
             # is inconsistent: it assigns NaN to last output instead of 4!
             if func_name not in ("min", "max"):
-                pd.testing.assert_frame_equal(
-                    bodo_func(df1), test_impl(df1), check_column_type=False
-                )
-            pd.testing.assert_frame_equal(
-                bodo_func(df2), test_impl(df2), check_column_type=False
-            )
+                _test_equal(bodo_func(df1), test_impl(df1))
+            _test_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable2(self):
         # test sequentially with generated dfs
@@ -691,9 +674,7 @@ class TestRolling(unittest.TestCase):
             for n in sizes:
                 time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df), test_impl(df), check_column_type=False
-                )
+                _test_equal(bodo_func(df), test_impl(df))
 
     def test_variable_apply1(self):
         # test sequentially with manually created dfs
@@ -737,12 +718,8 @@ class TestRolling(unittest.TestCase):
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
-            pd.testing.assert_frame_equal(
-                bodo_func(df1), test_impl(df1), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(df2), test_impl(df2), check_column_type=False
-            )
+            _test_equal(bodo_func(df1), test_impl(df1))
+            _test_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable_apply2(self):
         # test sequentially with generated dfs
@@ -762,9 +739,7 @@ class TestRolling(unittest.TestCase):
             for n in sizes:
                 time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df), test_impl(df), check_column_type=False
-                )
+                _test_equal(bodo_func(df), test_impl(df))
 
     def test_variable_parallel1(self):
         wins = ("2s",)
@@ -899,24 +874,16 @@ class TestRolling(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl(*args), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl(*args), check_column_type=False
-            )
+            _test_equal(bodo_func(*args), test_impl(*args))
+            _test_equal(bodo_func(*args), test_impl(*args))
 
         def test_impl2(df, df2, w, c):
             return df.rolling(w, center=c).corr(df2)
 
         bodo_func = bodo.jit(test_impl2)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl2(*args), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl2(*args), check_column_type=False
-            )
+            _test_equal(bodo_func(*args), test_impl2(*args))
+            _test_equal(bodo_func(*args), test_impl2(*args))
 
 
 if __name__ == "__main__":
