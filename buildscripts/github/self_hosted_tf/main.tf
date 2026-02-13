@@ -132,8 +132,7 @@ module "runners" {
         # Configure docker to use the NVIDIA runtime for GPU access
         userdata_pre_install = <<-EOT
             #!/bin/bash
-            sudo dnf install -y nvidia-container-toolkit
-            sudo nvidia-ctk runtime configure --runtime=docker
+            echo 1
           EOT
       })
     }
