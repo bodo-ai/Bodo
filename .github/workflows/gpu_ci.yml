@@ -11,6 +11,7 @@ jobs:
 
     container:
       image: nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04
+      options: --gpus all
 
     steps:
       - name: Checkout repo
