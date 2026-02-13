@@ -4018,13 +4018,13 @@ def to_sql_exception_guard(
             df.to_sql(
                 name,
                 con,
-                schema,
-                if_exists,
-                index,
-                index_label,
-                chunksize,
-                dtype,
-                method,
+                schema=schema,
+                if_exists=if_exists,
+                index=index,
+                index_label=index_label,
+                chunksize=chunksize,
+                dtype=dtype,
+                method=method,
             )
             ev_df_to_sql.finalize()
         except Exception as e:

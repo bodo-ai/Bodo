@@ -16,6 +16,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     oracle_user_pass_and_hostname,
     pytest_mark_oracle,
@@ -56,9 +57,7 @@ def test_write_sql_aws(chunksize, memory_leak_check):
                     df_load_sort = (
                         df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
                     )
-                    pd.testing.assert_frame_equal(
-                        df_load_sort, df_in_sort, check_column_type=False
-                    )
+                    _test_equal(df_load_sort, df_in_sort, check_dtype=False)
                 except Exception as e:
                     print("".join(traceback.format_exception(None, e, e.__traceback__)))
                     passed = 0
