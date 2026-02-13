@@ -25,6 +25,7 @@ requirements:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - sccache
+    - mold
 
   host:
     - python
