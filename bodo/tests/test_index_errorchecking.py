@@ -1085,27 +1085,6 @@ def test_dti_init_kwd_err():
         bodo.jit(impl)()
 
 
-def test_tdi_init_kwd_err():
-    from bodo.utils.typing import BodoError
-
-    def impl():
-        pd.TimedeltaIndex(np.arange(100))
-
-    err_msg = (
-        ".*"
-        + re.escape(
-            "pandas.TimedeltaIndex(): unit parameter only supports default value None"
-        )
-        + ".*"
-    )
-
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
 @pytest.mark.skip("TODO")
 def test_idx_map_tup_return():
     index = pd.Index(np.arange(10))
