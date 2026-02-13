@@ -304,6 +304,14 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = "NUMBER(38, 0)"
             elif numpy_type.startswith("float"):
                 sf_schema[col_name] = "REAL"
+        elif col_type == bodo.types.timedelta_array_type:
+            sf_schema[col_name] = "NUMBER(38, 0)"
+            if bodo.get_rank() == 0:
+                warnings.warn(
+                    BodoWarning(
+                        f"to_sql(): {col_name} with type 'timedelta' will be written as integer values (ns frequency) to the database."
+                    )
+                )
         elif is_str_arr_type(col_type):
             if column_precisions is None or column_precisions[col_idx] < 0:
                 sf_schema[col_name] = "TEXT"

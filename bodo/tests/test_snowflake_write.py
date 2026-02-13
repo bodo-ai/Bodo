@@ -30,6 +30,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     _get_dist_arg,
+    _test_equal,
     check_func,
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
@@ -987,7 +988,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             # disable dtype check. Int8 vs. int64
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result.sort_values("int8_col").reset_index(drop=True),
                 py_output.astype({"nullable_bool_col": "boolean"})
                 .sort_values("int8_col")
