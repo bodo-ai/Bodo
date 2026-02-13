@@ -126,6 +126,7 @@ FetchContent_Declare(
   GIT_TAG        5.0.2
   GIT_SHALLOW    TRUE
   GIT_SUBMODULES ""
+  EXCLUDE_FROM_ALL
 )
 
 FetchContent_MakeAvailable(datasketches)
