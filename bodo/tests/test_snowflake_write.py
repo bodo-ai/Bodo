@@ -1278,9 +1278,9 @@ def test_snowflake_to_sql_nullarray(memory_leak_check):
             # Attribute "dtype" are different
             # [left]:  string[pyarrow]
             # [right]: object
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result,
-                py_output,
+                py_output.astype(pd.ArrowDtype(pa.string())),
                 check_dtype=False,
             )
         except Exception as e:
