@@ -69,7 +69,7 @@ jobs:
       - name: Install Pixi Global Tools
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
         run: |
-          pixi global install sccache
+          pixi global install sccache mold
 
       - name: Calculate CIBW_BUILD (Unix)
         if: runner.os != 'Windows'
@@ -97,7 +97,7 @@ jobs:
             source ~/.bashrc
 
             # Global Tools
-            pixi global install sccache ninja
+            pixi global install sccache ninja mold
 
             # Install dependencies available on package manager
             ARCH=$(uname -m)
