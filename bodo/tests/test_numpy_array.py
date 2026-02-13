@@ -601,7 +601,8 @@ def test_cbrt(num_arr):
                 datetime.timedelta(days=11, seconds=4, weeks=4),
                 datetime.timedelta(days=42, seconds=11, weeks=4),
                 datetime.timedelta(days=5, seconds=123, weeks=4),
-            ]
+            ],
+            dtype="timedelta64[ns]",
         ),
         np.append(
             pd.date_range("2017-07-03", "2017-07-17", unit="ns").date,
