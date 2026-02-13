@@ -1518,10 +1518,10 @@ def test_read_nested_struct_in_array_col(memory_leak_check):
             "c": pd.array(
                 [
                     [
-                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "dos", "stat": None, "cnt": None},
                         {"name": "tres", "stat": False, "cnt": -2},
                     ],
-                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [None, {"name": "uno", "stat": False, "cnt": None}],
                     [],
                 ],
                 dtype=pd.ArrowDtype(
