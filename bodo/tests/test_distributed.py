@@ -2624,12 +2624,12 @@ def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
     df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df_value)
     # We have some minor dtype differences from pandas
     _test_equal_guard(
-        df_value, bodo.libs.distributed_api.allgatherv(df_scattered), check_dtype=False
+        bodo.libs.distributed_api.allgatherv(df_scattered), df_value, check_dtype=False
     )
     passed = 1
     gathered_val = bodo.libs.distributed_api.gatherv(df_scattered)
     if bodo.get_rank() == 0:
-        passed = _test_equal_guard(df_value, gathered_val, check_dtype=False)
+        passed = _test_equal_guard(gathered_val, df_value, check_dtype=False)
 
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()
