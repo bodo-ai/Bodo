@@ -74,6 +74,7 @@ class TestHiFrames(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_fillna_inplace(self):
         def test_impl():
             A = np.array([1.0, 2.0, 3.0])
