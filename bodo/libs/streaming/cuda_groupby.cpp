@@ -5490,5 +5490,9 @@ std::unique_ptr<cudf::column> mean_final_merge(
     return mean_col;
 }
 
+cudf::column_view no_op(const cudf::column_view &input_col) {
+    return input_col;
+}
+
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
 #undef MAX_SHUFFLE_TABLE_SIZE
