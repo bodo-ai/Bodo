@@ -28,7 +28,11 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo]
-cmd = "cmake --build build/standard -j && ln -sf build/standard/compile_commands.json compile_commands.json"
+cmd = """
+cmake --build build/standard -j && \
+cmake --install build/standard --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/standard/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 depends-on = ["configure-bodo"]
 [tasks.build-bodo.env]
@@ -49,7 +53,11 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-in-default-cuda]
-cmd = "cmake --build build/cudf -j && ln -sf build/cudf/compile_commands.json compile_commands.json"
+cmd = """
+cmake --build build/cudf -j && \
+cmake --install build/cudf --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/cudf/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 depends-on = ["configure-bodo-cudf-in-default-cuda"]
 [tasks.build-bodo-cudf-in-default-cuda.env]
@@ -65,7 +73,7 @@ depends-on = [
 
 
 [tasks.configure-bodo-cudf-san-in-default-cuda]
-cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/cudf-san -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve . --config-settings=cmake.define.USE_CUDF=ON"
+cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf-san -Ccmake.define.USE_CUDF=ON -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false"
 inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/cudf-san/CMakeCache.txt"]
 [tasks.configure-bodo-cudf-san-in-default-cuda.env]
@@ -75,7 +83,11 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-san-in-default-cuda]
-cmd = "cmake --build build/cudf-san -j && ln -sf build/cudf-san/compile_commands.json compile_commands.json"
+cmd = """
+cmake -S . -B build/cudf-san -DCMAKE_BUILD_TYPE=DebugSanitize -DUSE_CUDF=ON && \
+cmake --install build/cudf-san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/cudf-san/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 depends-on = ["configure-bodo-cudf-san-in-default-cuda"]
 [tasks.build-bodo-cudf-san-in-default-cuda.env]
@@ -95,7 +107,11 @@ inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/debug/CMakeCache.txt"]
 
 [tasks.build-bodo-debug]
-cmd = "cmake --build build/debug -j && ln -sf build/debug/compile_commands.json compile_commands.json"
+cmd = """
+cmake --build build/debug -j && \
+cmake --install build/debug --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/debug/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 depends-on = ["configure-bodo-debug"]
 
@@ -106,7 +122,11 @@ inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/san/CMakeCache.txt"]
 
 [tasks.build-bodo-san]
-cmd = "cmake --build build/san -j && ln -sf build/san/compile_commands.json compile_commands.json"
+cmd = """
+cmake --build build/san -j && \
+cmake --install build/san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/san/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 depends-on = ["configure-bodo-san"]
 
