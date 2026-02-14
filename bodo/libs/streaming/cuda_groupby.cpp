@@ -5332,7 +5332,10 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
 #endif
 
 std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
-    cudf::table_view const& input, rmm::cuda_stream_view& stream) {
+    cudf::table_view const& input, std::vector<uint64_t>& key_indices,
+    std::vector<uint64_t>& column_indices,
+    std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
+    rmm::cuda_stream_view& stream) {
     // Suppose column 0 is the key, column 1 is the value
     std::vector<cudf::column_view> key_columns;
     for (auto key_col : key_indices) {
@@ -5349,19 +5352,15 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     }
 
     // Run the groupby
-    // struct aggregation_result {
-    //     std::vector<std::unique_ptr<column>> results{};
-    // };
-
     std::pair<std::unique_ptr<cudf::table>,
               std::vector<cudf::groupby::aggregation_result>>
         result = gb_obj.aggregate(aggregation_requests, stream);
 
     // result.first  = grouped keys table
     // result.second = vector<aggregation_result>
-    //                each contains a table of aggregated columns
+    // Each aggregation_result is a vector<column>.
 
-    // Usually you want to stitch keys + results together
+    // stitch keys + results together
     std::vector<std::unique_ptr<cudf::column>> cols;
 
     // Move grouped keys
@@ -5382,17 +5381,113 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
 void CudaGroupbyState::build_consume_batch(
     std::shared_ptr<cudf::table> input_table, bool is_last,
     rmm::cuda_stream_view& stream) {
+    if (input_table->view().num_rows() == 0) {
+        return;
+    }
+
+    std::unique_ptr<cudf::table> new_data =
+        do_groupby(input_table->view(), key_indices, column_indices,
+                   aggregation_requests, stream);
     if (accumulation) {
-        throw std::runtime_error("GPU groupby merging Not implemented yet.");
+        // Subsequent time need to merge outputs and groupby on the
+        // concatenation.
+        std::vector<cudf::table_view> views;
+        views.reserve(2);
+        views.emplace_back(accumulation->view());
+        views.emplace_back(new_data->view());
+        auto combined = cudf::concatenate(views, stream);
+        accumulation = std::move(do_groupby(
+            combined->view(), merge_key_indices, merge_column_indices,
+            merge_aggregation_requests, stream));
     } else {
-        accumulation = std::move(do_groupby(input_table->view(), stream));
+        // First time just save the output.
+        accumulation = std::move(new_data);
     }
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     bool& out_is_last, bool produce_output) {
     out_is_last = true;
+    if (final_merges.size() > 0) {
+        accumulation = apply_final_merges(accumulation->view(), final_merges);
+    }
+
     return std::move(accumulation);
+}
+
+std::unique_ptr<cudf::table> apply_final_merges(
+    cudf::table_view const& input, std::vector<FinalMerge> const& merges) {
+    int ncols = input.num_columns();
+
+    // Build a quick lookup: for each column index, which merge (if any) owns
+    // it?
+    std::vector<int> merge_owner(ncols, -1);
+
+    for (size_t m = 0; m < merges.size(); ++m) {
+        for (size_t idx : merges[m].column_indices) {
+            merge_owner[idx] = m;
+        }
+    }
+
+    // Precompute merged columns
+    std::vector<std::unique_ptr<cudf::column>> merged_results(merges.size());
+
+    for (size_t m = 0; m < merges.size(); ++m) {
+        auto const& fm = merges[m];
+
+        std::vector<cudf::column_view> views;
+        views.reserve(fm.column_indices.size());
+
+        for (size_t idx : fm.column_indices) {
+            views.push_back(input.column(idx));
+        }
+
+        merged_results[m] = fm.fn(views);
+    }
+
+    // Build output columns
+    std::vector<std::unique_ptr<cudf::column>> out_cols;
+    out_cols.reserve(ncols);  // upper bound
+
+    int i = 0;
+    while (i < ncols) {
+        int m = merge_owner[i];
+
+        if (m == -1) {
+            // Not part of any merge → copy column
+            out_cols.push_back(std::make_unique<cudf::column>(input.column(i)));
+            i += 1;
+        } else {
+            // Part of merge m → insert merged column at this position
+            out_cols.push_back(std::move(merged_results[m]));
+
+            // Skip all columns consumed by this merge
+            int last = merges[m].column_indices.back();
+            i = last + 1;
+        }
+    }
+
+    return std::make_unique<cudf::table>(std::move(out_cols));
+}
+
+std::unique_ptr<cudf::column> mean_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 2) {
+        throw std::runtime_error("mean_final_merge didn't get 2 columns.");
+    }
+
+    auto const& sum_col = input_cols[0];
+    auto const& count_col = input_cols[1];
+
+    // The output type is float64 unless you want to preserve the input type.
+    // Using float64 is safest for mean.
+    cudf::data_type out_type{cudf::type_id::FLOAT64};
+
+    // Perform elementwise division: sum / count
+    auto mean_col = cudf::binary_operation(
+        sum_col, count_col, cudf::binary_operator::DIV, out_type);
+
+    return mean_col;
 }
 
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
