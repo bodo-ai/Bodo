@@ -31,6 +31,15 @@ jobs:
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: 'default-cuda'
           activate-environment: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+
       - name: Build Bodo
         run: |
           pixi run build-bodo-cudf
