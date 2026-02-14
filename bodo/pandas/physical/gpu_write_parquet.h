@@ -63,12 +63,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return names;
     }
 
-    void recreate_output_dir(const std::string &path) {
-        if (fs::exists(path)) {
-            fs::remove_all(path);
-        }
-        fs::create_directories(path);
-    }
+    std::shared_ptr<StreamAndEvent> prev_batch_se;
 
    public:
     explicit PhysicalGPUWriteParquet(std::shared_ptr<bodo::Schema> in_schema,
@@ -83,7 +78,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
           chunk_bytes(static_cast<int64_t>(get_parquet_chunk_size())) {
         time_pt start_init = start_timer();
 
-        recreate_output_dir(this->path);
+        pq_write_create_dir(this->path.c_str());
 
         column_names = get_names_from_arrow(arrow_schema);
 
@@ -103,7 +98,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
     virtual ~PhysicalGPUWriteParquet() = default;
 
-    size_t column_bytes(const cudf::column_view &col) {
+    size_t column_bytes(const cudf::column_view &col,
+                        std::shared_ptr<StreamAndEvent> se) {
         size_t total = 0;
 
         // null mask
@@ -125,7 +121,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             total += scv.offsets().size() * sizeof(int32_t);
 
             // chars buffer (requires a stream)
-            total += scv.chars_size(rmm::cuda_stream_default);
+            total += scv.chars_size(se->stream);
 
             return total;
         }
@@ -138,7 +134,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             total += lcv.offsets().size() * sizeof(int32_t);
 
             // recurse into child column
-            total += column_bytes(lcv.child());
+            total += column_bytes(lcv.child(), se);
 
             return total;
         }
@@ -146,7 +142,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         // STRUCTS
         if (col.type().id() == cudf::type_id::STRUCT) {
             for (int i = 0; i < col.num_children(); ++i) {
-                total += column_bytes(col.child(i));
+                total += column_bytes(col.child(i), se);
             }
             return total;
         }
@@ -155,24 +151,36 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return total;
     }
 
-    size_t table_bytes(const cudf::table_view &tv) {
+    size_t table_bytes(const cudf::table_view &tv,
+                       std::shared_ptr<StreamAndEvent> se) {
         size_t total = 0;
         for (auto const &col : tv) {
-            total += column_bytes(col);
+            total += column_bytes(col, se);
         }
         return total;
     }
 
-    size_t row_size_bytes(const cudf::table_view &tv) {
+    size_t row_size_bytes(const cudf::table_view &tv,
+                          std::shared_ptr<StreamAndEvent> se) {
         if (tv.num_rows() == 0)
             return 0;
-        return table_bytes(tv) / tv.num_rows();
+        return table_bytes(tv, se) / tv.num_rows();
     }
 
     // ConsumeBatch signature using GPU_DATA
-    OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                OperatorResult prev_op_result) override {
+    OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
+        if (prev_batch_se) {
+            // Write batches to file in pipeline order.
+            // Wait for last write pipeline batch to finish before running
+            // this one.
+            prev_batch_se->event.wait(se->stream);
+        }
+        prev_batch_se = se;
+
         if (finished) {
+            cudaStreamSynchronize(se->stream);
             return OperatorResult::FINISHED;
         }
 
@@ -190,7 +198,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             // concatenate: build views, get unique_ptr result
             std::vector<cudf::table_view> views{buffer_table->view(),
                                                 incoming_tbl->view()};
-            std::unique_ptr<cudf::table> concat_uptr = cudf::concatenate(views);
+            std::unique_ptr<cudf::table> concat_uptr =
+                cudf::concatenate(views, se->stream);
 
             // convert unique_ptr -> shared_ptr by moving ownership
             buffer_table = std::shared_ptr<cudf::table>(std::move(concat_uptr));
@@ -199,7 +208,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         // decide flush by rows
         bool is_last = (prev_op_result == OperatorResult::FINISHED);
-        size_t row_size = row_size_bytes(buffer_table->view());
+        size_t row_size = row_size_bytes(buffer_table->view(), se);
         size_t buffer_bytes = buffer_rows * row_size;
         bool should_flush = is_last || (buffer_bytes >= chunk_bytes);
 
@@ -235,7 +244,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             auto options = builder.build();
 
             // do the actual write
-            cudf::io::write_parquet(options);
+            cudf::io::write_parquet(options, se->stream);
 
             // reset buffer
             buffer_table.reset();
@@ -246,6 +255,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         if (is_last) {
             finished = true;
+            cudaStreamSynchronize(se->stream);
             return OperatorResult::FINISHED;
         }
 

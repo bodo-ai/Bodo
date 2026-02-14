@@ -85,54 +85,54 @@ class ArrayExprGPUResult : public ExprGPUResult {
  */
 class ScalarExprGPUResult : public ExprGPUResult {
    public:
-    ScalarExprGPUResult(GPU_SCALAR val) : result(std::move(val)) {
-        assert(val->length == 1);
-    }
+    ScalarExprGPUResult(GPU_SCALAR val) : result(std::move(val)) {}
     virtual ~ScalarExprGPUResult() = default;
     const GPU_SCALAR result;
 };
 
 template <typename U>
-std::unique_ptr<cudf::scalar> make_cudf_scalar_from_value(U const &value) {
+std::unique_ptr<cudf::scalar> make_cudf_scalar_from_value(
+    U const &value, std::shared_ptr<StreamAndEvent> se) {
     using T = std::decay_t<U>;
 
     if constexpr (std::is_same_v<T, std::string>) {
-        return std::make_unique<cudf::string_scalar>(value);
+        return std::make_unique<cudf::string_scalar>(value, se->stream);
     } else if constexpr (std::is_same_v<T, const char *>) {
-        return std::make_unique<cudf::string_scalar>(std::string(value));
+        return std::make_unique<cudf::string_scalar>(std::string(value),
+                                                     se->stream);
     } else if constexpr (std::is_same_v<T, bool>) {
         return std::make_unique<cudf::numeric_scalar<int8_t>>(
-            static_cast<int8_t>(value));
+            static_cast<int8_t>(value), true, se->stream);
     } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
         if constexpr (sizeof(T) == 1)
             return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(value));
+                static_cast<int8_t>(value), true, se->stream);
         if constexpr (sizeof(T) == 2)
             return std::make_unique<cudf::numeric_scalar<int16_t>>(
-                static_cast<int16_t>(value));
+                static_cast<int16_t>(value), true, se->stream);
         if constexpr (sizeof(T) == 4)
             return std::make_unique<cudf::numeric_scalar<int32_t>>(
-                static_cast<int32_t>(value));
+                static_cast<int32_t>(value), true, se->stream);
         return std::make_unique<cudf::numeric_scalar<int64_t>>(
-            static_cast<int64_t>(value));
+            static_cast<int64_t>(value), true, se->stream);
     } else if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
         if constexpr (sizeof(T) == 1)
             return std::make_unique<cudf::numeric_scalar<uint8_t>>(
-                static_cast<uint8_t>(value));
+                static_cast<uint8_t>(value), true, se->stream);
         if constexpr (sizeof(T) == 2)
             return std::make_unique<cudf::numeric_scalar<uint16_t>>(
-                static_cast<uint16_t>(value));
+                static_cast<uint16_t>(value), true, se->stream);
         if constexpr (sizeof(T) == 4)
             return std::make_unique<cudf::numeric_scalar<uint32_t>>(
-                static_cast<uint32_t>(value));
+                static_cast<uint32_t>(value), true, se->stream);
         return std::make_unique<cudf::numeric_scalar<uint64_t>>(
-            static_cast<uint64_t>(value));
+            static_cast<uint64_t>(value), true, se->stream);
     } else if constexpr (std::is_floating_point_v<T>) {
         if constexpr (sizeof(T) == 4)
             return std::make_unique<cudf::numeric_scalar<float>>(
-                static_cast<float>(value));
+                static_cast<float>(value), true, se->stream);
         return std::make_unique<cudf::numeric_scalar<double>>(
-            static_cast<double>(value));
+            static_cast<double>(value), true, se->stream);
     } else {
         static_assert(!sizeof(T),
                       "Unsupported type for make_cudf_scalar_from_value");
@@ -164,7 +164,7 @@ class PhysicalGPUExpression {
      *
      */
     virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch) = 0;
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) = 0;
 
     static bool join_expr(cudf::column **left_table, cudf::column **right_table,
                           void **left_data, void **right_data,
@@ -195,7 +195,7 @@ class PhysicalGPUExpression {
  */
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
     std::shared_ptr<ExprGPUResult> left_res,
-    const cudf::unary_operator &comparator,
+    const cudf::unary_operator &comparator, std::shared_ptr<StreamAndEvent> se,
     const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
@@ -205,16 +205,16 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_unary(
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
     std::shared_ptr<ExprGPUResult> left_res,
     std::shared_ptr<ExprGPUResult> right_res,
-    const cudf::binary_operator &comparator,
-    const std::shared_ptr<cudf::data_type> result_type = nullptr);
+    const cudf::binary_operator &comparator, std::shared_ptr<StreamAndEvent> se,
+    const cudf::data_type &cudf_result_type);
 
 /**
  * @brief Convert ExprGPUResult to arrow and cast to the requested type.
  *
  */
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
-    std::shared_ptr<ExprGPUResult> left_res,
-    const duckdb::LogicalType &return_type);
+    std::shared_ptr<ExprGPUResult> left_res, cudf::data_type &cudf_result_type,
+    std::shared_ptr<StreamAndEvent> se);
 
 /**
  * @brief Convert ExprGPUResult to arrow and run case compute on them.
@@ -222,7 +222,8 @@ std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_cast(
  */
 GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
                                 std::shared_ptr<ExprGPUResult> then_res,
-                                std::shared_ptr<ExprGPUResult> else_res);
+                                std::shared_ptr<ExprGPUResult> else_res,
+                                std::shared_ptr<StreamAndEvent> se);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -234,7 +235,9 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
     PhysicalGPUComparisonExpression(
         std::shared_ptr<PhysicalGPUExpression> left,
         std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype) {
+        duckdb::ExpressionType etype, duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -268,14 +271,16 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
-            children[0]->ProcessBatch(input_batch);
+            children[0]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> right_res =
-            children[1]->ProcessBatch(input_batch);
+            children[1]->ProcessBatch(input_batch, se);
 
-        auto result = do_cudf_compute_binary(left_res, right_res, comparator);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -306,6 +311,7 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
 };
 
@@ -320,7 +326,8 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalGPUNullExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // The current rule is that if the expression infrastructure
         // is used for filtering then constants are treated as
         // scalars and if used for projection then constants become
@@ -329,19 +336,20 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         // batch and return an ArrayExprGPUResult.
         std::unique_ptr<cudf::scalar> scalar;
         if constexpr (std::is_same_v<T, std::shared_ptr<arrow::Scalar>>) {
-            auto make_cudf_res = arrow_scalar_to_cudf(constant);
+            auto make_cudf_res = arrow_scalar_to_cudf(constant, se->stream);
             scalar = std::move(make_cudf_res);
         } else {
-            auto make_cudf_res = make_cudf_scalar_from_value(constant);
+            auto make_cudf_res = make_cudf_scalar_from_value(constant, se);
             scalar = std::move(make_cudf_res);
         }
-        std::unique_ptr<cudf::scalar> invalid = make_invalid_like(*scalar);
+        std::unique_ptr<cudf::scalar> invalid =
+            make_invalid_like(*scalar, se->stream);
 
         if (generate_array) {
             std::size_t length = input_batch.table->num_rows();
             // create a column filled with that scalar
             std::unique_ptr<cudf::column> col =
-                cudf::make_column_from_scalar(*scalar, length);
+                cudf::make_column_from_scalar(*scalar, length, se->stream);
             return std::make_shared<ArrayExprGPUResult>(
                 std::move(col), std::string("Constant"));
         } else {
@@ -380,14 +388,14 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
     virtual ~PhysicalGPUConstantExpression() = default;
 
     virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch) override {
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         std::unique_ptr<cudf::scalar> scalar;
         // create cudf scalar from the constant
         if constexpr (std::is_same_v<T, std::shared_ptr<arrow::Scalar>>) {
-            auto make_cudf_res = arrow_scalar_to_cudf(constant);
+            auto make_cudf_res = arrow_scalar_to_cudf(constant, se->stream);
             scalar = std::move(make_cudf_res);
         } else {
-            auto make_cudf_res = make_cudf_scalar_from_value(constant);
+            auto make_cudf_res = make_cudf_scalar_from_value(constant, se);
             scalar = std::move(make_cudf_res);
         }
 
@@ -395,7 +403,7 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
             std::size_t length = input_batch.table->num_rows();
             // create a column filled with that scalar
             std::unique_ptr<cudf::column> col =
-                cudf::make_column_from_scalar(*scalar, length);
+                cudf::make_column_from_scalar(*scalar, length, se->stream);
             return std::make_shared<ArrayExprGPUResult>(
                 std::move(col), std::string("Constant"));
         } else {
@@ -434,9 +442,10 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
         : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
     virtual ~PhysicalGPUColumnRefExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         GPU_COLUMN res_array = std::make_unique<cudf::column>(
-            input_batch.table->view().column(col_idx));
+            input_batch.table->view().column(col_idx), se->stream);
 
         std::vector<std::string> column_names =
             input_batch.schema->field_names();
@@ -480,7 +489,9 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
     PhysicalGPUConjunctionExpression(
         std::shared_ptr<PhysicalGPUExpression> left,
         std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype) {
+        duckdb::ExpressionType etype, duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -502,14 +513,16 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
-            children[0]->ProcessBatch(input_batch);
+            children[0]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> right_res =
-            children[1]->ProcessBatch(input_batch);
+            children[1]->ProcessBatch(input_batch, se);
 
-        auto result = do_cudf_compute_binary(left_res, right_res, comparator);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -540,6 +553,7 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
 };
 
@@ -550,9 +564,9 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
 class PhysicalGPUCastExpression : public PhysicalGPUExpression {
    public:
     PhysicalGPUCastExpression(std::shared_ptr<PhysicalGPUExpression> left,
-                              duckdb::LogicalType _return_type)
-        : return_type(_return_type) {
+                              duckdb::LogicalType _return_type) {
         children.push_back(left);
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
     }
 
     virtual ~PhysicalGPUCastExpression() = default;
@@ -561,11 +575,12 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
-            children[0]->ProcessBatch(input_batch);
-        auto result = do_cudf_compute_cast(left_res, return_type);
+            children[0]->ProcessBatch(input_batch, se);
+        auto result = do_cudf_compute_cast(left_res, return_type, se);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -594,7 +609,7 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
     }
 
    protected:
-    duckdb::LogicalType return_type;
+    cudf::data_type return_type;
 };
 
 /**
@@ -637,22 +652,24 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
-            children[0]->ProcessBatch(input_batch);
+            children[0]->ProcessBatch(input_batch, se);
         std::variant<GPU_COLUMN, GPU_SCALAR> op_res;
         if (is_not_null) {
             std::shared_ptr<ArrayExprGPUResult> left_as_array =
                 std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
             if (left_as_array) {
                 auto is_null_res = cudf::is_null(left_as_array->result->view());
-                op_res = cudf::unary_operation(is_null_res->view(), comparator);
+                op_res = cudf::unary_operation(is_null_res->view(), comparator,
+                                               se->stream);
             } else {
                 throw std::runtime_error("Left must be array for is_not_null.");
             }
         } else {
-            op_res = do_cudf_compute_unary(left_res, comparator);
+            op_res = do_cudf_compute_unary(left_res, comparator, se);
         }
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
@@ -693,12 +710,12 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
  */
 class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
    public:
-    PhysicalGPUBinaryExpression(
-        std::shared_ptr<PhysicalGPUExpression> left,
-        std::shared_ptr<PhysicalGPUExpression> right,
-        duckdb::ExpressionType etype,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+    PhysicalGPUBinaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
+                                std::shared_ptr<PhysicalGPUExpression> right,
+                                duckdb::ExpressionType etype,
+                                duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -709,11 +726,12 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         }
     }
 
-    PhysicalGPUBinaryExpression(
-        std::shared_ptr<PhysicalGPUExpression> left,
-        std::shared_ptr<PhysicalGPUExpression> right, const std::string &opstr,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+    PhysicalGPUBinaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
+                                std::shared_ptr<PhysicalGPUExpression> right,
+                                const std::string &opstr,
+                                duckdb::LogicalType _return_type) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
+
         children.push_back(left);
         children.push_back(right);
         if (opstr == "+") {
@@ -740,14 +758,16 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
-            children[0]->ProcessBatch(input_batch);
+            children[0]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> right_res =
-            children[1]->ProcessBatch(input_batch);
+            children[1]->ProcessBatch(input_batch, se);
 
-        auto result = do_cudf_compute_binary(left_res, right_res, comparator);
+        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
+                                             se, return_type);
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -778,8 +798,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    cudf::data_type return_type;
     cudf::binary_operator comparator;
-    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 /**
@@ -803,16 +823,17 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) {
+    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
         // Process children first.
         std::shared_ptr<ExprGPUResult> when_res =
-            children[0]->ProcessBatch(input_batch);
+            children[0]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> then_res =
-            children[1]->ProcessBatch(input_batch);
+            children[1]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> else_res =
-            children[2]->ProcessBatch(input_batch);
+            children[2]->ProcessBatch(input_batch, se);
 
-        auto result = do_cudf_compute_case(when_res, then_res, else_res);
+        auto result = do_cudf_compute_case(when_res, then_res, else_res, se);
         return std::make_shared<ArrayExprGPUResult>(std::move(result), "Case");
     }
 
@@ -843,6 +864,10 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     bool no_scalars = false);
 
+bool gpu_capable(duckdb::unique_ptr<duckdb::Expression> &expr);
+
+bool gpu_capable(duckdb::Expression &expr);
+
 struct PhysicalGPUUDFExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t cpp_to_py_time = 0;
@@ -859,12 +884,12 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     PhysicalGPUUDFExpression(
         std::vector<std::shared_ptr<PhysicalGPUExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
-        const std::shared_ptr<arrow::DataType> &_result_type)
+        duckdb::LogicalType _return_type)
         : PhysicalGPUExpression(children),
           scalar_func_data(_scalar_func_data),
-          result_type(_result_type),
           cfunc_ptr(nullptr),
           init_state(nullptr) {
+        return_type = duckdb_logicaltype_to_cudf(_return_type);
         throw std::runtime_error("PhysicalGPUUDFExpression unimplemented ");
     }
 
@@ -878,7 +903,8 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    std::shared_ptr<ExprGPUResult> ProcessBatch(GPU_DATA input_batch) override;
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override;
 
     arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
@@ -898,9 +924,38 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
 
    protected:
     BodoScalarFunctionData scalar_func_data;
-    const std::shared_ptr<arrow::DataType> result_type;
+    cudf::data_type return_type;
     PhysicalGPUUDFExpressionMetrics metrics;
     std::future<table_udf_t> compile_future;
     table_udf_t cfunc_ptr;
     PyObject *init_state;
 };
+
+// CudfExpr tree like Arrow expression tree
+struct CudfExpr {
+    enum class Kind { COLUMN_REF, LITERAL, EQ, NE, LT, LE, GT, GE, AND, OR };
+
+    Kind kind;
+
+    // For COLUMN_REF
+    int column_index = -1;
+
+    // For LITERAL
+    duckdb::Value literal;
+
+    // For binary ops
+    std::unique_ptr<CudfExpr> left;
+    std::unique_ptr<CudfExpr> right;
+
+    std::unique_ptr<cudf::table> eval(cudf::table &input,
+                                      std::shared_ptr<StreamAndEvent> se);
+};
+
+/*
+ * @brief Convert a duckdb TableFilterSet to a CudfExpr.  Since we have to
+ *        filter after columns are reduced (as supported in cudf), we have
+ *        to map the original column indices that TableFilterSet uses to
+ *        column indices after the column set is reduced.
+ */
+std::unique_ptr<CudfExpr> tableFilterSetToCudf(
+    duckdb::TableFilterSet &filters, const std::map<int, int> &column_map);

@@ -96,7 +96,7 @@ jobs:
             source ~/.bashrc
 
             # Global Tools
-            pixi global install sccache ninja
+            pixi global install sccache ninja mold
 
             # Install dependencies available on package manager
             ARCH=$(uname -m)

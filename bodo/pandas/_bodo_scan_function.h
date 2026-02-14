@@ -44,6 +44,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
     // physical read operators which can generate filters from join key
     // statistics.
     std::optional<JoinFilterProgramState> rtjf_state_map = std::nullopt;
+
+    virtual bool canRunOnGPU(bool has_filters, bool has_limit) { return false; }
 };
 
 /**
@@ -96,6 +98,10 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
+
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
+        return !has_limit;
+    }
 
     // Parquet dataset path
     PyObject *path;

@@ -6,24 +6,29 @@
 #include <utility>
 #include "../_util.h"
 #include "../io/parquet_reader.h"
+#include "../libs/gpu_utils.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "gpu_expression.h"
 #include "operator.h"
 
 #include <mpi.h>
 
 #include <cudf/concatenate.hpp>
+#include <cudf/copying.hpp>
 #include <cudf/io/parquet.hpp>  // cudf::io::read_parquet, options
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 
 #include <arrow/io/file.h>
+#include <mpi_proto.h>
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
 
 #include <glob.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -41,21 +46,24 @@ class RankBatchGenerator {
    public:
     RankBatchGenerator(std::string dataset_path, std::size_t target_rows,
                        const std::vector<std::string> &_selected_columns,
-                       std::shared_ptr<arrow::Schema> _arrow_schema)
+                       std::shared_ptr<arrow::Schema> _arrow_schema,
+                       MPI_Comm comm)
         : path_(std::move(dataset_path)),
           target_rows_(target_rows),
           selected_columns(_selected_columns),
           arrow_schema(_arrow_schema) {
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
-        MPI_Comm_size(MPI_COMM_WORLD, &size_);
-
         files_ = list_parquet_files(path_);
-        if (files_.empty()) {
+
+        // Only assign parts to GPU-pinned ranks
+        if (files_.empty() || comm == MPI_COMM_NULL) {
             // nothing to do
             parts_ = {};
             current_part_idx_ = 0;
             return;
         }
+
+        MPI_Comm_rank(comm, &rank_);
+        MPI_Comm_size(comm, &size_);
 
         if (files_.size() == 1) {
             // single file -> partition by row groups
@@ -71,7 +79,8 @@ class RankBatchGenerator {
 
     // next() returns a pair: (cudf::table, eof_flag)
     // If no data assigned to this rank, returns empty table and eof=true.
-    std::pair<std::unique_ptr<cudf::table>, bool> next() {
+    std::pair<std::unique_ptr<cudf::table>, bool> next(
+        std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
             // nothing assigned to this rank
             return {empty_table_from_arrow_schema(arrow_schema), true};
@@ -84,6 +93,26 @@ class RankBatchGenerator {
 
         std::vector<std::unique_ptr<cudf::table>> gpu_tables;
         std::size_t rows_accum = 0;
+
+        if (leftover_tbl) {
+            std::size_t n = leftover_tbl->num_rows();
+            if (n <= target_rows_) {
+                rows_accum += n;
+                gpu_tables.emplace_back(std::move(leftover_tbl));
+            } else {
+                cudf::table_view tv = leftover_tbl->view();
+                auto batch = cudf::slice(tv, {0, (int)target_rows_})[0];
+                auto remain = cudf::slice(tv, {(int)target_rows_, (int)n})[0];
+                gpu_tables.push_back(std::make_unique<cudf::table>(batch));
+                leftover_tbl = std::make_unique<cudf::table>(remain);
+                rows_accum = target_rows_;
+            }
+        }
+
+        // If leftover satisfied the batch, return early
+        if (rows_accum >= target_rows_) {
+            return {std::move(gpu_tables[0]), false};
+        }
 
         // accumulate whole row groups until target reached or parts exhausted
         while (current_part_idx_ < static_cast<int>(parts_.size()) &&
@@ -113,36 +142,50 @@ class RankBatchGenerator {
                 if (selected_columns.size() > 0) {
                     reader_opts.set_columns(selected_columns);
                 }
-                auto result = cudf::io::read_parquet(reader_opts);
+                auto result = cudf::io::read_parquet(reader_opts, se->stream);
 
                 // result.tbl is typically a std::unique_ptr<cudf::table> or
                 // cudf::table Adjust the following to match your cuDF version:
                 std::unique_ptr<cudf::table> tbl = std::move(result.tbl);
 
+                // advance to next row group in this part
+                ++current_rg_;
+
                 if (!tbl || tbl->num_rows() == 0) {
                     // no rows in this row group (rare) — advance
-                    ++current_rg_;
                     continue;
                 }
 
-                rows_accum += static_cast<std::size_t>(tbl->num_rows());
-                gpu_tables.push_back(std::move(tbl));
+                std::size_t tbl_n = tbl->num_rows();
+                if (rows_accum + tbl_n <= target_rows_) {
+                    rows_accum += tbl_n;
+                    gpu_tables.push_back(std::move(tbl));
+                } else {
+                    std::size_t need = target_rows_ - rows_accum;
+                    cudf::table_view tv = tbl->view();
+                    auto batch = cudf::slice(tv, {0, (int)need})[0];
+                    auto remain = cudf::slice(tv, {(int)need, (int)tbl_n})[0];
+                    gpu_tables.push_back(std::make_unique<cudf::table>(batch));
+                    leftover_tbl = std::make_unique<cudf::table>(remain);
+                    rows_accum = target_rows_;
+                }
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
                 throw std::runtime_error(
                     "PhysicalGPUReadParquet(): read_parquet failed " +
                     part.path + " " + std::string(e.what()));
             }
-
-            // advance to next row group in this part
-            ++current_rg_;
         }
+
+        // Determine EOF: true if we've consumed all parts and current_rg_ >=
+        // end of last part
+        bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()) &&
+                    (!leftover_tbl || leftover_tbl->num_rows() == 0));
 
         // If we collected no tables (e.g., parts exhausted), return EOF
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()));
             return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
         }
 
@@ -159,19 +202,7 @@ class RankBatchGenerator {
             batch = std::move(gpu_tables[0]);
         } else {
             // concatenate returns a std::unique_ptr<cudf::table>
-            batch = cudf::concatenate(views);
-        }
-
-        // Determine EOF: true if we've consumed all parts and current_rg_ >=
-        // end of last part
-        bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()));
-        if (!eof) {
-            // if current_part_idx_ points to a part and current_rg_ >= end, we
-            // may have just finished last part
-            if (current_part_idx_ == static_cast<int>(parts_.size()) - 1 &&
-                current_rg_ >= parts_.back().end_row_group) {
-                eof = true;
-            }
+            batch = cudf::concatenate(views, se->stream);
         }
 
         return {std::move(batch), eof};
@@ -295,6 +326,9 @@ class RankBatchGenerator {
     // current position
     int current_part_idx_{0};
     int current_rg_{0};
+
+    // leftover rows from previous oversized row-group read
+    std::unique_ptr<cudf::table> leftover_tbl;
 };
 
 struct PhysicalGPUReadParquetMetrics {
@@ -329,6 +363,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     const std::vector<int> selected_columns;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
+    std::unique_ptr<CudfExpr> cudfExprTree;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -344,9 +379,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
+        std::map<int, int> old_to_new_column_map;
+        // Generate map of original column indices to selected column indices.
+        for (size_t i = 0; i < selected_columns.size(); ++i) {
+            old_to_new_column_map.insert({selected_columns[i], i});
+        }
+
+        this->filter_exprs = join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
+
         if (filter_exprs.filters.size() != 0) {
-            throw std::runtime_error(
-                "PhysicalGPUReadParquet(): filters not yet implemented");
+            cudfExprTree =
+                tableFilterSetToCudf(filter_exprs, old_to_new_column_map);
         }
 
         if (py_path && PyUnicode_Check(py_path)) {
@@ -407,10 +451,15 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         }
 
         this->metrics.init_time += end_timer(start_init);
+
+        this->comm = get_gpu_mpi_comm(get_gpu_id());
     }
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);
         Py_XDECREF(this->schema_fields);
+        if (this->comm != MPI_COMM_NULL) {
+            MPI_Comm_free(&this->comm);
+        }
     }
 
     void FinalizeSource() override {
@@ -432,7 +481,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             this->metrics.rows_read);
     }
 
-    std::pair<GPU_DATA, OperatorResult> ProduceBatch() override {
+    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) override {
         if (!batch_gen) {
             time_pt start_init = start_timer();
             init_batch_gen();
@@ -442,13 +492,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         time_pt start_produce = start_timer();
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
-            batch_gen->next();
+            batch_gen->next(se);
+        if (cudfExprTree) {
+            next_batch_tup.first =
+                cudfExprTree->eval(*(next_batch_tup.first), se);
+        }
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
 
         std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
-            GPU_DATA(std::move(next_batch_tup.first), arrow_schema), result);
+            GPU_DATA(std::move(next_batch_tup.first), arrow_schema, se),
+            result);
 
         this->metrics.produce_time += end_timer(start_produce);
         return ret;
@@ -473,16 +528,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     std::shared_ptr<RankBatchGenerator> batch_gen;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
+    // Communicator for GPU ranks (for part assignments)
+    MPI_Comm comm;
+
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
     }
 
     void init_batch_gen() {
-        auto batch_size =
-            get_streaming_batch_size();  // TO-DO different for GPU
+        auto batch_size = get_gpu_streaming_batch_size();
 
         batch_gen = std::make_shared<RankBatchGenerator>(
-            path, batch_size, output_schema->column_names, arrow_schema);
+            path, batch_size, output_schema->column_names, arrow_schema, comm);
     }
 };

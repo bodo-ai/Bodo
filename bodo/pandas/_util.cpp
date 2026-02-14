@@ -1128,34 +1128,44 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
     switch (t.id()) {
         // **numeric types**
         case cudf::type_id::INT8:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false,
+                                                                  stream);
         case cudf::type_id::INT16:
-            return std::make_unique<cudf::numeric_scalar<int16_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<int16_t>>(0, false,
+                                                                   stream);
         case cudf::type_id::INT32:
-            return std::make_unique<cudf::numeric_scalar<int32_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<int32_t>>(0, false,
+                                                                   stream);
         case cudf::type_id::INT64:
-            return std::make_unique<cudf::numeric_scalar<int64_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<int64_t>>(0, false,
+                                                                   stream);
         case cudf::type_id::UINT8:
-            return std::make_unique<cudf::numeric_scalar<uint8_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<uint8_t>>(0, false,
+                                                                   stream);
         case cudf::type_id::UINT16:
-            return std::make_unique<cudf::numeric_scalar<uint16_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<uint16_t>>(0, false,
+                                                                    stream);
         case cudf::type_id::UINT32:
-            return std::make_unique<cudf::numeric_scalar<uint32_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<uint32_t>>(0, false,
+                                                                    stream);
         case cudf::type_id::UINT64:
-            return std::make_unique<cudf::numeric_scalar<uint64_t>>(0, false);
+            return std::make_unique<cudf::numeric_scalar<uint64_t>>(0, false,
+                                                                    stream);
         case cudf::type_id::FLOAT32:
-            return std::make_unique<cudf::numeric_scalar<float>>(0.f, false);
+            return std::make_unique<cudf::numeric_scalar<float>>(0.f, false,
+                                                                 stream);
         case cudf::type_id::FLOAT64:
-            return std::make_unique<cudf::numeric_scalar<double>>(0.0, false);
+            return std::make_unique<cudf::numeric_scalar<double>>(0.0, false,
+                                                                  stream);
 
         // **bool**
         case cudf::type_id::BOOL8:
             return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(false), false);
+                static_cast<int8_t>(false), false, stream);
 
         // **string**
         case cudf::type_id::STRING:
-            return std::make_unique<cudf::string_scalar>("", false);
+            return std::make_unique<cudf::string_scalar>("", false, stream);
 
         // **timestamps**
         case cudf::type_id::TIMESTAMP_SECONDS:
@@ -1420,9 +1430,13 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
                         "Unsupported Arrow timestamp unit");
             }
         }
+        case Type::DATE32: {
+            return cudf::data_type{type_id::TIMESTAMP_DAYS};
+        }
 
         default:
-            throw std::runtime_error("Unsupported Arrow type");
+            throw std::runtime_error("Unsupported Arrow type: " +
+                                     t->ToString());
     }
 }
 

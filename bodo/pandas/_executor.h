@@ -121,30 +121,7 @@ class Executor {
 
    private:
     void partition_internal(duckdb::LogicalOperator &op,
-                            std::map<void *, bool> &run_on_gpu) {
-        // This is just a quick hack of converting things we know will work
-        // with no regard to whether it is beneficial or not.  Tons of
-        // more work is required here.
-        for (auto &child : op.children) {
-            partition_internal(*child, run_on_gpu);
-        }
-        if (get_use_cudf()) {
-            if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET ||
-                (op.type ==
-                     duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN &&
-                 op.Cast<duckdb::LogicalComparisonJoin>().join_type ==
-                     duckdb::JoinType::INNER) ||
-                op.type == duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE ||
-                op.type == duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
-                run_on_gpu[&op] = true;
-            } else {
-                run_on_gpu[&op] = false;
-            }
-        } else {
-            // Run on CPU always if CUDF not enabled.
-            run_on_gpu[&op] = false;
-        }
-    }
+                            std::map<void *, bool> &run_on_gpu);
 
    public:
     std::map<void *, bool> partition_to_gpu(

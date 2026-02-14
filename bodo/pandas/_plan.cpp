@@ -1846,10 +1846,16 @@ void cpp_table_delete(int64_t cpp_table) {
 }
 
 bool g_use_cudf;
+std::string g_cache_dir;
 
-void set_use_cudf(bool use_cudf) { g_use_cudf = use_cudf; }
+void set_use_cudf(bool use_cudf, std::string cache_dir) {
+    g_use_cudf = use_cudf;
+    g_cache_dir = cache_dir;
+}
 
 bool get_use_cudf() { return g_use_cudf; }
+
+std::string get_cache_dir() { return g_cache_dir; }
 
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

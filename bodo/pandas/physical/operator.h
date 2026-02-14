@@ -2,7 +2,9 @@
 
 #include <arrow/c/bridge.h>
 #include <arrow/table.h>
+#include <cstdint>
 #ifdef USE_CUDF
+#include <cudf/copying.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #endif
@@ -10,6 +12,9 @@
 #include <typeinfo>
 #include <utility>
 
+#include "../../libs/_bodo_common.h"
+#include "../../libs/_chunked_table_builder.h"
+#include "../../libs/streaming/_shuffle.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
@@ -43,18 +48,218 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
+extern const bool G_USE_ASYNC;
+
 #ifdef USE_CUDF
+
+struct cuda_event_wrapper {
+    cudaEvent_t ev;
+
+    cuda_event_wrapper() {
+        cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+    }
+
+    ~cuda_event_wrapper() {
+        if (ev) {
+            cudaEventDestroy(ev);
+        }
+    }
+
+    // Disable copy
+    cuda_event_wrapper(const cuda_event_wrapper&) = delete;
+    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = delete;
+
+    // Enable move
+    cuda_event_wrapper(cuda_event_wrapper&& other) noexcept {
+        ev = other.ev;
+        other.ev = nullptr;
+    }
+
+    cuda_event_wrapper& operator=(cuda_event_wrapper&& other) noexcept {
+        if (this != &other) {
+            if (ev)
+                cudaEventDestroy(ev);
+            ev = other.ev;
+            other.ev = nullptr;
+        }
+        return *this;
+    }
+
+    void record(rmm::cuda_stream_view stream) {
+        cudaEventRecord(ev, stream.value());
+    }
+
+    void wait(rmm::cuda_stream_view stream) const {
+        cudaStreamWaitEvent(stream.value(), ev, 0);
+    }
+};
+
+struct StreamAndEvent {
+    rmm::cuda_stream_view stream;
+    cuda_event_wrapper event;
+
+    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper&& e)
+        : stream(s), event(std::move(e)) {}
+};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    if (use_async) {
+        // Create a new non-blocking CUDA stream
+        rmm::cuda_stream_view s{rmm::cuda_stream_per_thread};
+
+        // Create an unsignaled event (default constructor)
+        cuda_event_wrapper e;
+
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
+    } else {
+        // Synchronous mode: use default stream
+        rmm::cuda_stream_view s = rmm::cuda_stream_default;
+
+        // Event is already completed
+        cuda_event_wrapper e;
+        e.record(s);
+
+        return std::make_shared<StreamAndEvent>(s, std::move(e));
+    }
+}
+
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table,
+    std::shared_ptr<StreamAndEvent> se);
+
 struct GPU_DATA {
    public:
     std::shared_ptr<cudf::table> table;
     std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<StreamAndEvent> stream_event;
 
-    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s)
-        : table(t), schema(s) {}
+    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s,
+             std::shared_ptr<StreamAndEvent> se)
+        : table(t), schema(s), stream_event(se) {}
+};
+
+/**
+ * @brief Base class for sending data to/from ranks with pinned resources (GPUs)
+ *
+ */
+class RankDataExchange {
+   public:
+    RankDataExchange(int64_t op_id_);
+
+    ~RankDataExchange();
+
+   protected:
+    int64_t op_id;
+
+    std::vector<int> gpu_ranks;
+    std::vector<int> cpu_ranks;
+    MPI_Comm shuffle_comm;
+
+    // State for synchronizing after all ranks have sent their last batch
+    // to/from GPU ranks.
+    std::unique_ptr<IsLastState> is_last_state;
+    std::unique_ptr<IncrementalShuffleState> shuffle_state;
+};
+
+struct GPUBatchGenerator {
+    std::deque<GPU_DATA> batches;
+    std::unique_ptr<GPU_DATA> leftover_data;
+    std::shared_ptr<GPU_DATA> dummy_gpu_data;
+    size_t out_batch_size;
+    size_t collected_rows = 0;
+
+    GPUBatchGenerator(GPU_DATA dummy_gpu_data_, size_t out_batch_size_)
+        : dummy_gpu_data(std::make_shared<GPU_DATA>(dummy_gpu_data_)),
+          out_batch_size(out_batch_size_) {}
+
+    void append_batch(GPU_DATA batch);
+
+    /**
+     * @brief Combine smaller tables into a GPU batch.
+     *
+     * @param se Stream used for creating batch.
+     * @param force_return Whether to flush the remaining rows.
+     * @return GPU_DATA (returns dummy data if no batch is ready and
+     * force_return is false)
+     */
+    GPU_DATA next(std::shared_ptr<StreamAndEvent> se, bool force_return);
+};
+
+/**
+ * @brief Class for managing data exchange between CPU ranks (all ranks on the
+ * node) and GPU-pinned ranks.
+ *
+ */
+class CPUtoGPUExchange : public RankDataExchange {
+   public:
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    /**
+     * @brief Send data from all ranks to GPUs.
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param se The stream and event to associate with the batch.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<GPU_DATA, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<GPU_DATA, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch,
+        std::shared_ptr<StreamAndEvent> se, OperatorResult prev_op_result);
+
+   private:
+    /**
+     * @brief Initialize the state for the exchange (Shuffle state and GPU batch
+     * generator)
+     *
+     * @param input_batch Sample input batch for schema information
+     * @param se The stream and event for creating sample GPU data
+     */
+    void Initialize(std::shared_ptr<table_info> input_batch,
+                    std::shared_ptr<StreamAndEvent> se);
+
+    std::unique_ptr<GPUBatchGenerator> gpu_batch_generator;
+};
+
+/**
+ * @brief Class for managing data exchange between GPU-pinned ranks and CPU
+ * ranks (all ranks on the node).
+ *
+ */
+class GPUtoCPUExchange : public RankDataExchange {
+   public:
+    GPUtoCPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+
+    /**
+     * @brief Send data from GPU-pinned ranks to all ranks.
+     *
+     * @param input_batch The input batch to be exchanged.
+     * @param prev_op_result The result of the previous operator, used to
+     * determine if this is the last batch locally.
+     * @return std::tuple<std::shared_ptr<table_info>, OperatorResult> The
+     * exchanged data this will either be empty (if no data assigned to this
+     * rank) or a table with data. The OperatorResult indicates if the exchange
+     * is finished on all ranks.
+     */
+    std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
+        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+   private:
+    void Initialize(table_info* input_batch);
+
+    std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
 #else
 
 struct GPU_DATA {};
+struct StreamAndEvent {};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    return std::shared_ptr<StreamAndEvent>();
+}
 
 #endif
 
@@ -125,6 +330,13 @@ class PhysicalSink : public PhysicalOperator {
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+#ifdef USE_CUDF
+    PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -153,6 +365,13 @@ class PhysicalProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+#ifdef USE_CUDF
+    PhysicalProcessBatch() : gpu_to_cpu_exchange(this->op_id) {}
+
+   protected:
+    GPUtoCPUExchange gpu_to_cpu_exchange;
+#endif
 };
 
 /**
@@ -166,7 +385,10 @@ class PhysicalGPUSource : public PhysicalOperator {
         return OperatorType::GPU_SOURCE;
     }
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatch() = 0;
+    std::pair<GPU_DATA, OperatorResult> ProduceBatch();
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     // Constructor is always required for initialization
     // We should have a separate Finalize step that can throw an exception
@@ -191,16 +413,27 @@ class PhysicalGPUSink : public PhysicalOperator {
         return OperatorType::GPU_SINK;
     }
 
-    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                        OperatorResult prev_op_result) = 0;
+    OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                OperatorResult prev_op_result);
 
-    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
-                                        OperatorResult prev_op_result);
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result);
+
+    virtual OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+#ifdef USE_CUDF
+    PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 
 /**
@@ -214,11 +447,15 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
         return OperatorType::GPU_SOURCE_AND_SINK;
     }
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
-        GPU_DATA input_batch, OperatorResult prev_op_result) = 0;
+    std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+        GPU_DATA input_batch, OperatorResult prev_op_result);
 
-    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatch(
+    std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+
+    virtual std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual void FinalizeProcessBatch() = 0;
 
@@ -228,6 +465,13 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+
+#ifdef USE_CUDF
+    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->op_id) {}
+
+   protected:
+    CPUtoGPUExchange cpu_to_gpu_exchange;
+#endif
 };
 /**
  * @brief Get the streaming batch size from environment variable.
@@ -237,6 +481,13 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
  * @return int batch size to be used in streaming operators
  */
 int get_streaming_batch_size();
+
+/**
+ * @brief Get the streaming batch size from environment variable.
+ *
+ * @return int batch size to be used in gpu streaming operators
+ */
+int get_gpu_streaming_batch_size();
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size();
@@ -250,7 +501,8 @@ using PhysicalCpuGpuProcessBatch =
                  std::shared_ptr<PhysicalGPUProcessBatch>>;
 
 #ifdef USE_CUDF
-GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch);
+GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
+                           std::shared_ptr<StreamAndEvent> se);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif

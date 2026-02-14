@@ -55,6 +55,16 @@ using len_iter_t = std::vector<uint64_t>::const_iterator;
 int64_t get_shuffle_threshold();
 
 /**
+ * @brief Get the max allowed MPI tag value.
+ * Ref:
+ * https://stackoverflow.com/questions/61662466/can-the-tag-of-mpi-send-be-a-long-int,
+ * https://www.intel.com/content/www/us/en/developer/articles/technical/large-mpi-tags-with-the-intel-mpi.html
+ *
+ * @return int
+ */
+int get_max_allowed_tag_value();
+
+/**
  * @brief Find the next available starting message tag for sending concurrent
  * messages to the same rank.
  *
@@ -1405,6 +1415,10 @@ class IsLastState {
 
     IsLastState() {
         CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
+                  "IsLastState: MPI error on MPI_Comm_dup:");
+    }
+    IsLastState(MPI_Comm parent_comm) {
+        CHECK_MPI(MPI_Comm_dup(parent_comm, &this->is_last_comm),
                   "IsLastState: MPI error on MPI_Comm_dup:");
     }
     ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }

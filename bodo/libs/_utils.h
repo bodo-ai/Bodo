@@ -1,10 +1,16 @@
 #pragma once
 
 #include <Python.h>
+#include <arrow/buffer.h>
+#include <arrow/io/memory.h>
+#include <arrow/ipc/reader.h>
+#include <arrow/ipc/writer.h>
+#include <arrow/table.h>
 #include <chrono>
 #include <optional>
 #include <string>
 #include <tuple>
+#include "_array_build_buffer.h"
 
 /**
  * @brief Get the number of ranks on this node and the
@@ -74,3 +80,11 @@ class PyObjectPtr : public std::unique_ptr<PyObject, void (*)(PyObject*)> {
               obj, &(this->decref_check_none)) {}
     operator PyObject*() const { return get(); }
 };
+
+// Serialize an Arrow Table to a byte buffer (IPC Stream format)
+std::shared_ptr<arrow::Buffer> SerializeTableToIPC(
+    const std::shared_ptr<arrow::Table>& table);
+
+// Deserialize an IPC buffer back to an Arrow Table
+std::shared_ptr<arrow::Table> DeserializeIPC(
+    std::shared_ptr<arrow::Buffer> buffer);
