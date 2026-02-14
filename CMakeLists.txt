@@ -718,6 +718,7 @@ if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/physical/gpu_expression.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
+    "bodo/libs/streaming/cuda_groupby.cpp"
     "bodo/libs/gpu_utils.cpp"
     )
 endif()
