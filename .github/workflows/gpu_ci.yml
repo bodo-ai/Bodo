@@ -19,9 +19,7 @@ jobs:
           sudo dnf install -y kernel-modules-extra dkms
           sudo dnf config-manager \
             --add-repo=https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/cuda-amzn2023.repo
-
-          sudo dnf module enable -y nvidia-driver:open-dkms
-          sudo dnf install -y nvidia-open nvidia-xconfig
+          sudo dnf install -y nvidia-open
           nvidia-smi
 
       - name: Checkout repo
