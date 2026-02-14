@@ -11,18 +11,18 @@ jobs:
 
     steps:
 
-      - name: Configure docker
+      - name: Install NVIDIA Drivers
         run: |
           set -eo pipefail
 
-          sudo curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo   -o /etc/yum.repos.d/nvidia-container-toolkit.repo
-          sudo dnf install -y nvidia-container-toolkit \
-                    libnvidia-container-tools \
-                    libnvidia-container1 \
-                    nvidia-container-runtime
-          sudo nvidia-ctk runtime configure --runtime=docker
-          sudo systemctl restart docker
-          sudo docker run --rm --gpus all nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 nvidia-smi
+          sudo dnf update -y
+          sudo dnf install -y kernel-modules-extra dkms
+          sudo dnf config-manager \
+            --add-repo=https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/cuda-amzn2023.repo
+
+          sudo dnf module enable -y nvidia-driver:open-dkms
+          sudo dnf install -y nvidia-open nvidia-xconfig
+          nvidia-smi
 
       - name: Checkout repo
         uses: actions/checkout@v5
