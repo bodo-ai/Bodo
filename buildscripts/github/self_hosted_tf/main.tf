@@ -43,6 +43,18 @@ module "runners" {
         runner_name_prefix = "${local.prefix}_small_"
         # Max # of Runners of this Size
         runners_maximum_count = 20
+
+        ami = {
+          owners = ["amazon"]
+
+          filter = {
+            name                = ["al2023-ami-2023*-kernel-6.1-x86_64"]
+            state               = ["available"]
+            architecture        = ["x86_64"]
+            root-device-type    = ["ebs"]
+            virtualization-type = ["hvm"]
+          }
+        }
       })
     }
 
