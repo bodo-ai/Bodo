@@ -21,6 +21,9 @@ jobs:
           sudo dnf install -y nvidia-open
           nvidia-smi
 
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.63.2
@@ -28,11 +31,6 @@ jobs:
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: 'default-cuda'
           activate-environment: true
-
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
       - name: Build Bodo
         run: |
           pixi run build-bodo-cudf
