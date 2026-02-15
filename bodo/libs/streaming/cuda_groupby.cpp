@@ -5,6 +5,8 @@
 #include <mpi.h>
 #include <algorithm>
 #include <cstring>
+#include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/unary.hpp>
 #include <list>
 #include <memory>
 #include <tuple>
@@ -33,7 +35,9 @@
 std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     cudf::table_view const& input, std::vector<uint64_t>& key_indices,
     std::vector<uint64_t>& column_indices,
-    std::vector<ColumnAggInfo>& aggregation_requests,
+    std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
+    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
+        aggregation_fns,
     rmm::cuda_stream_view& stream) {
     // Suppose column 0 is the key, column 1 is the value
     std::vector<cudf::column_view> key_columns;
@@ -49,11 +53,11 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // Put the column view for the aggregations into aggregation_requests.
     for (size_t i = 0; i < column_indices.size(); ++i) {
         cudf::column_view col_to_use = input.column(column_indices[i]);
-        if (aggregation_requests[i].fn != nullptr) {
-            fn_cols.push_back(aggregation_requests[i].fn(col_to_use));
+        if (aggregation_fns[i] != nullptr) {
+            fn_cols.push_back(aggregation_fns[i](col_to_use));
             col_to_use = fn_cols[fn_cols.size() - 1]->view();
         }
-        aggregation_requests[i].agg_request->values = col_to_use;
+        aggregation_requests[i].values = col_to_use;
     }
 
     // Run the groupby
@@ -92,7 +96,7 @@ void CudaGroupbyState::build_consume_batch(
 
     std::unique_ptr<cudf::table> new_data =
         do_groupby(input_table->view(), key_indices, column_indices,
-                   aggregation_requests, stream);
+                   aggregation_requests, aggregation_fns, stream);
     if (accumulation) {
         // Subsequent time need to merge outputs and groupby on the
         // concatenation.
@@ -103,7 +107,7 @@ void CudaGroupbyState::build_consume_batch(
         auto combined = cudf::concatenate(views, stream);
         accumulation = std::move(do_groupby(
             combined->view(), merge_key_indices, merge_column_indices,
-            merge_aggregation_requests, stream));
+            merge_aggregation_requests, merge_aggregation_fns, stream));
     } else {
         // First time just save the output.
         accumulation = std::move(new_data);
@@ -195,21 +199,62 @@ std::unique_ptr<cudf::column> mean_final_merge(
     return mean_col;
 }
 
-std::unique_ptr<cudf::column> square_col(const cudf::column_view &input_col) {
-    return cudf::binary_operation(
-        input_col,
-        input_col,
-        cudf::binary_operator::MUL,
-        input_col.type());
+std::unique_ptr<cudf::column> var_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 3) {
+        throw std::runtime_error("var_final_merge didn't get 3 columns.");
+    }
+
+    auto const& sum_col = input_cols[0];
+    auto const& sumsq_col = input_cols[1];
+    auto const& count_col = input_cols[2];
+
+    cudf::data_type out_type{cudf::type_id::FLOAT64};
+
+    auto sum_sq =
+        cudf::binary_operation(sum_col, sum_col, cudf::binary_operator::MUL,
+                               sum_col.type()  // preserve dtype of sum_col
+        );
+
+    auto sum_sq_div_n = cudf::binary_operation(
+        sum_sq->view(), count_col, cudf::binary_operator::DIV, out_type);
+
+    auto numerator = cudf::binary_operation(
+        sumsq_col, sum_sq_div_n->view(), cudf::binary_operator::SUB, out_type);
+
+    auto one_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(1);
+    auto denom = cudf::binary_operation(count_col, *one_scalar,
+                                        cudf::binary_operator::SUB, out_type);
+
+    auto variance = cudf::binary_operation(
+        numerator->view(), denom->view(), cudf::binary_operator::DIV, out_type);
+
+    return variance;
 }
 
-std::unique_ptr<cudf::column> cube_col(const cudf::column_view &input_col) {
+std::unique_ptr<cudf::column> std_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 3) {
+        throw std::runtime_error("std_final_merge didn't get 3 columns.");
+    }
+
+    auto variance = var_final_merge(input_cols);
+
+    auto stddev =
+        cudf::unary_operation(variance->view(), cudf::unary_operator::SQRT);
+
+    return stddev;
+}
+
+std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col) {
+    return cudf::binary_operation(input_col, input_col,
+                                  cudf::binary_operator::MUL, input_col.type());
+}
+
+std::unique_ptr<cudf::column> cube_col(const cudf::column_view& input_col) {
     auto squared = square_col(input_col);
-    return cudf::binary_operation(
-        input_col,
-        squared->view(),
-        cudf::binary_operator::MUL,
-        input_col.type());
+    return cudf::binary_operation(input_col, squared->view(),
+                                  cudf::binary_operator::MUL, input_col.type());
 }
 
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
