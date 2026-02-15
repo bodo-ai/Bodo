@@ -45,9 +45,15 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // Build the groupby object
     cudf::groupby::groupby gb_obj(keys, cudf::null_policy::EXCLUDE);
 
+    std::vector<std::unique_ptr<cudf::column>> fn_cols;
     // Put the column view for the aggregations into aggregation_requests.
     for (size_t i = 0; i < column_indices.size(); ++i) {
-        aggregation_requests[i].values = input.column(column_indices[i]);
+        cudf::column_view col_to_use = input.column(column_indices[i]);
+        if (aggregation_requests[i].fn != nullptr) {
+            fn_cols.push_back(aggregation_requests[i].fn(col_to_use));
+            col_to_use = fn_cols[fn_cols.size() - 1]->view();
+        }
+        aggregation_requests[i].agg_request->values = col_to_use;
     }
 
     // Run the groupby
@@ -193,6 +199,15 @@ std::unique_ptr<cudf::column> square_col(const cudf::column_view &input_col) {
     return cudf::binary_operation(
         input_col,
         input_col,
+        cudf::binary_operator::MUL,
+        input_col.type());
+}
+
+std::unique_ptr<cudf::column> cube_col(const cudf::column_view &input_col) {
+    auto squared = square_col(input_col);
+    return cudf::binary_operation(
+        input_col,
+        squared->view(),
         cudf::binary_operator::MUL,
         input_col.type());
 }
