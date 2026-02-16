@@ -57,6 +57,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
         op.bind_data->Cast<BodoScanFunctionData>();
 
     bool run_on_gpu = node_run_on_gpu(op);
+    std::cout << " calling CreatePhysicalOperator for LogicalGet with selected "
+                 "columns: "
+              << std::endl;
     auto physical_op = scan_data.CreatePhysicalOperator(
         selected_columns, op.table_filters, op.extra_info.limit_val,
         this->join_filter_states, run_on_gpu);
@@ -346,6 +349,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         this->active_pipeline->getPrevOpOutputSchema();
 
 #ifdef USE_CUDF
+    std::cout << "Populating Join states " << std::endl;
     std::visit(
         [&](auto& vop) {
             vop->buildProbeSchemas(op, op.conditions, build_table_schema,
