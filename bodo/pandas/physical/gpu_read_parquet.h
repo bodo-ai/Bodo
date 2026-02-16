@@ -9,6 +9,7 @@
 #include "../libs/gpu_utils.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "gpu_expression.h"
 #include "operator.h"
 
 #include <mpi.h>
@@ -27,6 +28,7 @@
 #include <glob.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -81,13 +83,11 @@ class RankBatchGenerator {
         std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
             // nothing assigned to this rank
-            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
         // If we've exhausted all parts, signal EOF
         if (current_part_idx_ >= static_cast<int>(parts_.size())) {
-            se->event.record(se->stream);
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
@@ -111,7 +111,6 @@ class RankBatchGenerator {
 
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
-            se->event.record(se->stream);
             return {std::move(gpu_tables[0]), false};
         }
 
@@ -187,7 +186,6 @@ class RankBatchGenerator {
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            se->event.record(se->stream);
             return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
         }
 
@@ -207,7 +205,6 @@ class RankBatchGenerator {
             batch = cudf::concatenate(views, se->stream);
         }
 
-        se->event.record(se->stream);
         return {std::move(batch), eof};
     }
 
@@ -366,6 +363,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     const std::vector<int> selected_columns;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
+    std::unique_ptr<CudfExpr> cudfExprTree;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -381,9 +379,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
+        std::map<int, int> old_to_new_column_map;
+        // Generate map of original column indices to selected column indices.
+        for (size_t i = 0; i < selected_columns.size(); ++i) {
+            old_to_new_column_map.insert({selected_columns[i], i});
+        }
+
+        this->filter_exprs = join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
+
         if (filter_exprs.filters.size() != 0) {
-            throw std::runtime_error(
-                "PhysicalGPUReadParquet(): filters not yet implemented");
+            cudfExprTree =
+                tableFilterSetToCudf(filter_exprs, old_to_new_column_map);
         }
 
         if (py_path && PyUnicode_Check(py_path)) {
@@ -486,6 +493,10 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
             batch_gen->next(se);
+        if (cudfExprTree) {
+            next_batch_tup.first =
+                cudfExprTree->eval(*(next_batch_tup.first), se);
+        }
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
