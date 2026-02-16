@@ -260,6 +260,7 @@ std::unique_ptr<cudf::column> skew_final_merge(
 
     cudf::data_type out_type{cudf::type_id::FLOAT64};
 
+    // ------------ means -------------
     auto mean = cudf::binary_operation(sum_col, count_col,
                                        cudf::binary_operator::DIV, out_type);
 
@@ -270,68 +271,86 @@ std::unique_ptr<cudf::column> skew_final_merge(
         cudf::binary_operation(mean_squared->view(), mean->view(),
                                cudf::binary_operator::MUL, out_type);
 
-    auto sumsq_div_n = cudf::binary_operation(
+    // ------------- population mean 2 --------------
+
+    auto Q_over_N = cudf::binary_operation(
         sumsq_col, count_col, cudf::binary_operator::DIV, out_type);
 
-    auto second_central_moment =
-        cudf::binary_operation(sumsq_div_n->view(), mean_squared->view(),
+    auto mu2 =
+        cudf::binary_operation(Q_over_N->view(), mean_squared->view(),
                                cudf::binary_operator::SUB, out_type);
 
-    auto sumcube_div_n = cudf::binary_operation(
-        sumcube_col, count_col, cudf::binary_operator::DIV, out_type);
+    // ------------- population mean 3 --------------
 
     auto one_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(1);
     auto two_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(2);
     auto three_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(3);
 
-    auto two_mean_cubed = cudf::binary_operation(
-        mean_cubed->view(), *two_scalar, cudf::binary_operator::MUL, out_type);
+    auto M_over_N = cudf::binary_operation(
+        sumcube_col, count_col, cudf::binary_operator::DIV, out_type);
 
-    auto three_mean = cudf::binary_operation(
+    auto three_mu = cudf::binary_operation(
         mean->view(), *three_scalar, cudf::binary_operator::MUL, out_type);
 
-    auto three_mean_sumsq_div_n =
-        cudf::binary_operation(three_mean->view(), sumsq_div_n->view(),
+    auto three_mu_Q_over_N =
+        cudf::binary_operation(three_mu->view(), Q_over_N->view(),
                                cudf::binary_operator::MUL, out_type);
 
-    auto tcm_two_three_term = cudf::binary_operation(
-        two_mean_cubed->view(), three_mean_sumsq_div_n->view(),
+    auto two_mu3 = cudf::binary_operation(
+        mean_cubed->view(), *two_scalar, cudf::binary_operator::MUL, out_type);
+
+    auto mu3_tmp = cudf::binary_operation(
+        M_over_N->view(), three_mu_Q_over_N->view(),
         cudf::binary_operator::SUB, out_type);
 
-    auto third_central_moment = cudf::binary_operation(
-        sumcube_div_n->view(), tcm_two_three_term->view(),
+    auto mu3 = cudf::binary_operation(
+        mu3_tmp->view(), two_mu3->view(),
         cudf::binary_operator::ADD, out_type);
 
-    auto count_sub_1 = cudf::binary_operation(
+    // ---------- convert population to sample ------------
+
+    auto N_minus_1 = cudf::binary_operation(
         count_col, *one_scalar, cudf::binary_operator::SUB, count_col.type());
 
-    auto count_sub_2 = cudf::binary_operation(
+    auto N_minus_2 = cudf::binary_operation(
         count_col, *two_scalar, cudf::binary_operator::SUB, count_col.type());
 
-    auto N_third_moment =
-        cudf::binary_operation(count_col, third_central_moment->view(),
-                               cudf::binary_operator::MUL, out_type);
+    // m2 = (N / (N-1)) * μ2
+    auto N_over_Nm1 = cudf::binary_operation(
+        count_col, N_minus_1->view(), cudf::binary_operator::DIV, out_type);
 
-    auto skew1 =
-        cudf::binary_operation(N_third_moment->view(), count_sub_1->view(),
-                               cudf::binary_operator::DIV, out_type);
+    auto m2 = cudf::binary_operation(
+        mu2->view(), N_over_Nm1->view(), cudf::binary_operator::MUL, out_type);
 
-    auto skew2 = cudf::binary_operation(skew1->view(), count_sub_2->view(),
-                                        cudf::binary_operator::DIV, out_type);
+    // m3 = (N^2 / ((N-1)(N-2))) * μ3
+    auto N_sq = cudf::binary_operation(
+        count_col, count_col, cudf::binary_operator::MUL, out_type);
 
-    auto second_moment_squared = cudf::binary_operation(
-        second_central_moment->view(), second_central_moment->view(),
+    auto Nm1_Nm2 = cudf::binary_operation(
+        N_minus_1->view(), N_minus_2->view(), cudf::binary_operator::MUL, out_type);
+
+    auto Nsq_over = cudf::binary_operation(
+        N_sq->view(), Nm1_Nm2->view(), cudf::binary_operator::DIV, out_type);
+
+    auto m3 = cudf::binary_operation(
+        mu3->view(), Nsq_over->view(), cudf::binary_operator::MUL, out_type);
+
+
+    // -------------- skew -------------
+
+    auto m2_sq = cudf::binary_operation(
+        m2->view(), m2->view(),
         cudf::binary_operator::MUL, out_type);
 
-    auto second_moment_cubed = cudf::binary_operation(
-        second_moment_squared->view(), second_central_moment->view(),
+    auto m2_cu = cudf::binary_operation(
+        m2_sq->view(), m2->view(),
         cudf::binary_operator::MUL, out_type);
 
-    auto second_moment_power = cudf::unary_operation(
-        second_moment_cubed->view(), cudf::unary_operator::SQRT);
+    auto denom = cudf::unary_operation(
+        m2_cu->view(), cudf::unary_operator::SQRT);
 
     auto skew =
-        cudf::binary_operation(skew2->view(), second_moment_power->view(),
+        cudf::binary_operation(m3->view(), denom->view(),
                                cudf::binary_operator::DIV, out_type);
 
     return skew;
