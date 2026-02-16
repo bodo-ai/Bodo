@@ -379,20 +379,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
-        std::map<int, int> old_to_new_column_map;
-        // Generate map of original column indices to selected column indices.
-        for (size_t i = 0; i < selected_columns.size(); ++i) {
-            old_to_new_column_map.insert({selected_columns[i], i});
-        }
-
-        this->filter_exprs = join_filter_col_stats.insert_filters(
-            std::move(this->filter_exprs), this->selected_columns);
-
-        if (filter_exprs.filters.size() != 0) {
-            cudfExprTree =
-                tableFilterSetToCudf(filter_exprs, old_to_new_column_map);
-        }
-
         if (py_path && PyUnicode_Check(py_path)) {
             path = PyUnicode_AsUTF8(py_path);
         } else {
@@ -488,6 +474,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
         }
+        if (!filters_initialized) {
+            init_filter_exprs();
+        }
 
         time_pt start_produce = start_timer();
 
@@ -500,7 +489,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
-
         std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
             GPU_DATA(std::move(next_batch_tup.first), arrow_schema, se),
             result);
@@ -528,6 +516,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     std::shared_ptr<RankBatchGenerator> batch_gen;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
+    bool filters_initialized = false;
+
     // Communicator for GPU ranks (for part assignments)
     MPI_Comm comm;
 
@@ -541,5 +531,20 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         batch_gen = std::make_shared<RankBatchGenerator>(
             path, batch_size, output_schema->column_names, arrow_schema, comm);
+    }
+    void init_filter_exprs() {
+        std::map<int, int> old_to_new_column_map;
+        // Generate map of original column indices to selected column indices.
+        for (size_t i = 0; i < selected_columns.size(); ++i) {
+            old_to_new_column_map.insert({selected_columns[i], i});
+        }
+        this->filter_exprs = join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
+
+        if (this->filter_exprs->filters.size() != 0) {
+            cudfExprTree =
+                tableFilterSetToCudf(*filter_exprs, old_to_new_column_map);
+        }
+        this->filters_initialized = true;
     }
 };
