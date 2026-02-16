@@ -165,7 +165,7 @@ macos = "12.0"
 
 # Added to PyPi to ignore Pandas <3 constraint
 [feature.cpu.pypi-dependencies]
-pyiceberg = ">=0.10"
+pyiceberg = "==0.10"  # TODO(ehsan): fix issues with 0.11
 # Snowflake
 snowflake-connector-python = "*"
 
