@@ -1772,7 +1772,7 @@ def _test_equal(
         assert py_out is bodo_out or bodo_out is None
     # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
     # issues
-    elif py_out is pd.NA and np.isnan(bodo_out):
+    elif py_out is pd.NA and (bodo_out is None or np.isnan(bodo_out)):
         pass
     elif isinstance(py_out, pd.CategoricalDtype):
         np.testing.assert_equal(bodo_out.categories.values, py_out.categories.values)
