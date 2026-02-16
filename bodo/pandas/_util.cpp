@@ -974,7 +974,6 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
 
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
-    std::cout << "Join Stats collect_all()" << std::endl;
     // Cache the collection
     if (result.has_value()) {
         return result.value();
@@ -988,9 +987,6 @@ JoinFilterColStats::collect_all() {
     // join_filter_program_state
     for (const auto &[join_id, col_info] : this->join_filter_program_state) {
         auto join_state_it = join_state_map->find(join_id);
-        std::cout << "Processing join_id: " << join_id << std::endl;
-        std::cout << "Available join states: " << join_state_map->size()
-                  << std::endl;
         if (join_state_it == join_state_map->end()) {
             throw std::runtime_error(
                 "JoinFilterColStats: join state not found for join id " +

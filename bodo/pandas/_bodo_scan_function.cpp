@@ -66,10 +66,6 @@ PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states,
     bool run_on_gpu) {
-    if (this->rtjf_state_map.has_value()) {
-        std::cout << "Join filter States: " << join_filter_states->size()
-                  << std::endl;
-    }
     JoinFilterColStats join_filter_col_stats =
         this->rtjf_state_map.has_value()
             ? JoinFilterColStats(join_filter_states,
