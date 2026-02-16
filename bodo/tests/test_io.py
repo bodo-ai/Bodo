@@ -2169,7 +2169,10 @@ def test_csv_chunksize_nrows(datapath, memory_leak_check):
 
     check_func(impl1, (fname, 5))
     check_func(impl2, (fname, 5))
-    check_func(impl3, (fname, 5))
+    py_output = impl3(fname, 5)
+    # Avoid pd.NA typing issues in testing utilities
+    py_output = (py_output[0], np.nan)
+    check_func(impl3, (fname, 5), py_output=py_output)
 
 
 @pytest.mark.slow
