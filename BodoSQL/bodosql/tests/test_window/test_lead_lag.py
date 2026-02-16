@@ -155,6 +155,7 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
             pd.Timestamp("2000-01-01 00:00:00"),
             "'2000-01-01 00:00:00' :: TIMESTAMP_NTZ",
             id="timestamp_ntz",
+            marks=pytest.mark.skip("Fix for Pandas 3"),
         ),
         pytest.param(
             pd.array(
