@@ -8,6 +8,7 @@
 #include <rmm/cuda_stream_view.hpp>
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
+#include "_util.h"
 
 std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
     std::shared_ptr<arrow::Table> local_stats) {
@@ -110,6 +111,7 @@ void CudaHashJoin::FinalizeBuild() {
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     // Debug Hand between here and the print
     for (const auto& col_idx : this->build_key_indices) {
+        std::shared_ptr<arrow::Table> local_stats;
         if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
             auto [min, max] =
                 cudf::minmax(this->_build_table->get_column(col_idx).view());
@@ -127,11 +129,7 @@ void CudaHashJoin::FinalizeBuild() {
             GPU_DATA stats_gpu_data = {
                 stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
                 make_stream_and_event(false)};
-            std::shared_ptr<arrow::Table> local_stats;
             local_stats = convertGPUToArrow(stats_gpu_data);
-            std::shared_ptr<arrow::Table> global_stats =
-                SyncAndReduceGlobalStats(std::move(local_stats));
-            this->min_max_stats.push_back(global_stats);
         } else {
             // If we don't have a GPU, we still need to participate in the
             // global stats reduction, so we create an table with null vals
@@ -140,7 +138,6 @@ void CudaHashJoin::FinalizeBuild() {
                              build_table_arrow_schema->field(col_idx)->type()),
                 arrow::field("max",
                              build_table_arrow_schema->field(col_idx)->type())};
-            std::shared_ptr<arrow::Table> local_stats;
             local_stats = arrow::Table::Make(
                 std::make_shared<arrow::Schema>(std::move(fields)),
                 {arrow::MakeArrayOfNull(
@@ -149,13 +146,18 @@ void CudaHashJoin::FinalizeBuild() {
                  arrow::MakeArrayOfNull(
                      build_table_arrow_schema->field(col_idx)->type(), 1)
                      .ValueOrDie()});
-            std::shared_ptr<arrow::Table> global_stats =
-                SyncAndReduceGlobalStats(std::move(local_stats));
-            this->min_max_stats.push_back(global_stats);
         }
+        std::shared_ptr<arrow::Table> global_stats =
+            SyncAndReduceGlobalStats(std::move(local_stats));
+        this->min_max_stats.push_back(global_stats);
+        std::cout
+            << "Rank " << mpi_rank << " global min/max for build key column "
+            << col_idx << ": "
+            << global_stats->column(0)->GetScalar(0).ValueOrDie()->ToString()
+            << " / "
+            << global_stats->column(1)->GetScalar(0).ValueOrDie()->ToString()
+            << std::endl;
     }
-    std::cout << "Rank " << mpi_rank << ": Completed building hash table with "
-              << _build_table->num_rows() << " rows" << std::endl;
 
     // Clear build chunks to free memory
     this->_build_chunks.clear();
@@ -173,20 +175,34 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
 }
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk) {
-    if (!_join_handle) {
+    if (!_join_handle &&
+        this->probe_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
         throw std::runtime_error(
             "Hash table not built. Call FinalizeBuild first.");
     }
 
+    int mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    if (mpi_rank == 1) {
+        std::cout << "before shuffle" << std::endl;
+    }
     // Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
 
+    if (mpi_rank == 1) {
+        std::cout << "before progress" << std::endl;
+    }
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
         probe_shuffle_manager.progress();
 
-    if (shuffled_probe_chunks.empty()) {
-        return create_empty_result(probe_chunk->view(), _build_table->view());
+    if (mpi_rank == 1) {
+        std::cout << "after shuffle" << std::endl;
+    }
+    if (shuffled_probe_chunks.empty() ||
+        this->probe_shuffle_manager.get_mpi_comm() == MPI_COMM_NULL) {
+        return empty_table_from_arrow_schema(
+            this->output_schema->ToArrowSchema());
     }
 
     // Concatenate all incoming chunks into one contiguous table and join
@@ -203,7 +219,8 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         coalesced_probe->select(this->probe_key_indices));
 
     if (probe_indices->size() == 0) {
-        return create_empty_result(probe_chunk->view(), _build_table->view());
+        return empty_table_from_arrow_schema(
+            this->output_schema->ToArrowSchema());
     }
 
     // Create views for the columns we want to keep
@@ -236,25 +253,4 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     }
 
     return std::make_unique<cudf::table>(std::move(final_columns));
-}
-
-std::unique_ptr<cudf::table> CudaHashJoin::create_empty_result(
-    const cudf::table_view probe_ref, const cudf::table_view build_ref) {
-    std::vector<std::unique_ptr<cudf::column>> cols;
-
-    // Create empty columns matching probe schema
-    auto probe_view = probe_ref.select(this->probe_kept_cols.begin(),
-                                       this->probe_kept_cols.end());
-    for (const auto& col : probe_view) {
-        cols.push_back(cudf::empty_like(col));
-    }
-
-    // Create empty columns matching build schema
-    auto build_view = build_ref.select(this->build_kept_cols.begin(),
-                                       this->build_kept_cols.end());
-    for (const auto& col : build_view) {
-        cols.push_back(cudf::empty_like(col));
-    }
-
-    return std::make_unique<cudf::table>(std::move(cols));
 }

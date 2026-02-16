@@ -17,22 +17,16 @@ struct CudaHashJoin {
     // The hash map object (opaque handle to the GPU hash table)
     std::unique_ptr<cudf::hash_join> _join_handle;
 
+    // The output schema of the join probe phase, which is needed for for
+    // constructing empty result tables when there are no matches
+    std::shared_ptr<bodo::Schema> output_schema;
+
     /**
      * @brief Build the hash table from the accumulated build chunks
      * @param build_chunks Vector of build table chunks
      */
     void build_hash_table(
         const std::vector<std::shared_ptr<cudf::table>>& build_chunks);
-
-    /**
-     * @brief Helper to create an empty result table with the correct schema
-     * when the join produces no matches
-     * @param probe_ref Reference probe table
-     * @param build_ref Reference build table
-     * @return Empty result table with correct schema
-     */
-    std::unique_ptr<cudf::table> create_empty_result(
-        const cudf::table_view probe_ref, const cudf::table_view build_ref);
 
     // What input columns to join on
     std::vector<cudf::size_type> build_key_indices;
@@ -56,8 +50,10 @@ struct CudaHashJoin {
                  std::shared_ptr<bodo::Schema> probe_schema,
                  std::vector<int64_t> build_kept_cols,
                  std::vector<int64_t> probe_kept_cols,
+                 std::shared_ptr<bodo::Schema> output_schema,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL)
-        : build_key_indices(std::move(build_keys)),
+        : output_schema(std::move(output_schema)),
+          build_key_indices(std::move(build_keys)),
           probe_key_indices(std::move(probe_keys)),
           build_kept_cols(std::move(build_kept_cols)),
           probe_kept_cols(std::move(probe_kept_cols)),

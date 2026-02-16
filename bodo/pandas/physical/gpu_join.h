@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mpi_proto.h>
 #include <algorithm>
 #include <cstdint>
 #include <cudf/types.hpp>
@@ -157,10 +158,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             probe_kept_cols.push_back(idx);
         }
 
-        this->cuda_join = std::make_unique<CudaHashJoin>(
-            build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, cudf::null_equality::UNEQUAL);
-
         this->output_schema = std::make_shared<bodo::Schema>();
         for (const auto& kept_col : probe_kept_cols) {
             this->output_schema->column_types.push_back(
@@ -181,6 +178,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
         this->arrow_schema = this->output_schema->ToArrowSchema();
+
+        this->cuda_join = std::make_unique<CudaHashJoin>(
+            build_keys, probe_keys, build_table_schema, probe_table_schema,
+            build_kept_cols, probe_kept_cols, output_schema,
+            cudf::null_equality::UNEQUAL);
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
@@ -239,29 +241,48 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        int mpi_rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+        if (mpi_rank == 1) {
+            std::cout << "before wait" << std::endl;
+        }
         se->event.wait(se->stream);
         if (cuda_join->probe_shuffle_manager.all_complete()) {
             cudaStreamSynchronize(
                 cuda_join->probe_shuffle_manager.get_stream());
         }
+        if (mpi_rank == 1) {
+            std::cout << "before probe" << std::endl;
+        }
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
+
+        if (mpi_rank == 1) {
+            std::cout << "before record" << std::endl;
+        }
         se->event.record(se->stream);
         bool local_finished = prev_op_result == OperatorResult::FINISHED;
         if (local_finished) {
+            if (mpi_rank == 1) {
+                std::cout << "before complete" << std::endl;
+            }
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
             cuda_join->probe_shuffle_manager.complete();
         }
-        std::cout << "ProbeProcessBatch: produced "
-                  << output_gpu_data.table->num_rows()
-                  << " output rows, local_finished = " << local_finished
-                  << ", shuffle all_complete = "
-                  << cuda_join->probe_shuffle_manager.all_complete()
-                  << std::endl;
+        // std::cout << "ProbeProcessBatch: produced "
+        //           << output_gpu_data.table->num_rows()
+        //           << " output rows, local_finished = " << local_finished
+        //           << ", shuffle all_complete = "
+        //           << cuda_join->probe_shuffle_manager.all_complete()
+        //           << std::endl;
+
+        if (mpi_rank == 1) {
+            std::cout << "finished" << std::endl;
+        }
 
         return {
             output_gpu_data,
