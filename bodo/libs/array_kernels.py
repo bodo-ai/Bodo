@@ -4449,6 +4449,22 @@ def _overload_nan_argmin(arr):
     """
     Argmin function used on Bodo Array types for idxmin
     """
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_max_value(arr)
+            ival = typing.builtins.IndexValue(len(arr), init_val.value)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i].value)
+                ival = min(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
+
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
     if (
@@ -4537,6 +4553,22 @@ def _overload_nan_argmax(arr):
     """
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            n = len(arr)
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_min_value(arr)
+            ival = typing.builtins.IndexValue(len(arr), init_val.value)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i].value)
+                ival = max(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
 
     if (
         isinstance(
