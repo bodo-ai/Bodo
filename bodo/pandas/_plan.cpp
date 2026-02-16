@@ -14,7 +14,6 @@
 #include "_bodo_scan_function.h"
 #include "_bodo_write_function.h"
 #include "_executor.h"
-#include "cuda_runtime_api.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/enums/cte_materialize.hpp"
 #include "duckdb/common/types.hpp"
@@ -47,6 +46,7 @@
 
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
+#include "cuda_runtime_api.h"
 #endif
 
 // if status of arrow::Result is not ok, form an err msg and raise a
