@@ -133,11 +133,10 @@ module "runners" {
         ami = {
           id_ssm_parameter_arn = "arn:aws:ssm:${local.aws_region}::parameter/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-amazon-linux-2023/latest/ami-id"
         }
-
+        # GPU AMI requires >=75 GB of EBS Storage
         block_device_mappings = [{
           volume_size = 100
         }]
-
       })
     }
   }
