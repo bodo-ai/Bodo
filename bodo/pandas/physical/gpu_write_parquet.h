@@ -220,10 +220,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             std::string fname = gen_pieces_file_name(myrank, num_ranks,
                                                      fname_prefix, ".parquet");
             std::string out_path = (fs::path(path) / fname).string();
-            std::cout << "Writing parquet file: " << out_path << " with "
-                      << buffer_rows << " rows and ~"
-                      << (buffer_bytes / (1024 * 1024)) << " MB" << "from rank "
-                      << myrank << std::endl;
 
             cudf::table_view bttv = buffer_table->view();
             cudf::io::table_input_metadata meta{bttv};

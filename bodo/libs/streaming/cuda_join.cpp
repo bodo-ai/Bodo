@@ -104,7 +104,7 @@ void CudaHashJoin::FinalizeBuild() {
 
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
         this->build_table_schema->ToArrowSchema();
-    // Debug Hand between here and the print
+
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
         if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
@@ -152,7 +152,8 @@ void CudaHashJoin::FinalizeBuild() {
 }
 
 void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
-    // Store the incoming build chunk for later finalization
+    // TODO: remove unused columns before shuffling to save network bandwidth
+    // and GPU memory Store the incoming build chunk for later finalization
     this->build_shuffle_manager.shuffle_table(build_chunk,
                                               this->build_key_indices);
     std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
@@ -169,7 +170,8 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
             "Hash table not built. Call FinalizeBuild first.");
     }
 
-    // Send local data to appropriate ranks
+    // TODO: remove unused columns before shuffling to save network bandwidth
+    // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
 
     //    Receive data destined for this rank

@@ -2,7 +2,6 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
-#include <rmm/cuda_device.hpp>
 #include <utility>
 
 #include <arrow/api.h>
@@ -45,6 +44,10 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "optimizer/runtime_join_filter.h"
+
+#ifdef USE_CUDF
+#include <rmm/cuda_device.hpp>
+#endif
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it

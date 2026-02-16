@@ -1,5 +1,4 @@
 #include "_pipeline.h"
-#include <rmm/cuda_device.hpp>
 #include "physical/operator.h"
 
 #ifdef USE_CUDF

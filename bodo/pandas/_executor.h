@@ -161,7 +161,6 @@ class Executor {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
-
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         DEBUG_PIPELINE_CONTENTS(rank, pipelines);
