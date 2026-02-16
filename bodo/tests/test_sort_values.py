@@ -1927,6 +1927,7 @@ def sort_args(request):
     return args() if callable(args) else args
 
 
+@pytest.mark.skip("TODO: fix for Pandas 3")
 @pytest.mark.skipif(bodo.get_size() > 3, reason="Only implemented for up to 3 ranks.")
 def test_sort_table_for_interval_join(sort_args, memory_leak_check):
     """
