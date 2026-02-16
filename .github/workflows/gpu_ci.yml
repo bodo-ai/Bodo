@@ -11,14 +11,8 @@ jobs:
 
     steps:
 
-      - name: Install NVIDIA Drivers
+      - name: GPU Info
         run: |
-          set -eo pipefail
-
-          sudo dnf update -y
-          sudo dnf config-manager \
-            --add-repo=https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/cuda-amzn2023.repo
-          sudo dnf install -y nvidia-open
           nvidia-smi
 
       - uses: actions/checkout@v5

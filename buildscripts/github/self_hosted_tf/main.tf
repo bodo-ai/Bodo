@@ -43,18 +43,6 @@ module "runners" {
         runner_name_prefix = "${local.prefix}_small_"
         # Max # of Runners of this Size
         runners_maximum_count = 20
-
-        ami = {
-          owners = ["amazon"]
-
-          filter = {
-            name                = ["al2023-ami-2023*-kernel-6.1-x86_64"]
-            state               = ["available"]
-            architecture        = ["x86_64"]
-            root-device-type    = ["ebs"]
-            virtualization-type = ["hvm"]
-          }
-        }
       })
     }
 
@@ -140,7 +128,12 @@ module "runners" {
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_single_gpu_"
         # Max # of Runners of this Size
-        runners_maximum_count = 1
+        runners_maximum_count = 2
+        # Use Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023)
+        ami = {
+          id_ssm_parameter_arn = "arn:aws:ssm:${local.aws_region}::parameter/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-amazon-linux-2023/latest/ami-id"
+        }
+
       })
     }
   }
