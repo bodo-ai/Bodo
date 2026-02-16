@@ -19,8 +19,8 @@ jobs:
   #   name: Run E2E
   #   runs-on: self-hosted-xlarge
   #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: prefix-dev/setup-pixi@v0.9.0
+  #     - uses: actions/checkout@v6
+  #     - uses: prefix-dev/setup-pixi@v0.9.4
   #       with:
   #         pixi-version: v0.63.2
   #         cache: true
@@ -29,7 +29,7 @@ jobs:
   #         activate-environment: true
 
   #     - name: Configure AWS Credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
+  #       uses: aws-actions/configure-aws-credentials@v6
   #       with:
   #         aws-region: us-east-2
   #         role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
@@ -39,7 +39,7 @@ jobs:
   #         role-duration-seconds: 7200
 
   #     - name: Load and Save Hadoop to Cache
-  #       uses: actions/cache@v4
+  #       uses: actions/cache@v5
   #       with:
   #         path: hadoop.tar.gz
   #         key: hadoop-3.3.2-${{ runner.os }}
@@ -107,8 +107,8 @@ jobs:
         _Tutorials/*.py
         _Getting-Started/dataframes.py
     steps:
-      - uses: actions/checkout@v5
-      - uses: prefix-dev/setup-pixi@v0.9.0
+      - uses: actions/checkout@v6
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.63.2
           cache: true
@@ -117,7 +117,7 @@ jobs:
           activate-environment: true
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
@@ -126,7 +126,7 @@ jobs:
           role-duration-seconds: 7200
 
       - name: Load and Save Hadoop to Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hadoop.tar.gz
           key: hadoop-3.3.2-${{ runner.os }}
