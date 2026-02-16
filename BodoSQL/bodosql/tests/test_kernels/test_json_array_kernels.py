@@ -500,7 +500,7 @@ def test_json_extract_path_text_invalid(data, path):
                 dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
             ),
             "b",
-            pd.array([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
+            pd.Series([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             id="struct_missing_key",
         ),
         pytest.param(
