@@ -29,8 +29,6 @@ struct PhysicalGPUAggregateMetrics {
 };
 
 inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
-    std::cout << "gpu_capable for LogicalAggregate "
-              << !logical_aggregate.groups.empty() << std::endl;
     // Temporarily don't support count_start and quantile on GPU.
     if (logical_aggregate.groups.empty()) {
         return false;
@@ -117,7 +115,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
 
             uint64_t col_idx = col_ref_map.at(
                 {colref.binding.table_index, colref.binding.column_index});
-            std::cout << "agg expr " << i << " " << col_idx << std::endl;
 
 #if 0
             size_t reorder_col_idx =
@@ -301,11 +298,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
             keys.push_back(col_ref_map.at(
                 {colref.binding.table_index, colref.binding.column_index}));
-            std::cout << "initKeysandSchema " << colref.binding.table_index
-                      << " " << colref.binding.column_index << " "
-                      << col_ref_map.at({colref.binding.table_index,
-                                         colref.binding.column_index})
-                      << std::endl;
         }
 
         uint64_t ncols = in_table_schema->ncols();
@@ -326,8 +318,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         }
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
-        std::cout << "initKeyandschema done " << output_schema->ToString()
-                  << std::endl;
     }
 
     std::shared_ptr<CudaGroupbyState> groupby_state;
