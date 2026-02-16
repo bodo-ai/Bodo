@@ -24,6 +24,10 @@ std::unique_ptr<cudf::column> var_final_merge(
     const std::vector<cudf::column_view> &input_cols);
 std::unique_ptr<cudf::column> std_final_merge(
     const std::vector<cudf::column_view> &input_cols);
+std::unique_ptr<cudf::column> nunique_final_merge(
+    const std::vector<cudf::column_view> &input_cols);
+std::unique_ptr<cudf::column> skew_final_merge(
+    const std::vector<cudf::column_view> &input_cols);
 
 std::unique_ptr<cudf::column> square_col(const cudf::column_view &input_col);
 std::unique_ptr<cudf::column> cubed_col(const cudf::column_view &input_col);
@@ -120,6 +124,29 @@ class CudaGroupbyState {
                         cudf::null_policy::EXCLUDE),
                     aggregation_requests, aggregation_fns);
                 break;
+            case Bodo_FTypes::nunique:
+                add_agg_entry(cudf::make_collect_set_aggregation<
+                                  cudf::groupby_aggregation>(),
+                              aggregation_requests, aggregation_fns);
+                break;
+            case Bodo_FTypes::skew:
+                // For sum of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns);
+                // For sum of the square of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, square_col);
+                // For sum of the cube of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, cubed_col);
+                add_agg_entry(
+                    cudf::make_count_aggregation<cudf::groupby_aggregation>(
+                        cudf::null_policy::EXCLUDE),
+                    aggregation_requests, aggregation_fns);
+                break;
             default:
                 throw std::runtime_error(
                     "Cannot convert Bodo agg type to cudf in "
@@ -172,7 +199,29 @@ class CudaGroupbyState {
                 // For sum of the square of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns, square_col);
+                    aggregation_requests, aggregation_fns);
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns);
+                break;
+            case Bodo_FTypes::nunique:
+                add_agg_entry(cudf::make_collect_set_aggregation<
+                                  cudf::groupby_aggregation>(),
+                              aggregation_requests, aggregation_fns);
+                break;
+            case Bodo_FTypes::skew:
+                // For sum of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns);
+                // For sum of the square of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns);
+                // For sum of the cube of the column.
+                add_agg_entry(
+                    cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns);
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns);
@@ -205,6 +254,15 @@ class CudaGroupbyState {
                 final_merges.push_back(
                     {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
                      std_final_merge});
+                break;
+            case Bodo_FTypes::nunique:
+                final_merges.push_back(
+                    {{cur_col_size - 1}, nunique_final_merge});
+                break;
+            case Bodo_FTypes::skew:
+                final_merges.push_back({{cur_col_size - 4, cur_col_size - 3,
+                                         cur_col_size - 2, cur_col_size - 1},
+                                        skew_final_merge});
                 break;
             default:
                 throw std::runtime_error(

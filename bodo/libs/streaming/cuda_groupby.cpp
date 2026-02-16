@@ -5,6 +5,7 @@
 #include <mpi.h>
 #include <algorithm>
 #include <cstring>
+#include <cudf/lists/count_elements.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/unary.hpp>
 #include <list>
@@ -246,12 +247,109 @@ std::unique_ptr<cudf::column> std_final_merge(
     return stddev;
 }
 
+std::unique_ptr<cudf::column> nunique_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 1) {
+        throw std::runtime_error("nunique_final_merge didn't get 1 column.");
+    }
+
+    auto const& list_col = input_cols[0];
+
+    auto nunique_col = cudf::lists::count_elements(list_col);
+
+    return nunique_col;
+}
+
+std::unique_ptr<cudf::column> skew_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 4) {
+        throw std::runtime_error("skew_final_merge didn't get 4 columns.");
+    }
+
+    auto const& sum_col = input_cols[0];
+    auto const& sumsq_col = input_cols[1];
+    auto const& sumcube_col = input_cols[2];
+    auto const& count_col = input_cols[3];
+
+    cudf::data_type out_type{cudf::type_id::FLOAT64};
+
+    auto mean = cudf::binary_operation(sum_col, count_col,
+                                       cudf::binary_operator::DIV, out_type);
+
+    auto mean_squared = cudf::binary_operation(
+        mean->view(), mean->view(), cudf::binary_operator::MUL, out_type);
+
+    auto mean_cubed =
+        cudf::binary_operation(mean_squared->view(), mean->view(),
+                               cudf::binary_operator::MUL, out_type);
+
+    auto sumsq_div_n = cudf::binary_operation(
+        sumsq_col, count_col, cudf::binary_operator::DIV, out_type);
+
+    auto second_central_moment =
+        cudf::binary_operation(sumsq_div_n->view(), mean_squared->view(),
+                               cudf::binary_operator::SUB, out_type);
+
+    auto sumcube_div_n = cudf::binary_operation(
+        sumcube_col, count_col, cudf::binary_operator::DIV, out_type);
+
+    auto one_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(1);
+    auto two_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(2);
+    auto three_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(3);
+    auto one_point_five = std::make_unique<cudf::numeric_scalar<float>>(1.5);
+
+    auto tcm_third_term = cudf::binary_operation(
+        mean_cubed->view(), *two_scalar, cudf::binary_operator::MUL, out_type);
+
+    auto three_mean = cudf::binary_operation(
+        mean->view(), *three_scalar, cudf::binary_operator::MUL, out_type);
+
+    auto tcm_second_term =
+        cudf::binary_operation(three_mean->view(), sumsq_div_n->view(),
+                               cudf::binary_operator::MUL, out_type);
+
+    auto tcm_two_three_term =
+        cudf::binary_operation(tcm_third_term->view(), tcm_second_term->view(),
+                               cudf::binary_operator::SUB, out_type);
+
+    auto third_central_moment = cudf::binary_operation(
+        sumcube_div_n->view(), tcm_two_three_term->view(),
+        cudf::binary_operator::ADD, out_type);
+
+    auto count_sub_1 = cudf::binary_operation(
+        count_col, *one_scalar, cudf::binary_operator::SUB, count_col.type());
+
+    auto count_sub_2 = cudf::binary_operation(
+        count_col, *two_scalar, cudf::binary_operator::SUB, count_col.type());
+
+    auto N_third_moment =
+        cudf::binary_operation(count_col, third_central_moment->view(),
+                               cudf::binary_operator::MUL, out_type);
+
+    auto skew1 =
+        cudf::binary_operation(N_third_moment->view(), count_sub_1->view(),
+                               cudf::binary_operator::DIV, out_type);
+
+    auto skew2 = cudf::binary_operation(skew1->view(), count_sub_2->view(),
+                                        cudf::binary_operator::DIV, out_type);
+
+    auto second_moment_power =
+        cudf::binary_operation(second_central_moment->view(), *one_point_five,
+                               cudf::binary_operator::POW, out_type);
+
+    auto skew =
+        cudf::binary_operation(skew2->view(), second_moment_power->view(),
+                               cudf::binary_operator::DIV, out_type);
+
+    return skew;
+}
+
 std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col) {
     return cudf::binary_operation(input_col, input_col,
                                   cudf::binary_operator::MUL, input_col.type());
 }
 
-std::unique_ptr<cudf::column> cube_col(const cudf::column_view& input_col) {
+std::unique_ptr<cudf::column> cubed_col(const cudf::column_view& input_col) {
     auto squared = square_col(input_col);
     return cudf::binary_operation(input_col, squared->view(),
                                   cudf::binary_operator::MUL, input_col.type());
