@@ -324,7 +324,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.41.5-py314h2e6c369_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pygobject-3.54.5-py314h3b7b53d_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py314h6477eea_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py314h6477eea_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pynacl-1.6.2-py314h5bd0f2a_0.conda
@@ -766,7 +766,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pydantic-core-2.41.5-py314h451b6cc_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pygobject-3.54.5-py314hbacc415_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.10.0-np2py314h175d3ba_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.11.0-np2py314h175d3ba_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pynacl-1.6.2-py314h51f160d_0.conda
@@ -1194,7 +1194,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydantic-core-2.41.5-py314ha7b6dee_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pygobject-3.54.5-py314h6055307_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.10.0-np2py314h3cd8925_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.11.0-np2py314h613bbd0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pynacl-1.6.2-py314h4f144dc_0.conda
@@ -1597,7 +1597,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydantic-core-2.41.5-py314haad56a0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pygobject-3.54.5-py314h9418cea_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.10.0-np2py314hb738332_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.11.0-np2py314hdd732f0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pynacl-1.6.2-py314h6c2aa35_0.conda
@@ -1952,7 +1952,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.12.5-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydantic-core-2.41.5-py314h9f07db2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.10.0-np2py314hb7a55bc_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.11.0-np2py314hb7a55bc_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pynacl-1.6.2-py314h5a2d7ad_0.conda
@@ -2381,7 +2381,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.41.5-py314h2e6c369_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pygobject-3.54.5-py314h3b7b53d_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py314h6477eea_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py314h6477eea_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pynacl-1.6.2-py314h5bd0f2a_0.conda
@@ -2821,7 +2821,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pydantic-core-2.41.5-py314h451b6cc_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pygobject-3.54.5-py314hbacc415_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.10.0-np2py314h175d3ba_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.11.0-np2py314h175d3ba_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pynacl-1.6.2-py314h51f160d_0.conda
@@ -3247,7 +3247,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydantic-core-2.41.5-py314ha7b6dee_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pygobject-3.54.5-py314h6055307_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.10.0-np2py314h3cd8925_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.11.0-np2py314h613bbd0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pynacl-1.6.2-py314h4f144dc_0.conda
@@ -3648,7 +3648,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydantic-core-2.41.5-py314haad56a0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pygobject-3.54.5-py314h9418cea_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.10.0-np2py314hb738332_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.11.0-np2py314hdd732f0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pynacl-1.6.2-py314h6c2aa35_0.conda
@@ -4001,7 +4001,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.12.5-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydantic-core-2.41.5-py314h9f07db2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.10.0-np2py314hb7a55bc_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.11.0-np2py314hb7a55bc_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pynacl-1.6.2-py314h5a2d7ad_0.conda
@@ -4527,7 +4527,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.41.5-py313h843e2db_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pygobject-3.54.5-py313h372a45b_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py313h73dcb5b_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py313h73dcb5b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/rapidsai/linux-64/pylibcudf-25.12.00-cuda13_py313_251210_580975be.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
@@ -5614,7 +5614,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.12.0-pyh3cfb1c2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pygobject-3.54.5-py313h372a45b_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py313h73dcb5b_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py313h73dcb5b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyopenssl-25.3.0-pyhd8ed1ab_0.conda
@@ -6047,7 +6047,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.41.5-py313h843e2db_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pygobject-3.54.5-py313h372a45b_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py313h73dcb5b_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py313h73dcb5b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pymysql-1.1.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pynacl-1.6.2-py313h07c4f96_0.conda
@@ -22691,9 +22691,9 @@ packages:
   license_family: LGPL
   size: 326762
   timestamp: 1761080211935
-- conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py313h73dcb5b_1.conda
-  sha256: 5017484f3f02a6cb06330697fe1f88208728d9a75a7c4f9de9838e6da1bf2ff7
-  md5: b872791f53a22211ffafbc9fa180223f
+- conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py313h73dcb5b_1.conda
+  sha256: e680f7b03c480f083051ffda202c864152e55bd1603ae2ea67c2269f43933c47
+  md5: 1fedb0f29d26fda29fd80876e3f9233e
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22701,7 +22701,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22712,12 +22712,11 @@ packages:
   - libstdcxx >=14
   - libgcc >=14
   - __glibc >=2.17,<3.0.a0
-  - libgcc >=14
   - python_abi 3.13.* *_cp313
   - numpy >=1.23,<3
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22725,7 +22724,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22733,11 +22732,11 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1235681
-  timestamp: 1760025472322
-- conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.10.0-np2py314h6477eea_1.conda
-  sha256: 2f2bcf0a07249e5c5703cb4958a36f60af257718925bf7ed35ebdfbc9fd4df48
-  md5: d864a468850a1995cfaf44c903a3b109
+  size: 1188001
+  timestamp: 1770766167665
+- conda: https://conda.anaconda.org/conda-forge/linux-64/pyiceberg-0.11.0-np2py314h6477eea_1.conda
+  sha256: bfabf81093b00337d12070b6f9db5a92f9270e1a94a4232666109b7c9dff6693
+  md5: e9364ff6cb09bebd5c476932494e2dec
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22745,7 +22744,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22753,14 +22752,14 @@ packages:
   - tenacity >=8.2.3,<10.0.0
   - pyroaring >=1.0.0,<2.0.0
   - cachetools >=5.5.0,<7.0.0
+  - __glibc >=2.17,<3.0.a0
   - libstdcxx >=14
   - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
   - python_abi 3.14.* *_cp314
   - numpy >=1.23,<3
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22768,7 +22767,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22776,11 +22775,11 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1288132
-  timestamp: 1760025504522
-- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.10.0-np2py314h175d3ba_1.conda
-  sha256: e0577c046875ec02d74d77ac93cf780f25702fbc3a216e1a1d8b408d77a888c2
-  md5: de49c232915b3c30922c12a06f53339d
+  size: 1241782
+  timestamp: 1770766148265
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyiceberg-0.11.0-np2py314h175d3ba_1.conda
+  sha256: e2470793e101aece90557ffe13a96d8d59891091821dff63fba6769b7393b465
+  md5: 091dc162cb8f87246b1ef3f20a11ba0a
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22788,7 +22787,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22799,11 +22798,11 @@ packages:
   - python 3.14.* *_cp314
   - libstdcxx >=14
   - libgcc >=14
-  - python_abi 3.14.* *_cp314
   - numpy >=1.23,<3
+  - python_abi 3.14.* *_cp314
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22811,7 +22810,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22819,11 +22818,11 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1293230
-  timestamp: 1760025493398
-- conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.10.0-np2py314h3cd8925_1.conda
-  sha256: a4299166abc28c922cca955669e7de4be602c25b74e43fcd54646927b98748e0
-  md5: 2c0464ba5282faebeacb35fa91cc2e1e
+  size: 1246700
+  timestamp: 1770766183049
+- conda: https://conda.anaconda.org/conda-forge/osx-64/pyiceberg-0.11.0-np2py314h613bbd0_1.conda
+  sha256: 06cc07ed45a9be0ad3799742bc4e541027ccda82b82101d9920954745ba6de0a
+  md5: f8146a8bca5a5cebc8905b66398c34a4
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22831,7 +22830,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22841,11 +22840,11 @@ packages:
   - cachetools >=5.5.0,<7.0.0
   - __osx >=10.13
   - libcxx >=19
-  - numpy >=1.23,<3
   - python_abi 3.14.* *_cp314
+  - numpy >=1.23,<3
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22853,7 +22852,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22861,11 +22860,11 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1284211
-  timestamp: 1760025165824
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.10.0-np2py314hb738332_1.conda
-  sha256: 7354a56b1f5c1b4d1aed7b7d176cb3b1748ac1c4a391d8ea97468d2f6fd096d6
-  md5: 7635086927a548f03b802005ae489244
+  size: 1239791
+  timestamp: 1770766084350
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyiceberg-0.11.0-np2py314hdd732f0_1.conda
+  sha256: 397086300a88b897d98228ca0d387747866e736e99f9aa597958e061751b5c5b
+  md5: 4354fd4860e59ec63552b8c6a059fc7e
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22873,7 +22872,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22882,13 +22881,13 @@ packages:
   - pyroaring >=1.0.0,<2.0.0
   - cachetools >=5.5.0,<7.0.0
   - __osx >=11.0
-  - libcxx >=19
   - python 3.14.* *_cp314
-  - python_abi 3.14.* *_cp314
+  - libcxx >=19
   - numpy >=1.23,<3
+  - python_abi 3.14.* *_cp314
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22896,7 +22895,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22904,11 +22903,11 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1286717
-  timestamp: 1760025316785
-- conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.10.0-np2py314hb7a55bc_1.conda
-  sha256: 56d04893231891649330f1db6eebb18ad463062f3977a640c087d2b6daf411e5
-  md5: 60a697338cc9f2fac56ecbe648ad1e2e
+  size: 1242196
+  timestamp: 1770766192649
+- conda: https://conda.anaconda.org/conda-forge/win-64/pyiceberg-0.11.0-np2py314hb7a55bc_1.conda
+  sha256: 6a3c8cb36f65d35251bdcc72f8e84c85d380c53ab88e7a8fabfb69dda0c033b2
+  md5: 7180437f4333a99b31a4f6e304549a7c
   depends:
   - python
   - mmh3 >=4.0.0,<6.0.0
@@ -22916,7 +22915,7 @@ packages:
   - click >=7.1.1,<9.0.0
   - rich >=10.11.0,<15.0.0
   - strictyaml >=1.7.0,<2.0.0
-  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1
+  - pydantic >=2.0,<3.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1
   - sortedcontainers 2.4.0.*
   - fsspec >=2023.1.0
   - pyparsing >=3.1.0,<4.0.0
@@ -22927,14 +22926,11 @@ packages:
   - vc >=14.3,<15
   - vc14_runtime >=14.44.35208
   - ucrt >=10.0.20348.0
-  - vc >=14.3,<15
-  - vc14_runtime >=14.44.35208
-  - ucrt >=10.0.20348.0
   - numpy >=1.23,<3
   - python_abi 3.14.* *_cp314
   constrains:
   - pyarrow >=17.0.0
-  - pandas >=1.0.0,<3.0.0
+  - pandas >=1.0.0
   - python-duckdb >=0.5.0,<2.0.0
   - ray >=2.10.0,<3.0.0
   - python-snappy >=0.6.0,<1.0.0
@@ -22942,7 +22938,7 @@ packages:
   - mypy-boto3-glue >=1.28.18
   - boto3 >=1.24.59
   - s3fs >=2023.1.0
-  - adlfs >=2023.1.0
+  - adlfs >=2024.7.0
   - gcsfs >=2023.1.0
   - psycopg2-binary >=2.9.6
   - sqlalchemy >=2.0.18,<3.0.0
@@ -22950,8 +22946,8 @@ packages:
   - polars >=1.21.0,<2.0.0
   license: Apache-2.0
   license_family: APACHE
-  size: 1320604
-  timestamp: 1760025369017
+  size: 1275079
+  timestamp: 1770766308308
 - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.10.1-pyhd8ed1ab_0.conda
   sha256: 158d8911e873e2a339c27768933747bf9c2aec1caa038f1b7b38a011734a956f
   md5: 84c5c40ea7c5bbc6243556e5daed20e7
