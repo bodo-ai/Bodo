@@ -203,13 +203,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        se->event.wait(se->stream);
         if (cuda_join->build_shuffle_manager.all_complete()) {
             cudaStreamSynchronize(
                 cuda_join->build_shuffle_manager.get_stream());
         }
         cuda_join->BuildConsumeBatch(input_batch.table);
-        se->event.record(se->stream);
         if (prev_op_result == OperatorResult::FINISHED) {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
@@ -231,9 +229,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        int mpi_rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-        se->event.wait(se->stream);
         if (cuda_join->probe_shuffle_manager.all_complete()) {
             cudaStreamSynchronize(
                 cuda_join->probe_shuffle_manager.get_stream());
@@ -243,7 +238,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
 
-        se->event.record(se->stream);
         bool local_finished = prev_op_result == OperatorResult::FINISHED;
         if (local_finished) {
             // If we are finished consuming input but the shuffle is not

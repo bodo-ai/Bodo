@@ -160,7 +160,7 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
     std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
         build_shuffle_manager.progress();
     for (auto& chunk : shuffled_build_chunks) {
-        this->_build_chunks.push_back(std::move(chunk));
+        this->_build_chunks.emplace_back(std::move(chunk));
     }
 }
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(

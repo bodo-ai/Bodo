@@ -1,7 +1,7 @@
 #pragma once
 #include <arrow/scalar.h>
-#include "../libs/_bodo_common.h"
-#include "../libs/gpu_utils.h"
+#include "../_bodo_common.h"
+#include "../gpu_utils.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
@@ -17,7 +17,7 @@ struct CudaHashJoin {
     // The hash map object (opaque handle to the GPU hash table)
     std::unique_ptr<cudf::hash_join> _join_handle;
 
-    // The output schema of the join probe phase, which is needed for for
+    // The output schema of the join probe phase, which is needed for
     // constructing empty result tables when there are no matches
     std::shared_ptr<bodo::Schema> output_schema;
 

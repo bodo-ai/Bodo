@@ -36,8 +36,7 @@ static bodo::tests::suite tests([] {
         // Ensure we have a GPU context for this rank
         // Note: In a real test runner, this might be handled by a fixture
         rmm::cuda_device_id device_id = get_gpu_id();
-        std::cout << "Rank GPU ID: " << device_id.value() << std::endl;
-        if (device_id.value() > 0) {
+        if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
 
@@ -110,7 +109,7 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() > 0) {
+        if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
 
@@ -162,9 +161,6 @@ static bodo::tests::suite tests([] {
             rows_per_device *
             std::min(get_cluster_cuda_device_count(), n_ranks);
 
-        std::cout << "Rank " << rank << " received " << local_received_rows
-                  << " rows, global total is " << global_received_rows
-                  << ", expected total is " << expected_total_rows << std::endl;
         bodo::tests::check(global_received_rows == expected_total_rows);
 
         // 4. Check schema preservation
@@ -180,9 +176,6 @@ static bodo::tests::suite tests([] {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() > 0) {
-            cudaSetDevice(device_id.value());
-        }
         if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
@@ -231,10 +224,6 @@ static bodo::tests::suite tests([] {
         // Even if the table is empty, we expect the schema (column types) to
         // remain INT64
         if (!received_tables.empty()) {
-            std::cout << "Rank " << rank << " received an empty table with "
-                      << received_tables[0]->num_rows() << " rows and "
-                      << received_tables[0]->num_columns() << " columns."
-                      << std::endl;
             bodo::tests::check(received_tables[0]->num_columns() ==
                                input_ptr->num_columns());
             bodo::tests::check(received_tables[0]->get_column(0).type().id() ==

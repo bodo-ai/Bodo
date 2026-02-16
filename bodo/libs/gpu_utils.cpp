@@ -130,7 +130,7 @@ void GpuShuffleManager::do_shuffle() {
     // sizes and metadata buffers
     if (inflight_shuffles.size() * 3 > static_cast<size_t>(MAX_TAG_VAL)) {
         throw std::runtime_error(
-            "Exceeded maxiumum number of inflight shuffles");
+            "Exceeded maximum number of inflight shuffles");
     }
     this->curr_tag = (this->curr_tag + 3) % MAX_TAG_VAL;
 }
@@ -143,8 +143,6 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     if (this->complete_signaled && inflight_shuffles.empty() &&
         tables_to_shuffle.empty() &&
         global_completion_req == MPI_REQUEST_NULL && !global_completion) {
-        int mpi_rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
                   "GpuShuffleManager::complete: MPI_Ibarrier failed:");
     }
