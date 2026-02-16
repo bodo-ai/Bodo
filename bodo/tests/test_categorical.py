@@ -76,6 +76,8 @@ def test_unbox_dtype(dtype, memory_leak_check):
                     ["2020-01-14", "2020-01-15", "2020-01-16", "2020-01-17", "NAT"],
                     unit="ns",
                 )
+                .to_series()
+                .astype("datetime64[ns]")
             )
         ),
         pytest.param(
