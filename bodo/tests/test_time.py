@@ -694,6 +694,7 @@ def test_time_construction_from_parts(impl, lazy_time_fixture, memory_leak_check
     check_func(impl, (dt,))
 
 
+@pytest.mark.skip("Pandas 3 issue with setitem")
 @pytest.mark.slow
 def test_time_array_setitem_none(memory_leak_check):
     df = pd.DataFrame(
