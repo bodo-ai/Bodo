@@ -390,7 +390,7 @@ GpuShuffle::progress_waiting_for_data() {
             packed_recv_columns.emplace_back(
                 std::move(this->metadata_recv_buffers[src_rank]),
                 std::move(this->packed_recv_buffers[src_rank]));
-            table_views.push_back(cudf::unpack(packed_recv_columns[src_rank]));
+            table_views.push_back(cudf::unpack(packed_recv_columns.back()));
         }
         // Deallocate all receive data
         this->metadata_recv_buffers.clear();
