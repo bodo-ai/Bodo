@@ -29,7 +29,7 @@ runs:
 
       - name: Build Bodo
         run: |
-          pixi run build-bodo -Cbuild.verbose=true
+          pixi run build-bodo
         shell: bash
         env:
           # We should just use sccache directly on CI
