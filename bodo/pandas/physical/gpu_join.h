@@ -190,10 +190,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUJoin() = default;
 
-    void FinalizeSink() override {
-        std::cout << "Finalizing GPU Join build phase." << std::endl;
-        cuda_join->FinalizeBuild();
-    }
+    void FinalizeSink() override { cuda_join->FinalizeBuild(); }
 
     void FinalizeProcessBatch() override {}
 
@@ -219,13 +216,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // can be finished
             cuda_join->build_shuffle_manager.complete();
         }
-        // std::cout << "BuildConsumeBatch: consumed "
-        //           << input_batch.table->num_rows() << " rows, prev_op_result=
-        //           "
-        //           << static_cast<int>(prev_op_result)
-        //           << ", shuffle all_complete = "
-        //           << cuda_join->build_shuffle_manager.all_complete()
-        //           << std::endl;
         return prev_op_result == OperatorResult::FINISHED &&
                        cuda_join->build_shuffle_manager.all_complete()
                    ? OperatorResult::FINISHED
@@ -243,45 +233,23 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se) override {
         int mpi_rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-        if (mpi_rank == 1) {
-            std::cout << "before wait" << std::endl;
-        }
         se->event.wait(se->stream);
         if (cuda_join->probe_shuffle_manager.all_complete()) {
             cudaStreamSynchronize(
                 cuda_join->probe_shuffle_manager.get_stream());
-        }
-        if (mpi_rank == 1) {
-            std::cout << "before probe" << std::endl;
         }
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
 
-        if (mpi_rank == 1) {
-            std::cout << "before record" << std::endl;
-        }
         se->event.record(se->stream);
         bool local_finished = prev_op_result == OperatorResult::FINISHED;
         if (local_finished) {
-            if (mpi_rank == 1) {
-                std::cout << "before complete" << std::endl;
-            }
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
             cuda_join->probe_shuffle_manager.complete();
-        }
-        // std::cout << "ProbeProcessBatch: produced "
-        //           << output_gpu_data.table->num_rows()
-        //           << " output rows, local_finished = " << local_finished
-        //           << ", shuffle all_complete = "
-        //           << cuda_join->probe_shuffle_manager.all_complete()
-        //           << std::endl;
-
-        if (mpi_rank == 1) {
-            std::cout << "finished" << std::endl;
         }
 
         return {

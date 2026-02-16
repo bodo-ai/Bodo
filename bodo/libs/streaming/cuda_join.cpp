@@ -97,9 +97,6 @@ void CudaHashJoin::build_hash_table(
 }
 
 void CudaHashJoin::FinalizeBuild() {
-    std::cout << "Finalizing GPU Join build phase by building hash table and "
-                 "collecting stats."
-              << std::endl;
     // Build the hash table if we have a gpu assigned to us
     if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
         this->build_hash_table(this->_build_chunks);
@@ -107,8 +104,6 @@ void CudaHashJoin::FinalizeBuild() {
 
     std::shared_ptr<arrow::Schema> build_table_arrow_schema =
         this->build_table_schema->ToArrowSchema();
-    int mpi_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     // Debug Hand between here and the print
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
@@ -150,13 +145,6 @@ void CudaHashJoin::FinalizeBuild() {
         std::shared_ptr<arrow::Table> global_stats =
             SyncAndReduceGlobalStats(std::move(local_stats));
         this->min_max_stats.push_back(global_stats);
-        std::cout
-            << "Rank " << mpi_rank << " global min/max for build key column "
-            << col_idx << ": "
-            << global_stats->column(0)->GetScalar(0).ValueOrDie()->ToString()
-            << " / "
-            << global_stats->column(1)->GetScalar(0).ValueOrDie()->ToString()
-            << std::endl;
     }
 
     // Clear build chunks to free memory
@@ -181,24 +169,12 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
             "Hash table not built. Call FinalizeBuild first.");
     }
 
-    int mpi_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    if (mpi_rank == 1) {
-        std::cout << "before shuffle" << std::endl;
-    }
     // Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices);
 
-    if (mpi_rank == 1) {
-        std::cout << "before progress" << std::endl;
-    }
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
         probe_shuffle_manager.progress();
-
-    if (mpi_rank == 1) {
-        std::cout << "after shuffle" << std::endl;
-    }
     if (shuffled_probe_chunks.empty() ||
         this->probe_shuffle_manager.get_mpi_comm() == MPI_COMM_NULL) {
         return empty_table_from_arrow_schema(
