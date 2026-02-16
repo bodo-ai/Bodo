@@ -2856,14 +2856,14 @@ def timestamp_min(lhs, rhs):
             # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
             #
             # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
-            if pd.isna(lhs) and pd.isna(rhs):
+            if pd.isna(lhs.value) and pd.isna(rhs.value):
                 if lhs.index < rhs.index:
                     return lhs
                 else:
                     return rhs
-            elif pd.isna(lhs):
+            elif pd.isna(lhs.value):
                 return rhs
-            elif pd.isna(rhs):
+            elif pd.isna(rhs.value):
                 return lhs
             elif lhs.value < rhs.value:
                 return lhs
@@ -2908,14 +2908,14 @@ def timestamp_max(lhs, rhs):
             # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
             #
             # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
-            if pd.isna(lhs) and pd.isna(rhs):
+            if pd.isna(lhs.value) and pd.isna(rhs.value):
                 if lhs.index < rhs.index:
                     return lhs
                 else:
                     return rhs
-            elif pd.isna(lhs):
+            elif pd.isna(lhs.value):
                 return rhs
-            elif pd.isna(rhs):
+            elif pd.isna(rhs.value):
                 return lhs
             elif lhs.value < rhs.value:
                 return rhs
