@@ -464,7 +464,7 @@ def test_json_extract_path_text_invalid(data, path):
         pytest.param(
             pd.Series(list(range(5)), dtype=np.int32),
             "a",
-            pd.array([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
+            pd.Series([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             id="int",
         ),
         pytest.param(
