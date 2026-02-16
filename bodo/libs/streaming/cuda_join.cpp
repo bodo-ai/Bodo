@@ -153,7 +153,8 @@ void CudaHashJoin::FinalizeBuild() {
 
 void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
     // TODO: remove unused columns before shuffling to save network bandwidth
-    // and GPU memory Store the incoming build chunk for later finalization
+    // and GPU memory.
+    // Store the incoming build chunk for later finalization
     this->build_shuffle_manager.shuffle_table(build_chunk,
                                               this->build_key_indices);
     std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
