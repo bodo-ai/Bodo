@@ -5,7 +5,7 @@ on:
 
 jobs:
   gpu-ci:
-    runs-on: self-hosted-single-gpu
+    runs-on: self-hosted-multi-gpu
 
     timeout-minutes: 120
 
