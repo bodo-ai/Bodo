@@ -281,12 +281,14 @@ class GpuShuffleManager {
  * @param table Input table
  * @param column_indices Column indices to hash
  * @param num_partitions Number of partitions
+ * @param stream CUDA stream to use for partitioning
  * @return Pair of partitioned table and partition indices
  */
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
                      const std::vector<cudf::size_type>& column_indices,
-                     cudf::size_type num_partitions);
+                     cudf::size_type num_partitions,
+                     cudaStream_t stream = cudf::get_default_stream());
 
 /**
  * @brief Get the GPU device ID for the current process. All ranks must call

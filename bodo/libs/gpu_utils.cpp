@@ -478,8 +478,7 @@ bool GpuShuffleManager::all_complete() {
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
                      const std::vector<cudf::size_type>& column_indices,
-                     cudf::size_type num_partitions,
-                     cudaStream_t stream = cudf::get_default_stream()) {
+                     cudf::size_type num_partitions, cudaStream_t stream) {
     if (column_indices.empty()) {
         throw std::invalid_argument("Column indices cannot be empty");
     }
