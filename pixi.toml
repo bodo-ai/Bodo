@@ -192,9 +192,10 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-# Added to PyPi to ignore Pandas <3 constraint
 [feature.cpu.pypi-dependencies]
-# Snowflake
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
 snowflake-connector-python = "*"
 
 [feature.cpu.pypi-options.dependency-overrides]
@@ -226,7 +227,6 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.11"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
