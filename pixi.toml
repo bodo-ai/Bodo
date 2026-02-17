@@ -163,11 +163,20 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
+# Added to PyPi to ignore Pandas <3 constraint
+[feature.cpu.pypi-dependencies]
+pyiceberg = "==0.10"  # TODO(ehsan): fix issues with 0.11
+# Snowflake
+snowflake-connector-python = "*"
+
+[feature.cpu.pypi-options.dependency-overrides]
+pandas = ">=3.0.0"
+
 [dependencies]
 pip = "*"
 # Core Python Deps
 numpy = ">=1.24"
-pandas = ">=2.2"
+pytz = "*"
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -189,7 +198,6 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.10"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
@@ -197,8 +205,6 @@ zstandard = "*"
 pymysql = "*"
 psycopg2 = "*"
 sqlalchemy = "*"
-# Snowflake
-snowflake-connector-python = "*"
 # Excel
 xlrd = "*"
 xlsxwriter = "*"
@@ -219,6 +225,7 @@ python = "3.13.*"
 [feature.cpu.dependencies]
 numba = ">=0.62,<0.64.0"
 pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+pandas = ">=3.0.0"
 
 [feature.cpu.target.linux-64.dependencies]
 pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
@@ -239,6 +246,7 @@ nccl = ">=2.18"
 numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
+pandas = ">=2.2.0"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
@@ -252,6 +260,13 @@ hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = "*", build = "*mpi_impi_*" }
+
+
+# Added to PyPi to ignore Pandas <3 constraint
+[feature.dev.pypi-dependencies]
+# Snowflake Testing
+snowflake-sqlalchemy = "*"
+
 
 [feature.dev.dependencies]
 # Build Python
@@ -288,9 +303,6 @@ boto3 = "*"
 
 # Documentation Testing
 beautifulsoup4 = "*"
-
-# Snowflake Testing
-snowflake-sqlalchemy = "*"
 
 # S3 Testing
 minio-server = "*"

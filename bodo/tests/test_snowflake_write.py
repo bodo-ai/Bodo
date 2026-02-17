@@ -30,6 +30,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     _get_dist_arg,
+    _test_equal,
     check_func,
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
@@ -950,7 +951,9 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             # Date
             "DATE_COL": pd.date_range("2001-01-01", periods=df_len).date,
             # timedelta
-            "TIMEDELTA_COL": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
+            "TIMEDELTA_COL": pd.Series(
+                pd.timedelta_range(start="1 day", periods=7, unit="ns")
+            ),
             # string
             "STRING_COL": list_string,
         }
@@ -985,7 +988,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             # disable dtype check. Int8 vs. int64
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result.sort_values("int8_col").reset_index(drop=True),
                 py_output.astype({"nullable_bool_col": "boolean"})
                 .sort_values("int8_col")
@@ -1132,7 +1135,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             ]
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result.sort_values("datetime_col").reset_index(drop=True),
                 df.sort_values("datetime_col").reset_index(drop=True),
                 check_dtype=False,
@@ -1275,9 +1278,9 @@ def test_snowflake_to_sql_nullarray(memory_leak_check):
             # Attribute "dtype" are different
             # [left]:  string[pyarrow]
             # [right]: object
-            pd.testing.assert_frame_equal(
+            _test_equal(
                 bodo_result,
-                py_output,
+                py_output.astype(pd.ArrowDtype(pa.string())),
                 check_dtype=False,
             )
         except Exception as e:
@@ -2381,7 +2384,7 @@ def test_create_table_with_comments(memory_leak_check):
         ], "Wrong column nullability"
         assert column_info["comment"].to_list() == [
             "Index of events",
-            None,
+            np.nan,
             "Date of notable event",
         ], "Wrong column comments"
 

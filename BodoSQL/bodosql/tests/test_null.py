@@ -71,13 +71,16 @@ def bodosql_null_bool_df(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        pd.Timestamp(2021, 5, 19),
-                        pd.Timestamp(1999, 12, 31),
-                        pd.Timestamp(2020, 10, 11),
-                        pd.Timestamp(2025, 1, 1),
-                    ]
-                    * 3,
+                    "A": pd.Series(
+                        [
+                            pd.Timestamp(2021, 5, 19),
+                            pd.Timestamp(1999, 12, 31),
+                            pd.Timestamp(2020, 10, 11),
+                            pd.Timestamp(2025, 1, 1),
+                        ]
+                        * 3,
+                        dtype="datetime64[ns]",
+                    ),
                     "B": pd.Series(
                         [
                             np.datetime64("nat"),
@@ -85,6 +88,7 @@ def bodosql_null_bool_df(request):
                             np.datetime64("nat"),
                         ]
                         * 4,
+                        dtype="datetime64[ns]",
                     ),
                 }
             )

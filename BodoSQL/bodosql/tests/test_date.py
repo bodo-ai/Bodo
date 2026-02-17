@@ -466,7 +466,8 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
                             "2000-1-1",
                             "2025-7-4",
                         ]
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             }
         )

@@ -27,7 +27,7 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture(
     params=[
         ("1 DAY", pd.Timedelta(1, "D")),
-        ("1 HOUR", pd.Timedelta(1, "H")),
+        ("1 HOUR", pd.Timedelta(1, "h")),
         ("1 MINUTE", pd.Timedelta(1, "m")),
         ("1 SECOND", pd.Timedelta(1, "s")),
         ("'1 MILLISECOND'", pd.Timedelta(1, "ms")),
@@ -306,12 +306,15 @@ def test_interval_literals_addition(interval_addition_values, memory_leak_check)
 
     df = pd.DataFrame(
         {
-            "A": [
-                pd.Timestamp(2020, 1, 2),
-                pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
-                pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
-                pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
-            ]
+            "A": pd.Series(
+                [
+                    pd.Timestamp(2020, 1, 2),
+                    pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
+                    pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
+                    pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
+                ],
+                dtype="datetime64[ns]",
+            )
         }
     )
 
@@ -721,7 +724,7 @@ def test_dollar_strings(datapath, memory_leak_check):
 
 
 def test_null_variant_literal(memory_leak_check):
-    answer = pd.DataFrame({"0": [None]})
+    answer = pd.DataFrame({"0": pd.array([None], dtype=pd.ArrowDtype(pa.null()))})
     check_query(
         "SELECT NULL::VARIANT",
         {},

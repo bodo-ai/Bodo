@@ -84,7 +84,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2019-02-28 6:45:00"),
                     None,
                     pd.Timestamp("2017-04-01 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="year",
         ),
@@ -100,7 +101,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2022-11-29 6:45:00"),
                     None,
                     pd.Timestamp("2022-07-01 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="quarter",
             marks=pytest.mark.slow,
@@ -117,7 +119,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2023-09-29 6:45:00"),
                     None,
                     pd.Timestamp("2023-09-01 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="month",
             marks=pytest.mark.slow,
@@ -134,7 +137,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2024-02-24 6:45:00"),
                     None,
                     pd.Timestamp("2024-03-25 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="day",
         ),
@@ -150,7 +154,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2024-02-29 01:45:00"),
                     None,
                     pd.Timestamp("2024-04-01 05:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="hour",
             marks=pytest.mark.slow,
@@ -167,7 +172,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2024-02-29 6:44:55"),
                     None,
                     pd.Timestamp("2024-04-01 11:59:53"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="second",
         ),
@@ -183,7 +189,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2024-02-29 06:44:59.999995"),
                     None,
                     pd.Timestamp("2024-04-01 11:59:59.999993"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="microsecond",
         ),
@@ -199,7 +206,8 @@ def expanded_timestamp_tz_data():
                     pd.Timestamp("2024-02-29 06:44:59.999999995"),
                     None,
                     pd.Timestamp("2024-04-01 11:59:59.999999993"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="nanosecond",
             marks=pytest.mark.slow,
@@ -762,7 +770,8 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
                     pd.Timestamp("2024-02-29 06:45:00"),
                     None,
                     pd.Timestamp("2024-04-01 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="tz_to_ntz",
         ),
@@ -780,7 +789,8 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
                     pd.Timestamp("2024-02-28 17:15:00", tz="America/Los_Angeles"),
                     None,
                     pd.Timestamp("2024-04-01 13:00:00.000", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             id="tz_to_ltz",
         ),
@@ -895,7 +905,8 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
                     None,
                     pd.Timestamp("2026-02-16 16:45:13.249500", tz="Africa/Casablanca"),
                     pd.Timestamp("2026-05-25 01:00:00", tz="Africa/Casablanca"),
-                ]
+                ],
+                dtype="datetime64[ns, Africa/Casablanca]",
             ),
             "Africa/Casablanca",
             pd.array(

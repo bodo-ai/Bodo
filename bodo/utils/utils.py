@@ -304,6 +304,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         bodo.types.null_array_type,
         bodo.types.datetime_date_array_type,
         bodo.types.boolean_array_type,
+        bodo.types.timedelta_array_type,
     ) or isinstance(
         arr_type,
         (

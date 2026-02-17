@@ -3,7 +3,7 @@
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import types
+from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
@@ -2014,9 +2014,11 @@ class DtArrToIntType(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 1
-        assert args[0] == types.Array(types.NPDatetime("ns"), 1, "C") or args[
-            0
-        ] == types.Array(types.int64, 1, "C")
+        assert (
+            args[0] == types.Array(types.NPDatetime("ns"), 1, "C")
+            or args[0] == types.Array(types.int64, 1, "C")
+            or args[0] == bodo.types.DatetimeArrayType(None)
+        )
         return signature(types.Array(types.int64, 1, "C"), *args)
 
 
@@ -2024,6 +2026,14 @@ class DtArrToIntType(AbstractTemplate):
 @lower_builtin(cast_dt64_arr_to_int, types.Array(types.int64, 1, "C"))
 def lower_cast_dt64_arr_to_int(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+
+@lower_builtin(cast_dt64_arr_to_int, bodo.types.DatetimeArrayType(None))
+def lower_cast_datetime_arr_to_int(context, builder, sig, args):
+    datetime_struct = cgutils.create_struct_proxy(sig.args[0])(
+        context, builder, value=args[0]
+    )
+    return impl_ret_borrowed(context, builder, sig.return_type, datetime_struct.data)
 
 
 # ----------------------------------------

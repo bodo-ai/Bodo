@@ -34,7 +34,7 @@ def test_json_column_pruning(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_json(fname, orient="records", lines=True)
+        df = pd.read_json(fname, orient="records", lines=True, dtype_backend="pyarrow")
         return df.two
 
     fname_file = datapath("example.json")
@@ -52,7 +52,7 @@ def test_csv_column_pruning(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"])
+        df = pd.read_csv(fname, names=["A", "B", "C", "D"], dtype_backend="pyarrow")
         return df.A
 
     fname_file = datapath("csv_data1.csv")
@@ -74,7 +74,9 @@ def test_csv_iterator_column_pruning(datapath, memory_leak_check):
     @bodo.jit
     def test_impl(fname):
         total_len = 0
-        for df in pd.read_csv(fname, names=["A", "B", "C", "D"], chunksize=7):
+        for df in pd.read_csv(
+            fname, names=["A", "B", "C", "D"], chunksize=7, dtype_backend="pyarrow"
+        ):
             total_len += len(df)
         return total_len
 
@@ -113,7 +115,7 @@ def test_pq_column_pruning_filter_pushdown(datapath, memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         df = df[df.one > 1]
         return df.four
 
@@ -137,7 +139,7 @@ def test_pq_logging_closure(datapath, memory_leak_check):
     @bodo.jit
     def test_impl(fname):
         def f():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             df = df[df.one > 1]
             return df.four
 
@@ -162,7 +164,7 @@ def test_pq_logging_multifunction(datapath, memory_leak_check):
 
     @bodo.jit
     def f(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         df = df[df.one > 1]
         return df.four
 
@@ -189,7 +191,7 @@ def test_pq_logging_multifunction_inlining(datapath, memory_leak_check):
 
     @bodo.jit(inline="always")
     def f(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df
 
     @bodo.jit
@@ -236,7 +238,7 @@ def test_pq_dict_arrays(memory_leak_check):
 
     @bodo.jit
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     try:
         stream = io.StringIO()

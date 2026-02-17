@@ -268,6 +268,7 @@ class TestSeries(unittest.TestCase):
         test_impl(A2, 0)
         np.testing.assert_array_equal(A1.values, A2.values)
 
+    @pytest.mark.skip(reason="Setitem not supported by Pandas 3")
     def test_setitem_series3(self):
         def test_impl(A, i):
             S = pd.Series(A)
@@ -962,7 +963,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             S = df.points
             return S.nlargest(4)
 
@@ -1001,7 +1002,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             S = df.points
             return S.nsmallest(4)
 
@@ -1066,7 +1067,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             S = df.points
             return S.median()
 
@@ -1077,7 +1078,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             S = df.points
             return S.argsort().values
 
@@ -1132,7 +1133,7 @@ class TestSeries(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             S = df.points
             return S.sort_values()
 

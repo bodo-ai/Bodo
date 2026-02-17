@@ -4,7 +4,6 @@ Test correctness of SQL the flatten operation in BodoSQL
 
 import datetime
 
-import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -17,26 +16,35 @@ def test_lateral_split_to_table(memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "STR_COL": [
-                    "red;orange;yellow",
-                    "red",
-                    None,
-                    "blue;green",
-                    None,
-                    None,
-                    "",
-                    "red;yellow;blue",
-                    "red;green;blue",
-                    None,
-                    "green",
-                    ";;;;",
-                    ";red;red;red;;red;",
-                ],
+                "STR_COL": pd.array(
+                    [
+                        "red;orange;yellow",
+                        "red",
+                        None,
+                        "blue;green",
+                        None,
+                        None,
+                        "",
+                        "red;yellow;blue",
+                        "red;green;blue",
+                        None,
+                        "green",
+                        ";;;;",
+                        ";red;red;red;;red;",
+                    ],
+                    dtype=pd.ArrowDtype(pa.string()),
+                ),
             }
         )
     }
     answer = pd.DataFrame(
-        {0: ["red", "orange", "yellow", "green", "blue", ""], 1: [8, 1, 2, 3, 3, 9]}
+        {
+            0: pd.array(
+                ["red", "orange", "yellow", "green", "blue", ""],
+                dtype=pd.ArrowDtype(pa.string()),
+            ),
+            1: pd.array([8, 1, 2, 3, 3, 9], dtype=pd.ArrowDtype(pa.int64())),
+        }
     )
     check_query(
         query,
@@ -55,9 +63,18 @@ def test_lateral_split_to_table(memory_leak_check):
             "SELECT int_col as R, lat.index as I, lat.value as V FROM table1, lateral flatten(arr_col) lat",
             pd.DataFrame(
                 {
-                    "R": [0, 2, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 9],
-                    "I": [0, 0, 1, 0, 1, 2, 0, 0, 1, 0, 1, 2, 0, 0],
-                    "V": [1, 2, 3, 4, 5, None, 7, 8, 9, 10, 11, 12, 13, 14],
+                    "R": pd.array(
+                        [0, 2, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 9],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "I": pd.array(
+                        [0, 0, 1, 0, 1, 2, 0, 0, 1, 0, 1, 2, 0, 0],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "V": pd.array(
+                        [1, 2, 3, 4, 5, None, 7, 8, 9, 10, 11, 12, 13, 14],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="flatten_array-output_index_value-replicate_int",
@@ -66,30 +83,39 @@ def test_lateral_split_to_table(memory_leak_check):
             "SELECT int_col as R, lat.index as I, lat.value as V, lat.this as T FROM table1, lateral flatten(input=>arr_col, outer=>true) lat",
             pd.DataFrame(
                 {
-                    "R": [0, 1, 2, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 9],
+                    "R": pd.array(
+                        [0, 1, 2, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 9],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                     "I": pd.array(
                         [0, None, 0, 1, 0, 1, 2, 0, 0, 1, 0, 1, 2, 0, None, 0],
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
-                    "V": [1, None, 2, 3, 4, 5, None, 7, 8, 9, 10, 11, 12, 13, None, 14],
-                    "T": [
-                        [1],
-                        [],
-                        [2, 3],
-                        [2, 3],
-                        [4, 5, None],
-                        [4, 5, None],
-                        [4, 5, None],
-                        [7],
-                        [8, 9],
-                        [8, 9],
-                        [10, 11, 12],
-                        [10, 11, 12],
-                        [10, 11, 12],
-                        [13],
-                        None,
-                        [14],
-                    ],
+                    "V": pd.array(
+                        [1, None, 2, 3, 4, 5, None, 7, 8, 9, 10, 11, 12, 13, None, 14],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "T": pd.array(
+                        [
+                            [1],
+                            [],
+                            [2, 3],
+                            [2, 3],
+                            [4, 5, None],
+                            [4, 5, None],
+                            [4, 5, None],
+                            [7],
+                            [8, 9],
+                            [8, 9],
+                            [10, 11, 12],
+                            [10, 11, 12],
+                            [10, 11, 12],
+                            [13],
+                            None,
+                            [14],
+                        ],
+                        dtype=pd.ArrowDtype(pa.list_(pa.int64())),
+                    ),
                 }
             ),
             id="flatten_array-output_index_value_this-replicate_int-outer",
@@ -98,38 +124,44 @@ def test_lateral_split_to_table(memory_leak_check):
             "SELECT str_col as S, lat.this as T FROM table1, lateral flatten(arr_col) lat",
             pd.DataFrame(
                 {
-                    "S": [
-                        "a b c",
-                        "GHI",
-                        "GHI",
-                        "we attack at dawn",
-                        "we attack at dawn",
-                        "we attack at dawn",
-                        "",
-                        "a b c",
-                        "a b c",
-                        "d e f",
-                        "d e f",
-                        "d e f",
-                        "GHI",
-                        "",
-                    ],
-                    "T": [
-                        [1],
-                        [2, 3],
-                        [2, 3],
-                        [4, 5, None],
-                        [4, 5, None],
-                        [4, 5, None],
-                        [7],
-                        [8, 9],
-                        [8, 9],
-                        [10, 11, 12],
-                        [10, 11, 12],
-                        [10, 11, 12],
-                        [13],
-                        [14],
-                    ],
+                    "S": pd.array(
+                        [
+                            "a b c",
+                            "GHI",
+                            "GHI",
+                            "we attack at dawn",
+                            "we attack at dawn",
+                            "we attack at dawn",
+                            "",
+                            "a b c",
+                            "a b c",
+                            "d e f",
+                            "d e f",
+                            "d e f",
+                            "GHI",
+                            "",
+                        ],
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
+                    "T": pd.array(
+                        [
+                            [1],
+                            [2, 3],
+                            [2, 3],
+                            [4, 5, None],
+                            [4, 5, None],
+                            [4, 5, None],
+                            [7],
+                            [8, 9],
+                            [8, 9],
+                            [10, 11, 12],
+                            [10, 11, 12],
+                            [10, 11, 12],
+                            [13],
+                            [14],
+                        ],
+                        dtype=pd.ArrowDtype(pa.list_(pa.int64())),
+                    ),
                 }
             ),
             id="flatten_array-output_this-replicate_string",
@@ -138,47 +170,53 @@ def test_lateral_split_to_table(memory_leak_check):
             "SELECT int_col as R, lat.value as V FROM table1, lateral flatten(INPUT=>split(str_col, ' ')) lat",
             pd.DataFrame(
                 {
-                    "R": [
-                        0,
-                        0,
-                        0,
-                        1,
-                        1,
-                        1,
-                        2,
-                        3,
-                        3,
-                        3,
-                        3,
-                        4,
-                        5,
-                        5,
-                        5,
-                        6,
-                        6,
-                        6,
-                        7,
-                        8,
-                        8,
-                        8,
-                        8,
-                        9,
-                    ],
-                    "V": [
-                        "a",
-                        "b",
-                        "c",
-                        "d",
-                        "e",
-                        "f",
-                        "GHI",
-                        "we",
-                        "attack",
-                        "at",
-                        "dawn",
-                        "",
-                    ]
-                    * 2,
+                    "R": pd.array(
+                        [
+                            0,
+                            0,
+                            0,
+                            1,
+                            1,
+                            1,
+                            2,
+                            3,
+                            3,
+                            3,
+                            3,
+                            4,
+                            5,
+                            5,
+                            5,
+                            6,
+                            6,
+                            6,
+                            7,
+                            8,
+                            8,
+                            8,
+                            8,
+                            9,
+                        ],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "V": pd.array(
+                        [
+                            "a",
+                            "b",
+                            "c",
+                            "d",
+                            "e",
+                            "f",
+                            "GHI",
+                            "we",
+                            "attack",
+                            "at",
+                            "dawn",
+                            "",
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
                 }
             ),
             id="split_string-output_value-replicate_int",
@@ -189,20 +227,26 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "ARR_COL": [
-                    [1],
-                    [],
-                    [2, 3],
-                    [4, 5, None],
-                    [7],
-                    [8, 9],
-                    [10, 11, 12],
-                    [13],
-                    None,
-                    [14],
-                ],
-                "STR_COL": ["a b c", "d e f", "GHI", "we attack at dawn", ""] * 2,
-                "INT_COL": list(range(10)),
+                "ARR_COL": pd.array(
+                    [
+                        [1],
+                        [],
+                        [2, 3],
+                        [4, 5, None],
+                        [7],
+                        [8, 9],
+                        [10, 11, 12],
+                        [13],
+                        None,
+                        [14],
+                    ],
+                    dtype=pd.ArrowDtype(pa.list_(pa.int64())),
+                ),
+                "STR_COL": pd.array(
+                    ["a b c", "d e f", "GHI", "we attack at dawn", ""] * 2,
+                    dtype=pd.ArrowDtype(pa.string()),
+                ),
+                "INT_COL": pd.array(list(range(10)), dtype=pd.ArrowDtype(pa.int64())),
             }
         )
     }
@@ -222,19 +266,29 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
     [
         pytest.param(
             "SELECT 'A' as K, COUNT(*) as C FROM TABLE(GENERATOR(ROWCOUNT=>1776)) GROUP BY 1",
-            pd.DataFrame({"K": "A", "C": 1776}, index=np.arange(1)),
+            pd.DataFrame(
+                {
+                    "K": pd.array(["A"], dtype=pd.ArrowDtype(pa.string())),
+                    "C": pd.array([1776], dtype=pd.ArrowDtype(pa.int64())),
+                }
+            ),
             None,
             id="groupby_aggregate-without_lateral",
         ),
         pytest.param(
             "SELECT COUNT(*) as C FROM TABLE(GENERATOR(ROWCOUNT=>1776))",
-            pd.DataFrame({"C": 1776}, index=np.arange(1)),
+            pd.DataFrame({"C": pd.array([1776], dtype=pd.ArrowDtype(pa.int64()))}),
             False,
             id="nogroupby_aggregate-without_lateral",
         ),
         pytest.param(
             "SELECT I, COUNT(*) as C FROM table1, LATERAL TABLE(GENERATOR(ROWCOUNT=>10)) GROUP BY I",
-            pd.DataFrame({"I": [0, 1, 2], "C": [50, 30, 10]}),
+            pd.DataFrame(
+                {
+                    "I": pd.array([0, 1, 2], dtype=pd.ArrowDtype(pa.int64())),
+                    "C": pd.array([50, 30, 10], dtype=pd.ArrowDtype(pa.int64())),
+                }
+            ),
             None,
             id="groupby_aggregate-with_lateral",
             marks=pytest.mark.skip(
@@ -260,7 +314,15 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
     ],
 )
 def test_generator(query, answer, is_out_distributed, memory_leak_check):
-    ctx = {"TABLE1": pd.DataFrame({"I": [0, 0, 1, 0, 0, 1, 2, 1, 0]})}
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "I": pd.array(
+                    [0, 0, 1, 0, 0, 1, 2, 1, 0], dtype=pd.ArrowDtype(pa.int64())
+                )
+            }
+        )
+    }
     check_query(
         query,
         ctx,
@@ -279,7 +341,9 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(J) lat",
             pd.DataFrame(
                 {
-                    "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                    "I": pd.array(
+                        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=pd.ArrowDtype(pa.int64())
+                    ),
                     "J": pd.Series(
                         [
                             {"A": 0},
@@ -299,9 +363,17 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "I": [0, 2, 2, 2, 3, 4, 4, 4, 5, 6, 6, 7, 9],
-                    "K": list("ABILCDJMEFKGH"),
-                    "V": [0, 1, 8, 11, 2, 3, None, 12, 4, 5, 10, 6, 7],
+                    "I": pd.array(
+                        [0, 2, 2, 2, 3, 4, 4, 4, 5, 6, 6, 7, 9],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "K": pd.array(
+                        list("ABILCDJMEFKGH"), dtype=pd.ArrowDtype(pa.string())
+                    ),
+                    "V": pd.array(
+                        [0, 1, 8, 11, 2, 3, None, 12, 4, 5, 10, 6, 7],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="flatten_map-output_key_value-replicate_int",
@@ -310,7 +382,9 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(J) lat",
             pd.DataFrame(
                 {
-                    "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                    "I": pd.array(
+                        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=pd.ArrowDtype(pa.int64())
+                    ),
                     "J": pd.Series(
                         [
                             {"A": 0, "B": 9},
@@ -334,28 +408,34 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 9, 9],
-                    "K": ["A", "B"] * 9,
-                    "V": [
-                        0,
-                        9,
-                        1,
-                        10,
-                        2,
-                        11,
-                        3,
-                        12,
-                        4,
-                        13,
-                        5,
-                        14,
-                        6,
-                        15,
-                        7,
-                        16,
-                        8,
-                        None,
-                    ],
+                    "I": pd.array(
+                        [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 9, 9],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "K": pd.array(["A", "B"] * 9, dtype=pd.ArrowDtype(pa.string())),
+                    "V": pd.array(
+                        [
+                            0,
+                            9,
+                            1,
+                            10,
+                            2,
+                            11,
+                            3,
+                            12,
+                            4,
+                            13,
+                            5,
+                            14,
+                            6,
+                            15,
+                            7,
+                            16,
+                            8,
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="flatten_struct_nullable_int-output_key_value-replicate_int",
@@ -364,27 +444,37 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('x-coordinate', I1, 'y-coordinate', I2)) lat",
             pd.DataFrame(
                 {
-                    "I": [0, 1, 2, 3, 4],
-                    "I1": np.array([1, 2, -4, 8, 16], dtype=np.int8),
-                    "I2": pd.Series([9, 27, 81, None, 729], dtype=pd.UInt16Dtype()),
+                    "I": pd.array([0, 1, 2, 3, 4], dtype=pd.ArrowDtype(pa.int64())),
+                    "I1": pd.array([1, 2, -4, 8, 16], dtype=pd.ArrowDtype(pa.int8())),
+                    "I2": pd.array(
+                        [9, 27, 81, None, 729], dtype=pd.ArrowDtype(pa.uint16())
+                    ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4],
-                    "K": ["x-coordinate", "y-coordinate"] * 5,
-                    "V": [
-                        1,
-                        9,
-                        2,
-                        27,
-                        -4,
-                        81,
-                        8,
-                        None,
-                        16,
-                        729,
-                    ],
+                    "I": pd.array(
+                        [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=pd.ArrowDtype(pa.int64())
+                    ),
+                    "K": pd.array(
+                        ["x-coordinate", "y-coordinate"] * 5,
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
+                    "V": pd.array(
+                        [
+                            1,
+                            9,
+                            2,
+                            27,
+                            -4,
+                            81,
+                            8,
+                            None,
+                            16,
+                            729,
+                        ],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="flatten_struct_numeric_mix-output_key_value-replicate_int",
@@ -393,48 +483,74 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('S1', S1, 'S2', S2)) lat",
             pd.DataFrame(
                 {
-                    "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                    "S1": ["A", "B", "AB", "A", "B", None, "C", "AB", "A", "B"],
-                    "S2": ["A", "AB", "ABC", "A", "AB", "ABC", "A", "AB", "ABC", None],
+                    "I": pd.array(
+                        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=pd.ArrowDtype(pa.int64())
+                    ),
+                    "S1": pd.array(
+                        ["A", "B", "AB", "A", "B", None, "C", "AB", "A", "B"],
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
+                    "S2": pd.array(
+                        ["A", "AB", "ABC", "A", "AB", "ABC", "A", "AB", "ABC", None],
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
-                    "K": ["S1", "S2"] * 10,
-                    "V": [
-                        "A",
-                        "A",
-                        "B",
-                        "AB",
-                        "AB",
-                        "ABC",
-                        "A",
-                        "A",
-                        "B",
-                        "AB",
-                        None,
-                        "ABC",
-                        "C",
-                        "A",
-                        "AB",
-                        "AB",
-                        "A",
-                        "ABC",
-                        "B",
-                        None,
-                    ],
+                    "I": pd.array(
+                        [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "K": pd.array(["S1", "S2"] * 10, dtype=pd.ArrowDtype(pa.string())),
+                    "V": pd.array(
+                        [
+                            "A",
+                            "A",
+                            "B",
+                            "AB",
+                            "AB",
+                            "ABC",
+                            "A",
+                            "A",
+                            "B",
+                            "AB",
+                            None,
+                            "ABC",
+                            "C",
+                            "A",
+                            "AB",
+                            "AB",
+                            "A",
+                            "ABC",
+                            "B",
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
                 }
             ),
             id="flatten_struct_string-output_key_value-replicate_int",
         ),
         pytest.param(
             "SELECT F, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('regular', OBJECT_CONSTRUCT_KEEP_NULL('F', f, 'Fp', f+1), 'squared', OBJECT_CONSTRUCT_KEEP_NULL('F', f*f, 'Fp', f*f+1), 'cubed', OBJECT_CONSTRUCT_KEEP_NULL('F', POW(f, 0.5), 'Fp', POW(f, 0.5)+1))) lat",
-            pd.DataFrame({"F": [0.0, 1.0, 4.0, 0.25, 25.0]}),
             pd.DataFrame(
                 {
-                    "F": pd.Series([0.0, 1.0, 4.0, 0.25, 25.0]).repeat(3).values,
-                    "K": ["regular", "squared", "root"] * 5,
+                    "F": pd.array(
+                        [0.0, 1.0, 4.0, 0.25, 25.0], dtype=pd.ArrowDtype(pa.float64())
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "F": pd.array(
+                        list(pd.Series([0.0, 1.0, 4.0, 0.25, 25.0]).repeat(3).values),
+                        dtype=pd.ArrowDtype(pa.float64()),
+                    ),
+                    "K": pd.array(
+                        ["regular", "squared", "root"] * 5,
+                        dtype=pd.ArrowDtype(pa.string()),
+                    ),
                     "V": [
                         {"F": 0.0, "Fp": 1.0},
                         {"F": 0.0, "Fp": 1.0},
@@ -463,7 +579,9 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('ordmap', M, 'wo_vowel', OBJECT_DELETE(M, 'A', 'E', 'I', 'O', 'U'))) lat",
             pd.DataFrame(
                 {
-                    "I": [10, 20, 30, 40, 50],
+                    "I": pd.array(
+                        [10, 20, 30, 40, 50], dtype=pd.ArrowDtype(pa.int64())
+                    ),
                     "M": pd.Series(
                         [
                             {char: ord(char) for char in word}
@@ -475,8 +593,13 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "F": pd.Series([10, 20, 30, 40, 50]).repeat(2).values,
-                    "K": ["ordmap", "wo_vowel"] * 5,
+                    "F": pd.array(
+                        list(pd.Series([10, 20, 30, 40, 50]).repeat(2).values),
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "K": pd.array(
+                        ["ordmap", "wo_vowel"] * 5, dtype=pd.ArrowDtype(pa.string())
+                    ),
                     "V": pd.Series(
                         [
                             {"A": 65, "B": 66, "C": 67},
