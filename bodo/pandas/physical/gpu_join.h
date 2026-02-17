@@ -203,10 +203,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        if (cuda_join->build_shuffle_manager.all_complete()) {
-            cudaStreamSynchronize(
-                cuda_join->build_shuffle_manager.get_stream());
-        }
         cuda_join->BuildConsumeBatch(input_batch.table);
         if (prev_op_result == OperatorResult::FINISHED) {
             // If we are finished consuming input but the shuffle is not
@@ -229,10 +225,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        if (cuda_join->probe_shuffle_manager.all_complete()) {
-            cudaStreamSynchronize(
-                cuda_join->probe_shuffle_manager.get_stream());
-        }
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,

@@ -93,8 +93,8 @@ void GpuShuffleManager::do_shuffle() {
         this->tables_to_shuffle.pop_back();
 
         // Hash partition the table
-        auto [partitioned_table, partition_start_rows] =
-            hash_partition_table(table, partition_indices, n_ranks);
+        auto [partitioned_table, partition_start_rows] = hash_partition_table(
+            table, partition_indices, n_ranks, this->stream);
 
         assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
         // Contiguous splits requires the split indices excluding the first 0
@@ -478,7 +478,8 @@ bool GpuShuffleManager::all_complete() {
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
                      const std::vector<cudf::size_type>& column_indices,
-                     cudf::size_type num_partitions) {
+                     cudf::size_type num_partitions,
+                     cudaStream_t stream = cudf::get_default_stream()) {
     if (column_indices.empty()) {
         throw std::invalid_argument("Column indices cannot be empty");
     }
@@ -488,7 +489,9 @@ hash_partition_table(std::shared_ptr<cudf::table> table,
                                          column_indices.end());
 
     // Partition the table based on the hash of the selected columns
-    return cudf::hash_partition(table->view(), indices, num_partitions);
+    return cudf::hash_partition(table->view(), indices, num_partitions,
+                                cudf::hash_id::HASH_MURMUR3,
+                                cudf::DEFAULT_HASH_SEED, stream);
 }
 
 rmm::cuda_device_id get_gpu_id() {
