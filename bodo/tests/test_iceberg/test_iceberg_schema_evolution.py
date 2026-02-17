@@ -320,7 +320,7 @@ def test_filter_pushdown_adversarial_renamed_and_swapped_cols(
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-# TODO: fix Pandas 3 issues with IS_NULL and IS_NOT_NULL
+# TODO[BSE-5297]: fix Pandas 3 issues with IS_NULL and IS_NOT_NULL
 # @pytest.mark.parametrize("filter", ["IS_NULL", "IS_NOT_NULL", "IS_IN"])
 @pytest.mark.parametrize("filter", ["IS_IN"])
 @pytest.mark.parametrize(
