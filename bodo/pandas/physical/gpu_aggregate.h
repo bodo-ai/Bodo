@@ -116,14 +116,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             uint64_t col_idx = col_ref_map.at(
                 {colref.binding.table_index, colref.binding.column_index});
 
-#if 0
-            size_t reorder_col_idx =
-                std::find(this->input_col_inds.begin(),
-                          this->input_col_inds.end(), col_idx) -
-                this->input_col_inds.begin();
-            f_in_cols.push_back(reorder_col_idx);
-#endif
-
             auto ftype = function_to_ftype.at(agg_expr.function.name);
             column_agg_funcs.push_back({col_idx, ftype});
             std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
@@ -161,14 +153,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             std::make_unique<CudaGroupbyState>(keys, column_agg_funcs);
 
         arrow_output_schema = this->output_schema->ToArrowSchema();
-#if 0
-            std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
-            std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
-            std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
-            get_streaming_batch_size(), true, -1, getOpId(), -1, false,
-            std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
-#endif
         this->metrics.init_time += end_timer(start_init);
     }
 
@@ -237,9 +221,15 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         groupby_state->build_consume_batch(input_batch.table, local_is_last,
                                            se->stream);
 
+        if (local_is_last) {
+            // Tell groupby state that all data from the local pipeline has
+            // been processed.
+            groupby_state->all_local_data_processed();
+        }
         this->metrics.consume_time += end_timer(start_consume);
-        return local_is_last ? OperatorResult::FINISHED
-                             : OperatorResult::NEED_MORE_INPUT;
+        return (local_is_last && groupby_state->all_complete())
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::HAVE_MORE_OUTPUT;
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
