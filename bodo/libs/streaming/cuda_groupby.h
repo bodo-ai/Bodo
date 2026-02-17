@@ -12,6 +12,7 @@
 #include <cudf/groupby.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include "../gpu_utils.h"
 
 struct FinalMerge {
     std::vector<size_t> column_indices;  // indices into the input table
@@ -35,12 +36,15 @@ std::unique_ptr<cudf::table> apply_final_merges(
 
 class CudaGroupbyState {
    private:
+    bool all_local_done = false;
+
     std::vector<uint64_t> key_indices;
     std::vector<uint64_t> column_indices;
     std::vector<cudf::groupby::aggregation_request> aggregation_requests;
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &)>
         aggregation_fns;
 
+    std::vector<cudf::size_type> shuffle_key_indices;
     std::vector<uint64_t> merge_key_indices;
     std::vector<uint64_t> merge_column_indices;
     std::vector<cudf::groupby::aggregation_request> merge_aggregation_requests;
@@ -70,6 +74,8 @@ class CudaGroupbyState {
         aggregation_requests.push_back(std::move(req));
         aggregation_fns.push_back(fn);
     }
+
+    GpuShuffleManager merge_shuffler;
 
     void bodo_agg_to_cudf(
         uint64_t ftype,
@@ -288,11 +294,23 @@ class CudaGroupbyState {
 
         for (size_t i = 0; i < num_keys; ++i) {
             merge_key_indices.push_back(i);
+            shuffle_key_indices.push_back(i);
         }
 
         for (size_t i = 0; i < column_indices.size(); ++i) {
             merge_column_indices.push_back(num_keys + i);
         }
+    }
+
+    void all_local_data_processed() {
+        if (!all_local_done) {
+            all_local_done = true;
+            merge_shuffler.complete();
+        }
+    }
+
+    bool all_complete() {
+        return all_local_done && merge_shuffler.all_complete();
     }
 
     /**

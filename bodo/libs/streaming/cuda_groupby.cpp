@@ -91,33 +91,52 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
 void CudaGroupbyState::build_consume_batch(
     std::shared_ptr<cudf::table> input_table, bool is_last,
     rmm::cuda_stream_view& stream) {
-    if (input_table->view().num_rows() == 0) {
+    // During the phase where all_complete() is not true, we'll get
+    // blank tables, on which we don't need to run the first groupby
+    // pass.
+    if (input_table->view().num_rows() != 0) {
+        std::shared_ptr<cudf::table> new_data = std::move(
+            do_groupby(input_table->view(), key_indices, column_indices,
+                       aggregation_requests, aggregation_fns, stream));
+        merge_shuffler.shuffle_table(new_data, shuffle_key_indices);
+    }
+
+    // Give shuffler a chance to receive chunks.
+    std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
+        merge_shuffler.progress();
+
+    std::vector<cudf::table_view> views;
+
+    // If we have already accumulated on this node then add the result
+    // of that to the new shuffled tables to merge.
+    if (accumulation) {
+        views.emplace_back(accumulation->view());
+    }
+
+    // Add all the shuffled chunks to the merge set.
+    for (auto& merge_chunk : shuffled_merge_chunks) {
+        views.emplace_back(merge_chunk->view());
+    }
+
+    if (views.size() == 0) {
         return;
     }
 
-    std::unique_ptr<cudf::table> new_data =
-        do_groupby(input_table->view(), key_indices, column_indices,
-                   aggregation_requests, aggregation_fns, stream);
-    if (accumulation) {
-        // Subsequent time need to merge outputs and groupby on the
-        // concatenation.
-        std::vector<cudf::table_view> views;
-        views.reserve(2);
-        views.emplace_back(accumulation->view());
-        views.emplace_back(new_data->view());
-        auto combined = cudf::concatenate(views, stream);
-        accumulation = std::move(do_groupby(
-            combined->view(), merge_key_indices, merge_column_indices,
-            merge_aggregation_requests, merge_aggregation_fns, stream));
-    } else {
-        // First time just save the output.
-        accumulation = std::move(new_data);
-    }
+    // Make one table out of all the views.
+    auto combined = cudf::concatenate(views, stream);
+    // Do the groupby on the combined table.
+    accumulation = std::move(
+        do_groupby(combined->view(), merge_key_indices, merge_column_indices,
+                   merge_aggregation_requests, merge_aggregation_fns, stream));
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     bool& out_is_last, bool produce_output) {
     out_is_last = true;
+
+    // accumulation is guaranteed here to have all the merged data from
+    // all the other nodes.  If there are any final merges to collapse
+    // multiple columns back down to one then run them here.
     if (final_merges.size() > 0) {
         accumulation = apply_final_merges(accumulation->view(), final_merges);
     }
@@ -276,9 +295,8 @@ std::unique_ptr<cudf::column> skew_final_merge(
     auto Q_over_N = cudf::binary_operation(
         sumsq_col, count_col, cudf::binary_operator::DIV, out_type);
 
-    auto mu2 =
-        cudf::binary_operation(Q_over_N->view(), mean_squared->view(),
-                               cudf::binary_operator::SUB, out_type);
+    auto mu2 = cudf::binary_operation(Q_over_N->view(), mean_squared->view(),
+                                      cudf::binary_operator::SUB, out_type);
 
     // ------------- population mean 3 --------------
 
@@ -296,16 +314,15 @@ std::unique_ptr<cudf::column> skew_final_merge(
         cudf::binary_operation(three_mu->view(), Q_over_N->view(),
                                cudf::binary_operator::MUL, out_type);
 
-    auto two_mu3 = cudf::binary_operation(
-        mean_cubed->view(), *two_scalar, cudf::binary_operator::MUL, out_type);
+    auto two_mu3 = cudf::binary_operation(mean_cubed->view(), *two_scalar,
+                                          cudf::binary_operator::MUL, out_type);
 
-    auto mu3_tmp = cudf::binary_operation(
-        M_over_N->view(), three_mu_Q_over_N->view(),
-        cudf::binary_operator::SUB, out_type);
+    auto mu3_tmp =
+        cudf::binary_operation(M_over_N->view(), three_mu_Q_over_N->view(),
+                               cudf::binary_operator::SUB, out_type);
 
-    auto mu3 = cudf::binary_operation(
-        mu3_tmp->view(), two_mu3->view(),
-        cudf::binary_operator::ADD, out_type);
+    auto mu3 = cudf::binary_operation(mu3_tmp->view(), two_mu3->view(),
+                                      cudf::binary_operator::ADD, out_type);
 
     // ---------- convert population to sample ------------
 
@@ -319,39 +336,35 @@ std::unique_ptr<cudf::column> skew_final_merge(
     auto N_over_Nm1 = cudf::binary_operation(
         count_col, N_minus_1->view(), cudf::binary_operator::DIV, out_type);
 
-    auto m2 = cudf::binary_operation(
-        mu2->view(), N_over_Nm1->view(), cudf::binary_operator::MUL, out_type);
+    auto m2 = cudf::binary_operation(mu2->view(), N_over_Nm1->view(),
+                                     cudf::binary_operator::MUL, out_type);
 
     // m3 = (N^2 / ((N-1)(N-2))) * μ3
-    auto N_sq = cudf::binary_operation(
-        count_col, count_col, cudf::binary_operator::MUL, out_type);
+    auto N_sq = cudf::binary_operation(count_col, count_col,
+                                       cudf::binary_operator::MUL, out_type);
 
-    auto Nm1_Nm2 = cudf::binary_operation(
-        N_minus_1->view(), N_minus_2->view(), cudf::binary_operator::MUL, out_type);
+    auto Nm1_Nm2 = cudf::binary_operation(N_minus_1->view(), N_minus_2->view(),
+                                          cudf::binary_operator::MUL, out_type);
 
     auto Nsq_over = cudf::binary_operation(
         N_sq->view(), Nm1_Nm2->view(), cudf::binary_operator::DIV, out_type);
 
-    auto m3 = cudf::binary_operation(
-        mu3->view(), Nsq_over->view(), cudf::binary_operator::MUL, out_type);
-
+    auto m3 = cudf::binary_operation(mu3->view(), Nsq_over->view(),
+                                     cudf::binary_operator::MUL, out_type);
 
     // -------------- skew -------------
 
-    auto m2_sq = cudf::binary_operation(
-        m2->view(), m2->view(),
-        cudf::binary_operator::MUL, out_type);
+    auto m2_sq = cudf::binary_operation(m2->view(), m2->view(),
+                                        cudf::binary_operator::MUL, out_type);
 
-    auto m2_cu = cudf::binary_operation(
-        m2_sq->view(), m2->view(),
-        cudf::binary_operator::MUL, out_type);
+    auto m2_cu = cudf::binary_operation(m2_sq->view(), m2->view(),
+                                        cudf::binary_operator::MUL, out_type);
 
-    auto denom = cudf::unary_operation(
-        m2_cu->view(), cudf::unary_operator::SQRT);
+    auto denom =
+        cudf::unary_operation(m2_cu->view(), cudf::unary_operator::SQRT);
 
-    auto skew =
-        cudf::binary_operation(m3->view(), denom->view(),
-                               cudf::binary_operator::DIV, out_type);
+    auto skew = cudf::binary_operation(m3->view(), denom->view(),
+                                       cudf::binary_operator::DIV, out_type);
 
     return skew;
 }
