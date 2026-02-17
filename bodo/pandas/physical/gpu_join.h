@@ -213,7 +213,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         return prev_op_result == OperatorResult::FINISHED &&
                        cuda_join->build_shuffle_manager.all_complete()
                    ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+                   : OperatorResult::HAVE_MORE_OUTPUT;
     }
 
     /**
