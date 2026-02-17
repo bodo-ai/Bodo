@@ -101,18 +101,26 @@ test_map_arg = {
 }
 
 date_tz = pd.Series(
-    pd.date_range("20130101 00:00:00", periods=10, freq="h", tz="America/New_York")
+    pd.date_range(
+        "20130101 00:00:00", periods=10, freq="h", tz="America/New_York"
+    ).astype("datetime64[ns, America/New_York]")
 )
-date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
-date_s = pd.Series(pd.date_range("20221201 09:10:12", periods=10, freq="s"))
-date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
+date_m = pd.Series(
+    pd.date_range("20130101 09:10:12", periods=10, freq="MS").astype("datetime64[ns]")
+)
+date_s = pd.Series(
+    pd.date_range("20221201 09:10:12", periods=10, freq="s").astype("datetime64[ns]")
+)
+date_y = pd.Series(
+    pd.date_range("19990303 09:10:12", periods=10, freq="YE").astype("datetime64[ns]")
+)
 date_none = pd.Series([pd.NaT] * 10, dtype="datetime64[ns]")
 
 df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y, "D": date_none, "E": date_tz})
 timedelta_df = pd.DataFrame(
     {
-        "A": pd.to_timedelta(range(10), unit="s"),
-        "B": pd.to_timedelta(range(10, 20), unit="s"),
+        "A": pd.to_timedelta(range(10), unit="s").astype("timedelta64[ns]"),
+        "B": pd.to_timedelta(range(10, 20), unit="s").astype("timedelta64[ns]"),
     }
 )
 

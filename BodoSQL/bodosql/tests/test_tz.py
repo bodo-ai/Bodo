@@ -25,9 +25,15 @@ def test_select(memory_leak_check):
     query = "Select B from table1"
     df = pd.DataFrame(
         {
-            "A": pd.date_range("2/2/2022", periods=12, freq="1D2H", tz="Poland"),
-            "B": pd.date_range("2/25/2021", periods=12, freq="1D2H", tz="US/Pacific"),
-            "C": pd.date_range("5/22/2022", periods=12, freq="1D2H", tz="UTC"),
+            "A": pd.date_range(
+                "2/2/2022", periods=12, freq="1D2h", tz="Poland", unit="ns"
+            ),
+            "B": pd.date_range(
+                "2/25/2021", periods=12, freq="1D2h", tz="US/Pacific", unit="ns"
+            ),
+            "C": pd.date_range(
+                "5/22/2022", periods=12, freq="1D2h", tz="UTC", unit="ns"
+            ),
         }
     )
     expected_output = df[["B"]]

@@ -740,7 +740,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
         if (
             not isinstance(on_data_type, types.Array)
             or on_data_type.dtype != bodo.types.datetime64ns
-        ):
+        ) and on_data_type != bodo.types.DatetimeArrayType(None):
             raise BodoError(
                 f"{func_name}.rolling(): 'on' column should have datetime64 data."
             )

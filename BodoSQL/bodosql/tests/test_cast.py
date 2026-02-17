@@ -687,7 +687,9 @@ def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak
     else:
         query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP)"
 
-    expected_output = pd.DataFrame({"A": [pd.Timestamp(2013, 5, 6)]})
+    expected_output = pd.DataFrame(
+        {"A": pd.Series([pd.Timestamp(2013, 5, 6)], dtype="datetime64[ns]")}
+    )
     check_query(
         query,
         basic_df,
@@ -706,7 +708,12 @@ def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
         query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP_NTZ), CAST('2013-05-06 12:34:56' as TIMESTAMP_NTZ)"
 
     expected_output = pd.DataFrame(
-        {"A": [pd.Timestamp(2013, 5, 6)], "B": [pd.Timestamp(2013, 5, 6, 12, 34, 56)]}
+        {
+            "A": pd.Series([pd.Timestamp(2013, 5, 6)], dtype="datetime64[ns]"),
+            "B": pd.Series(
+                [pd.Timestamp(2013, 5, 6, 12, 34, 56)], dtype="datetime64[ns]"
+            ),
+        }
     )
     check_query(
         query,
@@ -752,8 +759,14 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
 
     expected_output = pd.DataFrame(
         {
-            "DATES": [pd.Timestamp(date) for date in ctx["TABLE1"]["DATES"]],
-            "STRINGS": [pd.Timestamp(string) for string in ctx["TABLE1"]["STRINGS"]],
+            "DATES": pd.Series(
+                [pd.Timestamp(date) for date in ctx["TABLE1"]["DATES"]],
+                dtype="datetime64[ns]",
+            ),
+            "STRINGS": pd.Series(
+                [pd.Timestamp(string) for string in ctx["TABLE1"]["STRINGS"]],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_query(
@@ -873,7 +886,8 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
                         pd.Timestamp("1942-04-30 03:24:55"),
                         pd.Timestamp("2019-10-03 19:57:28.082374912"),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="TIMESTAMP",

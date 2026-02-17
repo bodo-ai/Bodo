@@ -251,7 +251,7 @@ def check_table_comment(
     df = spark.sql(f"DESCRIBE TABLE {schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if not column_comments or i % 2 == 1:
-            assert df.iloc[i]["comment"] is None, (
+            assert pd.isna(df.iloc[i]["comment"]), (
                 f"Expected column {i} comment to be None, but actual comment is not None"
             )
         else:

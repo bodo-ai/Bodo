@@ -45,7 +45,8 @@ def comparison_func_name(request):
                     pd.Timestamp("2022-11-25 06:50:53"),
                     pd.Timestamp("2023-11-11"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ).values,
             id="Timestamp-Naive",
         ),
@@ -58,7 +59,8 @@ def comparison_func_name(request):
                     pd.Timestamp("2022-11-25 06:50:53", tz="US/Pacific"),
                     pd.Timestamp("2023-11-11", tz="US/Pacific"),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns, US/Pacific]",
             ).array,
             id="Timestamp-TZ-Aware",
         ),

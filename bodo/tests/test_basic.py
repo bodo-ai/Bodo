@@ -767,7 +767,7 @@ def test_udf_nest_jit_convert():
     df = pd.DataFrame(
         {
             "A": [1, 1, 3, 4, 1],
-            "B": pd.date_range("2020-01-01", periods=5),
+            "B": pd.date_range("2020-01-01", periods=5, unit="ns"),
             "C": [1, 2, 3, 4, 5],
         }
     )
@@ -954,7 +954,7 @@ def test_pure_func(datapath):
 
     # pq read
     def impl4():
-        return pd.read_parquet(fname_pq)
+        return pd.read_parquet(fname_pq, dtype_backend="pyarrow")
 
     # np read
     def impl5():
@@ -986,7 +986,7 @@ def test_pure_func(datapath):
 
     # csv read
     def impl11():
-        return pd.read_csv(fname_csv)
+        return pd.read_csv(fname_csv, dtype_backend="pyarrow")
 
     # csv write
     def impl12():

@@ -142,7 +142,8 @@ def create_date_field_overload(field):
             else:
                 func_text += "        out_arr[i] = ts." + field + "\n"
         else:
-            func_text += f"        out_arr[i] = arr[i].{field}\n"
+            call_params = "()" if field == "weekday" else ""
+            func_text += f"        out_arr[i] = arr[i].{field}{call_params}\n"
 
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
@@ -293,7 +294,11 @@ def series_dt_date_overload(S_dt):
 def create_series_dt_df_output_overload(attr):
     def series_dt_df_output_overload(S_dt):
         if not (
-            (attr == "components" and S_dt.stype.dtype == types.NPTimedelta("ns"))
+            (
+                attr == "components"
+                and S_dt.stype.dtype
+                in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type)
+            )
             or (
                 attr == "isocalendar"
                 and (
@@ -316,7 +321,11 @@ def create_series_dt_df_output_overload(attr):
                 "microseconds",
                 "nanoseconds",
             ]
-            convert = "convert_numpy_timedelta64_to_pd_timedelta"
+            convert = (
+                "convert_numpy_timedelta64_to_pd_timedelta"
+                if S_dt.stype.dtype == types.NPTimedelta("ns")
+                else ""
+            )
             int_type = "np.empty(n, np.int64)"
             attr_call = attr
         elif attr == "isocalendar":
@@ -384,7 +393,10 @@ _install_df_output_overload()
 # support Timedelta fields such as S.dt.days
 def create_timedelta_field_overload(field):
     def overload_field(S_dt):
-        if not S_dt.stype.dtype == types.NPTimedelta("ns"):  # pragma: no cover
+        if S_dt.stype.dtype not in (
+            types.NPTimedelta("ns"),
+            bodo.types.pd_timedelta_type,
+        ):  # pragma: no cover
             return
         # TODO: refactor with TimedeltaIndex?
         func_text = "def impl(S_dt):\n"
@@ -425,7 +437,10 @@ def create_timedelta_field_overload(field):
 # support Timedelta methods such as S.dt.total_seconds()
 def create_timedelta_method_overload(method):
     def overload_method(S_dt):
-        if not S_dt.stype.dtype == types.NPTimedelta("ns"):  # pragma: no cover
+        if S_dt.stype.dtype not in (
+            types.NPTimedelta("ns"),
+            bodo.types.pd_timedelta_type,
+        ):  # pragma: no cover
             return
         # TODO: refactor with TimedeltaIndex?
         func_text = "def impl(S_dt):\n"
@@ -556,7 +571,8 @@ def overload_dt_tz_convert(S_dt, tz):
 def create_timedelta_freq_overload(method):
     def freq_overload(S_dt, freq, ambiguous="raise", nonexistent="raise"):
         if (
-            S_dt.stype.dtype != types.NPTimedelta("ns")
+            S_dt.stype.dtype
+            not in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type)
             and S_dt.stype.dtype != types.NPDatetime("ns")
             and not isinstance(
                 S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
@@ -582,7 +598,7 @@ def create_timedelta_freq_overload(method):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(A)\n"
-        if S_dt.stype.dtype == types.NPTimedelta("ns"):
+        if S_dt.stype.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
             func_text += "    B = np.empty(n, np.dtype('timedelta64[ns]'))\n"
         elif is_tz_aware:
             func_text += "    B = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, tz_literal)\n"
@@ -592,7 +608,7 @@ def create_timedelta_freq_overload(method):
         func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(B, i)\n"
         func_text += "            continue\n"
-        if S_dt.stype.dtype == types.NPTimedelta("ns"):
+        if S_dt.stype.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
             front_convert = "bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_pd_timedelta"
             back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64"
         else:
@@ -924,7 +940,7 @@ def create_bin_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
             and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = lhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -958,7 +974,7 @@ def create_bin_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(rhs)
             and lhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = rhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1006,7 +1022,7 @@ def create_cmp_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
             and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = lhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1042,7 +1058,7 @@ def create_cmp_op_overload(op):
             bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(rhs)
             and lhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = rhs.dtype("NaT")
+            nat = bodo.types.timedelta64ns("NaT")
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()

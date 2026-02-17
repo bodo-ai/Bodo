@@ -498,6 +498,12 @@ def overload_timestamp_to_dt64(val):
             return val
 
         return impl
+    elif val == bodo.types.datetime_datetime_type:  # pragma: no cover
+
+        def impl(val):  # pragma: no cover
+            return bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
+
+        return impl
     else:
         raise BodoError("timestamp_to_dt64 requires a timestamp")
 
@@ -513,19 +519,25 @@ def overload_setitem(A, ind, val):
         isinstance(val, DatetimeArrayType)
         or isinstance(val, bodo.types.PandasTimestampType)
         or val == bodo.types.datetime64ns
+        or val == bodo.types.datetime_datetime_type
+        or val == types.Array(bodo.types.datetime64ns, 1, "C")
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
         )
 
+    is_tz_naive_dt = (
+        isinstance(val, numba.core.types.scalars.NPDatetime)
+        or val == bodo.types.datetime_datetime_type
+        or val == types.Array(bodo.types.datetime64ns, 1, "C")
+    )
+
     # Ensure the timezones match, and that, if a datetime 64, we have no time zone
-    if (
-        not isinstance(val, numba.core.types.scalars.NPDatetime) and val.tz != tz
-    ):  # pragma: no cover
+    if not is_tz_naive_dt and val.tz != tz:  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires the Array and values to set to share a timezone"
         )
-    elif isinstance(val, numba.core.types.scalars.NPDatetime) and tz is not None:
+    elif is_tz_naive_dt and tz is not None:
         raise BodoError(
             "operator.setitem with tz-aware DatetimeArrayType requires timezone-aware values"
         )
@@ -545,6 +557,16 @@ def overload_setitem(A, ind, val):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
+                A._data[ind] = dt64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
+                )
+
+            return impl
+        elif val == bodo.types.datetime_datetime_type:
+
+            def impl(A, ind, val):  # pragma: no cover
+                dt64_val = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
                 A._data[ind] = dt64_val
                 bodo.libs.int_arr_ext.set_bit_to_arr(
                     A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
@@ -643,6 +665,27 @@ def overload_setitem(A, ind, val):
 
             return impl_arr
 
+        elif val == types.Array(bodo.types.datetime64ns, 1, "C"):
+
+            def impl_arr(A, ind, val):  # pragma: no cover
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[ind] = val
+                n = len(A)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+
+                # Set the appropriate values in the null bitmap
+                val_idx = 0
+                arr_null_bitmap = A._null_bitmap
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        arr_null_bitmap,
+                        i,
+                        0 if np.isnat(val[val_idx]) else 1,
+                    )
+                    val_idx += 1
+
+            return impl_arr
         else:
             # Scalar case
             def impl_scalar(A, ind, val):  # pragma: no cover
@@ -720,7 +763,9 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType + Scalar tz-aware or date
         if isinstance(lhs, DatetimeArrayType) and (
-            isinstance(rhs, PandasTimestampType) or rhs == bodo.types.datetime_date_type
+            isinstance(rhs, PandasTimestampType)
+            or rhs == bodo.types.datetime_date_type
+            or (rhs == bodo.types.datetime64ns)
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -738,7 +783,9 @@ def create_cmp_op_overload_arr(op):
 
         # Scalar tz-aware or date + DatetimeArrayType.
         elif (
-            isinstance(lhs, PandasTimestampType) or lhs == bodo.types.datetime_date_type
+            isinstance(lhs, PandasTimestampType)
+            or lhs == bodo.types.datetime_date_type
+            or (lhs == bodo.types.datetime64ns)
         ) and isinstance(rhs, DatetimeArrayType):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -826,7 +873,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     """
     if isinstance(lhs, DatetimeArrayType):
         # TODO: Support more types
-        if rhs == bodo.types.week_type:
+        if rhs in (bodo.types.week_type, bodo.types.pd_timedelta_type):
             tz_literal = lhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -851,7 +898,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     else:
         # Note this function is only called if at least one input is a DatetimeArrayType
         # TODO: Support more types
-        if lhs == bodo.types.week_type:
+        if lhs in (bodo.types.week_type, bodo.types.pd_timedelta_type):
             tz_literal = rhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -872,6 +919,49 @@ def overload_add_operator_datetime_arr(lhs, rhs):
         else:
             raise BodoError(
                 f"add operator not supported between {lhs} and Timezone-aware timestamp. Please convert to timezone naive with ts.tz_convert(None)"
+            )
+
+
+def overload_sub_operator_datetime_arr(lhs, rhs):
+    if isinstance(lhs, DatetimeArrayType):
+        # TODO: Support more types
+        if rhs in (bodo.types.week_type, bodo.types.pd_timedelta_type):
+            tz_literal = lhs.tz
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    n, tz_literal
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(lhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs[i] - rhs
+                return out_arr
+
+            return impl
+
+        if isinstance(rhs, DatetimeArrayType) and rhs.tz == lhs.tz:
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(
+                        lhs, i
+                    ) or bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs[i] - rhs[i]
+                return out_arr
+
+            return impl
+        else:
+            raise BodoError(
+                f"sub operator not supported between Timezone-aware timestamp and {rhs}. Please convert to timezone naive with ts.tz_convert(None)"
             )
 
 

@@ -90,7 +90,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
         // table to a posix or hadoop filesystem.
         if (is_parallel) {
             create_dir_parallel(fs_option, myrank, dirname, path_name,
-                                orig_path, suffix.substr(1));
+                                orig_path, suffix.substr(1), true);
         }
 
         fs = get_fs_for_path(_path_name, is_parallel);

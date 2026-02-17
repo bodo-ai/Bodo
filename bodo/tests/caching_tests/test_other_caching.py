@@ -164,7 +164,7 @@ def test_index_info_caching(is_cached, memory_leak_check):
     import bodo
 
     def impl():
-        df = pd.read_parquet("test.pq")
+        df = pd.read_parquet("test.pq", dtype_backend="pyarrow")
         return df
 
     # create different sized dataframes with the same schema

@@ -16,6 +16,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     oracle_user_pass_and_hostname,
     pytest_mark_oracle,
@@ -56,9 +57,7 @@ def test_write_sql_aws(chunksize, memory_leak_check):
                     df_load_sort = (
                         df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
                     )
-                    pd.testing.assert_frame_equal(
-                        df_load_sort, df_in_sort, check_column_type=False
-                    )
+                    _test_equal(df_load_sort, df_in_sort, check_dtype=False)
                 except Exception as e:
                     print("".join(traceback.format_exception(None, e, e.__traceback__)))
                     passed = 0
@@ -71,7 +70,7 @@ def test_write_sql_aws(chunksize, memory_leak_check):
     len_list = 20
     list_int = rng.choice(10, len_list)
     list_double = rng.choice([4.0, np.nan], len_list)
-    list_datetime = pd.date_range("2001-01-01", periods=len_list)
+    list_datetime = pd.date_range("2001-01-01", periods=len_list, unit="ns")
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
     test_specific_dataframe(test_impl_write_sql, False, df1, chunksize)
     test_specific_dataframe(test_impl_write_sql, True, df1, chunksize)
@@ -99,7 +98,7 @@ def test_sql_if_exists_fail_errorchecking():
         len_list = 20
         list_int = rng.integers(1, 10, len_list)
         list_double = rng.choice([4.0, np.nan], len_list, p=[0.33, 0.67])
-        list_datetime = pd.date_range("2001-01-01", periods=len_list)
+        list_datetime = pd.date_range("2001-01-01", periods=len_list, unit="ns")
         df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
 
         bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl_fails)
@@ -467,7 +466,7 @@ def test_write_sql_oracle(is_distributed, memory_leak_check):
     len_list = 20
     list_int = rng.integers(1, 10, len_list)
     list_double = rng.choice([4.0, np.nan], len_list, p=[0.33, 0.67])
-    list_datetime = pd.date_range("2001-01-01", periods=len_list)
+    list_datetime = pd.date_range("2001-01-01", periods=len_list, unit="ns")
     df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
 
     table_name = "to_sql_table"
@@ -778,7 +777,7 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
         len_list = 20
         list_int = rng.choice(10, len_list)
         list_double = rng.choice([4.0, np.nan], len_list)
-        list_datetime = pd.date_range("2001-01-01", periods=len_list)
+        list_datetime = pd.date_range("2001-01-01", periods=len_list, unit="ns")
         df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
         if is_distributed:
             start, end = get_start_end(len(df_in))
@@ -837,8 +836,10 @@ def test_to_sql_oracle(is_distributed, memory_leak_check):
         "".join(rng.choice(letters, size=rng.integers(10, 100)))
         for _ in range(len_list)
     ]
-    list_datetime = pd.date_range("2001-01-01", periods=len_list)
-    list_date = [d.date() for d in pd.date_range("2021-11-06", periods=len_list)]
+    list_datetime = pd.date_range("2001-01-01", periods=len_list, unit="ns")
+    list_date = [
+        d.date() for d in pd.date_range("2021-11-06", periods=len_list, unit="ns")
+    ]
     df_in = pd.DataFrame(
         {
             "a": list_int,

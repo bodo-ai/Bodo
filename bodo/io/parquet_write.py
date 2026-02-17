@@ -243,14 +243,19 @@ def gen_pandas_parquet_metadata_template(
         # Currently only timezone types contain metadata
         metadata = None
         if isinstance(col_type, bodo.types.DatetimeArrayType):
-            pandas_type = "datetimetz"
             numpy_type = "datetime64[ns]"
-            # Reuse pyarrow to construct the metadata.
-            if isinstance(col_type.tz, int):
-                tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(col_type.tz)
+            if col_type.tz is None:
+                pandas_type = "datetime"
             else:
-                tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
-            metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
+                pandas_type = "datetimetz"
+                # Reuse pyarrow to construct the metadata.
+                if isinstance(col_type.tz, int):
+                    tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(
+                        col_type.tz
+                    )
+                else:
+                    tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
+                metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
         elif isinstance(col_type, types.Array) or col_type == boolean_array_type:
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):

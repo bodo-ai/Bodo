@@ -125,7 +125,7 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5h", tz="US/PACIFIC"
+                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
             )
         }
     )
@@ -146,7 +146,7 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=30, freq="10D5h", tz="US/PACIFIC"
+                "1/18/2022", periods=30, freq="10D5h", tz="US/Pacific", unit="ns"
             ),
             "B": [True, False, True, False, True] * 6,
         }
@@ -425,7 +425,7 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5h", tz="US/PACIFIC"
+                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
             )
         }
     )
@@ -548,7 +548,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -572,7 +573,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00", tz="Australia/Sydney"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999", tz="Australia/Sydney"),
-                ]
+                ],
+                dtype="datetime64[ns, Australia/Sydney]",
             ),
             pd.Series(
                 [
@@ -671,7 +673,12 @@ def test_to_timestamp_non_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 4 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
         expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
@@ -794,7 +801,12 @@ def test_to_timestamp_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 2 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
         expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
@@ -829,7 +841,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(1970, 1, 3, 23, 10, 1),
                         pd.Timestamp(2016, 2, 28, 10, 10, 10),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-1",
@@ -853,7 +866,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(2021, 9, 29, 11, 12, 27),
                         pd.Timestamp(2023, 2, 14, 18, 37, 5),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-2",
@@ -904,7 +918,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00"),
                     pd.Timestamp("2024-08-16 13:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             None,
             pd.Series(
@@ -914,7 +929,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 17:30:00"),
                     pd.Timestamp("2024-08-16 16:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ntz-west_to_east",
         ),
@@ -927,7 +943,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-08-16 16:45:20", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "America/Los_Angeles",
             pd.Series(
@@ -937,7 +954,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 10:30:00"),
                     pd.Timestamp("2024-08-16 12:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ltz_west-utc_to_east",
         ),

@@ -16,6 +16,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
@@ -120,11 +121,11 @@ def test_table_filter_dead_columns(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl(idx):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df[idx]
         return len(df2)
 
-    idx = np.arange(len(pd.read_parquet(filename))) % 3 == 0
+    idx = np.arange(len(pd.read_parquet(filename, dtype_backend="pyarrow"))) % 3 == 0
     check_func(impl, (idx,), only_seq=True)
     # NOTE: this needs distributed=False since args/returns don't force
     # sequential execution.
@@ -156,7 +157,7 @@ def test_table_len_with_idx_col(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column0")
+        df = pd.read_csv(filename, index_col="Column0", dtype_backend="pyarrow")
         return len(df)
 
     check_func(impl, ())
@@ -1389,7 +1390,7 @@ def test_table_del_single_block_pq_index(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df[["Column3", "Column37", "Column59"]]
 
     check_func(impl, ())
@@ -1417,7 +1418,7 @@ def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         return df[["Column3", "Column37", "Column59"]]
 
@@ -1445,7 +1446,7 @@ def test_table_dead_pq_index(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl(n):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         total = 0.0
         for _ in range(n):
             total += df["Column0"].sum()
@@ -1471,7 +1472,7 @@ def test_table_dead_pq_index_alias(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl(n):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         total = 0.0
         for _ in range(n):
@@ -1499,7 +1500,7 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl(n):
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         total = 0.0
         while n > 0:
@@ -1527,7 +1528,7 @@ def test_table_dead_pq_table(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         return df.index
 
@@ -1548,7 +1549,7 @@ def test_table_dead_pq_table_alias(datapath, memory_leak_check):
     filename = datapath("many_columns_index.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["Column99"] = np.arange(1000)
         return df.index
 
@@ -1569,7 +1570,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column4")
+        df = pd.read_csv(filename, index_col="Column4", dtype_backend="pyarrow")
         return df.index
 
     check_func(impl, ())
@@ -1586,16 +1587,14 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
     try:
 
         def impl(source_filename, dest_filename):
-            df = pd.read_csv(source_filename)
+            df = pd.read_csv(source_filename, dtype_backend="pyarrow")
             df.to_parquet(dest_filename)
 
         def check_correctness(pandas_filename, bodo_filename):
-            pandas_df = pd.read_parquet(pandas_filename)
-            bodo_df = pd.read_parquet(bodo_filename)
+            pandas_df = pd.read_parquet(pandas_filename, dtype_backend="pyarrow")
+            bodo_df = pd.read_parquet(bodo_filename, dtype_backend="pyarrow")
             try:
-                pd.testing.assert_frame_equal(
-                    pandas_df, bodo_df, check_column_type=False, check_dtype=False
-                )
+                _test_equal(pandas_df, bodo_df, check_dtype=False)
                 return 1
             except Exception:
                 return 0
@@ -1626,7 +1625,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
     filename = datapath("many_columns.csv")
 
     def impl():
-        df = pd.read_csv(filename, index_col="Column4")
+        df = pd.read_csv(filename, index_col="Column4", dtype_backend="pyarrow")
         return df.index
 
     check_func(impl, (), check_dtype=False)
@@ -1675,7 +1674,7 @@ def test_table_column_filter_past_setitem(memory_leak_check, datapath, num_layer
 
     func_text = ""
     func_text += "def impl():\n"
-    func_text += f"    df = pd.read_parquet({filename!r})\n"
+    func_text += f"    df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')\n"
     for i in range(num_layers):
         func_text += f"    df['Column{i + 1}'] = df['Column{i}']\n"
     func_text += "    df2 = df[df['Column96'] > 10]\n"
@@ -1710,7 +1709,7 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["Column0"] = df["Column0"].astype(float)
         df["Column1"] = df["Column1"].astype(str)
         df["Column0"] = df["Column0"] + 1
@@ -1763,7 +1762,7 @@ def test_table_nbytes_del_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         total_bytes = df.memory_usage(index=False)
         if total_bytes.sum() > 1000:
             n = df["Column3"].sum()
@@ -1803,7 +1802,7 @@ def test_table_nbytes_ret_df(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         total_bytes = df.memory_usage(index=False)
         if total_bytes.sum() > 1000:
             df["Column0"] += 1
@@ -1836,7 +1835,7 @@ def test_table_concat_del_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         out_df = df.melt(
             id_vars=["Column2", "Column5"], value_vars=["Column0", "Column3"]
         )
@@ -1879,7 +1878,7 @@ def test_table_concat_ret_df(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         out_df = df.melt(
             id_vars=["Column2", "Column5"], value_vars=["Column0", "Column3"]
         )
@@ -1948,7 +1947,7 @@ def test_table_astype_del_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -1994,7 +1993,7 @@ def test_table_astype_ret_df_input(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2034,7 +2033,7 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2074,7 +2073,7 @@ def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         # All columns being casted are originally int
         df2 = df1.astype({"Column0": np.float32, "Column3": np.float64})
         return df2
@@ -2090,7 +2089,7 @@ def test_concat_tables_used_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         in_dfs = []
         for _ in range(3):
             in_dfs.append(df1)
@@ -2136,7 +2135,7 @@ def test_filter_del_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2182,7 +2181,7 @@ def test_filter_ret_df_input(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2222,7 +2221,7 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2264,7 +2263,7 @@ def test_table_mappable_del_cols(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.copy()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2310,7 +2309,7 @@ def test_table_mappable_ret_df_input(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.copy()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2350,7 +2349,7 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.copy()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
@@ -2414,7 +2413,7 @@ def test_groupby_table_dels(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.groupby(by=["Column9", "Column6", "Column13", "Column11"])[
             ["Column14", "Column3", "Column17", "Column8", "Column1"]
         ].count()
@@ -2440,7 +2439,7 @@ def test_groupby_table_dels_as_index_false(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.groupby(
             by=["Column9", "Column6", "Column13", "Column11"], as_index=False
         )[["Column14", "Column3", "Column17", "Column8", "Column1"]].count()
@@ -2472,7 +2471,7 @@ def test_two_column_dels(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.memory_usage(index=False)
         return df2.sum() > 100.0
 
@@ -2510,7 +2509,7 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df.loc[:, {columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2548,7 +2547,7 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df.loc[:, {columns_loaded_level_1[::-1]}]
         return df1.loc[:, {columns_loaded_level_2 * 2}]"""
 
@@ -2593,7 +2592,7 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df.iloc[:, {columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2634,7 +2633,7 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df.iloc[:, {columns_loaded_level_1[::-1]}]
         return df1.iloc[:, {columns_loaded_level_2 * 2}]"""
 
@@ -2678,7 +2677,7 @@ def test_table_column_subset_level1(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         return df[{columns_loaded[::-1] * 2}]"""
 
     local_vars = {}
@@ -2715,7 +2714,7 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
 
     # Note we reverse the columns to check reordering
     func_text = f"""def impl():
-        df = pd.read_parquet({filename!r})
+        df = pd.read_parquet({filename!r}, dtype_backend='pyarrow')
         df1 = df[{columns_loaded_level_1[::-1]}]
         return df1[{columns_loaded_level_2 * 2}]"""
 
@@ -2746,7 +2745,7 @@ def test_merge_del_columns(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1.merge(df1, on="Column0", how="inner", suffixes=("_x", "_y"))
         return df2[["Column1_x", "Column21_y"]]
 
@@ -2787,7 +2786,7 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
     filename = datapath("many_columns.parquet")
 
     def impl1():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1[
             [
                 "Column0",
@@ -2806,7 +2805,7 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
         return df3[["Column1_y", "Column21"]]
 
     def impl2():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1[
             [
                 "Column0",
@@ -2825,7 +2824,7 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
         return df3[["Column1_x", "Column21"]]
 
     def impl3():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         df2 = df1[
             [
                 "Column0",
@@ -2879,7 +2878,7 @@ def test_parquet_tail(datapath, memory_leak_check):
     from bodo.tests.utils_jit import ColumnDelTestPipeline
 
     def impl():
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return len(df.tail(10000))
 
     filename = datapath("many_columns.parquet")

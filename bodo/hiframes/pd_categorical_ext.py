@@ -459,7 +459,7 @@ def get_code_for_value(cat_dtype, val):
 
 
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
-def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
+def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=False):
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(
@@ -477,7 +477,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
 
     if nb_dtype == types.unicode_type:
 
-        def impl(A, dtype, copy=True, _bodo_nan_to_str=True):  # pragma: no cover
+        def impl(A, dtype, copy=True, _bodo_nan_to_str=False):  # pragma: no cover
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
             categories = A.dtype.categories
             n = len(codes)
@@ -499,7 +499,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
 
     arr_type = dtype_to_array_type(nb_dtype)
 
-    def impl(A, dtype, copy=True, _bodo_nan_to_str=True):  # pragma: no cover
+    def impl(A, dtype, copy=True, _bodo_nan_to_str=False):  # pragma: no cover
         codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
         categories = A.dtype.categories
         n = len(codes)
@@ -925,7 +925,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
     """
     labels = {}
     for i in range(len(vals)):
-        val = vals[i]
+        val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(vals[i])
         labels[val] = i
 
     return labels

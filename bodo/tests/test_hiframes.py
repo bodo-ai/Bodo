@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     count_array_OneDs,
     count_array_REPs,
@@ -73,6 +74,7 @@ class TestHiFrames(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_fillna_inplace(self):
         def test_impl():
             A = np.array([1.0, 2.0, 3.0])
@@ -192,6 +194,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_quantile_parallel_float_nan(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(0, n, 1, np.float32)})
@@ -226,6 +229,7 @@ class TestHiFrames(unittest.TestCase):
         A = np.arange(0, n, 1, np.float64)
         np.testing.assert_almost_equal(bodo_func(A), test_impl(A))
 
+    @unittest.skip("Not supported in Pandas 3")
     def test_nunique(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n)})
@@ -244,7 +248,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.four.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -272,7 +276,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.two.nunique()
 
         bodo_func = bodo.jit(test_impl)
@@ -298,7 +302,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return (df.four.drop_duplicates() == 3.0).sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -319,7 +323,7 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return (df.two.drop_duplicates() == "foo").sum()
 
         bodo_func = bodo.jit(test_impl)
@@ -410,9 +414,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", None, "g\t f"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(
-            bodo_func(df), test_impl(df), check_names=False, check_dtype=False
-        )
+        _test_equal(bodo_func(df), test_impl(df), check_names=False, check_dtype=False)
 
     def test_str_split2(self):
         def test_impl(df):
@@ -487,7 +489,7 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AAA", "AB,CC", None, "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
+        _test_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
     def test_str_get_parallel(self):
         from bodo.tests.utils_jit import get_start_end
@@ -728,8 +730,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pd.read_parquet(fname)
-            df2 = pd.read_parquet(fname)
+            df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
+            df2 = pd.read_parquet(fname, dtype_backend="pyarrow")
             A3 = pd.concat([df1, df2])
             return (A3.two == "foo").sum()
 
@@ -757,8 +759,8 @@ class TestHiFrames(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df1 = pd.read_parquet(fname)
-            df2 = pd.read_parquet(fname)
+            df1 = pd.read_parquet(fname, dtype_backend="pyarrow")
+            df2 = pd.read_parquet(fname, dtype_backend="pyarrow")
             A3 = pd.concat([df1.two, df2.two])
             return (A3 == "foo").sum()
 

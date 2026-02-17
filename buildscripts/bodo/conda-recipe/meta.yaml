@@ -25,6 +25,7 @@ requirements:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - sccache
+    - mold  # [linux]
 
   host:
     - python
@@ -57,11 +58,13 @@ requirements:
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
     - zstd
+    - pytz
 
   run:
     - python
     - {{ pin_compatible('numpy') }}
     - pandas >=2.2
+    - pytz
     - fsspec >=2021.09
     - pyarrow =22.0
     - numba >=0.62,<0.64

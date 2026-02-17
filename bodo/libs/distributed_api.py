@@ -345,6 +345,7 @@ def isend(arr, size, pe, tag, cond=True):
             ),
         )
         or arr == datetime_date_array_type
+        or arr == bodo.types.timedelta_array_type
     ):
         # return a tuple of requests for data and null arrays
         type_enum = np.int32(numba_to_c_type(arr.dtype))
@@ -546,6 +547,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             bodo.types.timedelta64ns,
             bodo.types.datetime_date_type,
             bodo.types.TimeType,
+            bodo.types.pd_timedelta_type,
         ]
 
         if target_typ not in supported_typs and not isinstance(
@@ -1411,6 +1413,7 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
     ) or data in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.types.timedelta_array_type,
     ):
 
         def bcast_impl_int_arr(data, root=DEFAULT_ROOT):  # pragma: no cover

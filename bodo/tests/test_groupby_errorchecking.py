@@ -606,7 +606,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
     # Check for sums
     with pytest.raises(
         BodoError,
-        match="column type of datetime64.* is not supported in groupby built-in function sum",
+        match="column type of .* is not supported in groupby built-in function sum",
     ):
         bodo.jit(impl_sum)(df1_datetime)
     with pytest.raises(
@@ -616,13 +616,13 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
         bodo.jit(impl_sum)(df1_date)
     with pytest.raises(
         BodoError,
-        match="column type of timedelta64.* is not supported in groupby built-in function sum",
+        match="column type of .* is not supported in groupby built-in function sum",
     ):
         bodo.jit(impl_sum)(df1_timedelta)
     # checks for prod
     with pytest.raises(
         BodoError,
-        match="column type of datetime64.* is not supported in groupby built-in function prod",
+        match="column type of .* is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl_prod)(df1_datetime)
     with pytest.raises(
@@ -632,7 +632,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
         bodo.jit(impl_prod)(df1_date)
     with pytest.raises(
         BodoError,
-        match="column type of timedelta64.* is not supported in groupby built-in function prod",
+        match="column type of .* is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl_prod)(df1_timedelta)
     # checks for cumsum
@@ -916,7 +916,9 @@ def test_prod_args(memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -926,7 +928,7 @@ def test_prod_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1011,7 +1013,9 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1036,7 +1040,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1340,7 +1344,9 @@ def test_idxmax_args(memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1350,7 +1356,7 @@ def test_idxmax_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1453,7 +1459,9 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                 "A": [1, 2, 3, 2, 1],
                 "B": pd.concat(
                     [
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(
+                            pd.timedelta_range(start="1 day", periods=4, unit="ns")
+                        ),
                         pd.Series(data=[None], index=[4]),
                     ]
                 ),
@@ -1463,7 +1471,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
             }
         ),
         # [BE-416] Support with list
@@ -1642,7 +1650,9 @@ def test_cumultative_args(memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [1, 2, 3, 2, 1],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                    "B": pd.Series(
+                        pd.timedelta_range(start="1 day", periods=5, unit="ns")
+                    ),
                 }
             ),
             marks=pytest.mark.slow,
@@ -2019,9 +2029,7 @@ def test_transform_unsupported_type(memory_leak_check):
             "B": pd.date_range("2018", "2019", periods=8),
         }
     )
-    with pytest.raises(
-        BodoError, match=re.escape("column type of datetime64[ns] is not supported by")
-    ):
+    with pytest.raises(BodoError, match=r"column type of .* is not supported by"):
         bodo.jit(impl)(df)
 
 

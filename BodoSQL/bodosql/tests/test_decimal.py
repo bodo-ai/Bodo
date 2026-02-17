@@ -611,15 +611,18 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         "TABLE1": pd.DataFrame(
             {
                 "I": int_data,
-                "D": pa.array(
-                    [
-                        Decimal("0"),
-                        Decimal("1"),
-                        Decimal("2.5"),
-                        Decimal("3"),
-                        Decimal("10.25"),
-                    ],
-                    type=pa.decimal128(4, 2),
+                "D": pd.array(
+                    pa.array(
+                        [
+                            Decimal("0"),
+                            Decimal("1"),
+                            Decimal("2.5"),
+                            Decimal("3"),
+                            Decimal("10.25"),
+                        ],
+                        type=pa.decimal128(4, 2),
+                    ),
+                    dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
                 ),
             }
         )
@@ -630,7 +633,9 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"RES": result}),
+        expected_output=pd.DataFrame(
+            {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+        ),
     )
 
 
@@ -720,7 +725,9 @@ def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_che
             None,
             check_dtype=False,
             check_names=False,
-            expected_output=pd.DataFrame({"RES": result}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+            ),
             sort_output=False,
         )
 
@@ -796,7 +803,9 @@ def test_float_to_decimal(float_data, prec, scale, result, use_case, memory_leak
             None,
             check_dtype=False,
             check_names=False,
-            expected_output=pd.DataFrame({"RES": result}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
+            ),
             sort_output=False,
             convert_columns_decimal=["RES"] if use_case else None,
         )
@@ -2889,7 +2898,9 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame({"RES": answer}),
+            expected_output=pd.DataFrame(
+                {"RES": pd.array(answer, dtype="string[pyarrow]")}
+            ),
             sort_output=False,
             check_dtype=False,
         )
@@ -3002,7 +3013,15 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
                     ),
                 }
             ),
-            pd.DataFrame({0: [1, 2], 1: [None, Decimal("0.45")]}),
+            pd.DataFrame(
+                {
+                    0: [1, 2],
+                    1: pd.array(
+                        [None, Decimal("0.45")],
+                        dtype=pd.ArrowDtype(pa.decimal128(23, 13)),
+                    ),
+                }
+            ),
             id="group-of-nulls",
         ),
         pytest.param(
@@ -3564,7 +3583,10 @@ def test_decimal_median_error(arr, error_msg, spark_info):
                 }
             ),
             "ABS(D1)",
-            pd.array([None, None, None, None, None]),
+            pd.array(
+                [None, None, None, None, None],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
             id="all-none-values",
         ),
         pytest.param(

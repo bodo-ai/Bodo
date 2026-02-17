@@ -830,6 +830,8 @@ def log_loss_dist_helper(y_true, y_pred, normalize, sample_weight, labels):
     # See test_sklearn_metrics.py::test_log_loss
     if isinstance(labels, pd.arrays.ArrowStringArray):
         labels = labels.to_numpy()
+    if isinstance(sample_weight, pd.arrays.ArrowExtensionArray):
+        sample_weight = sample_weight.to_numpy()
 
     loss = sklearn.metrics.log_loss(
         y_true,

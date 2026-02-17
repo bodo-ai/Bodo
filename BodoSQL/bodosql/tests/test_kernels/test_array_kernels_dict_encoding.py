@@ -1558,8 +1558,9 @@ def test_dict_dayname(memory_leak_check):
     arr = pd.Series(
         [
             None if ts.month_name()[0] == "J" else ts
-            for ts in pd.date_range("2020", "2021", freq="22D")
-        ]
+            for ts in pd.date_range("2020", "2021", freq="22D", unit="ns")
+        ],
+        dtype="datetime64[ns]",
     )
     answer = pd.Series(
         [
@@ -1603,8 +1604,9 @@ def test_dict_monthname(memory_leak_check):
     arr = pd.Series(
         [
             None if ts.day_name()[0] == "F" else ts
-            for ts in pd.date_range("2020", "2024", freq="37D")
-        ]
+            for ts in pd.date_range("2020", "2024", freq="37D", unit="ns")
+        ],
+        dtype="datetime64[ns]",
     )
     answer = pd.Series(
         [

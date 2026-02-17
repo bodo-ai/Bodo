@@ -44,6 +44,12 @@
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "optimizer/runtime_join_filter.h"
 
+#ifdef USE_CUDF
+#include <rmm/cuda_device.hpp>
+#include "../libs/gpu_utils.h"
+#include "cuda_runtime_api.h"
+#endif
+
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #undef CHECK_ARROW
@@ -1230,10 +1236,27 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+#ifdef USE_CUDF
+    // Assign ranks to cuda devices
+    int prev_device = -1;
+    rmm::cuda_device_id gpu_id = get_gpu_id();
+    if (gpu_id.value() != -1) {
+        cudaGetDevice(&prev_device);
+        cudaSetDevice(gpu_id.value());
+    }
+#endif
+
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::variant<std::shared_ptr<table_info>, PyObject *> output =
         executor.ExecutePipelines();
+
+#ifdef USE_CUDF
+    // Reset to previous cuda device
+    if (gpu_id.value() != -1) {
+        cudaSetDevice(prev_device);
+    }
+#endif
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {

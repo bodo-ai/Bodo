@@ -125,6 +125,17 @@ def _get_type_max_value_overload(dtype):
 
         return impl
 
+    # timedelta array
+    if dtype == bodo.types.timedelta_array_type:
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_max_value(
+                numba.core.types.int64
+            )
+            return bodo.hiframes.datetime_timedelta_ext.init_pd_timedelta(int_value)
+
+        return impl
+
     # timestamptz array
     if dtype == bodo.types.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_max_value()
@@ -204,6 +215,17 @@ def _get_type_min_value_overload(dtype):
                 int_value, tz
             )
             return result
+
+        return impl
+
+    # timedelta array
+    if dtype == bodo.types.timedelta_array_type:
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_min_value(
+                numba.core.types.int64
+            )
+            return bodo.hiframes.datetime_timedelta_ext.init_pd_timedelta(int_value)
 
         return impl
 

@@ -258,7 +258,7 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                "2022/1/1", periods=30, freq="6D5H", tz=representative_tz
+                "2022/1/1", periods=30, freq="6D5h", tz=representative_tz, unit="ns"
             ),
             "B": [True, False, True, True, False] * 6,
         }
@@ -266,7 +266,7 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     query = "Select Case WHEN B THEN A END as output FROM table1"
     ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
-    expected_output[~df.B] = None
+    expected_output = expected_output.where(df.B, None)
     check_query(
         query, ctx, None, expected_output=expected_output, session_tz=representative_tz
     )
@@ -460,7 +460,14 @@ def test_nested_case(memory_leak_check):
 
 def test_null_array_to_timezone_aware(memory_leak_check):
     """Test CASE + casting NULL to Timezone-aware type"""
-    df = pd.DataFrame({"A": [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5})
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5,
+                dtype="datetime64[ns, Asia/Dubai]",
+            )
+        }
+    )
     ctx = {"TABLE1": df}
 
     query = """

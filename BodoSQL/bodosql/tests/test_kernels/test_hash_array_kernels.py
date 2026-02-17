@@ -96,14 +96,16 @@ pytestmark = pytest_slow_unless_codegen
                     [
                         pd.Timestamp("2020") + pd.Timedelta(days=(i % 1000))
                         for i in range(2**12)
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series(
                     [
                         pd.Timestamp("2020", tz="US/Pacific")
                         + pd.Timedelta(hours=(2 ** (i % 18)))
                         for i in range(2**12)
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
                 None,
             ),
