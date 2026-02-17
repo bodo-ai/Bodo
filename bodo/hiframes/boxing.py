@@ -961,28 +961,26 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
     try:
         arr_type = bodo.typeof(_fix_series_arr_type(S.array))
 
-        # always unbox boolean Series using nullable boolean array instead of Numpy
-        # because some processes may have nulls, leading to inconsistent data types
-        if arr_type == types.Array(types.bool_, 1, "C"):
-            arr_type = bodo.types.boolean_array_type
-
-        # Make sure datetime64 arrays are ns
-        if isinstance(arr_type, types.Array) and isinstance(
-            arr_type.dtype, types.NPDatetime
-        ):
-            arr_type = bodo.types.DatetimeArrayType(None)
-
-        # Make sure timedelta64 arrays are ns
-        if isinstance(arr_type, types.Array) and isinstance(
-            arr_type.dtype, types.NPTimedelta
-        ):
-            arr_type = bodo.types.timedelta_array_type
-
-        # We make all Series data arrays contiguous during unboxing to avoid type errors
-        # see test_df_query_stringliteral_expr
         if isinstance(arr_type, types.Array):
-            assert arr_type.ndim == 1, "invalid numpy array type in Series"
-            arr_type = types.Array(arr_type.dtype, 1, "C")
+            dtype = arr_type.dtype
+
+            # always unbox boolean Series using nullable boolean array instead of Numpy
+            # because some processes may have nulls, leading to inconsistent data types
+            if dtype == types.bool_:
+                arr_type = bodo.types.boolean_array_type
+
+            # Make sure datetime64 arrays are ns
+            elif isinstance(dtype, types.NPDatetime):
+                arr_type = bodo.types.DatetimeArrayType(None)
+
+            # Make sure timedelta64 arrays are ns
+            elif isinstance(dtype, types.NPTimedelta):
+                arr_type = bodo.types.timedelta_array_type
+            else:
+                # We make all Series data arrays contiguous during unboxing to avoid type errors
+                # see test_df_query_stringliteral_expr
+                assert arr_type.ndim == 1, "invalid numpy array type in Series"
+                arr_type = types.Array(arr_type.dtype, 1, "C")
 
         return arr_type
     except pa.lib.ArrowMemoryError:  # pragma: no cover
