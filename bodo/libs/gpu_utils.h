@@ -165,6 +165,11 @@ struct GpuShuffle {
     void progress_sending_data();
 };
 
+struct DoShuffleCoordination {
+    MPI_Request req = MPI_REQUEST_NULL;
+    int has_data;
+};
+
 /**
  * @brief Class for managing async shuffle of cudf::tables using NCCL
  */
@@ -197,10 +202,28 @@ class GpuShuffleManager {
 
     const int MAX_TAG_VAL;
 
+    // This is used to coordinate the start of shuffles across ranks
+    DoShuffleCoordination shuffle_coordination;
+
+    // IBarrier to know when all ranks are done sending data
+    MPI_Request global_completion_req = MPI_REQUEST_NULL;
+    int global_completion = false;
+    bool complete_signaled = false;
+
+    std::vector<
+        std::pair<std::shared_ptr<cudf::table>, std::vector<cudf::size_type>>>
+        tables_to_shuffle;
+
     /**
      * @brief Initialize NCCL communicator
      */
     void initialize_nccl();
+
+    /**
+     * @brief Once we've determined we will shuffle, start the shuffle by
+     * partitioning the table and posting sends/receives
+     */
+    void do_shuffle();
 
    public:
     GpuShuffleManager();
@@ -243,7 +266,12 @@ class GpuShuffleManager {
      * @brief Check if there are any inflight shuffles
      * @return true if there are inflight shuffles, false otherwise
      */
-    bool inflight_exists() const { return !inflight_shuffles.empty(); }
+    bool all_complete();
+
+    /**
+     * @brief Idempotent call to signify that this rank has no more data to send
+     */
+    void complete();
 
     bool is_available() const { return true; }
 };
@@ -253,12 +281,14 @@ class GpuShuffleManager {
  * @param table Input table
  * @param column_indices Column indices to hash
  * @param num_partitions Number of partitions
+ * @param stream CUDA stream to use for partitioning
  * @return Pair of partitioned table and partition indices
  */
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
                      const std::vector<cudf::size_type>& column_indices,
-                     cudf::size_type num_partitions);
+                     cudf::size_type num_partitions,
+                     cudaStream_t stream = cudf::get_default_stream());
 
 /**
  * @brief Get the GPU device ID for the current process. All ranks must call

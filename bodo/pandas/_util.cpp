@@ -1412,6 +1412,8 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
             return cudf::data_type{type_id::FLOAT64};
         case Type::STRING:
             return cudf::data_type{type_id::STRING};
+        case Type::LARGE_STRING:
+            return cudf::data_type{type_id::STRING};
 
         case Type::TIMESTAMP: {
             auto unit =
