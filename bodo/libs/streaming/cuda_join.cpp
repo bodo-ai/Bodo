@@ -163,6 +163,7 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk) {
         this->_build_chunks.emplace_back(std::move(chunk));
     }
 }
+
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk) {
     if (!_join_handle &&
