@@ -246,16 +246,34 @@ def time_comparison_args(comparison_query_args):
     B = pd.Series(b)
     ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
-        "=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] == x[1],
-        "<>": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] != x[1],
-        "!=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] != x[1],
-        "<": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] < x[1],
-        "<=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] <= x[1],
-        ">": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] > x[1],
-        ">=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] >= x[1],
+        "=": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] == x.iloc[1],
+        "<>": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] != x.iloc[1],
+        "!=": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] != x.iloc[1],
+        "<": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] < x.iloc[1],
+        "<=": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] <= x.iloc[1],
+        ">": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] > x.iloc[1],
+        ">=": lambda x: None
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0] >= x.iloc[1],
         "<=>": lambda x: True
-        if pd.isna(x[0]) and pd.isna(x[1])
-        else (False if pd.isna(x[1]) or pd.isna(x[1]) else x[0] == x[1]),
+        if pd.isna(x.iloc[0]) and pd.isna(x.iloc[1])
+        else (
+            False
+            if pd.isna(x.iloc[1]) or pd.isna(x.iloc[1])
+            else x.iloc[0] == x.iloc[1]
+        ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
     return cmp_op, use_case, ctx, answer
@@ -580,32 +598,32 @@ def date_datetime64_comparison_args(comparison_query_args):
         ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) == pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) == pd.Timestamp(x.iloc[1]),
         "<>": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) != pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) != pd.Timestamp(x.iloc[1]),
         "!=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) != pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) != pd.Timestamp(x.iloc[1]),
         "<": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) < pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) < pd.Timestamp(x.iloc[1]),
         "<=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) <= pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) <= pd.Timestamp(x.iloc[1]),
         ">": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) > pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) > pd.Timestamp(x.iloc[1]),
         ">=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else pd.Timestamp(x[0]) >= pd.Timestamp(x[1]),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else pd.Timestamp(x.iloc[0]) >= pd.Timestamp(x.iloc[1]),
         "<=>": lambda x: True
-        if pd.isna(x[0]) and pd.isna(x[1])
+        if pd.isna(x.iloc[0]) and pd.isna(x.iloc[1])
         else (
             False
-            if pd.isna(x[1]) or pd.isna(x[1])
-            else pd.Timestamp(x[0]) == pd.Timestamp(x[1])
+            if pd.isna(x.iloc[1]) or pd.isna(x.iloc[1])
+            else pd.Timestamp(x.iloc[0]) == pd.Timestamp(x.iloc[1])
         ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
@@ -655,32 +673,32 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
         ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) == x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) == x.iloc[1].tz_localize(None),
         "<>": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) != x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) != x.iloc[1].tz_localize(None),
         "!=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) != x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) != x.iloc[1].tz_localize(None),
         "<": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) < x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) < x.iloc[1].tz_localize(None),
         "<=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) <= x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) <= x.iloc[1].tz_localize(None),
         ">": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) > x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) > x.iloc[1].tz_localize(None),
         ">=": lambda x: None
-        if pd.isna(x[0]) or pd.isna(x[1])
-        else x[0].tz_localize(None) >= x[1].tz_localize(None),
+        if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+        else x.iloc[0].tz_localize(None) >= x.iloc[1].tz_localize(None),
         "<=>": lambda x: True
-        if pd.isna(x[0]) and pd.isna(x[1])
+        if pd.isna(x.iloc[0]) and pd.isna(x.iloc[1])
         else (
             False
-            if pd.isna(x[0]) or pd.isna(x[1])
-            else x[0].tz_localize(None) == x[1].tz_localize(None)
+            if pd.isna(x.iloc[0]) or pd.isna(x.iloc[1])
+            else x.iloc[0].tz_localize(None) == x.iloc[1].tz_localize(None)
         ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
