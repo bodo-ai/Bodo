@@ -36,7 +36,10 @@ import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pd_timestamp_tz_naive_type,
+)
 from bodo.ir.unsupported_method_template import (
     overload_unsupported_attribute,
     overload_unsupported_method,
@@ -45,7 +48,7 @@ from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, PandasDatetimeTZDtype
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
@@ -390,7 +393,25 @@ def unbox_datetime_index(typ, val, c):
     if isinstance(typ.data, DatetimeArrayType):
         data_obj = c.pyapi.object_getattr_string(val, "array")
     else:
-        data_obj = c.pyapi.object_getattr_string(val, "values")
+        # Call A.values.astype('datetime64[ns]', copy=False)
+        data_obj_us = c.pyapi.object_getattr_string(val, "values")
+        data_obj_us_astype = c.pyapi.object_getattr_string(data_obj_us, "astype")
+        dtype_obj = c.pyapi.string_from_constant_string("datetime64[ns]")
+        false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+        args = c.pyapi.tuple_pack([dtype_obj])
+        kws = c.pyapi.dict_pack(
+            [
+                ("copy", false_obj),
+            ]
+        )
+        data_obj = c.pyapi.call(data_obj_us_astype, args, kws)
+        c.pyapi.decref(data_obj_us)
+        c.pyapi.decref(data_obj_us_astype)
+        c.pyapi.decref(dtype_obj)
+        c.pyapi.decref(false_obj)
+        c.pyapi.decref(args)
+        c.pyapi.decref(kws)
+
     data = c.pyapi.to_native_value(typ.data, data_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
@@ -662,8 +683,8 @@ def overload_pd_datetime_tz_convert(A, tz):
 class DatetimeIndexAttribute(AttributeTemplate):
     key = DatetimeIndexType
 
-    def resolve_values(self, ary):
-        return _dt_index_data_typ
+    def resolve_values(self, dt_index):
+        return dt_index.data
 
 
 @overload(pd.DatetimeIndex, no_unliteral=True, jit_options={"cache": True})
@@ -851,7 +872,11 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             return pd.RangeIndex(data, name=name)
 
     # Datetime index:
-    elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
+    elif (
+        isinstance(data, DatetimeIndexType)
+        or elem_type == types.NPDatetime("ns")
+        or isinstance(elem_type, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+    ):
 
         def impl(
             data=None, dtype=None, copy=False, name=None, tupleize_cols=True
@@ -859,7 +884,11 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             return pd.DatetimeIndex(data, name=name)
 
     # Timedelta index:
-    elif isinstance(data, TimedeltaIndexType) or elem_type == types.NPTimedelta("ns"):
+    elif (
+        isinstance(data, TimedeltaIndexType)
+        or elem_type == types.NPTimedelta("ns")
+        or elem_type == bodo.types.pd_timedelta_type
+    ):
 
         def impl(
             data=None, dtype=None, copy=False, name=None, tupleize_cols=True
@@ -1121,13 +1150,14 @@ def pd_date_range_overload(
     tz=None,
     normalize=False,
     name=None,
-    closed=None,
+    inclusive="both",
+    unit=None,
 ):
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
 
-    unsupported_args = {"tz": tz, "normalize": normalize, "closed": closed}
-    arg_defaults = {"tz": None, "normalize": False, "closed": None}
+    unsupported_args = {"tz": tz, "normalize": normalize, "inclusive": inclusive}
+    arg_defaults = {"tz": None, "normalize": False, "inclusive": "both"}
     check_unsupported_args(
         "pandas.date_range",
         unsupported_args,
@@ -1162,7 +1192,7 @@ def pd_date_range_overload(
 
     # TODO: check start and end for NaT
 
-    func_text = "def bodo_pd_date_range_overload(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None):\n"
+    func_text = "def bodo_pd_date_range_overload(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, inclusive='both', unit=None):\n"
 
     func_text += freq_set
 
@@ -1238,6 +1268,7 @@ def pd_timedelta_range_overload(
     freq=None,
     name=None,
     closed=None,
+    unit=None,
 ):
     if is_overload_none(freq) and any(
         is_overload_none(t) for t in (start, end, periods)
@@ -1258,6 +1289,7 @@ def pd_timedelta_range_overload(
         freq=None,
         name=None,
         closed=None,
+        unit=None,
     ):  # pragma: no cover
         # pandas source code performs the below conditional in timedelta_range
         if freq is None and (start is None or end is None or periods is None):
@@ -1433,9 +1465,7 @@ class TimedeltaIndexTypeModel(models.StructModel):
 @typeof_impl.register(pd.TimedeltaIndex)
 def typeof_timedelta_index(val, c):
     # keep string literal value in type since reset_index() may need it
-    return TimedeltaIndexType(
-        get_val_type_maybe_str_literal(val.name), bodo.typeof(val.values)
-    )
+    return TimedeltaIndexType(get_val_type_maybe_str_literal(val.name))
 
 
 @box(TimedeltaIndexType)
@@ -1474,12 +1504,30 @@ def box_timedelta_index(typ, val, c):
 @unbox(TimedeltaIndexType)
 def unbox_timedelta_index(typ, val, c):
     # get data and name attributes
-    # TODO: use to_numpy()
-    values_obj = c.pyapi.object_getattr_string(val, "values")
-    data = c.pyapi.to_native_value(typ.data, values_obj).value
+
+    # Call A.values.astype('timedelta64[ns]', copy=False)
+    data_obj_us = c.pyapi.object_getattr_string(val, "values")
+    data_obj_us_astype = c.pyapi.object_getattr_string(data_obj_us, "astype")
+    dtype_obj = c.pyapi.string_from_constant_string("timedelta64[ns]")
+    false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+    args = c.pyapi.tuple_pack([dtype_obj])
+    kws = c.pyapi.dict_pack(
+        [
+            ("copy", false_obj),
+        ]
+    )
+    data_obj = c.pyapi.call(data_obj_us_astype, args, kws)
+    c.pyapi.decref(data_obj_us)
+    c.pyapi.decref(data_obj_us_astype)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(false_obj)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kws)
+
+    data = c.pyapi.to_native_value(typ.data, data_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
-    c.pyapi.decref(values_obj)
+    c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
 
     # create index struct
@@ -2263,16 +2311,18 @@ def box_period_index(typ, val, c):
     # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
     args = c.pyapi.tuple_pack([])
     kws = c.pyapi.dict_pack(
-        [("ordinal", data_obj), ("name", name_obj), ("freq", freq_obj)]
+        [("ordinals", data_obj), ("name", name_obj), ("freq", freq_obj)]
     )
     const_call = c.pyapi.object_getattr_string(class_obj, "PeriodIndex")
-    index_obj = c.pyapi.call(const_call, args, kws)
+    ord_call = c.pyapi.object_getattr_string(const_call, "from_ordinals")
+    index_obj = c.pyapi.call(ord_call, args, kws)
 
     c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(freq_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(const_call)
+    c.pyapi.decref(ord_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
     c.context.nrt.decref(c.builder, typ, val)
@@ -3257,6 +3307,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     ) or arr_typ in (
         bodo.types.datetime_date_array_type,
         bodo.types.boolean_array_type,
+        bodo.types.timedelta_array_type,
     ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
@@ -4521,6 +4572,8 @@ def overload_index_map(I, mapper, na_action=None):
         dtype = pd_timestamp_tz_naive_type
     if dtype == types.NPTimedelta("ns"):
         dtype = pd_timedelta_type
+    if isinstance(dtype, PandasDatetimeTZDtype):
+        dtype = PandasTimestampType(dtype.tz)
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
         dtype = dtype.elem_type
 

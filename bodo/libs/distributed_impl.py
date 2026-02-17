@@ -1692,6 +1692,7 @@ def irecv_impl(arr, size, pe, tag, cond):
             ),
         )
         or arr == datetime_date_array_type
+        or arr == bodo.types.timedelta_array_type
     ):
         # return a tuple of requests for data and null arrays
         type_enum = np.int32(numba_to_c_type(arr.dtype))

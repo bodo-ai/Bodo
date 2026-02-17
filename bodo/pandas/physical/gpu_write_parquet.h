@@ -214,8 +214,12 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         if (should_flush && buffer_table && buffer_rows > 0) {
             std::string fname_prefix = get_fname_prefix(iter);
-            std::string out_path =
-                (fs::path(path) / (fname_prefix + ".parquet")).string();
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+            std::string fname = gen_pieces_file_name(myrank, num_ranks,
+                                                     fname_prefix, ".parquet");
+            std::string out_path = (fs::path(path) / fname).string();
 
             cudf::table_view bttv = buffer_table->view();
             cudf::io::table_input_metadata meta{bttv};

@@ -186,7 +186,7 @@ def check_table_comment(
     df = spark.sql(f"DESCRIBE TABLE hadoop_prod.{db_schema}.{table_name}").toPandas()
     for i in range(number_columns):
         if column_comments is None or i >= 2:
-            assert df.iloc[i]["comment"] is None, (
+            assert pd.isna(df.iloc[i]["comment"]), (
                 f"Expected column {i} comment to be None, but actual comment is {df.iloc[i]['comment']}"
             )
         else:
@@ -253,8 +253,8 @@ def test_iceberg_write_basic(
             df = convert_non_pandas_columns(df)
             py_out = convert_non_pandas_columns(py_out)
         passed = _test_equal_guard(
-            df,
             py_out,
+            df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -310,8 +310,8 @@ def test_iceberg_write_with_comment_and_properties(
             df = convert_non_pandas_columns(df)
             py_out = convert_non_pandas_columns(py_out)
         passed = _test_equal_guard(
-            df,
             py_out,
+            df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -362,8 +362,8 @@ def test_iceberg_write_basic_rep(
 
     if comm.Get_rank() == 0:
         passed = _test_equal_guard(
-            df,
             py_out,
+            df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -453,8 +453,8 @@ def test_iceberg_write_part_sort(
 
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,

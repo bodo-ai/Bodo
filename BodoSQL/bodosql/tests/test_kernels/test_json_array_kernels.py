@@ -464,7 +464,7 @@ def test_json_extract_path_text_invalid(data, path):
         pytest.param(
             pd.Series(list(range(5)), dtype=np.int32),
             "a",
-            pd.Series([None] * 5),
+            pd.Series([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             id="int",
         ),
         pytest.param(
@@ -500,7 +500,7 @@ def test_json_extract_path_text_invalid(data, path):
                 dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
             ),
             "b",
-            pd.Series([None] * 5),
+            pd.Series([None] * 5, dtype=pd.ArrowDtype(pa.int32())),
             id="struct_missing_key",
         ),
         pytest.param(
@@ -509,7 +509,9 @@ def test_json_extract_path_text_invalid(data, path):
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
             ),
             "a",
-            pd.Series([0, None, 1, None, 2, None, None]),
+            pd.Series(
+                [0, None, 1, None, 2, None, None], dtype=pd.ArrowDtype(pa.int32())
+            ),
             id="map",
         ),
         pytest.param(
@@ -520,7 +522,7 @@ def test_json_extract_path_text_invalid(data, path):
                 ),
             ),
             "a.b",
-            pd.Series(list(range(5))),
+            pd.Series(list(range(5)), dtype=pd.ArrowDtype(pa.int32())),
             id="struct_nested_key",
         ),
         pytest.param(
@@ -539,7 +541,9 @@ def test_json_extract_path_text_invalid(data, path):
                 ),
             ),
             "a.b",
-            pd.Series([0, None, None, 3, None, None, None]),
+            pd.Series(
+                [0, None, None, 3, None, None, None], dtype=pd.ArrowDtype(pa.int32())
+            ),
             id="map_nested_map_key",
         ),
         pytest.param(
@@ -550,7 +554,7 @@ def test_json_extract_path_text_invalid(data, path):
                 ),
             ),
             "a.b",
-            pd.Series([0, None, None, 3, None]),
+            pd.Series([0, None, None, 3, None], dtype=pd.ArrowDtype(pa.int32())),
             id="map_nested_struct_key",
         ),
         pytest.param(
@@ -568,7 +572,7 @@ def test_json_extract_path_text_invalid(data, path):
                 ),
             ),
             "a[0].b",
-            pd.Series(list(range(5))),
+            pd.Series(list(range(5)), dtype=pd.ArrowDtype(pa.int32())),
             id="struct_field_index_field",
         ),
         pytest.param(
@@ -579,7 +583,7 @@ def test_json_extract_path_text_invalid(data, path):
                 ),
             ),
             "[0].a",
-            pd.Series(list(range(5))),
+            pd.Series(list(range(5)), dtype=pd.ArrowDtype(pa.int32())),
             id="list_index_field",
         ),
     ],

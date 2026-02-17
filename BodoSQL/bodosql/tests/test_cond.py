@@ -116,7 +116,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                         pd.Timestamp("2022-12-31"),
                         None,
                         pd.Timestamp("2000-1-1"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -131,7 +132,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                     pd.Timestamp("2022-12-31"),
                     pd.Timestamp(current_date),
                     pd.Timestamp("2000-1-1"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             )
         }
     )
@@ -683,9 +685,9 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
 
     # making a minor change, to ensure that we have an index where A == B to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
-        "TABLE1"
-    ]["B"][0]
+    bodosql_nullable_numeric_types["TABLE1"].loc[0, "A"] = (
+        bodosql_nullable_numeric_types["TABLE1"]["B"][0]
+    )
 
     query = "Select NULLIF(A, B) from table1"
     check_query(
@@ -790,9 +792,9 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 
     # making a minor change, to ensure that we have an index where A == C to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
-        "TABLE1"
-    ]["C"][0]
+    bodosql_nullable_numeric_types["TABLE1"].loc[0, "A"] = (
+        bodosql_nullable_numeric_types["TABLE1"]["C"][0]
+    )
 
     query = "Select CASE WHEN A > B THEN NULLIF(A, C) ELSE B END from table1"
     check_query(

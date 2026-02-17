@@ -201,7 +201,7 @@ def test_date_array_tz_scalar(sample_tz, cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     arr = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz=sample_tz)
         .to_series()
         .dt.date.values
     )
@@ -216,7 +216,7 @@ def test_date_series_tz_scalar(sample_tz, cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     S = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz=sample_tz)
         .to_series()
         .dt.date
     )
@@ -478,7 +478,7 @@ def test_tz_sub_month_end(representative_tz, memory_leak_check):
     check_func(impl, (ts, offset))
 
 
-@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+@pytest.mark.parametrize("freq", ["D", "h", "min", "s", "ms", "us", "ns"])
 def test_timestamp_freq_methods(freq, representative_tz, memory_leak_check):
     """Tests the timestamp freq methods with various frequencies"""
 

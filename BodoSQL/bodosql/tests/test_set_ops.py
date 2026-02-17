@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.timezone_common import representative_tz  # noqa
@@ -131,10 +132,14 @@ def make_tz_aware_df(tz):
     """
     # Note: B's and A's will overlap.
     tz_aware_data = {
-        "A": list(pd.date_range(start="1/1/2022", freq="4D7H", periods=30, tz=tz))
+        "A": list(
+            pd.date_range(start="1/1/2022", freq="4D7h", periods=30, tz=tz, unit="ns")
+        )
         + [None] * 4,
         "B": [None] * 14
-        + list(pd.date_range(start="1/1/2022", freq="12D21H", periods=20, tz=tz)),
+        + list(
+            pd.date_range(start="1/1/2022", freq="12D21h", periods=20, tz=tz, unit="ns")
+        ),
     }
     return pd.DataFrame(data=tz_aware_data)
 
@@ -295,7 +300,7 @@ def test_set_ops_nullable_many_cols(
                 {
                     "A": pd.Series([None], dtype="Int64"),
                     "B": pd.Series([None], dtype="Float64"),
-                    "C": [None],
+                    "C": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 }
             ),
             id="intersect",

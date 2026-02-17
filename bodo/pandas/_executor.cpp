@@ -14,6 +14,7 @@
 #include <cudf/stream_compaction.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <rmm/cuda_device.hpp>
 #include <rmm/device_buffer.hpp>
 
 #include <algorithm>

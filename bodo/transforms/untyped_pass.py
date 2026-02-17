@@ -1923,6 +1923,7 @@ class UntypedPass:
             "storage_options",
             "sample_nrows",
             "_bodo_read_as_dict",
+            "dtype_backend",
         }
         # Iterate through the provided args. If an argument is in the supported_args,
         # skip it. Otherwise we check that the value matches the default value.
@@ -2891,6 +2892,7 @@ class UntypedPass:
             "engine",
             "columns",
             "storage_options",
+            "dtype_backend",
             "_bodo_chunksize",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",

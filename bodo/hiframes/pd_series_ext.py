@@ -26,7 +26,10 @@ import bodo
 import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pd_timestamp_tz_naive_type,
+)
 from bodo.io import csv_cpp
 from bodo.ir.unsupported_method_template import (
     overload_unsupported_attribute,
@@ -277,7 +280,9 @@ def is_dt64_series_typ(t):
 
 
 def is_timedelta64_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.NPTimedelta("ns")
+    return isinstance(t, SeriesType) and (
+        t.dtype == types.NPTimedelta("ns") or t.data == bodo.types.timedelta_array_type
+    )
 
 
 def is_datetime_date_series_typ(t):
@@ -672,6 +677,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
         if dtype == types.NPTimedelta("ns"):
             dtype = pd_timedelta_type
+        if isinstance(dtype, PandasDatetimeTZDtype):
+            dtype = PandasTimestampType(dtype.tz)
 
         in_types = (dtype,)
         if f_args is not None:
@@ -1494,7 +1501,6 @@ heter_series_unsupported_methods = {
     "get",
     "at",
     "iat",
-    "iloc",
     "loc",
     "__iter__",
     "items",

@@ -996,6 +996,7 @@ def is_valid_timedelta_arg(arg):
                 is_timedelta64_series_typ(arg)
                 or isinstance(arg, PDTimeDeltaType)
                 or arg.dtype == bodo.types.timedelta64ns
+                or arg == bodo.types.timedelta_array_type
             )
         )
     )
@@ -1205,13 +1206,26 @@ def is_valid_tz_naive_datetime_arg(arg):
     Returns:
         bool: Is this type one of the tz-naive datetime types.
     """
-    return arg in (
-        bodo.types.datetime64ns,
-        bodo.types.pd_timestamp_tz_naive_type,
-        bodo.types.pd_datetime_tz_naive_type,
-    ) or (
-        bodo.utils.utils.is_array_typ(arg, True)
-        and arg.dtype == bodo.types.datetime64ns
+    return (
+        arg
+        in (
+            bodo.types.datetime64ns,
+            bodo.types.pd_timestamp_tz_naive_type,
+            bodo.types.pd_datetime_tz_naive_type,
+        )
+        or (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and (
+                arg.dtype == bodo.types.datetime64ns
+                or (
+                    isinstance(
+                        arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+                    )
+                    and arg.dtype.tz is None
+                )
+            )
+        )
+        or (isinstance(arg, bodo.types.DatetimeArrayType) and arg.tz is None)
     )
 
 
@@ -1230,6 +1244,7 @@ def is_valid_tz_aware_datetime_arg(arg):
     return (isinstance(arg, bodo.types.PandasTimestampType) and arg.tz is not None) or (
         bodo.utils.utils.is_array_typ(arg, True)
         and isinstance(arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+        and arg.dtype.tz is not None
     )
 
 

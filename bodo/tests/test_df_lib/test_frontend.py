@@ -321,6 +321,7 @@ def test_non_nested_cte():
     assert generated_ctes == 1
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "expr, expected_type",
     [

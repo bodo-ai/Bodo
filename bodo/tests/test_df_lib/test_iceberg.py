@@ -514,7 +514,7 @@ def test_table_read_partitioned_file_pruning(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
-    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12")]
+    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12").date()]
     assert bodo_out2.is_lazy_plan()
     pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
     assert pre == 3

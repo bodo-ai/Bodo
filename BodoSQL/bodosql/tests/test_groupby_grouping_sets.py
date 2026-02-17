@@ -35,7 +35,8 @@ from bodosql.tests.utils import check_query
                         pd.Timestamp("2001-01-01"),
                         pd.NaT,
                         pd.Timestamp("2002-01-01"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="timestamp",

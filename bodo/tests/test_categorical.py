@@ -72,16 +72,18 @@ def test_unbox_dtype(dtype, memory_leak_check):
         ),
         pytest.param(
             pd.Categorical(
-                np.array(
+                pd.to_datetime(
                     ["2020-01-14", "2020-01-15", "2020-01-16", "2020-01-17", "NAT"],
-                    dtype="datetime64[ns]",
+                    unit="ns",
                 )
+                .to_series()
+                .astype("datetime64[ns]")
             )
         ),
         pytest.param(
             pd.Categorical(
                 np.append(
-                    pd.timedelta_range(start="1 day", periods=4),
+                    pd.timedelta_range(start="1 day", periods=4, unit="ns"),
                     [np.timedelta64("NaT")],
                 )
             ),
@@ -239,6 +241,7 @@ def test_setitem_cat_array_runtime_err(cat_arr_value):
             bodo.jit(test_impl)(cat_arr_value, idx, val)
 
 
+@pytest.mark.skip("Pandas 3 doesn't support setitem properly")
 @pytest.mark.slow
 def test_setitem_categories(cat_arr_value, memory_leak_check):
     """
@@ -381,6 +384,7 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace():
     def test_impl(A, to_replace, value):
@@ -400,6 +404,7 @@ def test_replace():
     check_func(test_impl, (A, to_replace, value))
 
 
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace_list(memory_leak_check):
     def test_impl(A, to_replace, value):
@@ -419,13 +424,14 @@ def test_replace_list(memory_leak_check):
 @pytest.mark.slow
 def test_replace_const_string():
     def test_impl(A):
-        return pd.Series(A).replace("CC", "ZZZZ")
+        return pd.Series(A).replace("CC", "D")
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 def test_replace_const():
     def test_impl(A):
         return pd.Series(A).replace(2, 5)
@@ -438,13 +444,14 @@ def test_replace_const():
 @pytest.mark.slow
 def test_replace_const_list():
     def test_impl(A):
-        return pd.Series(A).replace([2, 3, 7], 5)
+        return pd.Series(A).replace([2, 3, 7], 4)
 
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     check_func(test_impl, (A,))
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.skip("Pandas 3 doesn't support replacing with new value")
 @pytest.mark.slow
 def test_replace_delete():
     def test_impl(A, to_replace, value):

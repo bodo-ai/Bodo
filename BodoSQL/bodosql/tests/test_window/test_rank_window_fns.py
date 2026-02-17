@@ -41,7 +41,7 @@ def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_column
     parquet_path = datapath("sample-parquet-data/rphd_sample.pq")
 
     ctx = {
-        "TABLE1": pd.read_parquet(parquet_path)[
+        "TABLE1": pd.read_parquet(parquet_path, dtype_backend="pyarrow")[
             ["uuid", "store_id", "ret_product_id", "in_stock", "last_seen"]
         ]
     }
@@ -559,6 +559,7 @@ def test_mrnf_all_ties(memory_leak_check):
                         None,
                         None,
                     ],
+                    dtype="datetime64[ns]",
                 ).values,
                 pd.array(
                     # Resolved by A or B or C

@@ -17,7 +17,7 @@ def test_recursive():
 
     @bodo.jit(spawn=True)
     def read_customer_table():
-        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH, dtype_backend="pyarrow")
         return df
 
     @bodo.jit(spawn=True)
