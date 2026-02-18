@@ -96,10 +96,14 @@ void CudaGroupbyState::build_consume_batch(
     // blank tables, on which we don't need to run the first groupby
     // pass.
     if (input_table->view().num_rows() != 0) {
-        std::shared_ptr<cudf::table> new_data = std::move(
-            do_groupby(input_table->view(), key_indices, column_indices,
-                       aggregation_requests, aggregation_fns, stream));
-        merge_shuffler.shuffle_table(new_data, shuffle_key_indices);
+        std::shared_ptr<StreamAndEvent> local_groupby_se =
+            make_stream_and_event(G_USE_ASYNC);
+        std::shared_ptr<cudf::table> new_data = std::move(do_groupby(
+            input_table->view(), key_indices, column_indices,
+            aggregation_requests, aggregation_fns, local_groupby_se->stream));
+        local_groupby_se->event.record(local_groupby_se->stream);
+        merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
+                                     local_groupby_se->event);
     }
 
     // Give shuffler a chance to receive chunks.

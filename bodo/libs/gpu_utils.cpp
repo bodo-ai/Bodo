@@ -2,6 +2,8 @@
 #include <mpi_proto.h>
 #include "vendored/simd-block-fixed-fpp.h"
 
+extern const bool G_USE_ASYNC = false;
+
 #ifdef USE_CUDF
 #include <thrust/execution_policy.h>
 #include <thrust/transform.h>
@@ -75,26 +77,29 @@ void GpuShuffleManager::initialize_nccl() {
 
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
-    const std::vector<cudf::size_type>& partition_indices) {
+    const std::vector<cudf::size_type>& partition_indices,
+    cuda_event_wrapper event) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.emplace_back(std::move(table), partition_indices);
+    this->tables_to_shuffle.push_back(
+        ShuffleTableInfo(table, partition_indices, event));
 }
 
 void GpuShuffleManager::do_shuffle() {
     std::vector<cudf::packed_table> packed_tables;
     if (!this->tables_to_shuffle.empty()) {
-        auto [table, partition_indices] =
-            std::move(this->tables_to_shuffle.back());
+        //    if (data_ready_to_send()) {
+        ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
         this->tables_to_shuffle.pop_back();
 
         // Hash partition the table
         auto [partitioned_table, partition_start_rows] = hash_partition_table(
-            table, partition_indices, n_ranks, this->stream);
+            shuffle_table_info.table, shuffle_table_info.partition_indices,
+            n_ranks, this->stream);
 
         assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
         // Contiguous splits requires the split indices excluding the first 0
@@ -157,6 +162,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         // a shuffle is needed and can call progress to start it
         this->shuffle_coordination.has_data =
             this->tables_to_shuffle.empty() ? 0 : 1;
+        //            this->data_ready_to_send() ? 0 : 1;
         CHECK_MPI(
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,

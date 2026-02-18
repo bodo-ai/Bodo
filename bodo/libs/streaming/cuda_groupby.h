@@ -2,6 +2,7 @@
 
 #include <../../bodo/libs/_bodo_common.h>
 #include <arrow/scalar.h>
+#include "../gpu_utils.h"
 #include "../groupby/_groupby_ftypes.h"
 #include "_groupby.h"
 
@@ -12,7 +13,6 @@
 #include <cudf/groupby.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
-#include "../gpu_utils.h"
 
 struct FinalMerge {
     std::vector<size_t> column_indices;  // indices into the input table

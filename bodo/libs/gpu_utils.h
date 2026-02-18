@@ -1,10 +1,93 @@
 #pragma once
 
+extern const bool G_USE_ASYNC;
+
 #ifdef USE_CUDF
 #include <mpi.h>
 #include <nccl.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
+
+struct cuda_event_wrapper {
+    std::shared_ptr<cudaEvent_t> ev;
+
+    cuda_event_wrapper() {
+        // Allocate storage for the event handle
+        cudaEvent_t raw;
+        cudaEventCreateWithFlags(&raw, cudaEventDisableTiming);
+
+        // Wrap it in a shared_ptr with a custom deleter
+        ev = std::shared_ptr<cudaEvent_t>(new cudaEvent_t(raw),
+                                          [](cudaEvent_t* p) {
+                                              if (p && *p) {
+                                                  cudaEventDestroy(*p);
+                                              }
+                                              delete p;
+                                          });
+    }
+
+    // Copy constructor: shared ownership
+    cuda_event_wrapper(const cuda_event_wrapper&) = default;
+
+    // Copy assignment: shared ownership
+    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = default;
+
+    // Disable move semantics (optional but recommended for clarity)
+    cuda_event_wrapper(cuda_event_wrapper&&) = delete;
+    cuda_event_wrapper& operator=(cuda_event_wrapper&&) = delete;
+    // Record event on a stream
+    void record(rmm::cuda_stream_view stream) const {
+        if (ev && *ev) {
+            cudaEventRecord(*ev, stream.value());
+        }
+    }
+
+    // Make a stream wait on this event
+    void wait(rmm::cuda_stream_view stream) const {
+        if (ev && *ev) {
+            cudaStreamWaitEvent(stream.value(), *ev, 0);
+        }
+    }
+
+    bool ready() const {
+        throw std::runtime_error("todd debugging");
+        if (ev && *ev) {
+            cudaError_t status = cudaEventQuery(*ev);
+            return status == cudaSuccess;
+        } else {
+            return false;
+        }
+    }
+};
+
+struct StreamAndEvent {
+    rmm::cuda_stream_view stream;
+    cuda_event_wrapper event;
+
+    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper e)
+        : stream(s), event(e) {}
+};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    if (use_async) {
+        // Create a new non-blocking CUDA stream
+        rmm::cuda_stream_view s{rmm::cuda_stream_per_thread};
+
+        // Create an unsignaled event (default constructor)
+        cuda_event_wrapper e;
+
+        return std::make_shared<StreamAndEvent>(s, e);
+    } else {
+        // Synchronous mode: use default stream
+        rmm::cuda_stream_view s = rmm::cuda_stream_default;
+
+        // Event is already completed
+        cuda_event_wrapper e;
+        e.record(s);
+
+        return std::make_shared<StreamAndEvent>(s, e);
+    }
+}
 
 // Error checking macros for NCCL
 #define CHECK_NCCL(call)                                                       \
@@ -170,6 +253,18 @@ struct DoShuffleCoordination {
     int has_data;
 };
 
+class ShuffleTableInfo {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::vector<cudf::size_type> partition_indices;
+    cuda_event_wrapper event;
+
+    ShuffleTableInfo(std::shared_ptr<cudf::table> t,
+                     const std::vector<cudf::size_type>& v,
+                     cuda_event_wrapper e)
+        : table(t), partition_indices(v), event(e) {}
+};
+
 /**
  * @brief Class for managing async shuffle of cudf::tables using NCCL
  */
@@ -210,9 +305,7 @@ class GpuShuffleManager {
     int global_completion = false;
     bool complete_signaled = false;
 
-    std::vector<
-        std::pair<std::shared_ptr<cudf::table>, std::vector<cudf::size_type>>>
-        tables_to_shuffle;
+    std::vector<ShuffleTableInfo> tables_to_shuffle;
 
     /**
      * @brief Initialize NCCL communicator
@@ -225,6 +318,13 @@ class GpuShuffleManager {
      */
     void do_shuffle();
 
+    bool data_ready_to_send() {
+        throw std::runtime_error("todd debugging 2");
+        return !this->tables_to_shuffle.empty();
+        // return !this->tables_to_shuffle.empty() &&
+        // this->tables_to_shuffle.back().event.ready();
+    }
+
    public:
     GpuShuffleManager();
     ~GpuShuffleManager();
@@ -235,7 +335,8 @@ class GpuShuffleManager {
      * @param partition_indices Column indices to use for partitioning
      */
     void shuffle_table(std::shared_ptr<cudf::table> table,
-                       const std::vector<cudf::size_type>& partition_indices);
+                       const std::vector<cudf::size_type>& partition_indices,
+                       cuda_event_wrapper event);
 
     /**
      * @brief Progress any inflight shuffles
