@@ -150,10 +150,10 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         if (!dropna.has_value()) {
             dropna = true;
         }
-        this->groupby_state =
-            std::make_unique<CudaGroupbyState>(keys, column_agg_funcs);
-
         arrow_output_schema = this->output_schema->ToArrowSchema();
+        this->groupby_state = std::make_unique<CudaGroupbyState>(
+            keys, column_agg_funcs, arrow_output_schema);
+
         this->metrics.init_time += end_timer(start_init);
     }
 
@@ -168,10 +168,11 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                                 in_table_schema, cols_to_keep_vec);
 
         std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
-        this->groupby_state = std::make_unique<CudaGroupbyState>(
-            cols_to_keep_vec, column_agg_funcs);
-
+        this->output_schema = in_table_schema;
         arrow_output_schema = this->output_schema->ToArrowSchema();
+        this->groupby_state = std::make_unique<CudaGroupbyState>(
+            cols_to_keep_vec, column_agg_funcs, arrow_output_schema);
+
         this->metrics.init_time += end_timer(start_init);
     }
 

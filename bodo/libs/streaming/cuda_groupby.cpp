@@ -28,6 +28,7 @@
 #include "../groupby/_groupby_ftypes.h"
 #include "../groupby/_groupby_groups.h"
 #include "_shuffle.h"
+#include "_util.h"
 #include "arrow/util/bit_util.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
@@ -133,6 +134,11 @@ void CudaGroupbyState::build_consume_batch(
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     bool& out_is_last, bool produce_output) {
     out_is_last = true;
+
+    // Will happen on non-GPU ranks.
+    if (accumulation == nullptr) {
+        return empty_table_from_arrow_schema(output_schema);
+    }
 
     // accumulation is guaranteed here to have all the merged data from
     // all the other nodes.  If there are any final merges to collapse

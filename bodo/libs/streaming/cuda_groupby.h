@@ -40,6 +40,8 @@ class CudaGroupbyState {
    private:
     bool all_local_done = false;
 
+    std::shared_ptr<arrow::Schema> output_schema;
+
     std::vector<uint64_t> key_indices;
     std::vector<uint64_t> column_indices;
     std::vector<cudf::groupby::aggregation_request> aggregation_requests;
@@ -274,38 +276,19 @@ class CudaGroupbyState {
    public:
     CudaGroupbyState(
         const std::vector<uint64_t> &_key_indices,
-        const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs)
-        : key_indices(_key_indices) {
+        const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs,
+        std::shared_ptr<arrow::Schema> _output_schema)
+        : output_schema(_output_schema), key_indices(_key_indices) {
         unsigned num_keys = key_indices.size();
 
         if (column_agg_funcs.size() == 0) {
             // Used for distinct/drop_duplicates.
-            add_agg_entry(
-                cudf::make_count_aggregation<cudf::groupby_aggregation>(
-                    cudf::null_policy::INCLUDE),
-                aggregation_requests, aggregation_fns);
-
-            // Find lowest number column that isn't a key.
-            bool found_col = false;
-            uint64_t col_to_use = 0;
-            while (!found_col) {
-                found_col = true;
-                for (size_t i = 0; i < _key_indices.size(); ++i) {
-                    if (_key_indices[i] == col_to_use) {
-                        found_col = false;
-                        break;
-                    }
-                }
-                if (!found_col) {
-                    col_to_use++;
-                }
-            }
-            column_indices.push_back(col_to_use);
-
-            add_agg_entry(
-                cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                merge_aggregation_requests, merge_aggregation_fns);
-
+            bodo_agg_to_cudf(Bodo_FTypes::size, aggregation_requests,
+                             aggregation_fns);
+            column_indices.push_back(0);
+            bodo_agg_to_merge_cudf(Bodo_FTypes::size,
+                                   merge_aggregation_requests,
+                                   merge_aggregation_fns);
             final_merges.push_back({{num_keys}, distinct_final_merge});
         } else {
             // Create as much as we can of the aggregation info.
