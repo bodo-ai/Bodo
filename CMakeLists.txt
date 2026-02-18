@@ -857,6 +857,11 @@ if(USE_CUDF)
   message(STATUS "RMM include: ${RMM_INCLUDE_DIR} lib: ${RMM_LIBDIR}")
   add_library(rmm SHARED IMPORTED)
   set_target_properties(rmm PROPERTIES IMPORTED_LOCATION "${RMM_LIB}")
+  # Rapids defines
+  find_path(RAPIDS_INCLUDE_DIR NAMES cuda/memory_resource cuda/mr/any_resource HINTS "$ENV{CONDA_PREFIX}/include"
+      PATH_SUFFIXES rapids
+      REQUIRED)
+  message(STATUS "Rapids include: ${RAPIDS_INCLUDE_DIR}")
   # Rapids logger defines
   find_path(RAPIDS_LOGGER_INCLUDE_DIR NAMES rapids_logger/log_levels.h)
   find_library(RL_LIB NAMES librapids_logger.so)
@@ -900,7 +905,7 @@ if(USE_CUDF)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
-  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
+  target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
   target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
