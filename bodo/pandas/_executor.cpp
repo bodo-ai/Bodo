@@ -213,24 +213,32 @@ class DevicePlanNode {
 
         gpu_capable = determineGPUCapable(op);
 
-        if (!op.has_estimated_cardinality) {
-#ifdef DEBUG_GPU_SELECTOR
-            std::cout << "DevicePlanNode operator didn't have cardinality.\n"
-                      << op.ToString() << std::endl;
-#endif
-            throw std::runtime_error(
-                "DevicePlanNode operator didn't have cardinality.");
-        }
-        rows_out = op.estimated_cardinality;
-        rows_out_width = 0;
-        for (auto &type : op.types) {
-            rows_out_width += GetTypeIdSize(type.InternalType());
-        }
         rows_in = 0;
         rows_in_width = 0;
         for (auto &dpchild : children) {
             rows_in += dpchild->getRowsOut();
             rows_in_width += dpchild->getRowsOutWidth();
+        }
+
+        if (!op.has_estimated_cardinality) {
+            if (op.type == duckdb::LogicalOperatorType::LOGICAL_DISTINCT) {
+                op.has_estimated_cardinality = true;
+                // 90% retention is an AI estimate of average row retention.
+                op.estimated_cardinality = (uint64_t)(rows_in * 0.9);
+            } else {
+#ifdef DEBUG_GPU_SELECTOR
+                std::cout
+                    << "DevicePlanNode operator didn't have cardinality.\n"
+                    << op.ToString() << std::endl;
+#endif
+                throw std::runtime_error(
+                    "DevicePlanNode operator didn't have cardinality.");
+            }
+        }
+        rows_out = op.estimated_cardinality;
+        rows_out_width = 1;
+        for (auto &type : op.types) {
+            rows_out_width += GetTypeIdSize(type.InternalType());
         }
 #ifdef DEBUG_GPU_SELECTOR
         std::cout << "DevicePlanNode " << id << " IN(" << rows_in << " "
