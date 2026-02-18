@@ -192,10 +192,10 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-# Added to PyPi to ignore Pandas <3 constraint
 [feature.cpu.pypi-dependencies]
-pyiceberg = "==0.10"  # TODO(ehsan): fix issues with 0.11
-# Snowflake
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
 snowflake-connector-python = "*"
 
 [feature.cpu.pypi-options.dependency-overrides]

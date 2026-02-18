@@ -444,7 +444,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -887,7 +887,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-1.5.7-h85ac4a6_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -1288,7 +1288,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -1689,7 +1689,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -2052,7 +2052,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -2502,7 +2502,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -2943,7 +2943,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-1.5.7-h85ac4a6_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -3342,7 +3342,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -3741,7 +3741,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -4102,7 +4102,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/0f/e4/975f0fa77fc3590820b4a3ac49704644b389795409bc12eb91729f845812/pyroaring-1.0.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/20/2f/9b0d1ea2196eeb32e9ac3f9cdf0cfc516ad3788333a75f197c3f55888f70/snowflake_connector_python-4.3.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -5721,7 +5721,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/16/cf/924b7b14267d47f5055bb5d032c7d24eb9542ac3631b460e1398fe9935ea/pyiceberg-0.11.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/47/74/da9b8ad2ca9ce6af1377f2cffdad6582a51a5f5df4f26df5c41810c9de5b/pyroaring-1.0.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2d/c1/19144f2e590d55bce17e089017b5dca71fad46a2a0ddb7b1a69a4c91c5c9/snowflake_connector_python-4.3.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl
@@ -6166,7 +6166,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/90/45/f458fa2c388e79dd9d8b9b0c99f1d31b568f27388f2fdba7bb66bbc0c6ed/cachetools-6.2.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/16/cf/924b7b14267d47f5055bb5d032c7d24eb9542ac3631b460e1398fe9935ea/pyiceberg-0.11.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/47/74/da9b8ad2ca9ce6af1377f2cffdad6582a51a5f5df4f26df5c41810c9de5b/pyroaring-1.0.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2d/c1/19144f2e590d55bce17e089017b5dca71fad46a2a0ddb7b1a69a4c91c5c9/snowflake_connector_python-4.3.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/dd/77/c3af74a84eb00c1004a8e3c8a98627a3eecb2563f4ee01e621326c947bce/snowflake_sqlalchemy-1.8.2-py3-none-any.whl
@@ -24612,48 +24612,106 @@ packages:
   - pkg:pypi/pygobject?source=hash-mapping
   size: 324730
   timestamp: 1770819172575
-- pypi: https://files.pythonhosted.org/packages/a3/0e/90e61c38504f4fbd5ed79631f85da7d5ea5e5bf997bdeaa65b28ebf04cab/pyiceberg-0.10.0.tar.gz
+- pypi: https://files.pythonhosted.org/packages/16/cf/924b7b14267d47f5055bb5d032c7d24eb9542ac3631b460e1398fe9935ea/pyiceberg-0.11.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
   name: pyiceberg
-  version: 0.10.0
-  sha256: 2525afa5e7e5fc4e72b291f8e1cc219e982d2bda5ff17e62cd05b8d91c4139f5
+  version: 0.11.0
+  sha256: a3507d079d43d724bffb80e75201f2995822af844b674642dcf73c19d5303994
   requires_dist:
-  - adlfs>=2024.7.0 ; extra == 'adlfs'
-  - bodo>=2025.7.4 ; extra == 'bodo'
-  - boto3>=1.24.59 ; extra == 'dynamodb' or extra == 'glue' or extra == 'rest-sigv4'
-  - cachetools>=5.5,<7.0
-  - click>=7.1.1,<9.0.0
-  - daft>=0.5.0 ; extra == 'daft'
-  - datafusion>=45 ; extra == 'datafusion'
-  - duckdb>=0.5.0,<2.0.0 ; extra == 'duckdb'
-  - fsspec>=2023.1.0
-  - gcsfs>=2023.1.0 ; extra == 'gcsfs'
-  - google-auth>=2.4.0 ; extra == 'gcp-auth'
-  - google-cloud-bigquery>=3.33.0,<4.0.0 ; extra == 'bigquery'
-  - huggingface-hub>=0.24.0 ; extra == 'hf'
-  - kerberos>=1.3.1,<2.0.0 ; extra == 'hive-kerberos'
   - mmh3>=4.0.0,<6.0.0
-  - pandas>=1.0.0,<3.0.0 ; extra == 'pandas' or extra == 'ray'
-  - polars>=1.21.0,<2.0.0 ; extra == 'polars'
-  - psycopg2-binary>=2.9.6 ; extra == 'sql-postgres'
-  - pyarrow>=17.0.0 ; extra == 'duckdb' or extra == 'pandas' or extra == 'pyarrow' or extra == 'ray'
-  - pydantic>=2.0,!=2.4.0,!=2.4.1,<3.0
-  - pyiceberg-core>=0.5.1,<0.7.0 ; extra == 'pyarrow' or extra == 'pyiceberg-core'
-  - pyparsing>=3.1.0,<4.0.0
-  - pyroaring>=1.0.0,<2.0.0
-  - python-snappy>=0.6.0,<1.0.0 ; extra == 'snappy'
-  - ray==2.10.0 ; python_full_version < '3.9' and extra == 'ray'
-  - ray>=2.10.0,<=2.44.0 ; python_full_version >= '3.9' and extra == 'ray'
   - requests>=2.20.0,<3.0.0
+  - click>=7.1.1,<9.0.0
   - rich>=10.11.0,<15.0.0
-  - s3fs>=2023.1.0 ; extra == 's3fs'
-  - sortedcontainers==2.4.0
-  - sqlalchemy>=2.0.18,<3.0.0 ; extra == 'sql-postgres' or extra == 'sql-sqlite'
   - strictyaml>=1.7.0,<2.0.0
+  - pydantic>=2.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1,<3.0
+  - fsspec>=2023.1.0
+  - pyparsing>=3.1.0,<4.0.0
   - tenacity>=8.2.3,<10.0.0
-  - thrift>=0.13.0,<1.0.0 ; extra == 'hive' or extra == 'hive-kerberos'
+  - pyroaring>=1.0.0,<2.0.0
+  - cachetools>=5.5,<7.0
+  - zstandard>=0.13.0,<1.0.0
+  - pyarrow>=17.0.0 ; extra == 'pyarrow'
+  - pyiceberg-core>=0.5.1,<0.9.0 ; extra == 'pyarrow'
+  - pandas>=1.0.0 ; extra == 'pandas'
+  - pyarrow>=17.0.0 ; extra == 'pandas'
+  - duckdb>=0.5.0,<2.0.0 ; extra == 'duckdb'
+  - pyarrow>=17.0.0 ; extra == 'duckdb'
+  - ray>=2.10.0,<3.0.0 ; extra == 'ray'
+  - pyarrow>=17.0.0 ; extra == 'ray'
+  - pandas>=1.0.0 ; extra == 'ray'
+  - bodo>=2025.7.4 ; extra == 'bodo'
+  - daft>=0.5.0 ; extra == 'daft'
+  - polars>=1.21.0,<2 ; extra == 'polars'
+  - python-snappy>=0.6.0,<1.0.0 ; extra == 'snappy'
+  - thrift>=0.13.0,<1.0.0 ; extra == 'hive'
+  - thrift>=0.13.0,<1.0.0 ; extra == 'hive-kerberos'
   - thrift-sasl>=0.4.3 ; extra == 'hive-kerberos'
-  - zstandard>=0.13.0,<1.0.0 ; extra == 'zstandard'
-  requires_python: '!=2.7.*,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,>=3.9'
+  - kerberos>=1.3.1,<2 ; extra == 'hive-kerberos'
+  - s3fs>=2023.1.0 ; extra == 's3fs'
+  - boto3>=1.24.59 ; extra == 'glue'
+  - adlfs>=2024.7.0 ; extra == 'adlfs'
+  - boto3>=1.24.59 ; extra == 'dynamodb'
+  - google-cloud-bigquery>=3.33.0,<4 ; extra == 'bigquery'
+  - sqlalchemy>=2.0.18,<3 ; extra == 'sql-postgres'
+  - psycopg2-binary>=2.9.6 ; extra == 'sql-postgres'
+  - sqlalchemy>=2.0.18,<3 ; extra == 'sql-sqlite'
+  - gcsfs>=2023.1.0 ; extra == 'gcsfs'
+  - boto3>=1.24.59 ; extra == 'rest-sigv4'
+  - huggingface-hub>=0.24.0 ; extra == 'hf'
+  - pyiceberg-core>=0.5.1,<0.9.0 ; extra == 'pyiceberg-core'
+  - datafusion>=51,<52 ; extra == 'datafusion'
+  - google-auth>=2.4.0 ; extra == 'gcp-auth'
+  - azure-identity>=1.25.1 ; extra == 'entra-auth'
+  requires_python: '>=3.10.0,<4.0.0'
+- pypi: https://files.pythonhosted.org/packages/bd/22/3d02ad39710bf51834d108e6d548cee9c1916850460ccba80db47a982567/pyiceberg-0.11.0.tar.gz
+  name: pyiceberg
+  version: 0.11.0
+  sha256: 095bbafc87d204cf8d3ffc1c434e07cf9a67a709192ac0b11dcb0f8251f7ad4e
+  requires_dist:
+  - mmh3>=4.0.0,<6.0.0
+  - requests>=2.20.0,<3.0.0
+  - click>=7.1.1,<9.0.0
+  - rich>=10.11.0,<15.0.0
+  - strictyaml>=1.7.0,<2.0.0
+  - pydantic>=2.0,!=2.4.0,!=2.4.1,!=2.12.0,!=2.12.1,<3.0
+  - fsspec>=2023.1.0
+  - pyparsing>=3.1.0,<4.0.0
+  - tenacity>=8.2.3,<10.0.0
+  - pyroaring>=1.0.0,<2.0.0
+  - cachetools>=5.5,<7.0
+  - zstandard>=0.13.0,<1.0.0
+  - pyarrow>=17.0.0 ; extra == 'pyarrow'
+  - pyiceberg-core>=0.5.1,<0.9.0 ; extra == 'pyarrow'
+  - pandas>=1.0.0 ; extra == 'pandas'
+  - pyarrow>=17.0.0 ; extra == 'pandas'
+  - duckdb>=0.5.0,<2.0.0 ; extra == 'duckdb'
+  - pyarrow>=17.0.0 ; extra == 'duckdb'
+  - ray>=2.10.0,<3.0.0 ; extra == 'ray'
+  - pyarrow>=17.0.0 ; extra == 'ray'
+  - pandas>=1.0.0 ; extra == 'ray'
+  - bodo>=2025.7.4 ; extra == 'bodo'
+  - daft>=0.5.0 ; extra == 'daft'
+  - polars>=1.21.0,<2 ; extra == 'polars'
+  - python-snappy>=0.6.0,<1.0.0 ; extra == 'snappy'
+  - thrift>=0.13.0,<1.0.0 ; extra == 'hive'
+  - thrift>=0.13.0,<1.0.0 ; extra == 'hive-kerberos'
+  - thrift-sasl>=0.4.3 ; extra == 'hive-kerberos'
+  - kerberos>=1.3.1,<2 ; extra == 'hive-kerberos'
+  - s3fs>=2023.1.0 ; extra == 's3fs'
+  - boto3>=1.24.59 ; extra == 'glue'
+  - adlfs>=2024.7.0 ; extra == 'adlfs'
+  - boto3>=1.24.59 ; extra == 'dynamodb'
+  - google-cloud-bigquery>=3.33.0,<4 ; extra == 'bigquery'
+  - sqlalchemy>=2.0.18,<3 ; extra == 'sql-postgres'
+  - psycopg2-binary>=2.9.6 ; extra == 'sql-postgres'
+  - sqlalchemy>=2.0.18,<3 ; extra == 'sql-sqlite'
+  - gcsfs>=2023.1.0 ; extra == 'gcsfs'
+  - boto3>=1.24.59 ; extra == 'rest-sigv4'
+  - huggingface-hub>=0.24.0 ; extra == 'hf'
+  - pyiceberg-core>=0.5.1,<0.9.0 ; extra == 'pyiceberg-core'
+  - datafusion>=51,<52 ; extra == 'datafusion'
+  - google-auth>=2.4.0 ; extra == 'gcp-auth'
+  - azure-identity>=1.25.1 ; extra == 'entra-auth'
+  requires_python: '>=3.10.0,<4.0.0'
 - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.11.0-pyhd8ed1ab_0.conda
   sha256: ac605d7fa239f78c508b47f2a0763236eef8d52b53852b84d784b598f92a1573
   md5: f9517d2fe1501919d7a236aba73409bb
