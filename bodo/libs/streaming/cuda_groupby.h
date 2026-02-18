@@ -27,6 +27,8 @@ std::unique_ptr<cudf::column> std_final_merge(
     const std::vector<cudf::column_view> &input_cols);
 std::unique_ptr<cudf::column> skew_final_merge(
     const std::vector<cudf::column_view> &input_cols);
+std::unique_ptr<cudf::column> distinct_final_merge(
+    const std::vector<cudf::column_view> &input_cols);
 
 std::unique_ptr<cudf::column> square_col(const cudf::column_view &input_col);
 std::unique_ptr<cudf::column> cubed_col(const cudf::column_view &input_col);
@@ -276,20 +278,51 @@ class CudaGroupbyState {
         : key_indices(_key_indices) {
         unsigned num_keys = key_indices.size();
 
-        // Create as much as we can of the aggregation info.
-        // Each batch overwrites the column with the given batch's column
-        // view.
-        for (auto &column_agg_func : column_agg_funcs) {
-            bodo_agg_to_cudf(column_agg_func.second, aggregation_requests,
-                             aggregation_fns);
-            for (size_t i = 0; i < aggregation_requests.size(); ++i) {
-                column_indices.push_back(column_agg_func.first);
+        if (column_agg_funcs.size() == 0) {
+            // Used for distinct/drop_duplicates.
+            add_agg_entry(
+                cudf::make_count_aggregation<cudf::groupby_aggregation>(
+                    cudf::null_policy::INCLUDE),
+                aggregation_requests, aggregation_fns);
+
+            // Find lowest number column that isn't a key.
+            bool found_col = false;
+            uint64_t col_to_use = 0;
+            while (!found_col) {
+                found_col = true;
+                for (size_t i = 0; i < _key_indices.size(); ++i) {
+                    if (_key_indices[i] == col_to_use) {
+                        found_col = false;
+                        break;
+                    }
+                }
+                if (!found_col) {
+                    col_to_use++;
+                }
             }
-            bodo_agg_to_merge_cudf(column_agg_func.second,
-                                   merge_aggregation_requests,
-                                   merge_aggregation_fns);
-            addFinalMerge(column_agg_func.second,
-                          num_keys + column_indices.size());
+            column_indices.push_back(col_to_use);
+
+            add_agg_entry(
+                cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
+                merge_aggregation_requests, merge_aggregation_fns);
+
+            final_merges.push_back({{num_keys}, distinct_final_merge});
+        } else {
+            // Create as much as we can of the aggregation info.
+            // Each batch overwrites the column with the given batch's column
+            // view.
+            for (auto &column_agg_func : column_agg_funcs) {
+                bodo_agg_to_cudf(column_agg_func.second, aggregation_requests,
+                                 aggregation_fns);
+                for (size_t i = 0; i < aggregation_requests.size(); ++i) {
+                    column_indices.push_back(column_agg_func.first);
+                }
+                bodo_agg_to_merge_cudf(column_agg_func.second,
+                                       merge_aggregation_requests,
+                                       merge_aggregation_fns);
+                addFinalMerge(column_agg_func.second,
+                              num_keys + column_indices.size());
+            }
         }
 
         for (size_t i = 0; i < num_keys; ++i) {

@@ -17,6 +17,7 @@
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
+#include "duckdb/planner/operator/logical_distinct.hpp"
 #include "expression.h"
 #include "operator.h"
 
@@ -156,38 +157,23 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->metrics.init_time += end_timer(start_init);
     }
 
-#if 0
     explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                   duckdb::LogicalDistinct& op) {
         time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
-        std::shared_ptr<bodo::Schema> in_table_schema_reordered;
-        std::vector<bool> cols_to_keep_vec;
+        std::vector<uint64_t> cols_to_keep_vec;
         this->initKeysAndSchema(col_ref_map, op.distinct_targets,
-                                in_table_schema, in_table_schema_reordered,
-                                cols_to_keep_vec);
+                                in_table_schema, cols_to_keep_vec);
 
-        std::vector<int32_t> ftypes;
-        // Create input data column indices (only single data column for now)
-        std::vector<int32_t> f_in_cols;
-
-        // Offsets for the input data columns, which are trivial since we have a
-        // single data column
-        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
-        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
-
+        std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
         this->groupby_state = std::make_unique<CudaGroupbyState>(
-            std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
-            std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
-            std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
-            get_streaming_batch_size(), true, -1, getOpId(), -1, false,
-            std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
+            cols_to_keep_vec, column_agg_funcs);
+
+        arrow_output_schema = this->output_schema->ToArrowSchema();
         this->metrics.init_time += end_timer(start_init);
     }
-#endif
 
     virtual ~PhysicalGPUAggregate() = default;
 

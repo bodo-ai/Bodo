@@ -187,8 +187,12 @@ std::unique_ptr<cudf::table> apply_final_merges(
             out_cols.push_back(std::make_unique<cudf::column>(input.column(i)));
             i += 1;
         } else {
-            // Part of merge m → insert merged column at this position
-            out_cols.push_back(std::move(merged_results[m]));
+            // distinct/drop_duplicates will return no data for the merged
+            // result and in that case we just drop the column
+            if (merged_results[m] != nullptr) {
+                // Part of merge m → insert merged column at this position
+                out_cols.push_back(std::move(merged_results[m]));
+            }
 
             // Skip all columns consumed by this merge
             int last = merges[m].column_indices.back();
@@ -217,6 +221,11 @@ std::unique_ptr<cudf::column> mean_final_merge(
         sum_col, count_col, cudf::binary_operator::DIV, out_type);
 
     return mean_col;
+}
+
+std::unique_ptr<cudf::column> distinct_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    return nullptr;  // distinct just drops the fake count col
 }
 
 std::unique_ptr<cudf::column> var_final_merge(
