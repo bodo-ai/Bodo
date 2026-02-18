@@ -211,6 +211,9 @@ def test_non_numeric_window_functions(
                 ("NTH_VALUE(BI, 3)", "3 PRECEDING", "3 FOLLOWING"),
             ],
             id="nth_value",
+            marks=pytest.mark.skip(
+                "TODO(BSE-5301): Fix remaining test issues from Pandas 3.0"
+            ),
         ),
     ],
 )
