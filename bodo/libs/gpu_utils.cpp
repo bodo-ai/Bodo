@@ -357,8 +357,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->recv_data();
         this->send_data();
         CHECK_NCCL(ncclGroupEnd());
-        CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
-        CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
+        this->nccl_recv_event.record(this->stream);
+        this->nccl_send_event.record(this->stream);
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
@@ -375,7 +375,7 @@ GpuShuffle::progress_waiting_for_data() {
     // Check if NCCL event has completed, this will return cudaSuccess if the
     // event has completed, cudaErrorNotReady if not yet completed,
     // or another error code if an error occurred.
-    cudaError_t event_status = cudaEventQuery(nccl_recv_event);
+    cudaError_t event_status = nccl_recv_event.query();
     // Check for errors
     if (event_status != cudaErrorNotReady) {
         CHECK_CUDA(event_status);
@@ -440,7 +440,7 @@ void GpuShuffle::progress_sending_data() {
     // Check if NCCL event has completed, this will return cudaSuccess if the
     // event has completed, cudaErrorNotReady if not yet completed,
     // or another error code if an error occurred.
-    cudaError_t event_status = cudaEventQuery(nccl_send_event);
+    cudaError_t event_status = nccl_send_event.query();
     // Check for errors
     if (event_status != cudaErrorNotReady) {
         CHECK_CUDA(event_status);

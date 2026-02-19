@@ -8,6 +8,24 @@ extern const bool G_USE_ASYNC;
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
 
+// Error checking macros for NCCL
+#define CHECK_NCCL(call)                                                       \
+    do {                                                                       \
+        ncclResult_t result = call;                                            \
+        if (result != ncclSuccess) {                                           \
+            throw std::runtime_error("NCCL error: " +                          \
+                                     std::string(ncclGetErrorString(result))); \
+        }                                                                      \
+    } while (0)
+#define CHECK_CUDA(call)                                                    \
+    do {                                                                    \
+        cudaError_t err = call;                                             \
+        if (err != cudaSuccess) {                                           \
+            throw std::runtime_error("CUDA error: " +                       \
+                                     std::string(cudaGetErrorString(err))); \
+        }                                                                   \
+    } while (0)
+
 struct cuda_event_wrapper {
     std::shared_ptr<cudaEvent_t> ev;
 
@@ -33,19 +51,29 @@ struct cuda_event_wrapper {
     cuda_event_wrapper& operator=(const cuda_event_wrapper&) = default;
 
     // Disable move semantics (optional but recommended for clarity)
-    cuda_event_wrapper(cuda_event_wrapper&&) = delete;
-    cuda_event_wrapper& operator=(cuda_event_wrapper&&) = delete;
+    cuda_event_wrapper(cuda_event_wrapper&&) noexcept = default;
+    cuda_event_wrapper& operator=(cuda_event_wrapper&&) noexcept = default;
+
     // Record event on a stream
     void record(rmm::cuda_stream_view stream) const {
         if (ev && *ev) {
-            cudaEventRecord(*ev, stream.value());
+            CHECK_CUDA(cudaEventRecord(*ev, stream.value()));
         }
     }
 
     // Make a stream wait on this event
     void wait(rmm::cuda_stream_view stream) const {
         if (ev && *ev) {
-            cudaStreamWaitEvent(stream.value(), *ev, 0);
+            CHECK_CUDA(cudaStreamWaitEvent(stream.value(), *ev, 0));
+        }
+    }
+
+    cudaError_t query() const {
+        if (ev && *ev) {
+            return cudaEventQuery(*ev);
+        } else {
+            throw std::runtime_error(
+                "cuda_event_wrapper query on invalid state");
         }
     }
 
@@ -54,7 +82,8 @@ struct cuda_event_wrapper {
             cudaError_t status = cudaEventQuery(*ev);
             return status == cudaSuccess;
         } else {
-            return false;
+            throw std::runtime_error(
+                "cuda_event_wrapper ready on invalid state");
         }
     }
 };
@@ -87,24 +116,6 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
         return std::make_shared<StreamAndEvent>(s, e);
     }
 }
-
-// Error checking macros for NCCL
-#define CHECK_NCCL(call)                                                       \
-    do {                                                                       \
-        ncclResult_t result = call;                                            \
-        if (result != ncclSuccess) {                                           \
-            throw std::runtime_error("NCCL error: " +                          \
-                                     std::string(ncclGetErrorString(result))); \
-        }                                                                      \
-    } while (0)
-#define CHECK_CUDA(call)                                                    \
-    do {                                                                    \
-        cudaError_t err = call;                                             \
-        if (err != cudaSuccess) {                                           \
-            throw std::runtime_error("CUDA error: " +                       \
-                                     std::string(cudaGetErrorString(err))); \
-        }                                                                   \
-    } while (0)
 
 enum class GpuShuffleState {
     SIZES_INFLIGHT = 0,
@@ -143,8 +154,8 @@ struct GpuShuffle {
     std::unique_ptr<std::vector<MPI_Request>> metadata_send_reqs;
     // Event markers for all nccl operations needed for this shuffle.
     // When this is finished all GPU buffers are in the correct place.
-    cudaEvent_t nccl_send_event;
-    cudaEvent_t nccl_recv_event;
+    cuda_event_wrapper nccl_send_event;
+    cuda_event_wrapper nccl_recv_event;
     // We need to keep sizes around while the transfers are inflight
     std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
     std::unique_ptr<std::vector<uint64_t>> recv_metadata_sizes;
@@ -193,11 +204,6 @@ struct GpuShuffle {
           packed_send_buffers(n_ranks),
           start_tag(start_tag),
           n_ranks(n_ranks) {
-        CHECK_CUDA(
-            cudaEventCreateWithFlags(&nccl_send_event, cudaEventDisableTiming));
-        CHECK_CUDA(
-            cudaEventCreateWithFlags(&nccl_recv_event, cudaEventDisableTiming));
-
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
             cudf::packed_table& table = packed_tables[dest_rank];
@@ -221,10 +227,7 @@ struct GpuShuffle {
     GpuShuffle(const GpuShuffle&) = delete;
     GpuShuffle& operator=(const GpuShuffle&) = delete;
 
-    ~GpuShuffle() {
-        cudaEventDestroy(nccl_send_event);
-        cudaEventDestroy(nccl_recv_event);
-    }
+    ~GpuShuffle() {}
 
     /*
      * @brief Progress the shuffle operation
