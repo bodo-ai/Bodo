@@ -12,6 +12,10 @@
 
 // From
 // https://github.com/dcleblanc/SafeInt/blob/1c94d38fe4c19fe17792de5e0f6619258c94bb30/safe_math_impl.h#L686
+// We were using arrow/vendored/portable-snippets/safe-math.h, but Arrow removed
+// this header due to to compatibility issues with Windows and switched to
+// vendoring SafeInt. We copy the relevant SafeInt function here to ensure
+// compatibility with Arrow.
 static inline bool check_add_int64_int64(int64_t a, int64_t b, int64_t* ret) {
     int64_t tmp = (int64_t)((uint64_t)a + (uint64_t)b);
     *ret = tmp;
