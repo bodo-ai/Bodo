@@ -91,8 +91,7 @@ void GpuShuffleManager::shuffle_table(
 
 void GpuShuffleManager::do_shuffle() {
     std::vector<cudf::packed_table> packed_tables;
-    if (!this->tables_to_shuffle.empty()) {
-        //    if (data_ready_to_send()) {
+    if (data_ready_to_send()) {
         ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
         this->tables_to_shuffle.pop_back();
 
@@ -161,8 +160,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         // send 1, ranks without data send 0, this way all ranks will know when
         // a shuffle is needed and can call progress to start it
         this->shuffle_coordination.has_data =
-            this->tables_to_shuffle.empty() ? 0 : 1;
-        //            this->data_ready_to_send() ? 0 : 1;
+            this->data_ready_to_send() ? 1 : 0;
         CHECK_MPI(
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,

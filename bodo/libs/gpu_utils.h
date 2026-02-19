@@ -50,7 +50,6 @@ struct cuda_event_wrapper {
     }
 
     bool ready() const {
-        throw std::runtime_error("todd debugging");
         if (ev && *ev) {
             cudaError_t status = cudaEventQuery(*ev);
             return status == cudaSuccess;
@@ -319,10 +318,8 @@ class GpuShuffleManager {
     void do_shuffle();
 
     bool data_ready_to_send() {
-        throw std::runtime_error("todd debugging 2");
-        return !this->tables_to_shuffle.empty();
-        // return !this->tables_to_shuffle.empty() &&
-        // this->tables_to_shuffle.back().event.ready();
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
     }
 
    public:
