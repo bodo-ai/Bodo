@@ -76,7 +76,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->initKeysAndSchema(col_ref_map, op.groups, in_table_schema, keys);
 
         std::optional<bool> dropna = std::nullopt;
-
         for (size_t i = 0; i < op.expressions.size(); i++) {
             const auto& expr = op.expressions[i];
 
@@ -206,7 +205,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         groupby_state->build_consume_batch(input_batch.table, local_is_last,
-                                           se->stream);
+                                           se->stream,
+                                           input_batch.stream_event);
 
         if (local_is_last) {
             // Tell groupby state that all data from the local pipeline has
@@ -216,7 +216,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->metrics.consume_time += end_timer(start_consume);
         return (local_is_last && groupby_state->all_complete())
                    ? OperatorResult::FINISHED
-                   : OperatorResult::HAVE_MORE_OUTPUT;
+                   : (local_is_last ? OperatorResult::HAVE_MORE_OUTPUT
+                                    : OperatorResult::NEED_MORE_INPUT);
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(

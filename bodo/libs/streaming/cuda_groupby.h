@@ -32,6 +32,7 @@ std::unique_ptr<cudf::column> distinct_final_merge(
 
 std::unique_ptr<cudf::column> square_col(const cudf::column_view &input_col);
 std::unique_ptr<cudf::column> cubed_col(const cudf::column_view &input_col);
+std::unique_ptr<cudf::column> cast_int64(const cudf::column_view &input_col);
 
 std::unique_ptr<cudf::table> apply_final_merges(
     cudf::table_view const &input, std::vector<FinalMerge> const &merges);
@@ -47,6 +48,8 @@ class CudaGroupbyState {
     std::vector<cudf::groupby::aggregation_request> aggregation_requests;
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &)>
         aggregation_fns;
+    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &)>
+        post_agg_fns;
 
     std::vector<cudf::size_type> shuffle_key_indices;
     std::vector<uint64_t> merge_key_indices;
@@ -54,6 +57,8 @@ class CudaGroupbyState {
     std::vector<cudf::groupby::aggregation_request> merge_aggregation_requests;
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &)>
         merge_aggregation_fns;
+    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &)>
+        post_merge_agg_fns;
 
     std::unique_ptr<cudf::table> accumulation;
     std::vector<FinalMerge> final_merges;
@@ -64,6 +69,8 @@ class CudaGroupbyState {
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         std::vector<std::unique_ptr<cudf::column> (*)(
             const cudf::column_view &)> &aggregation_fns,
+        std::vector<std::unique_ptr<cudf::column> (*)(
+            const cudf::column_view &)> &post_agg_fns,
         rmm::cuda_stream_view &stream);
 
     void add_agg_entry(
@@ -71,12 +78,17 @@ class CudaGroupbyState {
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         std::vector<std::unique_ptr<cudf::column> (*)(
             const cudf::column_view &)> &aggregation_fns,
+        std::vector<std::unique_ptr<cudf::column> (*)(
+            const cudf::column_view &)> &post_aggregation_fns,
         std::unique_ptr<cudf::column> (*fn)(const cudf::column_view &) =
-            nullptr) {
+            nullptr,
+        std::unique_ptr<cudf::column> (*post_agg_fn)(
+            const cudf::column_view &) = nullptr) {
         cudf::groupby::aggregation_request req;
         req.aggregations.push_back(std::move(agg));
         aggregation_requests.push_back(std::move(req));
         aggregation_fns.push_back(fn);
+        post_aggregation_fns.push_back(post_agg_fn);
     }
 
     GpuShuffleManager merge_shuffler;
@@ -85,76 +97,86 @@ class CudaGroupbyState {
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         std::vector<std::unique_ptr<cudf::column> (*)(
-            const cudf::column_view &)> &aggregation_fns) {
+            const cudf::column_view &)> &aggregation_fns,
+        std::vector<std::unique_ptr<cudf::column> (*)(
+            const cudf::column_view &)> &post_agg_fns) {
         switch (ftype) {
             case Bodo_FTypes::sum:
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::min:
                 add_agg_entry(
                     cudf::make_min_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::max:
                 add_agg_entry(
                     cudf::make_max_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::count:
                 add_agg_entry(
                     cudf::make_count_aggregation<cudf::groupby_aggregation>(
                         cudf::null_policy::EXCLUDE),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    nullptr, cast_int64);
                 break;
             case Bodo_FTypes::size:
                 add_agg_entry(
                     cudf::make_count_aggregation<cudf::groupby_aggregation>(
                         cudf::null_policy::INCLUDE),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    nullptr, cast_int64);
                 break;
             case Bodo_FTypes::mean:
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 add_agg_entry(
                     cudf::make_count_aggregation<cudf::groupby_aggregation>(
                         cudf::null_policy::EXCLUDE),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    nullptr, cast_int64);
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // For sum of the square of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns, square_col);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    square_col);
                 add_agg_entry(
                     cudf::make_count_aggregation<cudf::groupby_aggregation>(
                         cudf::null_policy::EXCLUDE),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    nullptr, cast_int64);
                 break;
             case Bodo_FTypes::skew:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // For sum of the square of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns, square_col);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    square_col);
                 // For sum of the cube of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns, cubed_col);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    cubed_col);
                 add_agg_entry(
                     cudf::make_count_aggregation<cudf::groupby_aggregation>(
                         cudf::null_policy::EXCLUDE),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    nullptr, cast_int64);
                 break;
             default:
                 throw std::runtime_error(
@@ -168,68 +190,70 @@ class CudaGroupbyState {
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         std::vector<std::unique_ptr<cudf::column> (*)(
-            const cudf::column_view &)> &aggregation_fns) {
+            const cudf::column_view &)> &aggregation_fns,
+        std::vector<std::unique_ptr<cudf::column> (*)(
+            const cudf::column_view &)> &post_agg_fns) {
         switch (ftype) {
             case Bodo_FTypes::sum:
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::min:
                 add_agg_entry(
                     cudf::make_min_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::max:
                 add_agg_entry(
                     cudf::make_max_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::count:
             case Bodo_FTypes::size:
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::mean:
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // merging of counts is summation
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // For sum of the square of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             case Bodo_FTypes::skew:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // For sum of the square of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 // For sum of the cube of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
-                    aggregation_requests, aggregation_fns);
+                    aggregation_requests, aggregation_fns, post_agg_fns);
                 break;
             default:
                 throw std::runtime_error(
@@ -284,25 +308,29 @@ class CudaGroupbyState {
         if (column_agg_funcs.size() == 0) {
             // Used for distinct/drop_duplicates.
             bodo_agg_to_cudf(Bodo_FTypes::size, aggregation_requests,
-                             aggregation_fns);
+                             aggregation_fns, post_agg_fns);
             column_indices.push_back(0);
             bodo_agg_to_merge_cudf(Bodo_FTypes::size,
                                    merge_aggregation_requests,
-                                   merge_aggregation_fns);
+                                   merge_aggregation_fns, post_merge_agg_fns);
             final_merges.push_back({{num_keys}, distinct_final_merge});
         } else {
             // Create as much as we can of the aggregation info.
             // Each batch overwrites the column with the given batch's column
             // view.
             for (auto &column_agg_func : column_agg_funcs) {
+                size_t agg_req_start_size = aggregation_requests.size();
                 bodo_agg_to_cudf(column_agg_func.second, aggregation_requests,
-                                 aggregation_fns);
-                for (size_t i = 0; i < aggregation_requests.size(); ++i) {
+                                 aggregation_fns, post_agg_fns);
+                size_t new_agg_req =
+                    aggregation_requests.size() - agg_req_start_size;
+
+                for (size_t i = 0; i < new_agg_req; ++i) {
                     column_indices.push_back(column_agg_func.first);
                 }
-                bodo_agg_to_merge_cudf(column_agg_func.second,
-                                       merge_aggregation_requests,
-                                       merge_aggregation_fns);
+                bodo_agg_to_merge_cudf(
+                    column_agg_func.second, merge_aggregation_requests,
+                    merge_aggregation_fns, post_merge_agg_fns);
                 addFinalMerge(column_agg_func.second,
                               num_keys + column_indices.size());
             }
@@ -339,7 +367,8 @@ class CudaGroupbyState {
      * in the last pipeline.
      */
     void build_consume_batch(std::shared_ptr<cudf::table> input_table,
-                             bool is_last, rmm::cuda_stream_view &stream);
+                             bool is_last, rmm::cuda_stream_view &output_stream,
+                             std::shared_ptr<StreamAndEvent> input_se);
 
     /**
      * @brief Function to produce an output table.

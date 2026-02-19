@@ -8,6 +8,7 @@
 #include <cudf/lists/count_elements.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/unary.hpp>
+#include <cudf/utilities/type_dispatcher.hpp>
 #include <list>
 #include <memory>
 #include <tuple>
@@ -40,6 +41,8 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
         aggregation_fns,
+    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
+        post_agg_fns,
     rmm::cuda_stream_view& stream) {
     // Suppose column 0 is the key, column 1 is the value
     std::vector<cudf::column_view> key_columns;
@@ -56,6 +59,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     for (size_t i = 0; i < column_indices.size(); ++i) {
         cudf::column_view col_to_use = input.column(column_indices[i]);
         if (aggregation_fns[i] != nullptr) {
+            std::cout << "agg fn is not null " << i << std::endl;
             fn_cols.push_back(aggregation_fns[i](col_to_use));
             col_to_use = fn_cols[fn_cols.size() - 1]->view();
         }
@@ -79,29 +83,60 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
         cols.push_back(std::move(c));
     }
 
+    size_t cur_col = 0;
     // Move aggregated values
     for (auto& agg_result : result.second) {
         for (auto& c : agg_result.results) {
+            if (post_agg_fns[cur_col] != nullptr) {
+                c = post_agg_fns[cur_col](c->view());
+            }
             cols.push_back(std::move(c));
+            cur_col++;
         }
+    }
+    if (cur_col != post_agg_fns.size()) {
+        throw std::runtime_error(
+            "do_gropuby agg columns added not same size as post_agg_fns.");
     }
 
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
+void print_column_types(cudf::table_view const& tv) {
+    for (int i = 0; i < tv.num_columns(); i++) {
+        auto const& col = tv.column(i);
+        auto dtype = col.type();
+        std::cout << "col[" << i << "] = " << cudf::type_to_name(dtype);
+
+        // If decimal, include scale
+        if (dtype.id() == cudf::type_id::DECIMAL32 ||
+            dtype.id() == cudf::type_id::DECIMAL64 ||
+            dtype.id() == cudf::type_id::DECIMAL128) {
+            std::cout << " (scale=" << dtype.scale() << ")";
+        }
+
+        std::cout << "\n";
+    }
+}
+
 void CudaGroupbyState::build_consume_batch(
     std::shared_ptr<cudf::table> input_table, bool is_last,
-    rmm::cuda_stream_view& stream) {
+    rmm::cuda_stream_view& output_stream,
+    std::shared_ptr<StreamAndEvent> input_se) {
     // During the phase where all_complete() is not true, we'll get
     // blank tables, on which we don't need to run the first groupby
     // pass.
     if (input_table->view().num_rows() != 0) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(G_USE_ASYNC);
-        std::shared_ptr<cudf::table> new_data = std::move(do_groupby(
-            input_table->view(), key_indices, column_indices,
-            aggregation_requests, aggregation_fns, local_groupby_se->stream));
+        input_se->event.wait(local_groupby_se->stream);
+        std::shared_ptr<cudf::table> new_data = std::move(
+            do_groupby(input_table->view(), key_indices, column_indices,
+                       aggregation_requests, aggregation_fns, post_agg_fns,
+                       local_groupby_se->stream));
         local_groupby_se->event.record(local_groupby_se->stream);
+        std::cout << "local new data " << new_data->num_columns() << std::endl;
+        print_column_types(new_data->view());
         merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
                                      local_groupby_se->event);
     }
@@ -115,11 +150,16 @@ void CudaGroupbyState::build_consume_batch(
     // If we have already accumulated on this node then add the result
     // of that to the new shuffled tables to merge.
     if (accumulation) {
+        std::cout << "accumulation not empty " << accumulation->num_columns()
+                  << std::endl;
+        print_column_types(accumulation->view());
         views.emplace_back(accumulation->view());
     }
 
     // Add all the shuffled chunks to the merge set.
     for (auto& merge_chunk : shuffled_merge_chunks) {
+        std::cout << "merge_chunk " << merge_chunk->num_columns() << std::endl;
+        print_column_types(merge_chunk->view());
         views.emplace_back(merge_chunk->view());
     }
 
@@ -128,11 +168,16 @@ void CudaGroupbyState::build_consume_batch(
     }
 
     // Make one table out of all the views.
-    auto combined = cudf::concatenate(views, stream);
+    auto combined = cudf::concatenate(views, output_stream);
+    std::cout << "combined " << combined->num_columns() << std::endl;
+    print_column_types(combined->view());
     // Do the groupby on the combined table.
     accumulation = std::move(
         do_groupby(combined->view(), merge_key_indices, merge_column_indices,
-                   merge_aggregation_requests, merge_aggregation_fns, stream));
+                   merge_aggregation_requests, merge_aggregation_fns,
+                   post_merge_agg_fns, output_stream));
+    std::cout << "post-merge " << accumulation->num_columns() << std::endl;
+    print_column_types(accumulation->view());
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
@@ -397,6 +442,10 @@ std::unique_ptr<cudf::column> cubed_col(const cudf::column_view& input_col) {
     auto squared = square_col(input_col);
     return cudf::binary_operation(input_col, squared->view(),
                                   cudf::binary_operator::MUL, input_col.type());
+}
+
+std::unique_ptr<cudf::column> cast_int64(const cudf::column_view& input_col) {
+    return cudf::cast(input_col, cudf::data_type{cudf::type_id::INT64});
 }
 
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
