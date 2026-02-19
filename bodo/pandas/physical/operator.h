@@ -49,6 +49,19 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
+inline std::string toString(OperatorResult res) {
+    switch (res) {
+        case OperatorResult::NEED_MORE_INPUT:
+            return "NEED_MORE_INPUT";
+        case OperatorResult::HAVE_MORE_OUTPUT:
+            return "HAVE_MORE_OUTPUT";
+        case OperatorResult::FINISHED:
+            return "FINISHED";
+        default:
+            throw std::runtime_error("toString(OperatorResult) unknown result");
+    }
+}
+
 #ifdef USE_CUDF
 
 std::shared_ptr<cudf::table> make_empty_like(
