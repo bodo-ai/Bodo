@@ -3121,3 +3121,21 @@ def datetime64_constructor(context, builder, sig, args):
         return integer_to_dt64(a.value)
 
     return context.compile_internal(builder, datetime64_constructor_impl, sig, args)
+
+
+@overload(operator.setitem, no_unliteral=True)
+def dt_timedelta_arr_setitem(A, ind, val):
+    """Handle A[i] = pd.Timestamp(...) where A is a datetime64 array"""
+    if (
+        not isinstance(A, types.Array)
+        or A.dtype != bodo.types.datetime64ns
+        or not isinstance(ind, types.Integer)
+        or not val == pd_timestamp_tz_naive_type
+    ):
+        return
+
+    def impl(A, ind, val):  # pragma: no cover
+        dt64 = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+        A[ind] = dt64
+
+    return impl
