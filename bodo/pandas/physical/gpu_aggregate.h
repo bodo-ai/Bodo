@@ -67,6 +67,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                   duckdb::LogicalAggregate& op) {
         time_pt start_init = start_timer();
+        batch_size = get_gpu_streaming_batch_size();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
@@ -159,6 +160,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                   duckdb::LogicalDistinct& op) {
         time_pt start_init = start_timer();
+        batch_size = get_gpu_streaming_batch_size();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
@@ -223,14 +225,29 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
         time_pt start_produce = start_timer();
-        bool out_is_last = false;
         std::unique_ptr<cudf::table> next_batch;
-        next_batch = std::move(groupby_state->produce_output_batch(
-            out_is_last /* output */, true, se->stream));
+
+        if (!leftover_tbl) {
+            leftover_tbl = std::move(groupby_state->produce_output_batch(
+                out_is_last /* output */, true, se->stream));
+        }
+
+        std::size_t n = leftover_tbl->num_rows();
+        if (n <= batch_size) {
+            next_batch = std::move(leftover_tbl);
+        } else {
+            cudf::table_view tv = leftover_tbl->view();
+            next_batch = std::make_unique<cudf::table>(
+                cudf::slice(tv, {0, (int)batch_size})[0]);
+            leftover_tbl = std::make_unique<cudf::table>(
+                cudf::slice(tv, {(int)batch_size, (int)n})[0]);
+        }
+
         this->metrics.produce_time += end_timer(start_produce);
         GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
-        return {out_table_info, out_is_last ? OperatorResult::FINISHED
-                                            : OperatorResult::HAVE_MORE_OUTPUT};
+        return {out_table_info, (out_is_last && leftover_tbl == nullptr)
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**
@@ -307,6 +324,10 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
+    // For batching the output of groupby_state.
+    std::unique_ptr<cudf::table> leftover_tbl;
+    bool out_is_last = false;
+    size_t batch_size;
 };
 
 /**
