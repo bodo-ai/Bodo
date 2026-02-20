@@ -78,10 +78,15 @@ std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
 }
 
 void CudaHashJoin::build_hash_table(
-    const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
+    std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
+    std::vector<cudf::table_view> build_views;
+    // If we don't have any chunks, add an empty one so the schema is correct
+    if (build_chunks.empty()) {
+        build_chunks.push_back(empty_table_from_arrow_schema(
+            this->build_table_schema->ToArrowSchema()));
+    }
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
-    std::vector<cudf::table_view> build_views;
     for (const auto& chunk : build_chunks) {
         build_views.push_back(chunk->view());
     }

@@ -26,7 +26,7 @@ struct CudaHashJoin {
      * @param build_chunks Vector of build table chunks
      */
     void build_hash_table(
-        const std::vector<std::shared_ptr<cudf::table>>& build_chunks);
+        std::vector<std::shared_ptr<cudf::table>>& build_chunks);
 
     // What input columns to join on
     std::vector<cudf::size_type> build_key_indices;
