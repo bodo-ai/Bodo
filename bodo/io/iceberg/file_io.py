@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from pyarrow.fs import FileSystem
 from pyiceberg.io import ADLS_ACCOUNT_KEY, ADLS_ACCOUNT_NAME
 from pyiceberg.io.pyarrow import PyArrowFileIO
-from pyiceberg.typedef import EMPTY_DICT, Properties, Tuple
+from pyiceberg.typedef import EMPTY_DICT, Properties
 
 import bodo.io.utils
 
@@ -35,7 +35,7 @@ class BodoPyArrowFileIO(PyArrowFileIO):
     @staticmethod
     def parse_location(
         location: str, *args, properties: Properties = EMPTY_DICT, **kwargs
-    ) -> Tuple[str, str, str]:
+    ) -> tuple[str, str, str]:
         """Return (scheme, netloc, path) for the given location.
 
         Uses DEFAULT_SCHEME and DEFAULT_NETLOC if scheme/netloc are missing.

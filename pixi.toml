@@ -1,8 +1,7 @@
 [workspace]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge"]
+channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
-conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
@@ -192,10 +191,10 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-# Added to PyPi to ignore Pandas <3 constraint
 [feature.cpu.pypi-dependencies]
-pyiceberg = "==0.10"  # TODO(ehsan): fix issues with 0.11
-# Snowflake
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
 snowflake-connector-python = "*"
 
 [feature.cpu.pypi-options.dependency-overrides]
@@ -253,13 +252,8 @@ python = "3.13.*"
 
 [feature.cpu.dependencies]
 numba = ">=0.62,<0.64.0"
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+pyarrow = "23.0.*"
 pandas = ">=3.0.0"
-
-[feature.cpu.target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
-pyarrow-core = { version = "==22.0.0", channel = "bodo.ai" }
-libarrow = { version = "==22.0.0", channel = "bodo.ai" }
 
 [feature.cudf]
 platforms = ["linux-64"]

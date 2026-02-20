@@ -48,12 +48,15 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 
 ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
 
-
+pyiceberg_imported = False
 try:
     importlib.import_module("pyiceberg")
-    from . import monkey_patch as _  # noqa: F401
+    pyiceberg_imported = True
 except ImportError:
     pass
+
+if pyiceberg_imported:
+    from . import monkey_patch as _  # noqa: F401
 
 
 def get_iceberg_pq_dataset(

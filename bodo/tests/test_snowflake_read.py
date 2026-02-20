@@ -2019,6 +2019,9 @@ def test_snowflake_dict_encoding_enabled(enable_dict_encoding, memory_leak_check
         bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = prev_small_table_threshold
 
 
+@pytest.mark.skip(
+    "TODO(BSE-5302) Ensure dictionary encoding in LINEITEM_100_VIEW lineitem"
+)
 def test_snowflake_bodo_read_as_dict(memory_leak_check):
     """
     Test Snowflake system sampling for dictionary-encoding detection

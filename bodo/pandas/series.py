@@ -2586,6 +2586,9 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
         return list_s
 
     # Map tolist() to convert DataFrame to Series of lists
+    if len(extracted) == 0:
+        return pd.Series([], dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
+
     extended_s = extracted.apply(to_extended_list, axis=1)
     return extended_s.astype(pd.ArrowDtype(pa.large_list(pa.large_string())))
 
