@@ -40,12 +40,13 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     cudf::table_view const& _input, std::vector<uint64_t>& key_indices,
     std::vector<uint64_t>& column_indices,
     std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
-        aggregation_fns,
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
-        post_agg_fns,
+    std::vector<std::unique_ptr<cudf::column> (*)(
+        const cudf::column_view&, rmm::cuda_stream_view&)>& aggregation_fns,
+    std::vector<std::unique_ptr<cudf::column> (*)(
+        const cudf::column_view&, rmm::cuda_stream_view&)>& post_agg_fns,
     std::vector<std::unique_ptr<cudf::table> (*)(
-        const cudf::table_view&, cudf::size_type)>& pre_agg_table_fns,
+        const cudf::table_view&, cudf::size_type, rmm::cuda_stream_view&)>&
+        pre_agg_table_fns,
     rmm::cuda_stream_view& stream) {
     cudf::table_view input = _input;
 
@@ -55,7 +56,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
                   << std::endl;
         if (pre_agg_table_fns[i] != nullptr) {
             hold_updated_table =
-                pre_agg_table_fns[i](input, key_indices.size() + i);
+                pre_agg_table_fns[i](input, key_indices.size() + i, stream);
             input = hold_updated_table->view();
         }
     }
@@ -75,7 +76,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     for (size_t i = 0; i < column_indices.size(); ++i) {
         cudf::column_view col_to_use = input.column(column_indices[i]);
         if (aggregation_fns[i] != nullptr) {
-            fn_cols.push_back(aggregation_fns[i](col_to_use));
+            fn_cols.push_back(aggregation_fns[i](col_to_use, stream));
             col_to_use = fn_cols[fn_cols.size() - 1]->view();
         }
         aggregation_requests[i].values = col_to_use;
@@ -103,7 +104,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     for (auto& agg_result : result.second) {
         for (auto& c : agg_result.results) {
             if (post_agg_fns[cur_col] != nullptr) {
-                c = post_agg_fns[cur_col](c->view());
+                c = post_agg_fns[cur_col](c->view(), stream);
             }
             cols.push_back(std::move(c));
             cur_col++;
@@ -168,7 +169,8 @@ void CudaGroupbyState::build_consume_batch(
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
-    bool& out_is_last, bool produce_output) {
+    bool& out_is_last, bool produce_output,
+    rmm::cuda_stream_view& output_stream) {
     out_is_last = true;
 
     // Will happen on non-GPU ranks.
@@ -180,14 +182,16 @@ std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     // all the other nodes.  If there are any final merges to collapse
     // multiple columns back down to one then run them here.
     if (final_merges.size() > 0) {
-        accumulation = apply_final_merges(accumulation->view(), final_merges);
+        accumulation = apply_final_merges(accumulation->view(), final_merges,
+                                          output_stream);
     }
 
     return std::move(accumulation);
 }
 
 std::unique_ptr<cudf::table> apply_final_merges(
-    cudf::table_view const& input, std::vector<FinalMerge> const& merges) {
+    cudf::table_view const& input, std::vector<FinalMerge> const& merges,
+    rmm::cuda_stream_view& output_stream) {
     int ncols = input.num_columns();
 
     // Build a quick lookup: for each column index, which merge (if any) owns
@@ -213,7 +217,7 @@ std::unique_ptr<cudf::table> apply_final_merges(
             views.push_back(input.column(idx));
         }
 
-        merged_results[m] = fm.fn(views);
+        merged_results[m] = fm.fn(views, output_stream);
     }
 
     // Build output columns
@@ -246,7 +250,8 @@ std::unique_ptr<cudf::table> apply_final_merges(
 }
 
 std::unique_ptr<cudf::column> mean_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     if (input_cols.size() != 2) {
         throw std::runtime_error("mean_final_merge didn't get 2 columns.");
     }
@@ -259,19 +264,22 @@ std::unique_ptr<cudf::column> mean_final_merge(
     cudf::data_type out_type{cudf::type_id::FLOAT64};
 
     // Perform elementwise division: sum / count
-    auto mean_col = cudf::binary_operation(
-        sum_col, count_col, cudf::binary_operator::DIV, out_type);
+    auto mean_col =
+        cudf::binary_operation(sum_col, count_col, cudf::binary_operator::DIV,
+                               out_type, output_stream);
 
     return mean_col;
 }
 
 std::unique_ptr<cudf::column> distinct_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     return nullptr;  // distinct just drops the fake count col
 }
 
 std::unique_ptr<cudf::column> var_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     if (input_cols.size() != 3) {
         throw std::runtime_error("var_final_merge didn't get 3 columns.");
     }
@@ -284,41 +292,47 @@ std::unique_ptr<cudf::column> var_final_merge(
 
     auto sum_sq =
         cudf::binary_operation(sum_col, sum_col, cudf::binary_operator::MUL,
-                               sum_col.type()  // preserve dtype of sum_col
-        );
+                               sum_col.type(),  // preserve dtype of sum_col
+                               output_stream);
 
-    auto sum_sq_div_n = cudf::binary_operation(
-        sum_sq->view(), count_col, cudf::binary_operator::DIV, out_type);
+    auto sum_sq_div_n = cudf::binary_operation(sum_sq->view(), count_col,
+                                               cudf::binary_operator::DIV,
+                                               out_type, output_stream);
 
-    auto numerator = cudf::binary_operation(
-        sumsq_col, sum_sq_div_n->view(), cudf::binary_operator::SUB, out_type);
+    auto numerator = cudf::binary_operation(sumsq_col, sum_sq_div_n->view(),
+                                            cudf::binary_operator::SUB,
+                                            out_type, output_stream);
 
     auto one_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(1);
     auto denom = cudf::binary_operation(count_col, *one_scalar,
-                                        cudf::binary_operator::SUB, out_type);
+                                        cudf::binary_operator::SUB, out_type,
+                                        output_stream);
 
-    auto variance = cudf::binary_operation(
-        numerator->view(), denom->view(), cudf::binary_operator::DIV, out_type);
+    auto variance = cudf::binary_operation(numerator->view(), denom->view(),
+                                           cudf::binary_operator::DIV, out_type,
+                                           output_stream);
 
     return variance;
 }
 
 std::unique_ptr<cudf::column> std_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     if (input_cols.size() != 3) {
         throw std::runtime_error("std_final_merge didn't get 3 columns.");
     }
 
-    auto variance = var_final_merge(input_cols);
+    auto variance = var_final_merge(input_cols, output_stream);
 
-    auto stddev =
-        cudf::unary_operation(variance->view(), cudf::unary_operator::SQRT);
+    auto stddev = cudf::unary_operation(
+        variance->view(), cudf::unary_operator::SQRT, output_stream);
 
     return stddev;
 }
 
 std::unique_ptr<cudf::column> skew_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     if (input_cols.size() != 4) {
         throw std::runtime_error("skew_final_merge didn't get 4 columns.");
     }
@@ -331,23 +345,27 @@ std::unique_ptr<cudf::column> skew_final_merge(
     cudf::data_type out_type{cudf::type_id::FLOAT64};
 
     // ------------ means -------------
-    auto mean = cudf::binary_operation(sum_col, count_col,
-                                       cudf::binary_operator::DIV, out_type);
+    auto mean =
+        cudf::binary_operation(sum_col, count_col, cudf::binary_operator::DIV,
+                               out_type, output_stream);
 
-    auto mean_squared = cudf::binary_operation(
-        mean->view(), mean->view(), cudf::binary_operator::MUL, out_type);
+    auto mean_squared = cudf::binary_operation(mean->view(), mean->view(),
+                                               cudf::binary_operator::MUL,
+                                               out_type, output_stream);
 
-    auto mean_cubed =
-        cudf::binary_operation(mean_squared->view(), mean->view(),
-                               cudf::binary_operator::MUL, out_type);
+    auto mean_cubed = cudf::binary_operation(mean_squared->view(), mean->view(),
+                                             cudf::binary_operator::MUL,
+                                             out_type, output_stream);
 
     // ------------- population mean 2 --------------
 
-    auto Q_over_N = cudf::binary_operation(
-        sumsq_col, count_col, cudf::binary_operator::DIV, out_type);
+    auto Q_over_N =
+        cudf::binary_operation(sumsq_col, count_col, cudf::binary_operator::DIV,
+                               out_type, output_stream);
 
     auto mu2 = cudf::binary_operation(Q_over_N->view(), mean_squared->view(),
-                                      cudf::binary_operator::SUB, out_type);
+                                      cudf::binary_operator::SUB, out_type,
+                                      output_stream);
 
     // ------------- population mean 3 --------------
 
@@ -355,107 +373,131 @@ std::unique_ptr<cudf::column> skew_final_merge(
     auto two_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(2);
     auto three_scalar = std::make_unique<cudf::numeric_scalar<int32_t>>(3);
 
-    auto M_over_N = cudf::binary_operation(
-        sumcube_col, count_col, cudf::binary_operator::DIV, out_type);
+    auto M_over_N = cudf::binary_operation(sumcube_col, count_col,
+                                           cudf::binary_operator::DIV, out_type,
+                                           output_stream);
 
-    auto three_mu = cudf::binary_operation(
-        mean->view(), *three_scalar, cudf::binary_operator::MUL, out_type);
+    auto three_mu = cudf::binary_operation(mean->view(), *three_scalar,
+                                           cudf::binary_operator::MUL, out_type,
+                                           output_stream);
 
-    auto three_mu_Q_over_N =
-        cudf::binary_operation(three_mu->view(), Q_over_N->view(),
-                               cudf::binary_operator::MUL, out_type);
+    auto three_mu_Q_over_N = cudf::binary_operation(
+        three_mu->view(), Q_over_N->view(), cudf::binary_operator::MUL,
+        out_type, output_stream);
 
     auto two_mu3 = cudf::binary_operation(mean_cubed->view(), *two_scalar,
-                                          cudf::binary_operator::MUL, out_type);
+                                          cudf::binary_operator::MUL, out_type,
+                                          output_stream);
 
-    auto mu3_tmp =
-        cudf::binary_operation(M_over_N->view(), three_mu_Q_over_N->view(),
-                               cudf::binary_operator::SUB, out_type);
+    auto mu3_tmp = cudf::binary_operation(
+        M_over_N->view(), three_mu_Q_over_N->view(), cudf::binary_operator::SUB,
+        out_type, output_stream);
 
     auto mu3 = cudf::binary_operation(mu3_tmp->view(), two_mu3->view(),
-                                      cudf::binary_operator::ADD, out_type);
+                                      cudf::binary_operator::ADD, out_type,
+                                      output_stream);
 
     // ---------- convert population to sample ------------
 
-    auto N_minus_1 = cudf::binary_operation(
-        count_col, *one_scalar, cudf::binary_operator::SUB, count_col.type());
+    auto N_minus_1 = cudf::binary_operation(count_col, *one_scalar,
+                                            cudf::binary_operator::SUB,
+                                            count_col.type(), output_stream);
 
-    auto N_minus_2 = cudf::binary_operation(
-        count_col, *two_scalar, cudf::binary_operator::SUB, count_col.type());
+    auto N_minus_2 = cudf::binary_operation(count_col, *two_scalar,
+                                            cudf::binary_operator::SUB,
+                                            count_col.type(), output_stream);
 
     // m2 = (N / (N-1)) * μ2
-    auto N_over_Nm1 = cudf::binary_operation(
-        count_col, N_minus_1->view(), cudf::binary_operator::DIV, out_type);
+    auto N_over_Nm1 = cudf::binary_operation(count_col, N_minus_1->view(),
+                                             cudf::binary_operator::DIV,
+                                             out_type, output_stream);
 
     auto m2 = cudf::binary_operation(mu2->view(), N_over_Nm1->view(),
-                                     cudf::binary_operator::MUL, out_type);
+                                     cudf::binary_operator::MUL, out_type,
+                                     output_stream);
 
     // m3 = (N^2 / ((N-1)(N-2))) * μ3
-    auto N_sq = cudf::binary_operation(count_col, count_col,
-                                       cudf::binary_operator::MUL, out_type);
+    auto N_sq =
+        cudf::binary_operation(count_col, count_col, cudf::binary_operator::MUL,
+                               out_type, output_stream);
 
     auto Nm1_Nm2 = cudf::binary_operation(N_minus_1->view(), N_minus_2->view(),
-                                          cudf::binary_operator::MUL, out_type);
+                                          cudf::binary_operator::MUL, out_type,
+                                          output_stream);
 
-    auto Nsq_over = cudf::binary_operation(
-        N_sq->view(), Nm1_Nm2->view(), cudf::binary_operator::DIV, out_type);
+    auto Nsq_over = cudf::binary_operation(N_sq->view(), Nm1_Nm2->view(),
+                                           cudf::binary_operator::DIV, out_type,
+                                           output_stream);
 
     auto m3 = cudf::binary_operation(mu3->view(), Nsq_over->view(),
-                                     cudf::binary_operator::MUL, out_type);
+                                     cudf::binary_operator::MUL, out_type,
+                                     output_stream);
 
     // -------------- skew -------------
 
     auto m2_sq = cudf::binary_operation(m2->view(), m2->view(),
-                                        cudf::binary_operator::MUL, out_type);
+                                        cudf::binary_operator::MUL, out_type,
+                                        output_stream);
 
     auto m2_cu = cudf::binary_operation(m2_sq->view(), m2->view(),
-                                        cudf::binary_operator::MUL, out_type);
+                                        cudf::binary_operator::MUL, out_type,
+                                        output_stream);
 
-    auto denom =
-        cudf::unary_operation(m2_cu->view(), cudf::unary_operator::SQRT);
+    auto denom = cudf::unary_operation(
+        m2_cu->view(), cudf::unary_operator::SQRT, output_stream);
 
     auto skew = cudf::binary_operation(m3->view(), denom->view(),
-                                       cudf::binary_operator::DIV, out_type);
+                                       cudf::binary_operator::DIV, out_type,
+                                       output_stream);
 
     return skew;
 }
 
 std::unique_ptr<cudf::column> nunique_final_merge(
-    const std::vector<cudf::column_view>& input_cols) {
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
     if (input_cols.size() != 1) {
         throw std::runtime_error("nunique_final_merge didn't get 1 column.");
     }
 
     auto const& collect_set_col = input_cols[0];
 
-    auto nunique_col = cudf::lists::count_elements(collect_set_col);
+    auto nunique_col =
+        cudf::lists::count_elements(collect_set_col, output_stream);
 
     return nunique_col;
 }
 
-std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col) {
+std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col,
+                                         rmm::cuda_stream_view& output_stream) {
     return cudf::binary_operation(input_col, input_col,
-                                  cudf::binary_operator::MUL, input_col.type());
+                                  cudf::binary_operator::MUL, input_col.type(),
+                                  output_stream);
 }
 
-std::unique_ptr<cudf::column> cubed_col(const cudf::column_view& input_col) {
-    auto squared = square_col(input_col);
+std::unique_ptr<cudf::column> cubed_col(const cudf::column_view& input_col,
+                                        rmm::cuda_stream_view& output_stream) {
+    auto squared = square_col(input_col, output_stream);
     return cudf::binary_operation(input_col, squared->view(),
-                                  cudf::binary_operator::MUL, input_col.type());
+                                  cudf::binary_operator::MUL, input_col.type(),
+                                  output_stream);
 }
 
-std::unique_ptr<cudf::column> cast_int64(const cudf::column_view& input_col) {
-    return cudf::cast(input_col, cudf::data_type{cudf::type_id::INT64});
+std::unique_ptr<cudf::column> cast_int64(const cudf::column_view& input_col,
+                                         rmm::cuda_stream_view& output_stream) {
+    return cudf::cast(input_col, cudf::data_type{cudf::type_id::INT64},
+                      output_stream);
 }
 
-std::unique_ptr<cudf::table> nunique_pre_agg(const cudf::table_view& tv,
-                                             cudf::size_type col_index) {
+std::unique_ptr<cudf::table> nunique_pre_agg(
+    const cudf::table_view& tv, cudf::size_type col_index,
+    rmm::cuda_stream_view& output_stream) {
     cudf::size_type ncols = static_cast<cudf::size_type>(tv.num_columns());
     if (col_index < 0 || col_index >= ncols) {
         throw std::out_of_range("explode: column index out of range");
     }
 
-    return cudf::explode(tv, col_index);
+    return cudf::explode(tv, col_index, output_stream);
 }
 
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
