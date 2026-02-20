@@ -226,7 +226,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         bool out_is_last = false;
         std::unique_ptr<cudf::table> next_batch;
         next_batch = std::move(groupby_state->produce_output_batch(
-            out_is_last /* output */, true));
+            out_is_last /* output */, true, se->stream));
         this->metrics.produce_time += end_timer(start_produce);
         GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
         return {out_table_info, out_is_last ? OperatorResult::FINISHED
