@@ -20,13 +20,16 @@
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/io/file.h>
+#include <arrow/python/api.h>
 #include <mpi_proto.h>
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
+#include "../io/arrow_compat.h"
 
 #include <glob.h>
-#include <filesystem>
+#include <cstddef>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -34,7 +37,23 @@
 #include <string>
 #include <vector>
 
-namespace fs = std::filesystem;
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                        \
+    if (expr) {                                                 \
+        throw std::runtime_error(std::string("fs_io: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 struct FilePart {
     std::string path;
@@ -68,10 +87,11 @@ class RankBatchGenerator {
 
         if (files_.size() == 1) {
             // single file -> partition by row groups
-            parts_ = partition_by_row_groups(files_[0], rank_, size_);
+            parts_ =
+                partition_by_row_groups(files_[0], filesystem_, rank_, size_);
         } else {
             // multi-file dataset -> partition by file (block partition)
-            parts_ = partition_by_files(files_, rank_, size_);
+            parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
 
         current_part_idx_ = 0;
@@ -129,13 +149,32 @@ class RankBatchGenerator {
                 continue;
             }
 
+            // Use Arrow filesystem to read the file into a buffer
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+            CHECK_ARROW_AND_ASSIGN(
+                filesystem_->OpenInputFile(part.path),
+                "Error opening file via Arrow filesystem: " + part.path,
+                arrow_file);
+
+            std::shared_ptr<arrow::Buffer> file_buffer;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow_file->ReadAt(0, arrow_file->GetSize().ValueOrDie()),
+                "Error reading file via Arrow filesystem: " + part.path,
+                file_buffer);
+
+            cudf::host_span<const std::byte> host_data =
+                cudf::host_span<const std::byte>(
+                    reinterpret_cast<const std::byte *>(file_buffer->data()),
+                    file_buffer->size());
+
+            cudf::io::source_info source_info(host_data);
+
             // Read whole row group current_rg_ from part.path into GPU using
             // cuDF Build cudf::io::parquet_reader_options to request a single
             // row group.
             try {
                 cudf::io::parquet_reader_options reader_opts =
-                    cudf::io::parquet_reader_options::builder(
-                        cudf::io::source_info(part.path))
+                    cudf::io::parquet_reader_options::builder(source_info)
                         .row_groups(std::vector<std::vector<int>>{
                             std::vector<int>{current_rg_}})
                         .build();
@@ -230,7 +269,14 @@ class RankBatchGenerator {
             throw std::runtime_error("python");
         }
 
-        this->filesystem_ = PyObject_GetAttrString(ds, "filesystem");
+        PyObjectPtr py_filesystem = PyObject_GetAttrString(ds, "filesystem");
+
+        ensure_pa_wrappers_imported();
+
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_filesystem(py_filesystem.get()),
+            "Error during Parquet read: Failed to unwrap Arrow filesystem",
+            this->filesystem_);
 
         // all_pieces = ds.pieces
         PyObjectPtr all_pieces = PyObject_GetAttrString(ds, "pieces");
@@ -256,16 +302,20 @@ class RankBatchGenerator {
     // Partition a single file by row groups into contiguous chunks for each
     // rank
     static std::vector<FilePart> partition_by_row_groups(
-        const std::string &file, int rank, int size) {
+        const std::string &file,
+        std::shared_ptr<arrow::fs::FileSystem> filesystem, int rank, int size) {
         std::vector<FilePart> result;
         // Use Arrow/Parquet to get num_row_groups cheaply
         int total_rg = 0;
         try {
-            std::shared_ptr<arrow::io::ReadableFile> infile;
-            PARQUET_ASSIGN_OR_THROW(infile,
-                                    arrow::io::ReadableFile::Open(file));
+            // Use Arrow filesystem to read the file into a buffer
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+            CHECK_ARROW_AND_ASSIGN(
+                filesystem->OpenInputFile(file),
+                "Error opening file via Arrow filesystem: " + file, arrow_file);
+
             std::unique_ptr<parquet::ParquetFileReader> pf =
-                parquet::ParquetFileReader::Open(infile);
+                parquet::ParquetFileReader::Open(arrow_file);
             total_rg = pf->metadata()->num_row_groups();
         } catch (const std::exception &e) {
             std::cerr << "Failed to read parquet metadata for " << file << ": "
@@ -287,7 +337,8 @@ class RankBatchGenerator {
 
     // Partition files across ranks by block partitioning
     static std::vector<FilePart> partition_by_files(
-        const std::vector<std::string> &files, int rank, int size) {
+        const std::vector<std::string> &files,
+        std::shared_ptr<arrow::fs::FileSystem> filesystem, int rank, int size) {
         std::vector<FilePart> result;
         int total = static_cast<int>(files.size());
         int base = total / size;
@@ -298,11 +349,13 @@ class RankBatchGenerator {
             const std::string &f = files[i];
             int num_rg = 0;
             try {
-                std::shared_ptr<arrow::io::ReadableFile> infile;
-                PARQUET_ASSIGN_OR_THROW(infile,
-                                        arrow::io::ReadableFile::Open(f));
+                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+                CHECK_ARROW_AND_ASSIGN(
+                    filesystem->OpenInputFile(f),
+                    "Error opening file via Arrow filesystem: " + f,
+                    arrow_file);
                 std::unique_ptr<parquet::ParquetFileReader> pf =
-                    parquet::ParquetFileReader::Open(infile);
+                    parquet::ParquetFileReader::Open(arrow_file);
                 num_rg = pf->metadata()->num_row_groups();
             } catch (const std::exception &e) {
                 std::cerr << "Failed to read parquet metadata for " << f << ": "
@@ -317,7 +370,7 @@ class RankBatchGenerator {
 
    private:
     PyObject *path_;
-    PyObjectPtr filesystem_;
+    std::shared_ptr<arrow::fs::FileSystem> filesystem_;
     std::size_t target_rows_;
     int rank_{0}, size_{1};
 
