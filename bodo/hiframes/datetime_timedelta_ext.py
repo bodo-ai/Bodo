@@ -1519,7 +1519,8 @@ def dt_timedelta_arr_setitem(A, ind, val):
             is_iterable_type(val)
             and val.dtype in (datetime_timedelta_type, pd_timedelta_type)
         )
-        or types.unliteral(val) in (datetime_timedelta_type, pd_timedelta_type)
+        or types.unliteral(val)
+        in (datetime_timedelta_type, pd_timedelta_type, bodo.types.timedelta64ns)
     ):
         raise BodoError(typ_err_msg)
 
@@ -1639,6 +1640,15 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                     A._data[i] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
+        elif types.unliteral(val) == bodo.types.timedelta64ns:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = val
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_slice_scalar
