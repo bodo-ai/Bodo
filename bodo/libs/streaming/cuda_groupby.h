@@ -59,6 +59,17 @@ std::unique_ptr<cudf::table> apply_final_merges(
     cudf::table_view const &input, std::vector<FinalMerge> const &merges,
     rmm::cuda_stream_view &output_stream);
 
+using col_to_col_fn = std::unique_ptr<cudf::column> (*)(
+    const cudf::column_view &, rmm::cuda_stream_view &);
+
+using col_to_col_fn_vec = std::vector<col_to_col_fn>;
+
+using tbl_to_tbl_fn = std::unique_ptr<cudf::table> (*)(const cudf::table_view &,
+                                                       cudf::size_type,
+                                                       rmm::cuda_stream_view &);
+
+using tbl_to_tbl_fn_vec = std::vector<tbl_to_tbl_fn>;
+
 class CudaGroupbyState {
    private:
     bool all_local_done = false;
@@ -68,29 +79,17 @@ class CudaGroupbyState {
     std::vector<uint64_t> key_indices;
     std::vector<uint64_t> column_indices;
     std::vector<cudf::groupby::aggregation_request> aggregation_requests;
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                  rmm::cuda_stream_view &)>
-        aggregation_fns;
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                  rmm::cuda_stream_view &)>
-        post_agg_fns;
-    std::vector<std::unique_ptr<cudf::table> (*)(
-        const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-        pre_agg_table_fns;
+    col_to_col_fn_vec aggregation_fns;
+    col_to_col_fn_vec post_agg_fns;
+    tbl_to_tbl_fn_vec pre_agg_table_fns;
 
     std::vector<cudf::size_type> shuffle_key_indices;
     std::vector<uint64_t> merge_key_indices;
     std::vector<uint64_t> merge_column_indices;
     std::vector<cudf::groupby::aggregation_request> merge_aggregation_requests;
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                  rmm::cuda_stream_view &)>
-        merge_aggregation_fns;
-    std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                  rmm::cuda_stream_view &)>
-        post_merge_agg_fns;
-    std::vector<std::unique_ptr<cudf::table> (*)(
-        const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-        pre_merge_agg_table_fns;
+    col_to_col_fn_vec merge_aggregation_fns;
+    col_to_col_fn_vec post_merge_agg_fns;
+    tbl_to_tbl_fn_vec pre_merge_agg_table_fns;
 
     std::unique_ptr<cudf::table> accumulation;
     std::vector<FinalMerge> final_merges;
@@ -99,35 +98,17 @@ class CudaGroupbyState {
         cudf::table_view const &input, std::vector<uint64_t> &key_indices,
         std::vector<uint64_t> &column_indices,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
-        std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                      rmm::cuda_stream_view &)>
-            &aggregation_fns,
-        std::vector<std::unique_ptr<cudf::column> (*)(
-            const cudf::column_view &, rmm::cuda_stream_view &)> &post_agg_fns,
-        std::vector<std::unique_ptr<cudf::table> (*)(
-            const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-            &pre_agg_table_fns,
-        rmm::cuda_stream_view &stream);
+        col_to_col_fn_vec &aggregation_fns, col_to_col_fn_vec &post_agg_fns,
+        tbl_to_tbl_fn_vec &pre_agg_table_fns, rmm::cuda_stream_view &stream);
 
     void add_agg_entry(
         std::unique_ptr<cudf::groupby_aggregation> agg,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
-        std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                      rmm::cuda_stream_view &)>
-            &aggregation_fns,
-        std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                      rmm::cuda_stream_view &)>
-            &post_aggregation_fns,
-        std::vector<std::unique_ptr<cudf::table> (*)(
-            const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-            &pre_aggregation_table_fns,
-        std::unique_ptr<cudf::column> (*fn)(const cudf::column_view &,
-                                            rmm::cuda_stream_view &) = nullptr,
-        std::unique_ptr<cudf::column> (*post_agg_fn)(
-            const cudf::column_view &, rmm::cuda_stream_view &) = nullptr,
-        std::unique_ptr<cudf::table> (*pre_agg_table_fn)(
-            const cudf::table_view &, cudf::size_type,
-            rmm::cuda_stream_view &) = nullptr) {
+        col_to_col_fn_vec &aggregation_fns,
+        col_to_col_fn_vec &post_aggregation_fns,
+        tbl_to_tbl_fn_vec &pre_aggregation_table_fns,
+        col_to_col_fn fn = nullptr, col_to_col_fn post_agg_fn = nullptr,
+        tbl_to_tbl_fn pre_agg_table_fn = nullptr) {
         cudf::groupby::aggregation_request req;
         req.aggregations.push_back(std::move(agg));
         aggregation_requests.push_back(std::move(req));
@@ -141,14 +122,8 @@ class CudaGroupbyState {
     void bodo_agg_to_cudf(
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
-        std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                      rmm::cuda_stream_view &)>
-            &aggregation_fns,
-        std::vector<std::unique_ptr<cudf::column> (*)(
-            const cudf::column_view &, rmm::cuda_stream_view &)> &post_agg_fns,
-        std::vector<std::unique_ptr<cudf::table> (*)(
-            const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-            &pre_aggregation_table_fns) {
+        col_to_col_fn_vec &aggregation_fns, col_to_col_fn_vec &post_agg_fns,
+        tbl_to_tbl_fn_vec &pre_aggregation_table_fns) {
         switch (ftype) {
             case Bodo_FTypes::sum:
                 add_agg_entry(
@@ -253,14 +228,8 @@ class CudaGroupbyState {
     void bodo_agg_to_merge_cudf(
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
-        std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view &,
-                                                      rmm::cuda_stream_view &)>
-            &aggregation_fns,
-        std::vector<std::unique_ptr<cudf::column> (*)(
-            const cudf::column_view &, rmm::cuda_stream_view &)> &post_agg_fns,
-        std::vector<std::unique_ptr<cudf::table> (*)(
-            const cudf::table_view &, cudf::size_type, rmm::cuda_stream_view &)>
-            &pre_aggregation_table_fns) {
+        col_to_col_fn_vec &aggregation_fns, col_to_col_fn_vec &post_agg_fns,
+        tbl_to_tbl_fn_vec &pre_aggregation_table_fns) {
         switch (ftype) {
             case Bodo_FTypes::sum:
                 add_agg_entry(

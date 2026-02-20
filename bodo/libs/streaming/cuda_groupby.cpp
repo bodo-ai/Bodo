@@ -40,20 +40,15 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     cudf::table_view const& _input, std::vector<uint64_t>& key_indices,
     std::vector<uint64_t>& column_indices,
     std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
-    std::vector<std::unique_ptr<cudf::column> (*)(
-        const cudf::column_view&, rmm::cuda_stream_view&)>& aggregation_fns,
-    std::vector<std::unique_ptr<cudf::column> (*)(
-        const cudf::column_view&, rmm::cuda_stream_view&)>& post_agg_fns,
-    std::vector<std::unique_ptr<cudf::table> (*)(
-        const cudf::table_view&, cudf::size_type, rmm::cuda_stream_view&)>&
-        pre_agg_table_fns,
-    rmm::cuda_stream_view& stream) {
+    col_to_col_fn_vec& aggregation_fns, col_to_col_fn_vec& post_agg_fns,
+    tbl_to_tbl_fn_vec& pre_agg_table_fns, rmm::cuda_stream_view& stream) {
     cudf::table_view input = _input;
 
+    // Aggregations like nunique need to do whole table operations before
+    // the code below can do the merge.  For example, nunique will explode
+    // a column containing a list to multiple rows in the table.
     std::unique_ptr<cudf::table> hold_updated_table;
     for (size_t i = 0; i < pre_agg_table_fns.size(); ++i) {
-        std::cout << "pre agg check " << i << " " << pre_agg_table_fns[i]
-                  << std::endl;
         if (pre_agg_table_fns[i] != nullptr) {
             hold_updated_table =
                 pre_agg_table_fns[i](input, key_indices.size() + i, stream);
@@ -61,12 +56,13 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
         }
     }
 
-    // Suppose column 0 is the key, column 1 is the value
+    // Get the key columns from the input table.
     std::vector<cudf::column_view> key_columns;
     for (auto key_col : key_indices) {
         key_columns.push_back(input.column(key_col));
     }
 
+    // Create a view with just the key columns.
     cudf::table_view keys{key_columns};
     // Build the groupby object
     cudf::groupby::groupby gb_obj(keys, cudf::null_policy::EXCLUDE);
@@ -75,6 +71,8 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // Put the column view for the aggregations into aggregation_requests.
     for (size_t i = 0; i < column_indices.size(); ++i) {
         cudf::column_view col_to_use = input.column(column_indices[i]);
+        // Some aggregations like variance needs to things like square
+        // the column before aggregating with it.
         if (aggregation_fns[i] != nullptr) {
             fn_cols.push_back(aggregation_fns[i](col_to_use, stream));
             col_to_use = fn_cols[fn_cols.size() - 1]->view();
@@ -103,6 +101,9 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // Move aggregated values
     for (auto& agg_result : result.second) {
         for (auto& c : agg_result.results) {
+            // Right now this is only used to do casting of column
+            // types when the local groupby and merge groupby
+            // produce different column types.
             if (post_agg_fns[cur_col] != nullptr) {
                 c = post_agg_fns[cur_col](c->view(), stream);
             }
