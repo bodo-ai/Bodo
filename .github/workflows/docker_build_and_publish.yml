@@ -44,12 +44,20 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build and export Docker image
+    - name: Build and export Docker image amd64
       uses: docker/build-push-action@v6
       with:
         load: true
         file: ./buildscripts/docker/docker_release/Dockerfile
         tags: ${{ env.TEST_TAG }}
+        platforms: linux/amd64
+
+    - name: Build and export Docker image arm64 
+      uses: docker/build-push-action@v6
+      with:
+        file: ./buildscripts/docker/docker_release/Dockerfile
+        tags: ${{ env.TEST_TAG }}
+        platforms: linux/arm64
  
     - name: Test Jupyter notebooks inside the Docker image
       run: |
@@ -87,7 +95,5 @@ jobs:
       with:
         push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
-        # Don't publish linux arm until we can get nightly fixed
-        #platforms: linux/amd64, linux/arm64
-        platforms: linux/amd64
+        platforms: linux/amd64, linux/arm64
         tags: ${{ env.LATEST_TAG}}  
