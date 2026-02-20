@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 #include <cudf/lists/count_elements.hpp>
+#include <cudf/lists/explode.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/unary.hpp>
 #include <cudf/utilities/type_dispatcher.hpp>
@@ -36,14 +37,29 @@
 #define MAX_SHUFFLE_HASHTABLE_SIZE 50 * 1024 * 1024
 
 std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
-    cudf::table_view const& input, std::vector<uint64_t>& key_indices,
+    cudf::table_view const& _input, std::vector<uint64_t>& key_indices,
     std::vector<uint64_t>& column_indices,
     std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
         aggregation_fns,
     std::vector<std::unique_ptr<cudf::column> (*)(const cudf::column_view&)>&
         post_agg_fns,
+    std::vector<std::unique_ptr<cudf::table> (*)(
+        const cudf::table_view&, cudf::size_type)>& pre_agg_table_fns,
     rmm::cuda_stream_view& stream) {
+    cudf::table_view input = _input;
+
+    std::unique_ptr<cudf::table> hold_updated_table;
+    for (size_t i = 0; i < pre_agg_table_fns.size(); ++i) {
+        std::cout << "pre agg check " << i << " " << pre_agg_table_fns[i]
+                  << std::endl;
+        if (pre_agg_table_fns[i] != nullptr) {
+            hold_updated_table =
+                pre_agg_table_fns[i](input, key_indices.size() + i);
+            input = hold_updated_table->view();
+        }
+    }
+
     // Suppose column 0 is the key, column 1 is the value
     std::vector<cudf::column_view> key_columns;
     for (auto key_col : key_indices) {
@@ -95,7 +111,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     }
     if (cur_col != post_agg_fns.size()) {
         throw std::runtime_error(
-            "do_gropuby agg columns added not same size as post_agg_fns.");
+            "do_groupby agg columns added not same size as post_agg_fns.");
     }
 
     return std::make_unique<cudf::table>(std::move(cols));
@@ -115,7 +131,7 @@ void CudaGroupbyState::build_consume_batch(
         std::shared_ptr<cudf::table> new_data = std::move(
             do_groupby(input_table->view(), key_indices, column_indices,
                        aggregation_requests, aggregation_fns, post_agg_fns,
-                       local_groupby_se->stream));
+                       pre_agg_table_fns, local_groupby_se->stream));
         local_groupby_se->event.record(local_groupby_se->stream);
         merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
                                      local_groupby_se->event);
@@ -148,7 +164,7 @@ void CudaGroupbyState::build_consume_batch(
     accumulation = std::move(
         do_groupby(combined->view(), merge_key_indices, merge_column_indices,
                    merge_aggregation_requests, merge_aggregation_fns,
-                   post_merge_agg_fns, output_stream));
+                   post_merge_agg_fns, pre_merge_agg_table_fns, output_stream));
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
@@ -404,6 +420,19 @@ std::unique_ptr<cudf::column> skew_final_merge(
     return skew;
 }
 
+std::unique_ptr<cudf::column> nunique_final_merge(
+    const std::vector<cudf::column_view>& input_cols) {
+    if (input_cols.size() != 1) {
+        throw std::runtime_error("nunique_final_merge didn't get 1 column.");
+    }
+
+    auto const& collect_set_col = input_cols[0];
+
+    auto nunique_col = cudf::lists::count_elements(collect_set_col);
+
+    return nunique_col;
+}
+
 std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col) {
     return cudf::binary_operation(input_col, input_col,
                                   cudf::binary_operator::MUL, input_col.type());
@@ -417,6 +446,16 @@ std::unique_ptr<cudf::column> cubed_col(const cudf::column_view& input_col) {
 
 std::unique_ptr<cudf::column> cast_int64(const cudf::column_view& input_col) {
     return cudf::cast(input_col, cudf::data_type{cudf::type_id::INT64});
+}
+
+std::unique_ptr<cudf::table> nunique_pre_agg(const cudf::table_view& tv,
+                                             cudf::size_type col_index) {
+    cudf::size_type ncols = static_cast<cudf::size_type>(tv.num_columns());
+    if (col_index < 0 || col_index >= ncols) {
+        throw std::out_of_range("explode: column index out of range");
+    }
+
+    return cudf::explode(tv, col_index);
 }
 
 #undef MAX_SHUFFLE_HASHTABLE_SIZE
