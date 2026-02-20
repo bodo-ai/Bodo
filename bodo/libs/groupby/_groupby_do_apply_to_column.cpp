@@ -4,13 +4,34 @@
 #include <numeric>
 #include <stdexcept>
 
-#include <arrow/vendored/portable-snippets/safe-math.h>
-
 #include "../_bodo_common.h"
 #include "../_stl.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
+
+// From
+// https://github.com/dcleblanc/SafeInt/blob/1c94d38fe4c19fe17792de5e0f6619258c94bb30/safe_math_impl.h#L686
+// We were using arrow/vendored/portable-snippets/safe-math.h, but Arrow removed
+// this header due to to compatibility issues with Windows and switched to
+// vendoring SafeInt. We copy the relevant SafeInt function here to ensure
+// compatibility with Arrow.
+static inline bool check_add_int64_int64(int64_t a, int64_t b, int64_t* ret) {
+    int64_t tmp = (int64_t)((uint64_t)a + (uint64_t)b);
+    *ret = tmp;
+
+    if (a >= 0) {
+        // mixed sign cannot overflow
+        if (b >= 0 && tmp < a)
+            return false;
+    } else {
+        // lhs negative
+        if (b < 0 && tmp > a)
+            return false;
+    }
+
+    return true;
+}
 
 // Equivalent to arrow::Decimal128::FitsInPrecision(DECIMAL128_MAX_PRECISION).
 // This is used in Groupby-Sum for decimals.
@@ -1819,12 +1840,12 @@ void apply_to_column_nullable(
                     i_grp;                                                                                                                  \
                 arrow::Decimal128 out_val = *out_ptr;                                                                                       \
                 int64_t result_hi;                                                                                                          \
-                success &= psnip_safe_int64_add(                                                                                            \
-                    &result_hi, out_val.high_bits(), data_val.high_bits());                                                                 \
+                success &= check_add_int64_int64(                                                                                           \
+                    out_val.high_bits(), data_val.high_bits(), &result_hi);                                                                 \
                 uint64_t result_lo = out_val.low_bits() + data_val.low_bits();                                                              \
                 /* Handle carry bit from low bits */                                                                                        \
-                success &= psnip_safe_int64_add(                                                                                            \
-                    &result_hi, result_hi, result_lo < out_val.low_bits());                                                                 \
+                success &= check_add_int64_int64(                                                                                           \
+                    result_hi, result_lo < out_val.low_bits(), &result_hi);                                                                 \
                 arrow::Decimal128 result_decimal =                                                                                          \
                     arrow::Decimal128(result_hi, result_lo);                                                                                \
                 success &= Decimal128FitsInMaxPrecision(result_decimal);                                                                    \

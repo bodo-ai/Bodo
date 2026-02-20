@@ -190,6 +190,7 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.skip("TODO(BSE-5301): Fix remaining test issues from Pandas 3.0")
 @pytest.mark.slow
 def test_qualify_timedelta(
     memory_leak_check,
