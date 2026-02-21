@@ -79,13 +79,18 @@ std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
 
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
+    std::vector<cudf::table_view> build_views;
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
-    std::vector<cudf::table_view> build_views;
     for (const auto& chunk : build_chunks) {
         build_views.push_back(chunk->view());
     }
     this->_build_table = cudf::concatenate(build_views);
+    if (this->_build_table->num_rows() == 0) {
+        // If we don't have chunks we don't need a build table, we won't match
+        // anything
+        return;
+    }
 
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
@@ -107,7 +112,8 @@ void CudaHashJoin::FinalizeBuild() {
 
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
-        if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
+        if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL &&
+            this->_build_table->num_rows()) {
             auto [min, max] =
                 cudf::minmax(this->_build_table->get_column(col_idx).view());
             std::vector<std::unique_ptr<cudf::column>> columns;
@@ -167,12 +173,6 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
 
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk, cuda_event_wrapper event) {
-    if (!_join_handle &&
-        this->probe_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
-        throw std::runtime_error(
-            "Hash table not built. Call FinalizeBuild first.");
-    }
-
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
@@ -181,7 +181,7 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
         probe_shuffle_manager.progress();
-    if (shuffled_probe_chunks.empty() ||
+    if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr ||
         this->probe_shuffle_manager.get_mpi_comm() == MPI_COMM_NULL) {
         return empty_table_from_arrow_schema(
             this->output_schema->ToArrowSchema());
