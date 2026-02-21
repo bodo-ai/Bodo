@@ -23,6 +23,10 @@ This section provides guides to help you install and set up Bodo on your local m
 This guide demonstrates how to use BodoDataFrames and will walk you through important concepts such as
 lazy evaluation, optimizations and execution triggers, fallback to Pandas and user defined functions.
 
+## [GPU Acceleration in Bodo DataFrames][df_gpu]
+
+This guide discusses GPU acceleration of Bodo DataFrames and how this interacts with the CPU.  It describes how to enable GPU acceleration, certain environment variables useful for optimizing GPU execution, and which kinds of operations are supported or not supported on the GPU.
+
 ---
 
 ## [Iceberg][iceberg_intro]
