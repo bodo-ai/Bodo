@@ -11,6 +11,7 @@
 #include "physical/cte.h"
 #include "physical/filter.h"
 #if USE_CUDF
+#include "physical/gpu_aggregate.h"
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_project.h"
@@ -148,7 +149,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
         physical_op = std::make_shared<PhysicalFilter>(
             op, op.expressions, in_table_schema, col_ref_map);
     }
-#else
+#else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalFilter>> physical_op;
     physical_op = std::make_shared<PhysicalFilter>(
         op, op.expressions, in_table_schema, col_ref_map);
@@ -259,11 +260,26 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     }
 
     // Regular groupby aggregation with groups and expressions.
-    auto physical_agg =
-        std::make_shared<PhysicalAggregate>(in_table_schema, op);
-    // Finish the current pipeline with groupby build sink
-    // Create a new pipeline with groupby output as source
-    FinishPipelineOneOperator(physical_agg);
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalAggregate>,
+                 std::shared_ptr<PhysicalGPUAggregate>>
+        physical_op;
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op =
+            std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
+    } else {
+        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    }
+#else   // USE_CUDF
+    std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
+    physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+#endif  // USE_CUDF
+
+    // Finish the current pipeline with groupby build sink.
+    // Create a new pipeline with groupby output as source.
+    std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); }, physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
@@ -638,9 +654,24 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
     }
 
     // Regular groupby aggregation with groups and expressions.
-    auto physical_agg =
-        std::make_shared<PhysicalAggregate>(in_table_schema, op);
-    // Finish the current pipeline with groupby build sink
-    // Create a new pipeline with groupby output as source
-    FinishPipelineOneOperator(physical_agg);
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalAggregate>,
+                 std::shared_ptr<PhysicalGPUAggregate>>
+        physical_op;
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op =
+            std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
+    } else {
+        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    }
+#else   // USE_CUDF
+    std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
+    physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+#endif  // USE_CUDF
+
+    // Finish the current pipeline with groupby build sink.
+    // Create a new pipeline with groupby output as source.
+    std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); }, physical_op);
 }

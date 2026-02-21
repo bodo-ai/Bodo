@@ -2,6 +2,8 @@
 #include <mpi_proto.h>
 #include "vendored/simd-block-fixed-fpp.h"
 
+extern const bool G_USE_ASYNC = false;
+
 #ifdef USE_CUDF
 #include <thrust/execution_policy.h>
 #include <thrust/transform.h>
@@ -75,26 +77,28 @@ void GpuShuffleManager::initialize_nccl() {
 
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
-    const std::vector<cudf::size_type>& partition_indices) {
+    const std::vector<cudf::size_type>& partition_indices,
+    cuda_event_wrapper event) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.emplace_back(std::move(table), partition_indices);
+    this->tables_to_shuffle.push_back(
+        ShuffleTableInfo(table, partition_indices, event));
 }
 
 void GpuShuffleManager::do_shuffle() {
     std::vector<cudf::packed_table> packed_tables;
-    if (!this->tables_to_shuffle.empty()) {
-        auto [table, partition_indices] =
-            std::move(this->tables_to_shuffle.back());
+    if (data_ready_to_send()) {
+        ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
         this->tables_to_shuffle.pop_back();
 
         // Hash partition the table
         auto [partitioned_table, partition_start_rows] = hash_partition_table(
-            table, partition_indices, n_ranks, this->stream);
+            shuffle_table_info.table, shuffle_table_info.partition_indices,
+            n_ranks, this->stream);
 
         assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
         // Contiguous splits requires the split indices excluding the first 0
@@ -156,7 +160,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         // send 1, ranks without data send 0, this way all ranks will know when
         // a shuffle is needed and can call progress to start it
         this->shuffle_coordination.has_data =
-            this->tables_to_shuffle.empty() ? 0 : 1;
+            this->data_ready_to_send() ? 1 : 0;
         CHECK_MPI(
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,
@@ -353,8 +357,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->recv_data();
         this->send_data();
         CHECK_NCCL(ncclGroupEnd());
-        CHECK_CUDA(cudaEventRecord(this->nccl_recv_event, this->stream));
-        CHECK_CUDA(cudaEventRecord(this->nccl_send_event, this->stream));
+        this->nccl_recv_event.record(this->stream);
+        this->nccl_send_event.record(this->stream);
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
@@ -371,7 +375,7 @@ GpuShuffle::progress_waiting_for_data() {
     // Check if NCCL event has completed, this will return cudaSuccess if the
     // event has completed, cudaErrorNotReady if not yet completed,
     // or another error code if an error occurred.
-    cudaError_t event_status = cudaEventQuery(nccl_recv_event);
+    cudaError_t event_status = nccl_recv_event.query();
     // Check for errors
     if (event_status != cudaErrorNotReady) {
         CHECK_CUDA(event_status);
@@ -436,7 +440,7 @@ void GpuShuffle::progress_sending_data() {
     // Check if NCCL event has completed, this will return cudaSuccess if the
     // event has completed, cudaErrorNotReady if not yet completed,
     // or another error code if an error occurred.
-    cudaError_t event_status = cudaEventQuery(nccl_send_event);
+    cudaError_t event_status = nccl_send_event.query();
     // Check for errors
     if (event_status != cudaErrorNotReady) {
         CHECK_CUDA(event_status);

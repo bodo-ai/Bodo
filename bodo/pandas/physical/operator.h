@@ -7,6 +7,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
+#include "../../libs/gpu_utils.h"
 #endif
 #include <memory>
 #include <typeinfo>
@@ -48,80 +49,20 @@ enum class OperatorResult : uint8_t {
     FINISHED = 2,
 };
 
-extern const bool G_USE_ASYNC;
-
-#ifdef USE_CUDF
-
-struct cuda_event_wrapper {
-    cudaEvent_t ev;
-
-    cuda_event_wrapper() {
-        cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
-    }
-
-    ~cuda_event_wrapper() {
-        if (ev) {
-            cudaEventDestroy(ev);
-        }
-    }
-
-    // Disable copy
-    cuda_event_wrapper(const cuda_event_wrapper&) = delete;
-    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = delete;
-
-    // Enable move
-    cuda_event_wrapper(cuda_event_wrapper&& other) noexcept {
-        ev = other.ev;
-        other.ev = nullptr;
-    }
-
-    cuda_event_wrapper& operator=(cuda_event_wrapper&& other) noexcept {
-        if (this != &other) {
-            if (ev)
-                cudaEventDestroy(ev);
-            ev = other.ev;
-            other.ev = nullptr;
-        }
-        return *this;
-    }
-
-    void record(rmm::cuda_stream_view stream) {
-        cudaEventRecord(ev, stream.value());
-    }
-
-    void wait(rmm::cuda_stream_view stream) const {
-        cudaStreamWaitEvent(stream.value(), ev, 0);
-    }
-};
-
-struct StreamAndEvent {
-    rmm::cuda_stream_view stream;
-    cuda_event_wrapper event;
-
-    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper&& e)
-        : stream(s), event(std::move(e)) {}
-};
-
-inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
-    if (use_async) {
-        // Create a new non-blocking CUDA stream
-        rmm::cuda_stream_view s{rmm::cuda_stream_per_thread};
-
-        // Create an unsignaled event (default constructor)
-        cuda_event_wrapper e;
-
-        return std::make_shared<StreamAndEvent>(s, std::move(e));
-    } else {
-        // Synchronous mode: use default stream
-        rmm::cuda_stream_view s = rmm::cuda_stream_default;
-
-        // Event is already completed
-        cuda_event_wrapper e;
-        e.record(s);
-
-        return std::make_shared<StreamAndEvent>(s, std::move(e));
+inline std::string toString(OperatorResult res) {
+    switch (res) {
+        case OperatorResult::NEED_MORE_INPUT:
+            return "NEED_MORE_INPUT";
+        case OperatorResult::HAVE_MORE_OUTPUT:
+            return "HAVE_MORE_OUTPUT";
+        case OperatorResult::FINISHED:
+            return "FINISHED";
+        default:
+            throw std::runtime_error("toString(OperatorResult) unknown result");
     }
 }
+
+#ifdef USE_CUDF
 
 std::shared_ptr<cudf::table> make_empty_like(
     std::shared_ptr<cudf::table> input_table,

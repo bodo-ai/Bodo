@@ -75,17 +75,27 @@ class PhysicalPlanBuilder {
     {
     }
 
-    template <typename T>
+    template <typename T,
+              std::enable_if_t<std::is_base_of_v<PhysicalSink, T> &&
+                                   std::is_base_of_v<PhysicalSource, T>,
+                               int> = 0>
     void FinishPipelineOneOperator(std::shared_ptr<T> obj) {
-        static_assert(std::is_base_of<PhysicalSink, T>::value,
-                      "T must derive from PhysicalSink");
-        static_assert(std::is_base_of<PhysicalSource, T>::value,
-                      "T must derive from PhysicalSource");
-
         std::shared_ptr<Pipeline> done_pipeline =
             active_pipeline->Build(std::static_pointer_cast<PhysicalSink>(obj));
         active_pipeline = std::make_shared<PipelineBuilder>(
             std::static_pointer_cast<PhysicalSource>(obj));
+        active_pipeline->addRunBefore(done_pipeline);
+    }
+
+    template <typename T,
+              std::enable_if_t<std::is_base_of_v<PhysicalGPUSink, T> &&
+                                   std::is_base_of_v<PhysicalGPUSource, T>,
+                               int> = 0>
+    void FinishPipelineOneOperator(std::shared_ptr<T> obj) {
+        std::shared_ptr<Pipeline> done_pipeline = active_pipeline->Build(
+            std::static_pointer_cast<PhysicalGPUSink>(obj));
+        active_pipeline = std::make_shared<PipelineBuilder>(
+            std::static_pointer_cast<PhysicalGPUSource>(obj));
         active_pipeline->addRunBefore(done_pipeline);
     }
 

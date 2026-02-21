@@ -9,14 +9,14 @@
 #include "physical/result_collector.h"
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result)   \
-    do {                                                            \
-        for (unsigned i = 0; i < idx; ++i)                          \
-            std::cout << " ";                                       \
-        std::cout << "Rank " << rank                                \
-                  << " midPipelineExecute before ConsumeBatch "     \
-                  << getNodeString(sink) << " "                     \
-                  << static_cast<int>(prev_op_result) << std::endl; \
+#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result)           \
+    do {                                                                    \
+        for (unsigned i = 0; i < idx; ++i)                                  \
+            std::cout << " ";                                               \
+        std::cout << "Rank " << rank                                        \
+                  << " midPipelineExecute before ConsumeBatch "             \
+                  << getNodeString(sink) << " " << toString(prev_op_result) \
+                  << std::endl;                                             \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result) \
@@ -25,14 +25,14 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result)    \
-    do {                                                            \
-        for (unsigned i = 0; i < idx; ++i)                          \
-            std::cout << " ";                                       \
-        std::cout << "Rank " << rank                                \
-                  << " midPipelineExecute after ConsumeBatch "      \
-                  << getNodeString(sink) << " "                     \
-                  << static_cast<int>(consume_result) << std::endl; \
+#define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result)            \
+    do {                                                                    \
+        for (unsigned i = 0; i < idx; ++i)                                  \
+            std::cout << " ";                                               \
+        std::cout << "Rank " << rank                                        \
+                  << " midPipelineExecute after ConsumeBatch "              \
+                  << getNodeString(sink) << " " << toString(consume_result) \
+                  << std::endl;                                             \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result) \
@@ -54,12 +54,12 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result)  \
-    do {                                                            \
-        std::cout << "Rank " << rank                                \
-                  << " Pipeline::Execute after ProduceBatch "       \
-                  << getNodeString(source) << " "                   \
-                  << static_cast<int>(produce_result) << std::endl; \
+#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result)            \
+    do {                                                                      \
+        std::cout << "Rank " << rank                                          \
+                  << " Pipeline::Execute after ProduceBatch "                 \
+                  << getNodeString(source) << " " << toString(produce_result) \
+                  << std::endl;                                               \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result) \
@@ -81,14 +81,14 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result)     \
-    do {                                                            \
-        for (unsigned i = 0; i < idx; ++i)                          \
-            std::cout << " ";                                       \
-        std::cout << "Rank " << rank                                \
-                  << " midPipelineExecute before ProcessBatch "     \
-                  << getNodeString(op) << " "                       \
-                  << static_cast<int>(prev_op_result) << std::endl; \
+#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result)           \
+    do {                                                                  \
+        for (unsigned i = 0; i < idx; ++i)                                \
+            std::cout << " ";                                             \
+        std::cout << "Rank " << rank                                      \
+                  << " midPipelineExecute before ProcessBatch "           \
+                  << getNodeString(op) << " " << toString(prev_op_result) \
+                  << std::endl;                                           \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result) \
@@ -97,14 +97,14 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result)      \
-    do {                                                            \
-        for (unsigned i = 0; i < idx; ++i)                          \
-            std::cout << " ";                                       \
-        std::cout << "Rank " << rank                                \
-                  << " midPipelineExecute after ProcessBatch "      \
-                  << getNodeString(op) << " "                       \
-                  << static_cast<int>(prev_op_result) << std::endl; \
+#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result)            \
+    do {                                                                  \
+        for (unsigned i = 0; i < idx; ++i)                                \
+            std::cout << " ";                                             \
+        std::cout << "Rank " << rank                                      \
+                  << " midPipelineExecute after ProcessBatch "            \
+                  << getNodeString(op) << " " << toString(prev_op_result) \
+                  << std::endl;                                           \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result) \
