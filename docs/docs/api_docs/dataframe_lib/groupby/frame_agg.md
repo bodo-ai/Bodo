@@ -2,6 +2,7 @@
 ```
 DataFrameGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame
 ```
+**GPU:** ✔ Supported
 
 Apply one or more aggregate functions to groups of data in a BodoDataFrame. This method is the same as `DataFrameGroupBy.aggregate`.
 

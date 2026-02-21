@@ -1,7 +1,9 @@
 GPU Acceleration for Bodo DataFrames {#df_gpu}
 =================
 
-This page describes Bodo’s CPU–GPU hybrid execution within [Bodo DataFrames](https://docs.bodo.ai/latest/guides/dataframes/dataframes_intro/#df_devguide) and uses terminology from that document, so it should be read first.  For hybrid execution, we discuss how GPU execution is enabled, what is supported today, configuration and tuning, and important caveats.
+This page describes Bodo’s CPU–GPU hybrid execution within [Bodo DataFrames][df_page] and uses terminology from that document, so it should be read first.  For hybrid execution, we discuss how GPU execution is enabled, what is supported today, configuration and tuning, and important caveats.
+
+[df_page]: dataframes_intro.md
 
 ## Overview
 
