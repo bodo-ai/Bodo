@@ -11,15 +11,17 @@ Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from
 
 ## Enabling GPU Hybrid Execution
 
-GPU execution is opt‑in. To enable GPU usage by the DataFrame system set:
+GPU execution is opt-in. To enable GPU usage by the DataFrame system set:
 
+```
 export BODO_GPU=1
+```
 
 If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only even if GPUs are present.
 
 ## How Placement is Decided
 
-Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different devices types, Bodo automatically inserts transfers between host and device as needed.
+Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
 
 ## Configuration and Tuning
 
@@ -27,7 +29,9 @@ Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to min
 
 GPUs generally prefer to work on larger chunks of data compared to CPU.  As such, Bodo has a separate GPU batch size that controls the size of batches flowing through the GPU with Bodo pipelines.  To set this batch size, use the following environment variable.
 
+```
 export BODO_GPU_STREAMING_BATCH_SIZE=320000   # default: 320K
+```
 
 Tune this value for your workload: larger batches increase GPU utilization but require more device memory.
 
@@ -35,8 +39,10 @@ Tune this value for your workload: larger batches increase GPU utilization but r
 
 Because Bodo pipelines data in fixed-sized batches through the GPU, lots of room exists to improve performance by re-using memory allocations.  Therefore, we suggest that users enable the RMM pooling (or arena) allocator.  For example:
 
+```
 export RMM_ALLOCATOR="pool"
 export RMM_POOL_INIT_SIZE="2GB"
+```
 
 Adjust RMM_POOL_INIT_SIZE to match your workload and available GPU memory.
 
@@ -44,11 +50,11 @@ Adjust RMM_POOL_INIT_SIZE to match your workload and available GPU memory.
 
 Below is a concise summary of broad capabilities that can run on GPU today, followed by specific caveats that may prevent a particular use of that capability from running on GPU.
 
-* Parquet read (local filesystem and S3 only)
+* Parquet read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
 * Parquet write (local filesystem only)
 
-* Row filtering (Pandas‑style boolean filters) — UDFs excluded
+* Row filtering (Pandas-style boolean filters) — UDFs excluded
 
 * Column selection and vectorized arithmetic / boolean ops — UDFs excluded
 
@@ -58,17 +64,15 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * drop_duplicates
 
+## Unsupported Capabilities
+
+No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
+
 ## Important Per-Feature Caveats
 
 ### Read Parquet
 
-GPU reads are supported only for Parquet files on the local filesystem and on S3.
-
 A plan that includes a head() (or other operations that force a small sample collection via Pandas) may prevent the Parquet read from running on GPU; in such cases the read may fall back to CPU to satisfy the sampling semantics.
-
-Other input formats
-
-No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
 ### Write Parquet
 
@@ -80,7 +84,7 @@ Vectorized boolean filters run on GPU. User-defined functions (UDFs) used inside
 
 ### Column expressions
 
-Column selection and built‑in arithmetic/boolean expressions are supported on GPU. UDFs are excluded.
+Column selection and built-in arithmetic/boolean expressions are supported on GPU. UDFs are excluded.
 
 ### GroupBy
 
@@ -92,7 +96,7 @@ Inner equi-joins are supported on GPU. Joins with non-equality predicates (range
 
 ## Troubleshooting
 
-If execution is slower than expected, confirm the operator in your plan are supported on GPU (see supported list).
+If execution is slower than expected, confirm the operators in your plan are supported on GPU (see supported list).
 
 If GPU profiling shows high allocation overhead, ensure RMM pooling is enabled and tuned to an appropriate value.
 
@@ -102,4 +106,4 @@ Unexpected CPU fallback
 
 ## Roadmap
 
-New I/O types and join variants are forthcoming.
+Write parquet to the same filesystems supported by read parquet is currently in progress. Additional join variants are forthcoming.
