@@ -98,8 +98,14 @@ If GPU profiling shows high allocation overhead, ensure RMM pooling is enabled a
 
 If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE or increase RMM_POOL_INIT_SIZE if memory is available.
 
-Unexpected CPU fallback
+### Unexpected CPU fallback
 
+If you expect a portion of your pipeline to run on GPU but it executes on CPU instead, check the following:
+
+* Verify that the operators involved are listed as GPU-supported in the sections above; unsupported operators will always run on CPU.
+* Ensure that GPU execution is enabled by setting `BODO_GPU=1` in the environment for the process running your code.
+* Look for unsupported constructs such as UDFs inside filters, column expressions, or aggregations, which can force CPU execution for those nodes.
+* Review your execution or plan diagnostics to confirm which nodes are placed on GPU vs CPU and adjust your code or configuration accordingly.
 ## Roadmap
 
 New I/O types and join variants are forthcoming.
