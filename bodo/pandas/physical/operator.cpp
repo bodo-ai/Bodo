@@ -35,8 +35,6 @@ int64_t get_parquet_chunk_size() {
                                 : 256e6;  // Default to 256 MiB
 }
 
-extern const bool G_USE_ASYNC = false;
-
 #ifdef USE_CUDF
 
 std::shared_ptr<cudf::table> make_empty_like(
