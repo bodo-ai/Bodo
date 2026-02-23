@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23...3.31 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.29...3.31 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
 # External Packages
@@ -15,6 +15,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
   set (X86 TRUE)
 else()
   set (X86 FALSE)
+endif()
+
+if (LINUX)
+    # Use mold for linking on Linux systems
+    set(CMAKE_LINKER_TYPE MOLD)
 endif()
 
 # ------------------------- Enable Compilation Caches -------------------------
@@ -112,29 +117,19 @@ if(WIN32)
 endif()
 
 # ----------------------------- Download Apache Datasketches -------------------------
-include(ExternalProject)
-ExternalProject_Add(datasketches
+set(BUILD_TESTS OFF CACHE BOOL "Disable datasketches tests" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "Disable datasketches examples" FORCE) 
+
+FetchContent_Declare(
+  datasketches
   GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
-  GIT_TAG 5.0.2
-  GIT_SHALLOW true
+  GIT_TAG        5.0.2
+  GIT_SHALLOW    TRUE
   GIT_SUBMODULES ""
-  INSTALL_DIR /tmp/datasketches-prefix
-  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/tmp/datasketches-prefix
-  # Override the install command to add DESTDIR
-  # This is necessary to work around an oddity in the RPM (but not other) package
-  # generation, as CMake otherwise picks up the Datasketch files when building
-  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
-  # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
-  LOG_CONFIGURE ON
-  LOG_BUILD ON
-  LOG_INSTALL ON
-  LOG_OUTPUT_ON_FAILURE ON
+  EXCLUDE_FROM_ALL
 )
 
-ExternalProject_Get_property(datasketches INSTALL_DIR)
-set(datasketches_INSTALL_DIR ${INSTALL_DIR})
-message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
+FetchContent_MakeAvailable(datasketches)
 
 # ---------------------------- Set CMake Options -----------------------------
 
@@ -722,7 +717,9 @@ cmake_print_variables(NO_HDF5)
 if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/physical/gpu_expression.cpp"
+    "bodo/pandas/physical/gpu_aggregate.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
+    "bodo/libs/streaming/cuda_groupby.cpp"
     "bodo/libs/gpu_utils.cpp"
     )
 endif()
@@ -739,7 +736,7 @@ target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOU
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 )
 target_link_libraries(ext PRIVATE
-  duckdb_static
+  duckdb_static datasketches
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -797,7 +794,6 @@ if (NOT WIN32)
 endif()
 
 target_link_directories(ext PRIVATE ${PYARROW_LIBRARY_DIRS} "${Python_NumPy_INCLUDE_DIR}/../lib")
-target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE
   npymath
@@ -863,6 +859,11 @@ if(USE_CUDF)
   message(STATUS "RMM include: ${RMM_INCLUDE_DIR} lib: ${RMM_LIBDIR}")
   add_library(rmm SHARED IMPORTED)
   set_target_properties(rmm PROPERTIES IMPORTED_LOCATION "${RMM_LIB}")
+  # Rapids defines
+  find_path(RAPIDS_INCLUDE_DIR NAMES cuda/memory_resource cuda/mr/any_resource HINTS "$ENV{CONDA_PREFIX}/include"
+      PATH_SUFFIXES rapids
+      REQUIRED)
+  message(STATUS "Rapids include: ${RAPIDS_INCLUDE_DIR}")
   # Rapids logger defines
   find_path(RAPIDS_LOGGER_INCLUDE_DIR NAMES rapids_logger/log_levels.h)
   find_library(RL_LIB NAMES librapids_logger.so)
@@ -906,7 +907,7 @@ if(USE_CUDF)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
-  target_include_directories(ext PRIVATE ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
+  target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
   target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
@@ -919,5 +920,5 @@ endif()
 # # Exclude Cython generated code from clang-tidy since it can hang
 # set_source_files_properties(bodo/pandas/plan_optimizer.cpp PROPERTIES CXX_CLANG_TIDY "")
 
-add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader tracing pyarrow_wrappers)
 install(TARGETS ext DESTINATION "bodo/")

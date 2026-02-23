@@ -739,7 +739,7 @@ def add_interval_util(start_dt, interval):
     elif is_valid_date_arg(start_dt):
         # If the time unit is smaller than or equal to hour, returns timestamp objects
         scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg0) + {box_str1}(arg1))\n"
-        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
+        out_dtype = bodo.types.DatetimeArrayType(None)
     # Modified logic from add_interval_xxx functions
     elif time_zone is not None:
         if (
@@ -785,7 +785,7 @@ def add_interval_util(start_dt, interval):
         # For regular timestamps, perform the standard arithmetic on the datetime and
         # interval after unwrapping them, then re-wrap the result
         scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
-        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
+        out_dtype = bodo.types.DatetimeArrayType(None)
 
     return gen_vectorized(
         arg_names,
@@ -1021,7 +1021,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
                 scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg1) + td)"
                 # If the time unit is smaller than or equal to hour, returns timestamp objects
-                out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
+                out_dtype = bodo.types.DatetimeArrayType(None)
 
         # Code path generated for timezone-aware data
         elif time_zone is not None:
@@ -1132,7 +1132,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             out_dtype = (
                 bodo.types.timestamptz_array_type
                 if is_timestamp_tz
-                else types.Array(bodo.types.datetime64ns, 1, "C")
+                else bodo.types.DatetimeArrayType(None)
             )
 
         return gen_vectorized(
@@ -1974,11 +1974,11 @@ def overload_date_trunc_util(
         scalar_text += "    else:\n"
         scalar_text += "        out_val = in_val.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
         scalar_text += "elif part_str == 'hour':\n"
-        scalar_text += "    out_val = in_val.floor('H')\n"
+        scalar_text += "    out_val = in_val.floor('h')\n"
         scalar_text += "elif part_str == 'minute':\n"
         scalar_text += "    out_val = in_val.floor('min')\n"
         scalar_text += "elif part_str == 'second':\n"
-        scalar_text += "    out_val = in_val.floor('S')\n"
+        scalar_text += "    out_val = in_val.floor('s')\n"
         scalar_text += "elif part_str == 'millisecond':\n"
         scalar_text += "    out_val = in_val.floor('ms')\n"
         scalar_text += "elif part_str == 'microsecond':\n"

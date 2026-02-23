@@ -66,6 +66,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.hiframes.pd_timestamp_ext import timedelta_methods
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_indexing import (
+    HeterogeneousSeriesIlocType,
     SeriesIatType,
     SeriesIlocType,
     SeriesLocType,
@@ -418,6 +419,13 @@ class SeriesPass:
             target_typ.index, HeterogeneousIndexType
         ):
             impl = bodo.hiframes.series_indexing.overload_series_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
+
+        # heterogenous Series.iloc[]
+        if isinstance(target_typ, HeterogeneousSeriesIlocType):
+            impl = bodo.hiframes.series_indexing.overload_heter_series_iloc_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
@@ -1168,6 +1176,15 @@ class SeriesPass:
             )
             return replace_func(self, impl, [arg1, arg2])
 
+        if rhs.fn == operator.sub and (
+            isinstance(typ1, bodo.types.DatetimeArrayType)
+            or isinstance(typ2, bodo.types.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.overload_sub_operator_datetime_arr(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
         if rhs.fn == operator.sub and typ2 == datetime_timedelta_type:
             if typ1 == datetime_date_array_type:
                 impl = (
@@ -1181,6 +1198,16 @@ class SeriesPass:
                     typ1, typ2
                 )
                 return replace_func(self, impl, [arg1, arg2])
+
+        if (
+            rhs.fn == operator.sub
+            and typ1 == datetime_timedelta_type
+            and typ2 == timedelta_array_type
+        ):
+            impl = bodo.hiframes.datetime_timedelta_ext.overload_sub_operator_datetime_timedelta(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
 
         # categorical array comparison
         if rhs.fn in (operator.eq, operator.ne) and isinstance(

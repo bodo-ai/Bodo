@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mpi_proto.h>
 #include <algorithm>
 #include <cstdint>
 #include <cudf/types.hpp>
@@ -157,10 +158,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             probe_kept_cols.push_back(idx);
         }
 
-        this->cuda_join = std::make_unique<CudaHashJoin>(
-            build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, cudf::null_equality::EQUAL);
-
         this->output_schema = std::make_shared<bodo::Schema>();
         for (const auto& kept_col : probe_kept_cols) {
             this->output_schema->column_types.push_back(
@@ -182,6 +179,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             std::vector<std::string>({}), std::vector<std::string>({}));
         this->arrow_schema = this->output_schema->ToArrowSchema();
 
+        this->cuda_join = std::make_unique<CudaHashJoin>(
+            build_keys, probe_keys, build_table_schema, probe_table_schema,
+            build_kept_cols, probe_kept_cols, output_schema,
+            cudf::null_equality::UNEQUAL);
+
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
     }
@@ -201,8 +203,16 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        cuda_join->BuildConsumeBatch(input_batch.table);
-        return prev_op_result == OperatorResult::FINISHED
+        cuda_join->BuildConsumeBatch(input_batch.table,
+                                     input_batch.stream_event->event);
+        if (prev_op_result == OperatorResult::FINISHED) {
+            // If we are finished consuming input but the shuffle is not
+            // complete, we need to wait for the shuffle to complete before we
+            // can be finished
+            cuda_join->build_shuffle_manager.complete();
+        }
+        return prev_op_result == OperatorResult::FINISHED &&
+                       cuda_join->build_shuffle_manager.all_complete()
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
     }
@@ -217,10 +227,25 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
         std::unique_ptr<cudf::table> output_table =
-            cuda_join->ProbeProcessBatch(input_batch.table);
+            cuda_join->ProbeProcessBatch(input_batch.table,
+                                         input_batch.stream_event->event);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
-        return {output_gpu_data, prev_op_result};
+
+        bool local_finished = prev_op_result == OperatorResult::FINISHED;
+        if (local_finished) {
+            // If we are finished consuming input but the shuffle is not
+            // complete, we need to wait for the shuffle to complete before we
+            // can be finished
+            cuda_join->probe_shuffle_manager.complete();
+        }
+
+        return {
+            output_gpu_data,
+            local_finished && cuda_join->probe_shuffle_manager.all_complete()
+                ? OperatorResult::FINISHED
+                : (local_finished ? OperatorResult::HAVE_MORE_OUTPUT
+                                  : OperatorResult::NEED_MORE_INPUT)};
     }
 
     /**

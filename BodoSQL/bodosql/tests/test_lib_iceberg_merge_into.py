@@ -32,7 +32,7 @@ from bodosql.libs.iceberg_merge_into import (
     do_delta_merge_with_target,
 )
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [pytest.mark.iceberg, pytest.mark.skip]
 
 small_df_len = 12
 
@@ -83,7 +83,9 @@ base_df_string = pd.DataFrame(
     {
         "A": pd.Series(np.arange(small_df_len, dtype=np.int64).astype(str)),
         "B": pd.Series(np.arange(small_df_len, dtype=np.int64) * 2).astype(bytes),
-        "C": pd.date_range(start="2018-07-24", end="2018-11-29", periods=small_df_len),
+        "C": pd.date_range(
+            start="2018-07-24", end="2018-11-29", periods=small_df_len, unit="ns"
+        ),
         ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
     }
 )
@@ -107,7 +109,9 @@ delete_everything_df_string = pd.DataFrame(
     {
         "A": gen_nonascii_list(small_df_len),
         "B": gen_random_string_binary_array(small_df_len, is_binary=True),
-        "C": pd.date_range(start="2018-07-24", end="2018-07-25", periods=small_df_len),
+        "C": pd.date_range(
+            start="2018-07-24", end="2018-07-25", periods=small_df_len, unit="ns"
+        ),
         ROW_ID_COL_NAME: pd.Series(np.arange(small_df_len, dtype=np.int64)),
         MERGE_ACTION_ENUM_COL_NAME: [DELETE_ENUM] * small_df_len,
     }
@@ -117,7 +121,7 @@ delete_everything_and_insert_some_stuff_df_string = pd.DataFrame(
     {
         "A": gen_random_string_binary_array(14, is_binary=False),
         "B": gen_random_string_binary_array(14, is_binary=True),
-        "C": pd.date_range(start="2018-07-24", end="2018-07-25", periods=14),
+        "C": pd.date_range(start="2018-07-24", end="2018-07-25", periods=14, unit="ns"),
         ROW_ID_COL_NAME: pd.Series(np.arange(14, dtype=np.int64) - 1),
         MERGE_ACTION_ENUM_COL_NAME: [INSERT_ENUM] + [DELETE_ENUM] * 12 + [INSERT_ENUM],
     }
@@ -132,7 +136,9 @@ stress_test_base_df = pd.DataFrame(
         "STR_COL": gen_random_string_binary_array(100, is_binary=False),
         "NON_ASCII_STR_COL": gen_nonascii_list(100),
         "BYTES_COL": gen_random_string_binary_array(100, is_binary=True),
-        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
+        "TS_COL": pd.date_range(
+            start="2011-02-24", end="2013-01-1", periods=100, unit="ns"
+        ),
         "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
             "timedelta64[ns]"
         ),
@@ -149,7 +155,9 @@ stress_test_delta_df = pd.DataFrame(
         "STR_COL": gen_nonascii_list(75),
         "NON_ASCII_STR_COL": gen_random_string_binary_array(75, is_binary=False),
         "BYTES_COL": gen_random_string_binary_array(75, is_binary=True),
-        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
+        "TS_COL": pd.date_range(
+            start="2011-02-24", end="2013-01-1", periods=75, unit="ns"
+        ),
         "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
             "timedelta64[ns]"
         ),

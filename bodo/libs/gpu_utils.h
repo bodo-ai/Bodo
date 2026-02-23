@@ -1,5 +1,7 @@
 #pragma once
 
+extern const bool G_USE_ASYNC;
+
 #ifdef USE_CUDF
 #include <mpi.h>
 #include <nccl.h>
@@ -23,6 +25,97 @@
                                      std::string(cudaGetErrorString(err))); \
         }                                                                   \
     } while (0)
+
+struct cuda_event_wrapper {
+    std::shared_ptr<cudaEvent_t> ev;
+
+    cuda_event_wrapper() {
+        // Allocate storage for the event handle
+        cudaEvent_t raw;
+        cudaEventCreateWithFlags(&raw, cudaEventDisableTiming);
+
+        // Wrap it in a shared_ptr with a custom deleter
+        ev = std::shared_ptr<cudaEvent_t>(new cudaEvent_t(raw),
+                                          [](cudaEvent_t* p) {
+                                              if (p && *p) {
+                                                  cudaEventDestroy(*p);
+                                              }
+                                              delete p;
+                                          });
+    }
+
+    // Copy constructor: shared ownership
+    cuda_event_wrapper(const cuda_event_wrapper&) = default;
+
+    // Copy assignment: shared ownership
+    cuda_event_wrapper& operator=(const cuda_event_wrapper&) = default;
+
+    // Disable move semantics (optional but recommended for clarity)
+    cuda_event_wrapper(cuda_event_wrapper&&) noexcept = default;
+    cuda_event_wrapper& operator=(cuda_event_wrapper&&) noexcept = default;
+
+    // Record event on a stream
+    void record(rmm::cuda_stream_view stream) const {
+        if (ev && *ev) {
+            CHECK_CUDA(cudaEventRecord(*ev, stream.value()));
+        }
+    }
+
+    // Make a stream wait on this event
+    void wait(rmm::cuda_stream_view stream) const {
+        if (ev && *ev) {
+            CHECK_CUDA(cudaStreamWaitEvent(stream.value(), *ev, 0));
+        }
+    }
+
+    cudaError_t query() const {
+        if (ev && *ev) {
+            return cudaEventQuery(*ev);
+        } else {
+            throw std::runtime_error(
+                "cuda_event_wrapper query on invalid state");
+        }
+    }
+
+    bool ready() const {
+        if (ev && *ev) {
+            cudaError_t status = cudaEventQuery(*ev);
+            return status == cudaSuccess;
+        } else {
+            throw std::runtime_error(
+                "cuda_event_wrapper ready on invalid state");
+        }
+    }
+};
+
+struct StreamAndEvent {
+    rmm::cuda_stream_view stream;
+    cuda_event_wrapper event;
+
+    StreamAndEvent(rmm::cuda_stream_view s, cuda_event_wrapper e)
+        : stream(s), event(e) {}
+};
+
+inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
+    if (use_async) {
+        // Create a new non-blocking CUDA stream
+        rmm::cuda_stream_view s{rmm::cuda_stream_per_thread};
+
+        // Create an unsignaled event (default constructor)
+        cuda_event_wrapper e;
+
+        return std::make_shared<StreamAndEvent>(s, e);
+    } else {
+        // Synchronous mode: use default stream
+        rmm::cuda_stream_view s = rmm::cuda_stream_default;
+
+        // Event is already completed
+        cuda_event_wrapper e;
+        e.record(s);
+
+        return std::make_shared<StreamAndEvent>(s, e);
+    }
+}
 
 enum class GpuShuffleState {
     SIZES_INFLIGHT = 0,
@@ -61,8 +154,8 @@ struct GpuShuffle {
     std::unique_ptr<std::vector<MPI_Request>> metadata_send_reqs;
     // Event markers for all nccl operations needed for this shuffle.
     // When this is finished all GPU buffers are in the correct place.
-    cudaEvent_t nccl_send_event;
-    cudaEvent_t nccl_recv_event;
+    cuda_event_wrapper nccl_send_event;
+    cuda_event_wrapper nccl_recv_event;
     // We need to keep sizes around while the transfers are inflight
     std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
     std::unique_ptr<std::vector<uint64_t>> recv_metadata_sizes;
@@ -111,11 +204,6 @@ struct GpuShuffle {
           packed_send_buffers(n_ranks),
           start_tag(start_tag),
           n_ranks(n_ranks) {
-        CHECK_CUDA(
-            cudaEventCreateWithFlags(&nccl_send_event, cudaEventDisableTiming));
-        CHECK_CUDA(
-            cudaEventCreateWithFlags(&nccl_recv_event, cudaEventDisableTiming));
-
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
             cudf::packed_table& table = packed_tables[dest_rank];
@@ -139,10 +227,7 @@ struct GpuShuffle {
     GpuShuffle(const GpuShuffle&) = delete;
     GpuShuffle& operator=(const GpuShuffle&) = delete;
 
-    ~GpuShuffle() {
-        cudaEventDestroy(nccl_send_event);
-        cudaEventDestroy(nccl_recv_event);
-    }
+    ~GpuShuffle() {}
 
     /*
      * @brief Progress the shuffle operation
@@ -163,6 +248,23 @@ struct GpuShuffle {
     std::optional<std::unique_ptr<cudf::table>> progress_waiting_for_data();
     void progress_sending_sizes();
     void progress_sending_data();
+};
+
+struct DoShuffleCoordination {
+    MPI_Request req = MPI_REQUEST_NULL;
+    int has_data;
+};
+
+class ShuffleTableInfo {
+   public:
+    std::shared_ptr<cudf::table> table;
+    std::vector<cudf::size_type> partition_indices;
+    cuda_event_wrapper event;
+
+    ShuffleTableInfo(std::shared_ptr<cudf::table> t,
+                     const std::vector<cudf::size_type>& v,
+                     cuda_event_wrapper e)
+        : table(t), partition_indices(v), event(e) {}
 };
 
 /**
@@ -197,10 +299,31 @@ class GpuShuffleManager {
 
     const int MAX_TAG_VAL;
 
+    // This is used to coordinate the start of shuffles across ranks
+    DoShuffleCoordination shuffle_coordination;
+
+    // IBarrier to know when all ranks are done sending data
+    MPI_Request global_completion_req = MPI_REQUEST_NULL;
+    int global_completion = false;
+    bool complete_signaled = false;
+
+    std::vector<ShuffleTableInfo> tables_to_shuffle;
+
     /**
      * @brief Initialize NCCL communicator
      */
     void initialize_nccl();
+
+    /**
+     * @brief Once we've determined we will shuffle, start the shuffle by
+     * partitioning the table and posting sends/receives
+     */
+    void do_shuffle();
+
+    bool data_ready_to_send() {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
 
    public:
     GpuShuffleManager();
@@ -212,7 +335,8 @@ class GpuShuffleManager {
      * @param partition_indices Column indices to use for partitioning
      */
     void shuffle_table(std::shared_ptr<cudf::table> table,
-                       const std::vector<cudf::size_type>& partition_indices);
+                       const std::vector<cudf::size_type>& partition_indices,
+                       cuda_event_wrapper event);
 
     /**
      * @brief Progress any inflight shuffles
@@ -243,7 +367,12 @@ class GpuShuffleManager {
      * @brief Check if there are any inflight shuffles
      * @return true if there are inflight shuffles, false otherwise
      */
-    bool inflight_exists() const { return !inflight_shuffles.empty(); }
+    bool all_complete();
+
+    /**
+     * @brief Idempotent call to signify that this rank has no more data to send
+     */
+    void complete();
 
     bool is_available() const { return true; }
 };
@@ -253,12 +382,14 @@ class GpuShuffleManager {
  * @param table Input table
  * @param column_indices Column indices to hash
  * @param num_partitions Number of partitions
+ * @param stream CUDA stream to use for partitioning
  * @return Pair of partitioned table and partition indices
  */
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
 hash_partition_table(std::shared_ptr<cudf::table> table,
                      const std::vector<cudf::size_type>& column_indices,
-                     cudf::size_type num_partitions);
+                     cudf::size_type num_partitions,
+                     cudaStream_t stream = cudf::get_default_stream());
 
 /**
  * @brief Get the GPU device ID for the current process. All ranks must call

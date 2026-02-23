@@ -33,7 +33,9 @@ def test_csv_invalid_path():
     """
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
+        return pd.read_csv(
+            fname, names=["A"], dtype={"A": np.int64}, dtype_backend="pyarrow"
+        )
 
     with pytest.raises(ValueError, match=r"FileNotFoundError"):
         bodo.jit(test_impl)("f.csv")
@@ -44,7 +46,7 @@ def test_csv_invalid_path_const(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        return pd.read_csv("in_csv.csv")
+        return pd.read_csv("in_csv.csv", dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="FileNotFoundError"):
         bodo.jit(test_impl)()
@@ -58,7 +60,9 @@ def test_csv_repeat_args(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        return pd.read_csv("csv_data1.csv", filepath_or_buffer="csv_data1.csv")
+        return pd.read_csv(
+            "csv_data1.csv", filepath_or_buffer="csv_data1.csv", dtype_backend="pyarrow"
+        )
 
     with pytest.raises(
         BodoError,
@@ -88,7 +92,7 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
 
         @bodo.jit
         def read(filename):
-            df = pd.read_csv(filename)
+            df = pd.read_csv(filename, dtype_backend="pyarrow")
             return df
 
         # Test with passing filename from bodo to bodo call error and S3
@@ -115,7 +119,7 @@ def test_io_error_nested_calls(memory_leak_check):
 
     @bodo.jit
     def test_csv(filename):
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype_backend="pyarrow")
         return df
 
     def test_impl_csv(filename):
@@ -127,7 +131,7 @@ def test_io_error_nested_calls(memory_leak_check):
 
     @bodo.jit
     def test_pq(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     def test_impl_pq(filename):
@@ -172,9 +176,15 @@ def test_csv_infer_type_error(datapath):
         bodo.barrier()
         message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
         with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+            bodo.jit(
+                lambda: pd.read_csv(filepath, dtype_backend="pyarrow"),
+                all_returns_distributed=True,
+            )()
         with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
+            bodo.jit(
+                lambda: pd.read_csv(filepath, dtype_backend="pyarrow"),
+                distributed=False,
+            )()
 
 
 @pytest.mark.parquet
@@ -182,7 +192,7 @@ def test_pseudo_exception(datapath, memory_leak_check):
     """Test removal of ForceLiteralArg message"""
 
     def test_csv(fname):
-        df = pd.read_csv(fname)
+        df = pd.read_csv(fname, dtype_backend="pyarrow")
         return df.clip()
 
     fname = datapath("csv_data1.csv")
@@ -194,7 +204,7 @@ def test_pseudo_exception(datapath, memory_leak_check):
     assert "Pseudo-exception" not in str(csv_track)
 
     def test_pq(file_name):
-        df = pd.read_parquet(file_name)
+        df = pd.read_parquet(file_name, dtype_backend="pyarrow")
         return df.A.WRONG()
 
     fname = datapath("groupby3.pq")
@@ -215,10 +225,10 @@ def test_csv_chunksize_type(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1(fname):
-        return pd.read_csv(fname, chunksize=-1)
+        return pd.read_csv(fname, chunksize=-1, dtype_backend="pyarrow")
 
     def impl2(fname):
-        return pd.read_csv(fname, chunksize="no thanks")
+        return pd.read_csv(fname, chunksize="no thanks", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -244,10 +254,10 @@ def test_csv_nrows_type():
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, nrows=-2)
+        return pd.read_csv(fname, nrows=-2, dtype_backend="pyarrow")
 
     def impl2():
-        return pd.read_csv(fname, nrows="wrong")
+        return pd.read_csv(fname, nrows="wrong", dtype_backend="pyarrow")
 
     with pytest.raises(ValueError, match="integer >= 0"):
         bodo.jit(impl1)()
@@ -265,14 +275,17 @@ def test_csv_skiprows_type(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, skiprows=-1)
+        return pd.read_csv(fname, skiprows=-1, dtype_backend="pyarrow")
 
     def impl2():
-        return pd.read_csv(fname, skiprows="wrong")
+        return pd.read_csv(fname, skiprows="wrong", dtype_backend="pyarrow")
 
     def impl3():
         return pd.read_csv(
-            fname, skiprows=lambda x: x > 1, names=["X", "Y", "Z", "MM", "AA"]
+            fname,
+            skiprows=lambda x: x > 1,
+            names=["X", "Y", "Z", "MM", "AA"],
+            dtype_backend="pyarrow",
         )
 
     with pytest.raises(BodoError, match="integer >= 0"):
@@ -301,7 +314,7 @@ def test_to_csv_compression_kwd_arg():
         return df.to_csv(f_name)
 
     def non_compressed_read_impl(f_name):
-        return pd.read_csv(f_name, compression=None)
+        return pd.read_csv(f_name, compression=None, dtype_backend="pyarrow")
 
     df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
     check_CSV_write(
@@ -413,7 +426,10 @@ def test_csv_skiprows_type_nonconstant(memory_leak_check):
 
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
+            fname,
+            skiprows=g(skiprow_list),
+            names=["X", "Y", "Z", "MM", "AA"],
+            dtype_backend="pyarrow",
         )
 
     skiprow_list = ["abcd"]
@@ -441,7 +457,10 @@ def test_csv_skiprows_nonconstant_incorrect_values():
 
     def impl(skiprow_list):
         return pd.read_csv(
-            fname, skiprows=g(skiprow_list), names=["X", "Y", "Z", "MM", "AA"]
+            fname,
+            skiprows=g(skiprow_list),
+            names=["X", "Y", "Z", "MM", "AA"],
+            dtype_backend="pyarrow",
         )
 
     skiprow_list = [-2]
@@ -455,7 +474,12 @@ def test_csv_skiprows_nonconstant_incorrect_values():
         return [1, -3, 0]
 
     def impl2():
-        return pd.read_csv(fname, skiprows=f2(), names=["X", "Y", "Z", "MM", "AA"])
+        return pd.read_csv(
+            fname,
+            skiprows=f2(),
+            names=["X", "Y", "Z", "MM", "AA"],
+            dtype_backend="pyarrow",
+        )
 
     with pytest.raises(ValueError, match="integer >= 0"):
         bodo.jit(impl2)()
@@ -471,10 +495,10 @@ def test_csv_skiprows_list_type(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, skiprows=[3, 2, 5, -1, -10])
+        return pd.read_csv(fname, skiprows=[3, 2, 5, -1, -10], dtype_backend="pyarrow")
 
     def impl2():
-        return pd.read_csv(fname, skiprows=["wrong", "type"])
+        return pd.read_csv(fname, skiprows=["wrong", "type"], dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="integer >= 0"):
         bodo.jit(impl1)()
@@ -497,7 +521,12 @@ def test_csv_skiprows_list_type_nonconstant(memory_leak_check):
         return ["abcd", "efg"]
 
     def impl():
-        return pd.read_csv(fname, skiprows=f(), names=["X", "Y", "Z", "MM", "AA"])
+        return pd.read_csv(
+            fname,
+            skiprows=f(),
+            names=["X", "Y", "Z", "MM", "AA"],
+            dtype_backend="pyarrow",
+        )
 
     with pytest.raises(
         BodoError,
@@ -517,7 +546,7 @@ def test_csv_nrows_type_nonconstant(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl(nrows_list):
-        return pd.read_csv(fname, nrows=nrows_list[0])
+        return pd.read_csv(fname, nrows=nrows_list[0], dtype_backend="pyarrow")
 
     nrows_list = ["abcd"]
     with pytest.raises(
@@ -538,7 +567,7 @@ def test_csv_sep_and_delimiter(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, ",", delimiter=".")
+        return pd.read_csv(fname, ",", delimiter=".", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -556,7 +585,7 @@ def test_csv_filename_type(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def impl():
-        return pd.read_csv(1)
+        return pd.read_csv(1, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -574,7 +603,9 @@ def test_csv_variable_filename_type(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def impl(fname_list):
-        return pd.read_csv(fname_list[0], dtype={"A": str}, names=["A"])
+        return pd.read_csv(
+            fname_list[0], dtype={"A": str}, names=["A"], dtype_backend="pyarrow"
+        )
 
     with pytest.raises(
         BodoError,
@@ -594,7 +625,7 @@ def test_csv_multichar_sep(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, sep="ab")
+        return pd.read_csv(fname, sep="ab", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -614,7 +645,7 @@ def test_csv_multichar_delimiter(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, delimiter="ab")
+        return pd.read_csv(fname, delimiter="ab", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -646,6 +677,7 @@ def test_csv_unsupported_arg_kwarg(memory_leak_check):
             None,
             None,
             engine=None,
+            dtype_backend="pyarrow",
         )
 
     with pytest.raises(
@@ -667,7 +699,7 @@ def test_csv_unknown_argument(memory_leak_check):
 
     def impl():
         # column_names is not a valid argument
-        return pd.read_csv(fname, column_names=["A", "B", "C"])
+        return pd.read_csv(fname, column_names=["A", "B", "C"], dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -698,7 +730,8 @@ def test_csv_unsupported_arg_mismatch(memory_leak_check):
             None,
             None,
             None,
-            "pyarrow",  # engine argument is here
+            "pyarrow",  # engine argument is here,
+            dtype_backend="pyarrow",
         )
 
     with pytest.raises(
@@ -721,7 +754,7 @@ def test_csv_unsupported_kwarg_mismatch(memory_leak_check):
     def impl():
         # comment is provided but not supported. It doesn't match
         # the default so it should raise an error.
-        return pd.read_csv(fname, comment=[2])
+        return pd.read_csv(fname, comment=[2], dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -741,7 +774,7 @@ def test_csv_header_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, header="A")
+        return pd.read_csv(fname, header="A", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -761,7 +794,7 @@ def test_csv_names_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, names="A")
+        return pd.read_csv(fname, names="A", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -781,7 +814,7 @@ def test_csv_index_col_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, index_col=True)
+        return pd.read_csv(fname, index_col=True, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -801,7 +834,7 @@ def test_csv_usecols_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, usecols=True)
+        return pd.read_csv(fname, usecols=True, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -821,7 +854,7 @@ def test_csv_dtype_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, dtype=bodo.types.string_type)
+        return pd.read_csv(fname, dtype=bodo.types.string_type, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -841,7 +874,7 @@ def test_csv_parse_dates_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, parse_dates=True)
+        return pd.read_csv(fname, parse_dates=True, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -861,7 +894,7 @@ def test_csv_compression_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, compression="gz")
+        return pd.read_csv(fname, compression="gz", dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -881,19 +914,19 @@ def test_csv_escapechar_value():
 
     # wrong datatype
     def impl1():
-        return pd.read_csv(fname, escapechar=3)
+        return pd.read_csv(fname, escapechar=3, dtype_backend="pyarrow")
 
     # > 1-char
     def impl2():
-        return pd.read_csv(fname, escapechar="wrong")
+        return pd.read_csv(fname, escapechar="wrong", dtype_backend="pyarrow")
 
     # same as sep
     def impl3():
-        return pd.read_csv(fname, escapechar=",")
+        return pd.read_csv(fname, escapechar=",", dtype_backend="pyarrow")
 
     # newline
     def impl4():
-        return pd.read_csv(fname, escapechar="\n")
+        return pd.read_csv(fname, escapechar="\n", dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="must be a one-character string"):
         bodo.jit(impl1)()
@@ -915,7 +948,7 @@ def test_csv_names_usecols_err():
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, usecols=[0, 2], names=["A"])
+        return pd.read_csv(fname, usecols=[0, 2], names=["A"], dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError, match="number of used columns exceeds the number of passed names"
@@ -933,7 +966,7 @@ def test_csv_usecols_not_found():
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
-        return pd.read_csv(fname, usecols=["B"], names=["A"])
+        return pd.read_csv(fname, usecols=["B"], names=["A"], dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="does not match columns"):
         bodo.jit(impl1)()
@@ -950,11 +983,11 @@ def test_csv_sample_nrows_size(memory_leak_check):
 
     # negative values
     def impl1(fname):
-        return pd.read_csv(fname, sample_nrows=-1)
+        return pd.read_csv(fname, sample_nrows=-1, dtype_backend="pyarrow")
 
     # string
     def impl2(fname):
-        return pd.read_csv(fname, sample_nrows="no thanks")
+        return pd.read_csv(fname, sample_nrows="no thanks", dtype_backend="pyarrow")
 
     @bodo.jit
     def g(ilist):
@@ -964,7 +997,7 @@ def test_csv_sample_nrows_size(memory_leak_check):
 
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_csv(fname, sample_nrows=g(ilist))
+        return pd.read_csv(fname, sample_nrows=g(ilist), dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -999,11 +1032,11 @@ def test_json_sample_nrows_size(memory_leak_check):
 
     # negative values
     def impl1(fname):
-        return pd.read_json(fname, sample_nrows=-1)
+        return pd.read_json(fname, sample_nrows=-1, dtype_backend="pyarrow")
 
     # string
     def impl2(fname):
-        return pd.read_json(fname, sample_nrows="no thanks")
+        return pd.read_json(fname, sample_nrows="no thanks", dtype_backend="pyarrow")
 
     @bodo.jit
     def g(ilist):
@@ -1013,7 +1046,7 @@ def test_json_sample_nrows_size(memory_leak_check):
 
     # nonconstant
     def impl3(fname, ilist):
-        return pd.read_json(fname, sample_nrows=g(ilist))
+        return pd.read_json(fname, sample_nrows=g(ilist), dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -1052,7 +1085,7 @@ def test_read_csv_sample_nrows_error(datapath):
     fname = datapath("large_data.csv")
 
     def impl1():
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, dtype_backend="pyarrow")
 
     # 1st 100 rows for column b is empty
     with pytest.raises(TypeError, match="Bodo could not infer dtypes correctly."):
@@ -1076,7 +1109,9 @@ def test_read_json_sample_nrows_error(datapath):
     fname = datapath("large_data.json")
 
     def impl1():
-        return pd.read_json(fname, lines=True, orient="records")
+        return pd.read_json(
+            fname, lines=True, orient="records", dtype_backend="pyarrow"
+        )
 
     # 1st 100 rows for column a is integer, next 100 are floats
     with pytest.raises(

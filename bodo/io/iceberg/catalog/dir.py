@@ -239,6 +239,9 @@ class DirCatalog(Catalog):
     def load_namespace_properties(self, namespace: str | Identifier) -> Properties:
         raise NotImplementedError
 
+    def namespace_exists(self, namespace: str | Identifier) -> bool:
+        raise NotImplementedError
+
     def drop_view(self, identifier: str | Identifier) -> None:
         raise NotImplementedError
 

@@ -69,7 +69,9 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame(
                 {"A": ["A"] * 100},
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
+                ),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],
@@ -118,7 +120,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)),
+                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)).astype(
+                    "datetime64[ns]"
+                ),
             ),
             id="datetime_index",
             marks=[pytest.mark.slow],
@@ -126,7 +130,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
+                ).astype("timedelta64[ns]"),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],
@@ -196,7 +202,7 @@ def test_spawn_distributed():
         pd.MultiIndex.from_arrays(
             [
                 np.arange(5),
-                pd.date_range("2001-10-15", periods=5),
+                pd.date_range("2001-10-15", periods=5).astype("datetime64[ns]"),
             ],
             names=["AA", None],
         ),

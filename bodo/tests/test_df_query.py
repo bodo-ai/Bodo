@@ -82,7 +82,7 @@ def test_df_query_dt(memory_leak_check):
     def impl(df):
         return df.query("A.dt.year == 2012")
 
-    df = pd.DataFrame({"A": pd.date_range("1/1/2012", periods=5)})
+    df = pd.DataFrame({"A": pd.date_range("1/1/2012", periods=5, unit="ns")})
     check_func(impl, (df,))
 
 

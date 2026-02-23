@@ -106,11 +106,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                     row_indexes.append(index_data)
                 elif isinstance(ss_axis, pd.TimedeltaIndex):
                     assert index_data is not None
-                    row_indexes.append(
-                        pd.TimedeltaIndex(
-                            index_data, name=ss_axis.name, unit=ss_axis.unit
-                        )
-                    )
+                    row_indexes.append(pd.TimedeltaIndex(index_data, name=ss_axis.name))
                 elif isinstance(ss_axis, pd.Index):
                     assert index_data is not None
                     row_indexes.append(pd.Index(index_data, name=ss_axis.name))
@@ -399,9 +395,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                 axis_ = index_data
             elif isinstance(head_axis, pd.TimedeltaIndex):
                 assert index_data is not None
-                axis_ = pd.TimedeltaIndex(
-                    index_data, name=head_axis.name, unit=head_axis.unit
-                )
+                axis_ = pd.TimedeltaIndex(index_data, name=head_axis.name)
             elif isinstance(head_axis, pd.Index):
                 assert index_data is not None
                 axis_ = pd.Index(index_data, name=head_axis.name)

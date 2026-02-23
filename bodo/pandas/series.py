@@ -2546,7 +2546,9 @@ def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     lhs_col = df.iloc[:, left_idx]
     rhs_col = df.iloc[:, right_idx]
 
-    return lhs_col.str.cat(rhs_col, sep, na_rep)
+    # Work around Pandas 3 bugs with ArrowDtype str.cat()
+    out = lhs_col.astype(object).str.cat(rhs_col.astype(object), sep, na_rep)
+    return out.astype("str").astype(pd.ArrowDtype(pa.large_string()))
 
 
 def _get_col_as_series(s, col):
@@ -2575,17 +2577,20 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
     extracted = string_s.str.extract(pat, flags=flags, expand=expand)
 
     if is_series_output:
-        return extracted
+        return extracted.astype(pd.ArrowDtype(pa.large_string()))
 
     def to_extended_list(s):
         """Extends list in each row to match length to n_cols"""
-        list_s = s.tolist()
-        list_s.extend([pd.NA] * (n_cols - len(s)))
+        list_s = s.astype(object).replace(np.nan, None).tolist()
+        list_s.extend([None] * (n_cols - len(s)))
         return list_s
 
     # Map tolist() to convert DataFrame to Series of lists
+    if len(extracted) == 0:
+        return pd.Series([], dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
+
     extended_s = extracted.apply(to_extended_list, axis=1)
-    return extended_s
+    return extended_s.astype(pd.ArrowDtype(pa.large_list(pa.large_string())))
 
 
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):

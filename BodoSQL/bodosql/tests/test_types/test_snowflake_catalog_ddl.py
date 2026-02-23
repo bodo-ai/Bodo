@@ -8,6 +8,7 @@ from copy import deepcopy
 from decimal import Decimal
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 import snowflake.connector
 
@@ -1355,14 +1356,14 @@ def test_describe_table(describe_keyword, test_db_snowflake_catalog, memory_leak
             ],
             "KIND": ["COLUMN"] * 16,
             "NULL?": ["N"] * 16,
-            "DEFAULT": [None] * 16,
+            "DEFAULT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "PRIMARY_KEY": ["N"] * 16,
             "UNIQUE_KEY": ["N"] * 16,
-            "CHECK": [None] * 16,
-            "EXPRESSION": [None] * 16,
-            "COMMENT": [None] * 16,
-            "POLICY NAME": [None] * 16,
-            "PRIVACY DOMAIN": [None] * 16,
+            "CHECK": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "EXPRESSION": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "COMMENT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "POLICY NAME": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "PRIVACY DOMAIN": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
         }
     )
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
@@ -1621,7 +1622,7 @@ def _show_schemas_snowflake_sample_data_output(terse=True):
                     "SNOWFLAKE_SAMPLE_DATA",
                 ]
                 * 7,
-                "KIND": [None] * 7,
+                "KIND": pd.array([None] * 7, dtype=pd.ArrowDtype(pa.string())),
             }
         )
     else:
@@ -2031,14 +2032,14 @@ def test_describe_view(describe_keyword, test_db_snowflake_catalog, memory_leak_
             ],
             "KIND": ["COLUMN"] * 16,
             "NULL?": ["N"] * 16,
-            "DEFAULT": [None] * 16,
+            "DEFAULT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "PRIMARY_KEY": ["N"] * 16,
             "UNIQUE_KEY": ["N"] * 16,
-            "CHECK": [None] * 16,
-            "EXPRESSION": [None] * 16,
-            "COMMENT": [None] * 16,
-            "POLICY NAME": [None] * 16,
-            "PRIVACY DOMAIN": [None] * 16,
+            "CHECK": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "EXPRESSION": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "COMMENT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "POLICY NAME": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "PRIVACY DOMAIN": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
         }
     )
     with view_helper_nontrivialview(conn, view_name, create=True):
@@ -2112,14 +2113,14 @@ def test_describe_view_on_table(
             ],
             "KIND": ["COLUMN"] * 16,
             "NULL?": ["N"] * 16,
-            "DEFAULT": [None] * 16,
+            "DEFAULT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
             "PRIMARY_KEY": ["N"] * 16,
             "UNIQUE_KEY": ["N"] * 16,
-            "CHECK": [None] * 16,
-            "EXPRESSION": [None] * 16,
-            "COMMENT": [None] * 16,
-            "POLICY NAME": [None] * 16,
-            "PRIVACY DOMAIN": [None] * 16,
+            "CHECK": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "EXPRESSION": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "COMMENT": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "POLICY NAME": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
+            "PRIVACY DOMAIN": pd.array([None] * 16, dtype=pd.ArrowDtype(pa.string())),
         }
     )
 

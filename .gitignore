@@ -132,3 +132,5 @@ bodo_versions.txt
 .DS_Store
 .idea
 .venv
+
+gpu_bench

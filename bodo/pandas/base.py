@@ -142,7 +142,7 @@ def from_pandas(df):
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
 
-@check_args_fallback("all")
+@check_args_fallback(supported=["dtype_backend"])
 def read_parquet(
     path,
     engine="auto",
@@ -154,6 +154,11 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
+    if dtype_backend is not lib.no_default and dtype_backend != "pyarrow":
+        raise BodoLibNotImplementedException(
+            "read_parquet() only supports dtype_backend='pyarrow' in Bodo."
+        )
+
     if storage_options is None:
         storage_options = {}
 

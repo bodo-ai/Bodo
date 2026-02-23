@@ -745,7 +745,9 @@ def test_plan_execs_cpp_backend(datapath, memory_leak_check):
         out = bc.sql("select * from TABLE1")
 
     assert isinstance(out, bd.BodoDataFrame)
-    pd_out = pd.read_parquet(datapath("sample-parquet-data/partitioned"))
+    pd_out = pd.read_parquet(
+        datapath("sample-parquet-data/partitioned"), dtype_backend="pyarrow"
+    )
     _test_equal_guard(
         out,
         pd_out,

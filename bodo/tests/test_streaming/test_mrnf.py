@@ -145,6 +145,7 @@ def get_random_col(col_type: str, nrows: int) -> pd.Series:
     return s
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "mrnf_sort_col_asc",
     [
@@ -288,6 +289,7 @@ def test_mrnf_basic(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "mrnf_col_inds_keep",
     [
@@ -395,6 +397,7 @@ def test_mrnf_skipped_cols(mrnf_col_inds_keep, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data_col",
     [
@@ -616,6 +619,7 @@ def test_data_col_correctness(memory_leak_check):
         return x.sort_values(by="C", ascending=True, na_position="last").iloc[0]
 
     expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[["A", "B", "C"]]
 
     _test_mrnf_helper(
         df,
@@ -653,6 +657,7 @@ def test_mrnf_no_order(memory_leak_check):
         return x.iloc[0]
 
     expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[["A", "B"]]
 
     _test_mrnf_helper(
         df,

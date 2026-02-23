@@ -14,7 +14,9 @@ TABLE_NAME = "ENGLISH_DICTIONARY_TABLE"
 def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
-    df = pd.read_csv(f"{os.path.dirname(__file__)}/raw_dict_sample.csv")
+    df = pd.read_csv(
+        f"{os.path.dirname(__file__)}/raw_dict_sample.csv", dtype_backend="pyarrow"
+    )
     sql_schema = [
         ("WORD", "string", True),
         ("COUNT", "string", True),

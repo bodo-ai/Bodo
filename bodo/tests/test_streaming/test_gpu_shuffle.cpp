@@ -7,6 +7,7 @@
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/types.hpp>
+#include <rmm/cuda_device.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_buffer.hpp>
 
@@ -35,6 +36,9 @@ static bodo::tests::suite tests([] {
         // Ensure we have a GPU context for this rank
         // Note: In a real test runner, this might be handled by a fixture
         rmm::cuda_device_id device_id = get_gpu_id();
+        if (device_id.value() >= 0) {
+            cudaSetDevice(device_id.value());
+        }
 
         try {
             GpuShuffleManager manager;
@@ -46,7 +50,7 @@ static bodo::tests::suite tests([] {
                 bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
             } else {
                 // Should be empty on init
-                bodo::tests::check(manager.inflight_exists() == false);
+                bodo::tests::check(manager.all_complete() == false);
 
                 // Check communicators exist
                 bodo::tests::check(manager.get_nccl_comm() != nullptr);
@@ -105,7 +109,7 @@ static bodo::tests::suite tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
         rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() > 0) {
+        if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
         }
 
@@ -122,26 +126,20 @@ static bodo::tests::suite tests([] {
         GpuShuffleManager manager;
 
         // Shuffle based on column 0
-        manager.shuffle_table(input_ptr, {0});
-
-        bodo::tests::check(manager.inflight_exists() ==
-                           (device_id.value() >= 0));
+        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
+        manager.shuffle_table(input_ptr, {0}, se->event);
+        manager.complete();
 
         std::vector<std::unique_ptr<cudf::table>> received_tables;
 
         // Pump the progress loop
-        bool done = false;
-        while (!done) {
+        while (!manager.all_complete()) {
             auto out_batch = manager.progress();
             // Move received tables into our accumulator
             for (auto& t : out_batch) {
-                if (t)
+                if (t) {
                     received_tables.push_back(std::move(t));
-            }
-
-            // Check if queue is drained
-            if (!manager.inflight_exists()) {
-                done = true;
+                }
             }
         }
 
@@ -191,27 +189,20 @@ static bodo::tests::suite tests([] {
         GpuShuffleManager manager;
 
         // Shuffle based on column 0
-        manager.shuffle_table(input_ptr, {0});
-
-        // Verify inflight status matches GPU presence
-        bodo::tests::check(manager.inflight_exists() ==
-                           (device_id.value() >= 0));
+        std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
+        manager.shuffle_table(input_ptr, {0}, se->event);
+        manager.complete();
 
         std::vector<std::unique_ptr<cudf::table>> received_tables;
 
         // Pump the progress loop
-        bool done = false;
-        while (!done) {
+        while (!manager.all_complete()) {
             auto out_batch = manager.progress();
             // Move received tables into our accumulator
             for (auto& t : out_batch) {
-                if (t)
+                if (t) {
                     received_tables.push_back(std::move(t));
-            }
-
-            // Check if queue is drained
-            if (!manager.inflight_exists()) {
-                done = true;
+                }
             }
         }
 

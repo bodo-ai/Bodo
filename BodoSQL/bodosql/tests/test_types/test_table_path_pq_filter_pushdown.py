@@ -69,7 +69,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     py_output = py_output[py_output["part"] == "b"].reset_index(drop=True)
     py_output1 = py_output
@@ -161,7 +161,7 @@ def test_like_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)[["uuid"]]
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["uuid"]]
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -264,7 +264,7 @@ def test_ilike_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)[["uuid"]]
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["uuid"]]
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -334,7 +334,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
             "select * from table1 where coalesce(A, current_date()) > '2015-01-01'"
         )
 
-    df = pd.read_parquet(filename)
+    df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = df[
         df.A.fillna(pd.Timestamp.now().date()) > pd.to_datetime("2015-01-01").date()
     ]
@@ -374,7 +374,7 @@ def test_case_conversion_filter_pushdown(func_args, datapath, memory_leak_check)
     filename = datapath("string_lower_upper.pq")
     test_str_val = getattr("macedonia", pd_func_name)()
 
-    df = pd.read_parquet(filename)
+    df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = df[getattr(df.A.str, pd_func_name)() == test_str_val]
 
     bc = bodosql.BodoSQLContext(
@@ -406,7 +406,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
     """
     filename = datapath("string_lower_upper.pq")
     test_str_val = "macedonia"
-    df = pd.read_parquet(filename)
+    df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = df[df.A.str.lower().fillna(test_str_val) == test_str_val]
 
     bc = bodosql.BodoSQLContext(
@@ -441,7 +441,7 @@ def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
     """
     filename = datapath("string_lower_upper.pq")
     test_str_val = "macedonia"
-    df = pd.read_parquet(filename)
+    df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = df[df.A.fillna(test_str_val).str.upper() == test_str_val.upper()]
 
     bc = bodosql.BodoSQLContext(
@@ -490,7 +490,7 @@ def test_table_path_filter_pushdown_multi_table(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     py_output_part1 = py_output[py_output["part"] == "b"]
     py_output_part2 = py_output[py_output["part"] == "a"]
@@ -540,7 +540,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     py_output_part1 = py_output[py_output["part"] == "a"]
     py_output = py_output_part1.merge(py_output, on="C")
@@ -607,7 +607,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting(
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
@@ -706,7 +706,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
@@ -804,7 +804,7 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
@@ -875,7 +875,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     # filename = "BodoSQL/bodosql/tests/data/sample-parquet-data/partitioned"
     filename = datapath("sample-parquet-data/no_index.pq")
 
-    py_output = pd.read_parquet(filename)[["A", "B"]].head(5)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["A", "B"]].head(5)
     check_func(
         impl1, (filename,), py_output=py_output, reset_index=True, check_dtype=False
     )
@@ -887,7 +887,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     assert hasattr(fir, "meta_head_only_info")
     assert fir.meta_head_only_info[0] is not None
 
-    py_output = pd.read_parquet(filename).head(5)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow").head(5)
     check_func(
         impl2, (filename,), py_output=py_output, reset_index=True, check_dtype=False
     )
@@ -920,7 +920,7 @@ def test_named_param_filter_pushdown(datapath, memory_leak_check):
         )
 
     # Compare entirely to Pandas output to simplify the process.
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
@@ -967,7 +967,7 @@ def test_table_path_limit_pushdown_complex(datapath, memory_leak_check):
         )
 
     filename = datapath("sample-parquet-data/no_index.pq")
-    py_output = pd.read_parquet(filename)[["A", "B"]]
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["A", "B"]]
     py_output["A"] += 1
     py_output = py_output.rename(columns={"B": "newCol1"}, copy=False)
     py_output["newCol2"] = "my_name"
@@ -1014,7 +1014,7 @@ def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
         return bc.sql(query)
 
     filename = datapath("tpch-test-data/parquet/lineitem.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
 
     expr_a = "L_ORDERKEY > 10"
     expr_b = "L_LINENUMBER = 3"
@@ -1092,7 +1092,7 @@ def test_in_filter_pushdown(datapath):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filepath)
+    py_output = pd.read_parquet(filepath, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     py_output = py_output[(py_output["part"] == "a") | (py_output["part"] == "b")]
 
@@ -1209,7 +1209,7 @@ def test_in_filter_pushdown_e2e(datapath):
     expected_output_path = datapath(
         "sample-parquet-data/apple_sample_data/expected_query_output.pq"
     )
-    expected_output = pd.read_parquet(expected_output_path)
+    expected_output = pd.read_parquet(expected_output_path, dtype_backend="pyarrow")
 
     bc = bodosql.BodoSQLContext(
         {
@@ -1258,7 +1258,7 @@ def test_not_in_filter_pushdown(datapath):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filepath)
+    py_output = pd.read_parquet(filepath, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     py_output = py_output[~py_output["part"].isin(["a", "b", "Z"])]
 
@@ -1290,7 +1290,7 @@ def test_not_like_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)[["uuid"]]
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["uuid"]]
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -1380,7 +1380,7 @@ def test_not_ilike_filter_pushdown(datapath, memory_leak_check):
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
-    py_output = pd.read_parquet(filename)[["uuid"]]
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")[["uuid"]]
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -1466,7 +1466,7 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
         return bc.sql(query)
 
     filename = datapath("tpch-test-data/parquet/lineitem.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     t1 = read_df[read_df.L_LINENUMBER == 3]
     t2 = read_df[read_df.L_SHIPMODE == "SHIP"]
     join_output = t1.merge(t2, on="L_ORDERKEY")
@@ -1511,7 +1511,7 @@ def test_length_filter_pushdown(datapath, memory_leak_check):
         return bc.sql(query)
 
     filename = datapath("tpch-test-data/parquet/lineitem.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     expected_output = read_df[read_df.L_SHIPMODE.str.len() == 4][["L_LINENUMBER"]]
     bc = bodosql.BodoSQLContext(
         {
@@ -1572,7 +1572,7 @@ def test_trim_filter_pushdown(func_args, datapath, memory_leak_check):
         return bc.sql(query)
 
     filename = datapath("tpch-test-data/parquet/lineitem.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
 
     shipmode_col = getattr(read_df.L_SHIPMODE.str, pd_func_name)()
     expected_output = read_df[shipmode_col == "SHIP"][["L_ORDERKEY"]]
@@ -1620,7 +1620,7 @@ def test_reverse_filter_pushdown(datapath, memory_leak_check):
         return bc.sql(query)
 
     filename = datapath("tpch-test-data/parquet/lineitem.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
 
     shipmode_col = read_df.L_SHIPMODE.apply(lambda x: x[::-1])
     expected_output = read_df[shipmode_col == "PIHS"][["L_ORDERKEY"]]

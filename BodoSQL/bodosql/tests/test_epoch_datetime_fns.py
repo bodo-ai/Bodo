@@ -71,6 +71,7 @@ def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
             + secondDeltaUnixY0,
         }
     )
+    expected_output = expected_output.astype("Float64").astype("Int64")
 
     check_query(
         query,

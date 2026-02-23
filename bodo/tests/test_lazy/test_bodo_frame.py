@@ -517,7 +517,7 @@ def test_csv(collect_func):
     with ensure_clean2(fname):
         bodo_df.to_csv(fname, index=False)
         assert bodo_df._lazy
-        read_df = pd.read_csv(fname)
+        read_df = pd.read_csv(fname, dtype_backend="pyarrow")
 
     pd.testing.assert_frame_equal(
         read_df,
@@ -582,7 +582,9 @@ def test_json(collect_func):
 
     @bodo.jit(spawn=True)
     def _read_bodo_df(fname):
-        read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        read_df = pd.read_json(
+            path_or_buf=fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
         return read_df
 
     df = collect_func(0)

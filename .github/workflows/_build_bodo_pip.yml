@@ -59,9 +59,8 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.9.0
+        uses: prefix-dev/setup-pixi@v0.9.3
         with:
-          pixi-version: v0.63.2
           cache: true
           cache-write: ${{ github.event_name == 'schedule'}}
           environments: ${{ contains(inputs.os, 'macos') && 'pip-cpp-macos' || 'pip-cpp-win' }}
@@ -97,7 +96,7 @@ jobs:
             source ~/.bashrc
 
             # Global Tools
-            pixi global install sccache ninja
+            pixi global install sccache ninja mold
 
             # Install dependencies available on package manager
             ARCH=$(uname -m)
@@ -179,8 +178,8 @@ jobs:
             sccache --show-stats && 
             auditwheel -v repair
             --exclude libmpi.so.12 --exclude libmpi.so.40
-            --exclude libarrow.so.2200 --exclude libarrow_acero.so.2200 --exclude libarrow_dataset.so.2200
-            --exclude libarrow_python.so.2200 --exclude libparquet.so.2200
+            --exclude libarrow.so.2300 --exclude libarrow_acero.so.2300 --exclude libarrow_dataset.so.2300
+            --exclude libarrow_python.so.2300 --exclude libparquet.so.2300
             --exclude libaws-cpp-sdk-core.so --exclude libaws-crt-cpp.so --exclude libaws-c-mqtt.so.1.0.0
             --exclude libaws-c-event-stream.so.1.0.0 --exclude libaws-c-s3.so.0unstable --exclude libaws-c-auth.so.1.0.0
             --exclude libaws-c-http.so.1.0.0 --exclude libaws-c-io.so.1.0.0 --exclude libaws-c-cal.so.1.0.0

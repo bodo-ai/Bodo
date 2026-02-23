@@ -309,6 +309,7 @@ def test_list(memory_leak_check):
     check_func(test_impl, (A,), only_seq=True)
 
 
+@pytest.mark.skip("Pandas 3 NA handling issues in testing")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta

@@ -44,7 +44,7 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodo
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats

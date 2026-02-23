@@ -117,8 +117,9 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
         }
 
     slow_mark_opt = pytest.mark.slow if is_slow else ()
+    dtype = pd.ArrowDtype(pa.time64("ns")) if name == "time" else None
     return pytest.param(
-        create_data_dict, create_answer_dict, None, False, id=name, marks=slow_mark_opt
+        create_data_dict, create_answer_dict, dtype, False, id=name, marks=slow_mark_opt
     )
 
 
