@@ -139,7 +139,7 @@ jobs:
       batch: ${{ matrix.batch }}
       total-batches: 12
       pytest-marker: "not slow and not weekly or smoke"
-      collect-coverage: true
+      collect-coverage: ${{ inputs.runner_os == 'ubuntu-latest' }}
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
