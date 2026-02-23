@@ -1246,11 +1246,7 @@ def fallback_wrapper(self, attr, name, msg):
     """
 
     # Avoid wrapping indexers & accessors
-    if (
-        callable(attr)
-        and not hasattr(attr, "__getitem__")
-        and not hasattr(attr, "__getattr__")
-    ):
+    if inspect.isfunction(attr) or inspect.isbuiltin(attr):
 
         def silenced_method(*args, **kwargs):
             jit_fallback = JITFallback(self, name)
