@@ -14,6 +14,7 @@
 #include <cudf/stream_compaction.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <rmm/cuda_device.hpp>
 #include <rmm/device_buffer.hpp>
 
 #include <algorithm>
@@ -32,17 +33,10 @@
 #include <iostream>
 #endif
 
-enum DEVICE { CPU = 0, GPU = 1 };
+// Always choose GPU as device for supported ops (used for testing)
+#define ALWAYS_RUN_ON_GPU
 
-/**
- * @brief Get flag for whether to always run operators on GPU if possible from
- * an environment variable.
- *
- */
-bool get_always_run_on_gpu() {
-    char *env_str = std::getenv("BODO_ALWAYS_RUN_ON_GPU");
-    return (env_str != nullptr) && std::string(env_str) == "1";
-}
+enum DEVICE { CPU = 0, GPU = 1 };
 
 /* -----------------------------
  * Cost model parameters
@@ -55,10 +49,11 @@ double TRANSFER_OVERHEAD = 10e-6;  // 10 microseconds
 double KERNEL_LAUNCH = 10e-6;      // 10 microseconds
 
 double transfer_time(uint64_t bytes_size) {
-    if (get_always_run_on_gpu()) {
-        return 0.0;
-    }
+#ifdef ALWAYS_RUN_ON_GPU
+    return 0.0;
+#else
     return TRANSFER_OVERHEAD + (bytes_size / PCIe_BW);
+#endif
 }
 
 // Some reasonable defaults in rare case calibration fails.
@@ -735,31 +730,31 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
     // Add in kernel launch time and apply penalty if operation is
     // considered too small for GPU.
     if (device == DEVICE::GPU) {
-        if (get_always_run_on_gpu()) {
-            t = 0.0;
-        } else {
-            t += KERNEL_LAUNCH;
-            auto gpu_min_size_iter = GPU_MIN_SIZE.find(op);
-            if (gpu_min_size_iter == GPU_MIN_SIZE.end()) {
-                throw std::runtime_error(
-                    "compute_time didn't find op in GPU_MIN_SIZE.");
-            }
-            uint64_t min_size = gpu_min_size_iter->second;
-            if (size_in < min_size) {
-#ifdef DEBUG_GPU_SELECTOR
-                std::cout << "compute_time applying min_size penalty " << t
-                          << " " << t * 1.5 << std::endl;
-#endif
-                t *= 1.5;
-            }
+#ifdef ALWAYS_RUN_ON_GPU
+        t = 0.0;
+#else
+        t += KERNEL_LAUNCH;
+        auto gpu_min_size_iter = GPU_MIN_SIZE.find(op);
+        if (gpu_min_size_iter == GPU_MIN_SIZE.end()) {
+            throw std::runtime_error(
+                "compute_time didn't find op in GPU_MIN_SIZE.");
         }
-
+        uint64_t min_size = gpu_min_size_iter->second;
+        if (size_in < min_size) {
 #ifdef DEBUG_GPU_SELECTOR
-        std::cout << "compute_time " << node->getId() << " "
-                  << (device == DEVICE::CPU ? "CPU" : "GPU") << " " << t
-                  << std::endl;
+            std::cout << "compute_time applying min_size penalty " << t << " "
+                      << t * 1.5 << std::endl;
+#endif
+            t *= 1.5;
+        }
 #endif
     }
+
+#ifdef DEBUG_GPU_SELECTOR
+    std::cout << "compute_time " << node->getId() << " "
+              << (device == DEVICE::CPU ? "CPU" : "GPU") << " " << t
+              << std::endl;
+#endif
 
     return t;
 }
