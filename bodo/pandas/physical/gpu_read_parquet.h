@@ -20,13 +20,16 @@
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/io/file.h>
+#include <arrow/python/api.h>
 #include <mpi_proto.h>
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
+#include "../io/arrow_compat.h"
 
 #include <glob.h>
-#include <filesystem>
+#include <cstddef>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -34,7 +37,23 @@
 #include <string>
 #include <vector>
 
-namespace fs = std::filesystem;
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                        \
+    if (expr) {                                                 \
+        throw std::runtime_error(std::string("fs_io: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 struct FilePart {
     std::string path;
@@ -44,15 +63,16 @@ struct FilePart {
 
 class RankBatchGenerator {
    public:
-    RankBatchGenerator(std::string dataset_path, std::size_t target_rows,
+    RankBatchGenerator(PyObject *dataset_path, std::size_t target_rows,
                        const std::vector<std::string> &_selected_columns,
                        std::shared_ptr<arrow::Schema> _arrow_schema,
                        MPI_Comm comm)
-        : path_(std::move(dataset_path)),
+        : path_(dataset_path),
+          filesystem_(nullptr),
           target_rows_(target_rows),
           selected_columns(_selected_columns),
-          arrow_schema(_arrow_schema) {
-        files_ = list_parquet_files(path_);
+          arrow_schema(std::move(_arrow_schema)) {
+        get_dataset();
 
         // Only assign parts to GPU-pinned ranks
         if (files_.empty() || comm == MPI_COMM_NULL) {
@@ -67,10 +87,11 @@ class RankBatchGenerator {
 
         if (files_.size() == 1) {
             // single file -> partition by row groups
-            parts_ = partition_by_row_groups(files_[0], rank_, size_);
+            parts_ =
+                partition_by_row_groups(files_[0], filesystem_, rank_, size_);
         } else {
             // multi-file dataset -> partition by file (block partition)
-            parts_ = partition_by_files(files_, rank_, size_);
+            parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
 
         current_part_idx_ = 0;
@@ -128,13 +149,32 @@ class RankBatchGenerator {
                 continue;
             }
 
+            // Use Arrow filesystem to read the file into a buffer
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+            CHECK_ARROW_AND_ASSIGN(
+                filesystem_->OpenInputFile(part.path),
+                "Error opening file via Arrow filesystem: " + part.path,
+                arrow_file);
+
+            std::shared_ptr<arrow::Buffer> file_buffer;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow_file->ReadAt(0, arrow_file->GetSize().ValueOrDie()),
+                "Error reading file via Arrow filesystem: " + part.path,
+                file_buffer);
+
+            cudf::host_span<const std::byte> host_data =
+                cudf::host_span<const std::byte>(
+                    reinterpret_cast<const std::byte *>(file_buffer->data()),
+                    file_buffer->size());
+
+            cudf::io::source_info source_info(host_data);
+
             // Read whole row group current_rg_ from part.path into GPU using
             // cuDF Build cudf::io::parquet_reader_options to request a single
             // row group.
             try {
                 cudf::io::parquet_reader_options reader_opts =
-                    cudf::io::parquet_reader_options::builder(
-                        cudf::io::source_info(part.path))
+                    cudf::io::parquet_reader_options::builder(source_info)
                         .row_groups(std::vector<std::vector<int>>{
                             std::vector<int>{current_rg_}})
                         .build();
@@ -209,63 +249,73 @@ class RankBatchGenerator {
     }
 
    private:
-    // list parquet files in path (if path is a file, return single element)
-    static std::vector<std::string> list_parquet_files(
-        const std::string &path) {
-        std::vector<std::string> out;
-        fs::path p(path);
-        if (fs::is_regular_file(p)) {
-            out.push_back(p.string());
-            return out;
-        }
-        if (fs::is_directory(p)) {
-            for (auto &entry : fs::directory_iterator(p)) {
-                if (!entry.is_regular_file())
-                    continue;
-                auto ext = entry.path().extension().string();
-                if (ext == ".parquet" || ext == ".PARQUET" || ext == ".pq" ||
-                    ext == ".PQ") {
-                    out.push_back(entry.path().string());
-                }
-            }
-            std::sort(out.begin(), out.end());
-            return out;
-        }
-        if (fs::exists(p)) {
-            out.push_back(p.string());
-        }
-        if (path.find('*') != std::string::npos ||
-            path.find('?') != std::string::npos ||
-            path.find('[') != std::string::npos) {
-            // Handle globs.
+    /** Get PyArrow parquet dataset from path and populate files_ and
+     * filesystem_.
+     */
+    void get_dataset() {
+        // import bodo.io.parquet_pio
+        PyObjectPtr pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-            glob_t g;
-            if (glob(path.c_str(), 0, NULL, &g) == 0) {
-                for (size_t i = 0; i < g.gl_pathc; i++) {
-                    out.push_back(g.gl_pathv[i]);
-                }
-            }
-            globfree(&g);
-            std::sort(out.begin(), out.end());
-            return out;
+        // ds = bodo.io.parquet_pio.get_parquet_dataset(path,
+        // get_row_counts=False)
+        // TODO(Ehsan): pass other options filters, storage_options,
+        // read_categories, tot_rows_to_read, schema, partitioning
+        PyObjectPtr ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset",
+                                             "OO", this->path_, Py_False);
+        if (ds == nullptr && PyErr_Occurred()) {
+            throw std::runtime_error("python");
+        }
+        if (PyErr_Occurred()) {
+            throw std::runtime_error("python");
         }
 
-        return out;
+        PyObjectPtr py_filesystem = PyObject_GetAttrString(ds, "filesystem");
+
+        ensure_pa_wrappers_imported();
+
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_filesystem(py_filesystem.get()),
+            "Error during Parquet read: Failed to unwrap Arrow filesystem",
+            this->filesystem_);
+
+        // all_pieces = ds.pieces
+        PyObjectPtr all_pieces = PyObject_GetAttrString(ds, "pieces");
+
+        PyObject *piece;
+        // iterate through pieces next
+        PyObject *iterator = PyObject_GetIter(all_pieces.get());
+        if (iterator == nullptr) {
+            throw std::runtime_error(
+                "RankBatchGenerator::get_dataset(): error getting pieces "
+                "iterator");
+        }
+        while ((piece = PyIter_Next(iterator))) {
+            // p = piece.path
+            PyObjectPtr p = PyObject_GetAttrString(piece, "path");
+            const char *c_path = PyUnicode_AsUTF8(p.get());
+            files_.emplace_back(c_path);
+            Py_DECREF(piece);
+        }
+        Py_DECREF(iterator);
     }
 
     // Partition a single file by row groups into contiguous chunks for each
     // rank
     static std::vector<FilePart> partition_by_row_groups(
-        const std::string &file, int rank, int size) {
+        const std::string &file,
+        std::shared_ptr<arrow::fs::FileSystem> filesystem, int rank, int size) {
         std::vector<FilePart> result;
         // Use Arrow/Parquet to get num_row_groups cheaply
         int total_rg = 0;
         try {
-            std::shared_ptr<arrow::io::ReadableFile> infile;
-            PARQUET_ASSIGN_OR_THROW(infile,
-                                    arrow::io::ReadableFile::Open(file));
+            // Use Arrow filesystem to read the file into a buffer
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+            CHECK_ARROW_AND_ASSIGN(
+                filesystem->OpenInputFile(file),
+                "Error opening file via Arrow filesystem: " + file, arrow_file);
+
             std::unique_ptr<parquet::ParquetFileReader> pf =
-                parquet::ParquetFileReader::Open(infile);
+                parquet::ParquetFileReader::Open(arrow_file);
             total_rg = pf->metadata()->num_row_groups();
         } catch (const std::exception &e) {
             std::cerr << "Failed to read parquet metadata for " << file << ": "
@@ -280,13 +330,15 @@ class RankBatchGenerator {
         if (start >= end) {
             return result;
         }
-        result.push_back(FilePart{file, start, end});
+        result.push_back(FilePart{
+            .path = file, .start_row_group = start, .end_row_group = end});
         return result;
     }
 
     // Partition files across ranks by block partitioning
     static std::vector<FilePart> partition_by_files(
-        const std::vector<std::string> &files, int rank, int size) {
+        const std::vector<std::string> &files,
+        std::shared_ptr<arrow::fs::FileSystem> filesystem, int rank, int size) {
         std::vector<FilePart> result;
         int total = static_cast<int>(files.size());
         int base = total / size;
@@ -297,24 +349,28 @@ class RankBatchGenerator {
             const std::string &f = files[i];
             int num_rg = 0;
             try {
-                std::shared_ptr<arrow::io::ReadableFile> infile;
-                PARQUET_ASSIGN_OR_THROW(infile,
-                                        arrow::io::ReadableFile::Open(f));
+                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+                CHECK_ARROW_AND_ASSIGN(
+                    filesystem->OpenInputFile(f),
+                    "Error opening file via Arrow filesystem: " + f,
+                    arrow_file);
                 std::unique_ptr<parquet::ParquetFileReader> pf =
-                    parquet::ParquetFileReader::Open(infile);
+                    parquet::ParquetFileReader::Open(arrow_file);
                 num_rg = pf->metadata()->num_row_groups();
             } catch (const std::exception &e) {
                 std::cerr << "Failed to read parquet metadata for " << f << ": "
                           << e.what() << "\n";
                 continue;
             }
-            result.push_back(FilePart{f, 0, num_rg});
+            result.push_back(FilePart{
+                .path = f, .start_row_group = 0, .end_row_group = num_rg});
         }
         return result;
     }
 
    private:
-    std::string path_;
+    PyObject *path_;
+    std::shared_ptr<arrow::fs::FileSystem> filesystem_;
     std::size_t target_rows_;
     int rank_{0}, size_{1};
 
@@ -357,7 +413,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
     JoinFilterColStats join_filter_col_stats;
 
-    std::string path;
+    PyObject *path;
     PyObject *storage_options;
     PyObject *schema_fields;
     const std::vector<int> selected_columns;
@@ -374,17 +430,11 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         JoinFilterColStats join_filter_col_stats)
         : join_filter_col_stats(std::move(join_filter_col_stats)),
+          path(py_path),
           storage_options(storage_options),
           selected_columns(selected_columns),
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
-
-        if (py_path && PyUnicode_Check(py_path)) {
-            path = PyUnicode_AsUTF8(py_path);
-        } else {
-            throw std::runtime_error(
-                "PhysicalGPUReadParquet(): path not a Python unicode string");
-        }
 
         Py_INCREF(this->storage_options);
 
