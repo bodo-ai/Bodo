@@ -143,6 +143,7 @@ nav:
             - Bodo Platform on AWS: guides/installation_and_setup/bodo_platform_aws.md
             - Bodo Platform on Azure: guides/installation_and_setup/bodo_platform_azure.md
       - Python BodoDataFrames: guides/dataframes/dataframes_intro.md
+      - GPU Accelerator Python BodoDataFrames: guides/dataframes/gpu_acceleration.md
       - Iceberg:
           - Introduction: guides/iceberg/intro.md
           - Reading and Writing: guides/iceberg/read_write.md

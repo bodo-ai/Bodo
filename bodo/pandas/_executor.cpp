@@ -901,7 +901,7 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
  * map is used to select whether the child will run on CPU or GPU.
  */
 void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
-                    std::map<void *, bool> &run_on_gpu,
+                    std::map<duckdb::LogicalOperator *, bool> &run_on_gpu,
                     std::optional<DEVICE> chosen_device = {}) {
     auto dp_iter = dp_cache.find(node->getId());
     if (dp_iter == dp_cache.end()) {
@@ -945,8 +945,9 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 
 #endif  // USE_CUDF
 
-void Executor::partition_internal(duckdb::LogicalOperator &op,
-                                  std::map<void *, bool> &run_on_gpu) {
+void Executor::partition_internal(
+    duckdb::LogicalOperator &op,
+    std::map<duckdb::LogicalOperator *, bool> &run_on_gpu) {
     /*
      * If GPU mode is enabled then we will run an algorithm to determine
      * whether to run each node on CPU or GPU.
