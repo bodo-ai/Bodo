@@ -23,6 +23,14 @@ If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only 
 
 Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
 
+## Checking Placement
+
+When GPU acceleration is enabled, users can view which plan nodes will be run on CPU versus GPU by setting the following environment variable:
+
+```
+export BODO_DATAFRAME_LIBRARY_DUMP_PLANS=1
+```
+
 ## Configuration and Tuning
 
 ### Batch Size
