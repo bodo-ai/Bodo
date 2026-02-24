@@ -75,6 +75,7 @@ jobs:
             role-skip-session-tagging: true
             role-duration-seconds: 10800
         - name: Install Extra Test dependencies
+          if: ${{ inputs.test-type != 'DF_LIB_GPU' }}
           run: |
             pip install transformers
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
@@ -98,7 +99,7 @@ jobs:
 
             set +eo pipefail
 
-            if [[ "${{ inputs.test-type }}" == "GPU" ]]; then
+            if [[ "${{ inputs.test-type }}" == "DF_LIB_GPU" ]]; then
               # C++ GPU tests
               GPU_CPP_TESTS=(
                   bodo/tests/test_streaming/test_gpu_shuffle.cpp
