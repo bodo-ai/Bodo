@@ -113,15 +113,15 @@ jobs:
               )
               PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_ARGS[*]} $PYTEST_IGNORE"
 
-              # CPP tests (single GPU)
+              # CPP tests (Single GPU)
               pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
               cpp_single_gpu_exit_code=$?
 
-              # CPP tests (multi-gpu)
+              # CPP tests (Multi GPU)
               mpiexec -n 4 pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
               cpp_multi_gpu_exit_code=$?
 
-              # Python tests (NUM_WORKERS=NUM GPUS)
+              # Python tests (NUM_WORKERS = NUM GPUS)
               BODO_NUM_WORKERS=4 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo \
                 --store-durations --clean-durations \
@@ -129,7 +129,7 @@ jobs:
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
-              # Python tests (NUM_WORKERS>NUM GPUS)
+              # Python tests (NUM_WORKERS > NUM GPUS)
               BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo --cov-append \
                 --store-durations --clean-durations \
@@ -137,6 +137,7 @@ jobs:
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
+              # Merge Exit Codes
               exit $((cpp_single_gpu_exit_code + cpp_multi_gpu_exit_code + python_test_exit_code + python_multi_test_exit_code))
             elif [[ "${{ inputs.test-type }}" == "NARWHALS" ]]; then
               # Checkout narwhals fork
