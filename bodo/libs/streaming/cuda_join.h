@@ -70,7 +70,8 @@ struct CudaHashJoin {
      * @brief Process input tables to build side of join
      */
     void BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                           cuda_event_wrapper event);
+                           cuda_event_wrapper event,
+                           rmm::cuda_stream_view& stream);
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
@@ -78,7 +79,7 @@ struct CudaHashJoin {
      */
     std::unique_ptr<cudf::table> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
-        cuda_event_wrapper event);
+        cuda_event_wrapper event, rmm::cuda_stream_view& stream);
 
     /**
      * @brief Get the min-max statistics for runtime join filters

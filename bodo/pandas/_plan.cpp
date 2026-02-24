@@ -1871,9 +1871,10 @@ void cpp_table_delete(int64_t cpp_table) {
 bool g_use_cudf;
 std::string g_cache_dir;
 
-void set_use_cudf(bool use_cudf, std::string cache_dir) {
+void set_use_cudf(bool use_cudf, std::string cache_dir, bool use_async) {
     g_use_cudf = use_cudf;
     g_cache_dir = cache_dir;
+    G_USE_ASYNC = use_async;
 }
 
 bool get_use_cudf() { return g_use_cudf; }
