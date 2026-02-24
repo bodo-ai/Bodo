@@ -45,6 +45,7 @@ jobs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
       run_tests: ${{ (steps.changes.outputs.not_docs && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
+      run_gpu: ${{ contains(github.event.pull_request.title, '[GPU]') || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
       not_docs: ${{ steps.changes.outputs.not_docs }}
       skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
@@ -140,7 +141,7 @@ jobs:
       total-batches: 12
       pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
@@ -154,7 +155,7 @@ jobs:
       total-batches: 1
       pytest-marker: "spawn_mode"
       collect-coverage: true
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: SPAWN
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
@@ -168,7 +169,7 @@ jobs:
       total-batches: 1
       pytest-marker: "df_lib and not jit_dependency and not weekly"
       collect-coverage: true
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB_NO_JIT"
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
@@ -187,7 +188,7 @@ jobs:
       total-batches: 2
       pytest-marker: "df_lib and jit_dependency and not weekly"
       collect-coverage: true
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
@@ -201,7 +202,7 @@ jobs:
       total-batches: 1
       pytest-marker: ""
       collect-coverage: false
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NARWHALS
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
       bodo-num-workers: "1"
@@ -216,8 +217,26 @@ jobs:
       total-batches: 1
       pytest-marker: ""
       collect-coverage: false
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NARWHALS
+      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
+    secrets: inherit
+
+  gpu-ci:
+    needs: [validate, get_version]
+    name: Test Multi-GPU
+    if: |
+      needs.validate.outputs.run_tests == 'true' && 
+      needs.validate.outputs.run_gpu == 'true'
+
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "gpu"
+      collect-coverage: true
+      runner-id: "self-hosted-multi-gpu"
+      test-type: "GPU"
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
@@ -230,7 +249,7 @@ jobs:
       total-batches: 1
       pytest-marker: "bodosql_cpp and not weekly"
       collect-coverage: true
-      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "BODOSQL_CPP"
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
@@ -323,6 +342,7 @@ jobs:
       - df-lib-ci
       - df-lib-non-jit-ci
       - bodosql-cpp-ci
+      - gpu-ci
       - validate
     runs-on: ubuntu-latest
     steps:
@@ -335,4 +355,5 @@ jobs:
         if: ${{ (needs.validate.outputs.not_docs == 'true') && (needs.validate.outputs.skip_flag != 'true') }}
         uses: re-actors/alls-green@release/v1
         with:
+          allowed-skips: ${{ needs.validate.outputs.run_gpu != 'true' && 'gpu-ci' || '' }}
           jobs: ${{ toJSON(needs) }}

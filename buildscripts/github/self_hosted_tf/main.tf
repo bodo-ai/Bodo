@@ -122,21 +122,11 @@ module "runners" {
       # Recommended disabled for ephemeral runners
       fifo = false
 
-      runner_config = merge(local.base_runner_config, {
+      runner_config = merge(local.base_gpu_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge", "g6e.2xlarge"]
+        instance_types = ["g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge"]
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_single_gpu_"
-        # Max # of Runners of this Size
-        runners_maximum_count = 2
-        # Use Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023)
-        ami = {
-          id_ssm_parameter_arn = "arn:aws:ssm:${local.aws_region}::parameter/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-amazon-linux-2023/latest/ami-id"
-        }
-        # GPU AMI requires >=75 GB of EBS Storage
-        block_device_mappings = [{
-          volume_size = 100
-        }]
       })
     }
 
@@ -149,21 +139,11 @@ module "runners" {
       # Recommended disabled for ephemeral runners
       fifo = false
 
-      runner_config = merge(local.base_runner_config, {
+      runner_config = merge(local.base_gpu_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["g4dn.12xlarge", "g5.12xlarge", "g6.12xlarge", "g6e.12xlarge"]
+        instance_types = ["g4dn.12xlarge", "g5.12xlarge", "g6.12xlarge"]
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_multi_gpu_"
-        # Max # of Runners of this Size
-        runners_maximum_count = 2
-        # Use Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023)
-        ami = {
-          id_ssm_parameter_arn = "arn:aws:ssm:${local.aws_region}::parameter/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-amazon-linux-2023/latest/ami-id"
-        }
-        # GPU AMI requires >=75 GB of EBS Storage
-        block_device_mappings = [{
-          volume_size = 100
-        }]
       })
     }
   }

@@ -6,6 +6,11 @@ inputs:
     required: false
     default: false
     type: 'boolean'
+  environment:
+    description: 'The environment to build to activate (default or default-cuda)'
+    required: false
+    default: 'default'
+    type: 'string'
 
 runs:
   using: "composite"
@@ -15,7 +20,7 @@ runs:
         with:
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-          environments: 'default'
+          environments: ${{ inputs.environment }}
           activate-environment: true
 
       # -------------------------- Build Packages --------------------------- #
@@ -29,7 +34,11 @@ runs:
 
       - name: Build Bodo
         run: |
-          pixi run build-bodo
+          if [ "${{ inputs.environment }}" == "default-cuda" ]; then
+            pixi run build-bodo-cudf
+          else
+            pixi run build-bodo
+          fi
         shell: bash
         env:
           # We should just use sccache directly on CI
