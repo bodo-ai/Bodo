@@ -125,15 +125,15 @@ jobs:
               BODO_NUM_WORKERS=4 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo \
                 --store-durations --clean-durations \
-                --durations-path=buildscripts/github/test_dur_bodo.json \
+                --durations-path=buildscripts/github/test_dur_bodo_1.json  \
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
               # Python tests (NUM_WORKERS>NUM GPUS)
               BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
-                --cov-report= --cov=bodo \
+                --cov-report= --cov=bodo --cov-append \
                 --store-durations --clean-durations \
-                --durations-path=buildscripts/github/test_dur_bodo.json \
+                --durations-path=buildscripts/github/test_dur_bodo_2.json \
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
@@ -227,9 +227,14 @@ jobs:
           if: inputs.collect-coverage && (success() || failure())
           run: |
             mkdir -p outputs
-            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
             mv .coverage outputs/.coverage_${{ inputs.batch }}_${{ inputs.test-type }}
-            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
+            if [[ "${{ inputs.test-type }}" == "DF_LIB_GPU" ]]; then
+              mv buildscripts/github/test_dur_bodo_1.json outputs/test_dur_bodo_1_${{ inputs.batch }}_${{ inputs.test-type }}.json
+              mv buildscripts/github/test_dur_bodo_2.json outputs/test_dur_bodo_2_${{ inputs.batch }}_${{ inputs.test-type }}.json
+            else
+              mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
+              mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
+            fi
           shell: bash
         - name: Upload Timings and Coverage
           uses: actions/upload-artifact@v4
