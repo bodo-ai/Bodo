@@ -1,7 +1,8 @@
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 
-#include "duckdb/storage/data_table.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
+#include "duckdb/storage/data_table.hpp"
+#include "duckdb/storage/table/data_table_info.hpp"
 
 namespace duckdb {
 
@@ -22,7 +23,6 @@ void DuckIndexEntry::Rollback(CatalogEntry &) {
 DuckIndexEntry::DuckIndexEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateIndexInfo &create_info,
                                TableCatalogEntry &table_p)
     : IndexCatalogEntry(catalog, schema, create_info), initial_index_size(0) {
-
 	auto &table = table_p.Cast<DuckTableEntry>();
 	auto &storage = table.GetStorage();
 	info = make_shared_ptr<IndexDataTableInfo>(storage.GetDataTableInfo(), name);

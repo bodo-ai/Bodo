@@ -8,20 +8,33 @@
 
 #pragma once
 
-#include "duckdb/storage/partial_block_manager.hpp"
-#include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/storage/partial_block_manager.hpp"
 
 namespace duckdb {
-class DatabaseInstance;
+
+// Forward declaration.
+class AttachedDatabase;
+class BlockManager;
+class CatalogEntry;
+struct CatalogTransaction;
 class ClientContext;
 class ColumnSegment;
+class DatabaseInstance;
+class Deserializer;
+class IndexCatalogEntry;
+class MetadataManager;
 class MetadataReader;
 class SchemaCatalogEntry;
 class SequenceCatalogEntry;
+class Serializer;
+class ScalarMacroCatalogEntry;
+class TableMacroCatalogEntry;
 class TableCatalogEntry;
 class ViewCatalogEntry;
+class TableDataWriter;
 class TypeCatalogEntry;
+struct BoundCreateTableInfo;
 
 class CheckpointWriter {
 public:
@@ -89,17 +102,13 @@ public:
 	SingleFileStorageManager &storage;
 };
 
-//! CheckpointWriter is responsible for checkpointing the database
-class SingleFileRowGroupWriter;
-class SingleFileTableDataWriter;
-
 class SingleFileCheckpointWriter final : public CheckpointWriter {
 	friend class SingleFileRowGroupWriter;
 	friend class SingleFileTableDataWriter;
 
 public:
 	SingleFileCheckpointWriter(QueryContext context, AttachedDatabase &db, BlockManager &block_manager,
-	                           CheckpointType checkpoint_type);
+	                           CheckpointOptions options);
 
 	void CreateCheckpoint() override;
 
@@ -108,8 +117,8 @@ public:
 	unique_ptr<TableDataWriter> GetTableDataWriter(TableCatalogEntry &table) override;
 
 	BlockManager &GetBlockManager();
-	CheckpointType GetCheckpointType() const {
-		return checkpoint_type;
+	CheckpointOptions GetCheckpointOptions() const {
+		return options;
 	}
 	optional_ptr<ClientContext> GetClientContext() const {
 		return context;
@@ -128,7 +137,7 @@ private:
 	//! an entire checkpoint.
 	PartialBlockManager partial_block_manager;
 	//! Checkpoint type
-	CheckpointType checkpoint_type;
+	CheckpointOptions options;
 	//! Block usage count for verification purposes
 	unordered_map<block_id_t, idx_t> verify_block_usage_count;
 };

@@ -16,6 +16,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/common/optional_ptr.hpp"
+#include "duckdb/common/enums/filter_propagate_result.hpp"
 
 namespace duckdb {
 
@@ -54,6 +55,15 @@ class BoundFunctionExpression;
 class ScalarFunctionCatalogEntry;
 
 struct StatementProperties;
+
+struct FunctionStatisticsPruneInput {
+	FunctionStatisticsPruneInput(optional_ptr<FunctionData> bind_data_p, BaseStatistics &stats_p)
+	    : bind_data(bind_data_p), stats(stats_p) {
+	}
+
+	optional_ptr<FunctionData> bind_data;
+	BaseStatistics &stats;
+};
 
 struct FunctionStatisticsInput {
 	FunctionStatisticsInput(BoundFunctionExpression &expr_p, optional_ptr<FunctionData> bind_data_p,
@@ -119,6 +129,9 @@ typedef void (*function_serialize_t)(Serializer &serializer, const optional_ptr<
                                      const ScalarFunction &function);
 typedef unique_ptr<FunctionData> (*function_deserialize_t)(Deserializer &deserializer, ScalarFunction &function);
 
+//! The type to prune row groups based on statistics
+typedef FilterPropagateResult (*propagate_filter_t)(const FunctionStatisticsPruneInput &input);
+
 //! The type to bind lambda-specific parameter types
 typedef unique_ptr<Expression> (*function_bind_expression_t)(FunctionBindExpressionInput &input);
 
@@ -142,6 +155,67 @@ public:
 	                          FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
 	                          bind_lambda_function_t bind_lambda = nullptr);
 
+	// clang-format off
+	// Keep these on one-line for readability
+	bool HasFunctionCallback() const { return function != nullptr; }
+	scalar_function_t GetFunctionCallback() const { return function; }
+	void SetFunctionCallback(scalar_function_t callback) { function = std::move(callback); }
+
+	bool HasBindCallback() const { return bind != nullptr; };
+	bind_scalar_function_t GetBindCallback() const { return bind; };
+	void SetBindCallback(bind_scalar_function_t callback) { bind = callback; }
+
+	bool HasBindExtendedCallback() const { return bind_extended != nullptr; }
+	bind_scalar_function_extended_t GetBindExtendedCallback() const { return bind_extended; }
+	void SetBindExtendedCallback(bind_scalar_function_extended_t callback) { bind_extended = callback; }
+
+	bool HasBindLambdaCallback() const { return bind_lambda != nullptr; }
+	bind_lambda_function_t GetBindLambdaCallback() const { return bind_lambda; }
+	void SetBindLambdaCallback(bind_lambda_function_t callback) { bind_lambda = callback; }
+
+	bool HasBindExpressionCallback() const { return bind_expression != nullptr; }
+	function_bind_expression_t GetBindExpressionCallback() const { return bind_expression; }
+	void SetBindExpressionCallback(function_bind_expression_t callback) { bind_expression = callback; }
+
+	bool HasInitStateCallback() const { return init_local_state != nullptr; }
+	init_local_state_t GetInitStateCallback() const { return init_local_state; }
+	void SetInitStateCallback(init_local_state_t callback) { init_local_state = callback; }
+
+	bool HasStatisticsCallback() const { return statistics != nullptr; }
+	function_statistics_t GetStatisticsCallback() const { return statistics; }
+	void SetStatisticsCallback(function_statistics_t callback) { statistics = callback; }
+
+	bool HasModifiedDatabasesCallback() const { return get_modified_databases != nullptr; }
+	get_modified_databases_t GetModifiedDatabasesCallback() const { return get_modified_databases; }
+	void SetModifiedDatabasesCallback(get_modified_databases_t callback) { get_modified_databases = callback; }
+
+	bool HasSerializationCallbacks() const { return serialize != nullptr && deserialize != nullptr; }
+	void SetSerializeCallback(function_serialize_t callback) { serialize = callback; }
+	void SetDeserializeCallback(function_deserialize_t callback) { deserialize = callback; }
+	function_serialize_t GetSerializeCallback() const { return serialize; }
+	function_deserialize_t GetDeserializeCallback() const { return deserialize; }
+
+	bool HasFilterPruneCallback() const {return filter_prune != nullptr; }
+	void SetFilterPruneCallback(propagate_filter_t callback) { filter_prune = callback; }
+	propagate_filter_t GetFilterPruneCallback() const { return filter_prune; }
+	// clang-format on
+
+	bool HasExtraFunctionInfo() const {
+		return function_info != nullptr;
+	}
+	ScalarFunctionInfo &GetExtraFunctionInfo() const {
+		D_ASSERT(function_info.get());
+		return *function_info;
+	}
+	void SetExtraFunctionInfo(shared_ptr<ScalarFunctionInfo> info) {
+		function_info = std::move(info);
+	}
+	template <class T, class... ARGS>
+	void SetExtraFunctionInfo(ARGS &&... args) {
+		function_info = make_shared_ptr<T>(std::forward<ARGS>(args)...);
+	}
+
+public:
 	//! The main scalar function to execute
 	scalar_function_t function;
 	//! The bind function (if any)
@@ -161,9 +235,13 @@ public:
 
 	function_serialize_t serialize;
 	function_deserialize_t deserialize;
+
+	//! The filter prune function (if any)
+	propagate_filter_t filter_prune = nullptr;
 	//! Additional function info, passed to the bind
 	shared_ptr<ScalarFunctionInfo> function_info;
 
+public:
 	DUCKDB_API bool operator==(const ScalarFunction &rhs) const;
 	DUCKDB_API bool operator!=(const ScalarFunction &rhs) const;
 

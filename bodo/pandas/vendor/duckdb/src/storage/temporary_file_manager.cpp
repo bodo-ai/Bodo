@@ -1,13 +1,12 @@
 #include "duckdb/storage/temporary_file_manager.hpp"
 
-#include "duckdb/common/chrono.hpp"
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/storage/buffer/temporary_file_information.hpp"
-#include "duckdb/storage/standard_buffer_manager.hpp"
 #include "duckdb/main/database.hpp"
 // Bodo Change: Add for QueryContext
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/settings.hpp"
 // Bodo Change: Remove encryption files
 // #include "duckdb/common/encryption_functions.hpp"
 #include "zstd.h"
@@ -76,7 +75,6 @@ TemporaryFileIdentifier::TemporaryFileIdentifier(TemporaryBufferSize size_p, idx
 TemporaryFileIdentifier::TemporaryFileIdentifier(DatabaseInstance &db, TemporaryBufferSize size_p, idx_t file_index_p,
                                                  bool encrypted_p)
     : size(size_p), file_index(file_index_p), encrypted(encrypted_p) {
-
 	// Bodo Change: Remove storage encryption code
 	//if (encrypted) {
 	//	// generate a random encryption key ID and corresponding key
@@ -648,7 +646,7 @@ void TemporaryFileManager::DecreaseSizeOnDisk(idx_t bytes) {
 }
 
 bool TemporaryFileManager::IsEncrypted() const {
-	return db.config.options.temp_file_encryption;
+	return Settings::Get<TempFileEncryptionSetting>(db);
 }
 
 unique_ptr<FileBuffer> TemporaryFileManager::ReadTemporaryBuffer(QueryContext context, block_id_t id,
@@ -768,9 +766,12 @@ TemporaryDirectoryHandle::~TemporaryDirectoryHandle() {
 			// we want to remove all files in the directory
 			fs.RemoveDirectory(temp_directory);
 		} else {
+			vector<string> full_path_files_to_delete;
+			full_path_files_to_delete.reserve(files_to_delete.size());
 			for (auto &file : files_to_delete) {
-				fs.RemoveFile(fs.JoinPath(temp_directory, file));
+				full_path_files_to_delete.push_back(fs.JoinPath(temp_directory, file));
 			}
+			fs.RemoveFiles(full_path_files_to_delete);
 		}
 	}
 }

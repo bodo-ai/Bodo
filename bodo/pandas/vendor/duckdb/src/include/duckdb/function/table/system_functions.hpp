@@ -63,6 +63,10 @@ struct DuckDBConstraintsFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 
+struct DuckDBCoordinateSystemsFun {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
 struct DuckDBSecretsFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
@@ -152,6 +156,10 @@ struct DuckDBViewsFun {
 };
 
 struct EnableLoggingFun {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
+struct EnableProfilingFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 

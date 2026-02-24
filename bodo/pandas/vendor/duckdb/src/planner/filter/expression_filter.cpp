@@ -1,6 +1,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
@@ -27,6 +28,18 @@ bool ExpressionFilter::EvaluateWithConstant(ExpressionExecutor &executor, const 
 }
 
 FilterPropagateResult ExpressionFilter::CheckStatistics(BaseStatistics &stats) const {
+	if (stats.GetStatsType() == StatisticsType::GEOMETRY_STATS) {
+		// Delegate to GeometryStats for geometry types
+		return GeometryStats::CheckZonemap(stats, expr);
+	}
+	if (expr->type == ExpressionType::BOUND_FUNCTION) {
+		auto &func_expr = expr->Cast<BoundFunctionExpression>();
+		if (func_expr.function.HasFilterPruneCallback()) {
+			FunctionStatisticsPruneInput input(func_expr.bind_info.get(), stats);
+			return func_expr.function.GetFilterPruneCallback()(input);
+		}
+	}
+
 	// we cannot prune based on arbitrary expressions currently
 	return FilterPropagateResult::NO_PRUNING_POSSIBLE;
 }
