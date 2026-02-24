@@ -80,6 +80,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         pq_write_create_dir(this->path.c_str());
 
+        fs = get_fs_for_path(this->path.c_str(), true);
+
         column_names = get_names_from_arrow(arrow_schema);
 
         // Keep dict builders for API parity with CPU writer (not used for GPU
@@ -217,9 +219,19 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             int myrank, num_ranks;
             MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-            std::string fname = gen_pieces_file_name(myrank, num_ranks,
-                                                     fname_prefix, ".parquet");
-            std::string out_path = (fs::path(path) / fname).string();
+
+            std::string path_name;  // original path passed to this function
+                                    // (excluding prefix)
+            std::string dirname;    // path and directory name to store the
+                                    // parquet files (only if is_parallel=true)
+            std::string fname;  // name of parquet file to write (excludes path)
+            Bodo_Fs::FsEnum fs_option;
+            std::string prefix = get_fname_prefix(iter);
+            extract_fs_dir_path(path.c_str(), true, prefix.c_str(), ".parquet",
+                                myrank, num_ranks, &fs_option, &dirname, &fname,
+                                &path, &path_name);
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;  // append file name to output path
 
             cudf::table_view bttv = buffer_table->view();
             cudf::io::table_input_metadata meta{bttv};
@@ -324,6 +336,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     }
 
     const std::string path;
+    std::shared_ptr<arrow::fs::FileSystem> fs;
     const std::string compression;
     const int64_t row_group_size;
     const std::string bucket_region;
