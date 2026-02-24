@@ -18,7 +18,8 @@ on:
       - '.github/workflows/**'
       - '!.github/workflows/lcov_exclude'
       - '!.github/workflows/CodeQuality.yml'
-      - '.github/config/out_of_tree_extensions.cmake'
+      - '.github/config/extensions/*.cmake'
+      - '.github/patches/extensions/**/*.patch'
   merge_group:
   pull_request:
     types: [opened, reopened, ready_for_review, converted_to_draft]
@@ -29,7 +30,8 @@ on:
       - '.github/workflows/**'
       - '!.github/workflows/lcov_exclude'
       - '!.github/workflows/CodeQuality.yml'
-      - '.github/config/out_of_tree_extensions.cmake'
+      - '.github/config/extensions/*.cmake'
+      - '.github/patches/extensions/**/*.patch'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
@@ -129,12 +131,7 @@ jobs:
         shell: bash
         run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build clang-tidy && sudo pip3 install pybind11[global] --break-system-packages
 
-      - name: Setup Ccache
-        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature' }}
-        uses: hendrikmuhs/ccache-action@main
-        with:
-          key: ${{ github.job }}
-          save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
+      - uses: ./.github/actions/ccache-action
 
       - name: Download clang-tidy-cache
         if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature' }}
@@ -153,4 +150,4 @@ jobs:
       - name: Tidy Check Diff
         shell: bash
         if: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feature' }}
-        run: make tidy-check-diff
+        run: DUCKDB_GIT_BASE_BRANCH=${{ github.base_ref }} make tidy-check-diff

@@ -23,12 +23,8 @@ static void BitStringFunction(DataChunk &args, ExpressionState &state, Vector &r
 		    if (idx_t(n) < input_length) {
 			    throw InvalidInputException("Length must be equal or larger than input string");
 		    }
-		    idx_t len;
-		    if (FROM_STRING) {
-			    Bit::TryGetBitStringSize(input, len, nullptr); // string verification
-		    }
 
-		    len = Bit::ComputeBitstringLen(UnsafeNumericCast<idx_t>(n));
+		    idx_t len = Bit::ComputeBitstringLen(UnsafeNumericCast<idx_t>(n));
 		    string_t target = StringVector::EmptyString(result, len);
 		    if (FROM_STRING) {
 			    Bit::BitString(input, UnsafeNumericCast<idx_t>(n), target);
@@ -47,7 +43,7 @@ ScalarFunctionSet BitStringFun::GetFunctions() {
 	bitstring.AddFunction(
 	    ScalarFunction({LogicalType::BIT, LogicalType::INTEGER}, LogicalType::BIT, BitStringFunction<false>));
 	for (auto &func : bitstring.functions) {
-		BaseScalarFunction::SetReturnsError(func);
+		func.SetFallible();
 	}
 	return bitstring;
 }
@@ -72,7 +68,7 @@ struct GetBitOperator {
 ScalarFunction GetBitFun::GetFunction() {
 	ScalarFunction func({LogicalType::BIT, LogicalType::INTEGER}, LogicalType::INTEGER,
 	                    ScalarFunction::BinaryFunction<string_t, int32_t, int32_t, GetBitOperator>);
-	BaseScalarFunction::SetReturnsError(func);
+	func.SetFallible();
 	return func;
 }
 
@@ -100,7 +96,7 @@ static void SetBitOperation(DataChunk &args, ExpressionState &state, Vector &res
 ScalarFunction SetBitFun::GetFunction() {
 	ScalarFunction function({LogicalType::BIT, LogicalType::INTEGER, LogicalType::INTEGER}, LogicalType::BIT,
 	                        SetBitOperation);
-	BaseScalarFunction::SetReturnsError(function);
+	function.SetFallible();
 	return function;
 }
 

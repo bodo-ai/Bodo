@@ -2,6 +2,9 @@
 # description: Test merge queue and repartitioning with encrypted temporary files
 # group: [temp_files]
 
+# We need httpfs to do encrypted writes
+require httpfs
+
 foreach cipher GCM CTR
 
 statement ok
@@ -9,9 +12,6 @@ ATTACH '__TEST_DIR__/encrypted_temp_files_${cipher}.db' AS enc (ENCRYPTION_KEY '
 
 statement ok
 SET temp_file_encryption=true;
-
-statement ok
-USE enc;
 
 statement ok
 PRAGMA memory_limit='400M'

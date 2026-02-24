@@ -51,10 +51,21 @@ BindResult TableFunctionBinder::BindColumnReference(unique_ptr<ParsedExpression>
 		}
 	}
 
-	auto value_function = ExpressionBinder::GetSQLValueFunction(column_names.back());
-	if (value_function) {
-		return BindExpression(value_function, depth, root_expression);
+	if (accept_sql_value_functions) {
+		auto value_function = ExpressionBinder::GetSQLValueFunction(column_names.back());
+		if (value_function) {
+			return BindExpression(value_function, depth, root_expression);
+		}
 	}
+
+	auto result = BindCorrelatedColumns(expr_ptr, ErrorData("error"));
+	if (!result.HasError()) {
+		auto &bound_expr = expr_ptr->Cast<BoundExpression>();
+		ExtractCorrelatedExpressions(binder, *bound_expr.expr);
+		result.expression = std::move(bound_expr.expr);
+		return result;
+	}
+
 	if (table_function_name.empty()) {
 		throw BinderException(query_location,
 		                      "Failed to bind \"%s\" - COLUMNS expression can only contain lambda parameters",

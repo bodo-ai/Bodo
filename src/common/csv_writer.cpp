@@ -16,7 +16,7 @@ CSVWriterState::CSVWriterState()
 }
 
 CSVWriterState::CSVWriterState(ClientContext &context, idx_t flush_size_p)
-    : flush_size(flush_size_p), stream(make_uniq<MemoryStream>(Allocator::Get(context))) {
+    : flush_size(flush_size_p), stream(make_uniq<MemoryStream>(Allocator::Get(context), flush_size)) {
 }
 
 CSVWriterState::CSVWriterState(DatabaseInstance &db, idx_t flush_size_p)
@@ -71,7 +71,6 @@ CSVWriter::CSVWriter(CSVReaderOptions &options_p, FileSystem &fs, const string &
                                                 FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW |
                                                     FileLockType::WRITE_LOCK | compression)),
       write_stream(*file_writer), should_initialize(true), shared(shared) {
-
 	if (!shared) {
 		global_write_state = make_uniq<CSVWriterState>();
 	}
@@ -198,18 +197,6 @@ void CSVWriter::ResetInternal(optional_ptr<CSVWriterState> local_state) {
 	bytes_written = 0;
 }
 
-unique_ptr<CSVWriterState> CSVWriter::InitializeLocalWriteState(ClientContext &context, idx_t flush_size) {
-	auto res = make_uniq<CSVWriterState>(context, flush_size);
-	res->stream = make_uniq<MemoryStream>();
-	return res;
-}
-
-unique_ptr<CSVWriterState> CSVWriter::InitializeLocalWriteState(DatabaseInstance &db, idx_t flush_size) {
-	auto res = make_uniq<CSVWriterState>(db, flush_size);
-	res->stream = make_uniq<MemoryStream>();
-	return res;
-}
-
 idx_t CSVWriter::BytesWritten() {
 	if (shared) {
 		lock_guard<mutex> flock(lock);
@@ -240,6 +227,9 @@ void CSVWriter::WriteQuoteOrEscape(WriteStream &writer, char quote_or_escape) {
 }
 
 string CSVWriter::AddEscapes(char to_be_escaped, char escape, const string &val) {
+	if (escape == '\0') {
+		return val;
+	}
 	idx_t i = 0;
 	string new_val = "";
 	idx_t found = val.find(to_be_escaped);
@@ -249,10 +239,8 @@ string CSVWriter::AddEscapes(char to_be_escaped, char escape, const string &val)
 			new_val += val[i];
 			i++;
 		}
-		if (escape != '\0') {
-			new_val += escape;
-			found = val.find(to_be_escaped, found + 1);
-		}
+		new_val += escape;
+		found = val.find(to_be_escaped, found + 1);
 	}
 	while (i < val.length()) {
 		new_val += val[i];

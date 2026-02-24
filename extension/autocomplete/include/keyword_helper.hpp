@@ -4,7 +4,7 @@
 #include "duckdb/common/string.hpp"
 
 namespace duckdb {
-enum class KeywordCategory : uint8_t {
+enum class PEGKeywordCategory : uint8_t {
 	KEYWORD_NONE,
 	KEYWORD_UNRESERVED,
 	KEYWORD_RESERVED,
@@ -12,14 +12,21 @@ enum class KeywordCategory : uint8_t {
 	KEYWORD_COL_NAME
 };
 
-class KeywordHelper {
+class PEGKeywordHelper {
 public:
-	static KeywordHelper &Instance();
-	bool KeywordCategoryType(const string &text, KeywordCategory type) const;
+	static PEGKeywordHelper &Instance();
+	bool KeywordCategoryType(const string &text, PEGKeywordCategory type) const;
 	void InitializeKeywordMaps();
+	bool IsKeyword(const string &text) {
+		if (reserved_keyword_map.count(text) != 0 || unreserved_keyword_map.count(text) != 0 ||
+		    colname_keyword_map.count(text) != 0 || typefunc_keyword_map.count(text) != 0) {
+			return true;
+		}
+		return false;
+	};
 
 private:
-	KeywordHelper();
+	PEGKeywordHelper();
 	bool initialized;
 	case_insensitive_set_t reserved_keyword_map;
 	case_insensitive_set_t unreserved_keyword_map;

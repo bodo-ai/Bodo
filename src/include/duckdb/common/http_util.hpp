@@ -11,6 +11,7 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/enums/http_status_code.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include <functional>
 
 namespace duckdb {
@@ -40,6 +41,8 @@ struct HTTPParams {
 	float retry_backoff = DEFAULT_RETRY_BACKOFF;
 	bool keep_alive = DEFAULT_KEEP_ALIVE;
 	bool follow_location = true;
+	bool override_verify_ssl = false;
+	bool verify_ssl = true;
 
 	string http_proxy;
 	idx_t http_proxy_port;
@@ -138,10 +141,15 @@ struct BaseRequest {
 	const string &url;
 	string path;
 	string proto_host_port;
-	const HTTPHeaders &headers;
+	HTTPHeaders headers;
 	HTTPParams &params;
 	//! Whether or not to return failed requests (instead of throwing)
 	bool try_request = false;
+
+	// Requests will optionally contain their timings
+	bool have_request_timing = false;
+	timestamp_t request_start;
+	timestamp_t request_end;
 
 	template <class TARGET>
 	TARGET &Cast() {
@@ -150,6 +158,14 @@ struct BaseRequest {
 	template <class TARGET>
 	const TARGET &Cast() const {
 		return reinterpret_cast<const TARGET &>(*this);
+	}
+
+	static HTTPHeaders MergeHeaders(const HTTPHeaders &headers, HTTPParams &params) {
+		HTTPHeaders result = headers;
+		for (const auto &header : params.extra_headers) {
+			result.Insert(header.first, header.second);
+		}
+		return result;
 	}
 };
 
@@ -205,17 +221,21 @@ struct PostRequestInfo : public BaseRequest {
 	const_data_ptr_t buffer_in;
 	idx_t buffer_in_len;
 	string buffer_out;
+	//! Used to send a GET request with a body (non-standard but supported by some servers)
+	bool send_post_as_get_request = false;
 };
 
 class HTTPClient {
 public:
 	virtual ~HTTPClient() = default;
+	virtual void Initialize(HTTPParams &http_params) = 0;
 
 	virtual unique_ptr<HTTPResponse> Get(GetRequestInfo &info) = 0;
 	virtual unique_ptr<HTTPResponse> Put(PutRequestInfo &info) = 0;
 	virtual unique_ptr<HTTPResponse> Head(HeadRequestInfo &info) = 0;
 	virtual unique_ptr<HTTPResponse> Delete(DeleteRequestInfo &info) = 0;
 	virtual unique_ptr<HTTPResponse> Post(PostRequestInfo &info) = 0;
+	virtual void Cleanup() {};
 
 	unique_ptr<HTTPResponse> Request(BaseRequest &request);
 };
@@ -246,6 +266,8 @@ public:
 	static void DecomposeURL(const string &url, string &path_out, string &proto_host_port_out);
 	static HTTPStatusCode ToStatusCode(int32_t status_code);
 	static string GetStatusMessage(HTTPStatusCode status);
+	static bool IsHTTPProtocol(const string &url);
+	static void BumpToSecureProtocol(string &url);
 
 public:
 	static duckdb::unique_ptr<HTTPResponse>
