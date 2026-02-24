@@ -21,7 +21,7 @@ If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only 
 
 ## How Placement is Decided
 
-Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
+Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.  The first time BODO_GPU is enabled, Bodo will run a small number of example operators on CPU and GPU to determine their relative speeds and these statistics are later used to estimate execution time for operators on CPU and GPU.
 
 ## Checking Placement
 
@@ -29,6 +29,45 @@ When GPU acceleration is enabled, users can view which plan nodes will be run on
 
 ```
 export BODO_DATAFRAME_LIBRARY_DUMP_PLANS=1
+```
+
+The following is an example output when this environment variable is enabled.  By looking at the first section, we learn that the projection will be run on the GPU but note that this does not imply that its read parquet child node will also be run on the GPU.  However, in the second section we find the CPU/GPU selection for that read parquet node and it is also scheduled to run on GPU.  By printing the full subtree for each node, this allows the user to better place that subtree within the overall plan.
+
+```
+=========================================================================
+    The following node (but not necessarily its children) will run on GPU
+┌───────────────────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│        Expressions:       │
+│           #[0.0]          │
+│           #[0.1]          │
+│           #[0.2]          │
+│           #[0.3]          │
+│           #[0.4]          │
+│                           │
+│        ~56,961 rows       │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│BODO_READ_PARQUET(TIME...  │
+│    ────────────────────   │
+│   Filters: Amount<100.0   │
+│                           │
+│        ~56,961 rows       │
+└───────────────────────────┘
+
+=========================================================================
+=========================================================================
+    The following node (but not necessarily its children) will run on GPU
+┌───────────────────────────┐
+│BODO_READ_PARQUET(TIME...  │
+│    ────────────────────   │
+│   Filters: Amount<100.0   │
+│                           │
+│        ~56,961 rows       │
+└───────────────────────────┘
+
+=========================================================================
 ```
 
 ## Configuration and Tuning
@@ -76,6 +115,8 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
+Limit, sampling, CTEs, sorting, quantiles, and union are not currently supported.
+
 ## Important Per-Feature Caveats
 
 ### Read Parquet
@@ -118,6 +159,9 @@ If you expect a portion of your pipeline to run on GPU but it executes on CPU in
 * Ensure that GPU execution is enabled by setting `BODO_GPU=1` in the environment for the process running your code.
 * Look for unsupported constructs such as UDFs inside filters, column expressions, or aggregations, which can force CPU execution for those nodes.
 * Review your execution or plan diagnostics to confirm which nodes are placed on GPU vs CPU and adjust your code or configuration accordingly.
+
 ## Roadmap
 
-Write parquet to the same filesystems supported by read parquet is currently in progress. Additional join variants are forthcoming.
+Write parquet to the same filesystems supported by read parquet is currently in progress.
+
+Additional join variants are forthcoming.
