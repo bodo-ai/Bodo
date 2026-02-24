@@ -236,7 +236,7 @@ jobs:
       pytest-marker: "gpu"
       collect-coverage: true
       runner-id: "self-hosted-multi-gpu"
-      test-type: "GPU"
+      test-type: "DF_LIB_GPU"
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
