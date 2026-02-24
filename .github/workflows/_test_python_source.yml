@@ -114,11 +114,11 @@ jobs:
               PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_ARGS[*]} $PYTEST_IGNORE"
 
               # CPP tests (single GPU)
-              pytest -s -v -Wignore "${GPU_CPP_TESTS[*]}"
+              pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
               cpp_single_gpu_exit_code=$?
 
               # CPP tests (multi-gpu)
-              mpiexec -n 1 pytest -s -v -Wignore "${GPU_CPP_TESTS[*]}"
+              mpiexec -n 1 pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
               cpp_multi_gpu_exit_code=$?
 
               # Python tests (NUM_WORKERS=NUM GPUS)
