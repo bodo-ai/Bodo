@@ -118,15 +118,23 @@ jobs:
               cpp_single_gpu_exit_code=$?
 
               # CPP tests (multi-gpu)
-              mpiexec -n 1 pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
+              mpiexec -n 4 pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
               cpp_multi_gpu_exit_code=$?
 
               # Python tests (NUM_WORKERS=NUM GPUS)
-              BODO_NUM_WORKERS=1 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
+              BODO_NUM_WORKERS=4 pytest -s -v -Wignore \
+                --cov-report= --cov=bodo \
+                --store-durations --clean-durations \
+                --durations-path=buildscripts/github/test_dur_bodo.json \
+                -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
               # Python tests (NUM_WORKERS>NUM GPUS)
-              BODO_NUM_WORKERS=3 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
+              BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
+                --cov-report= --cov=bodo \
+                --store-durations --clean-durations \
+                --durations-path=buildscripts/github/test_dur_bodo.json \
+                -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
               exit $((cpp_single_gpu_exit_code + cpp_multi_gpu_exit_code + python_test_exit_code + python_multi_test_exit_code))
