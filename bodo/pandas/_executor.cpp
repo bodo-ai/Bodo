@@ -929,16 +929,23 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 #endif
 
     if (get_dump_plans()) {
-        std::cout << "========================================================="
-                     "================"
-                  << std::endl;
-        std::cout << "    The following node (but not necessarily its "
-                     "children) will run on "
-                  << (dev == DEVICE::CPU ? "CPU" : "GPU") << std::endl;
-        std::cout << node->getOp().ToString() << std::endl;
-        std::cout << "========================================================="
-                     "================"
-                  << std::endl;
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        if (rank == 0) {
+            std::cout
+                << "========================================================="
+                   "================"
+                << std::endl;
+            std::cout << "    The following node (but not necessarily its "
+                         "children) will run on "
+                      << (dev == DEVICE::CPU ? "CPU" : "GPU") << std::endl;
+            std::cout << node->getOp().ToString() << std::endl;
+            std::cout
+                << "========================================================="
+                   "================"
+                << std::endl;
+        }
     }
 
     // Fill in the map with true if the selected device is GPU.
