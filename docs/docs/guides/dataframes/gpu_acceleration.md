@@ -99,7 +99,7 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * Parquet read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
-* Parquet write (local filesystem only)
+* Parquet write (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
 * Row filtering (Pandas-style boolean filters) — UDFs excluded
 
@@ -122,10 +122,6 @@ Limit, sampling, CTEs, sorting, quantiles, and union are not currently supported
 ### Read Parquet
 
 A plan that includes a head() (or other operations that force a small sample collection via Pandas) may prevent the Parquet read from running on GPU; in such cases the read may fall back to CPU to satisfy the sampling semantics.
-
-### Write Parquet
-
-GPU writes are supported only when writing to the local filesystem. Remote/cloud writes currently use CPU paths.
 
 ### Filtering
 
@@ -161,7 +157,5 @@ If you expect a portion of your pipeline to run on GPU but it executes on CPU in
 * Review your execution or plan diagnostics to confirm which nodes are placed on GPU vs CPU and adjust your code or configuration accordingly.
 
 ## Roadmap
-
-Write parquet to the same filesystems supported by read parquet is currently in progress.
 
 Additional join variants are forthcoming.

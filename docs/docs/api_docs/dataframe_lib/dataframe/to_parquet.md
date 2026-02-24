@@ -4,9 +4,6 @@ BodoDataFrame.to_parquet(path=None, engine="auto", compression="snappy", index=N
 ```
 **GPU:** ✔ Supported
 
-**Tip:** GPU acceleration for `to_parquet` writes is currently only available when writing to local filesystem paths.
-Writes to remote/cloud storage (e.g., S3, Azure ABFS, GCS) will fall back to CPU, even when GPU is enabled.
-
 Write a DataFrame as a Parquet dataset.
 
 <p class="api-header">Parameters</p>
