@@ -16,6 +16,7 @@
 #include "physical/write_parquet_utils.h"
 
 #include <cudf/concatenate.hpp>
+#include <cudf/io/data_sink.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
 #include <cudf/lists/lists_column_view.hpp>
@@ -29,6 +30,13 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+
 struct PhysicalGPUWriteParquetMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
@@ -40,6 +48,55 @@ struct PhysicalGPUWriteParquetMetrics {
     time_t consume_time = 0;
     time_t accumulate_time = 0;
     time_t file_write_time = 0;
+};
+
+/**
+Plugs into cudf parquet writer and writes the host buffer to output storage.
+Similar to
+https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/pylibcudf/pylibcudf/io/types.pyx#L580
+https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/cpp/src/io/utilities/data_sink.cpp#L21
+ */
+class BodoDataSink : public cudf::io::data_sink {
+   public:
+    BodoDataSink(std::shared_ptr<arrow::fs::FileSystem> _fs,
+                 const std::filesystem::path &out_path)
+        : fs(std::move(_fs)) {
+        // Avoid "\" generated on Windows for remote object storage
+        std::string out_path_str = fs->type_name() == "local"
+                                       ? out_path.string()
+                                       : out_path.generic_string();
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            fs->OpenOutputStream(out_path_str);
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+    }
+
+    void host_write(void const *data, size_t size) override {
+        arrow::Status status = out_stream->Write(data, size);
+        CHECK_ARROW(status, "BodoDataSink::host_write failed");
+    }
+
+    void flush() override {
+        arrow::Status status = out_stream->Flush();
+        CHECK_ARROW(status, "BodoDataSink::flush failed");
+    }
+
+    size_t bytes_written() override {
+        int64_t pos;
+        CHECK_ARROW_AND_ASSIGN(out_stream->Tell(), "BodoDataSink::Tell", pos);
+        return static_cast<size_t>(pos);
+    }
+
+    ~BodoDataSink() override {
+        arrow::Status status = out_stream->Close();
+        if (!status.ok()) {
+            std::cerr << "Error in BodoDataSink destructor: "
+                      << status.ToString() << std::endl;
+        }
+    }
+
+   private:
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    std::shared_ptr<::arrow::io::OutputStream> out_stream;
 };
 
 /// @brief GPU-backed parquet writer for streaming pipelines.
@@ -239,8 +296,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
                 meta.column_metadata[i].set_name(column_names[i]);
             }
 
+            BodoDataSink bodo_data_sink(fs, out_path);
             // build writer options (row_group_size, compression, etc.)
-            auto sink = cudf::io::sink_info(out_path);
+            auto sink = cudf::io::sink_info(&bodo_data_sink);
             auto builder = cudf::io::parquet_writer_options::builder(sink, bttv)
                                .metadata(meta);
             if (row_group_size > 0) {
