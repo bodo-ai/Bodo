@@ -23,7 +23,7 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: string
-      # Options: DF_LIB, DF_LIB_NO_JIT, SPAWN, NORMAL, NARWHALS, GPU
+      # Options: DF_LIB, DF_LIB_NO_JIT, DF_LIB_GPU, SPAWN, NORMAL, NARWHALS
       test-type:
         type: string
         description: The kind of tests to run e.g. spawn tests
@@ -99,23 +99,33 @@ jobs:
             set +eo pipefail
 
             if [[ "${{ inputs.test-type }}" == "GPU" ]]; then
-              GPU_CPP_TESTS="bodo/tests/test_streaming/test_gpu_shuffle.cpp
-              bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
+              # C++ GPU tests
+              GPU_CPP_TESTS=(
+                  bodo/tests/test_streaming/test_gpu_shuffle.cpp
+                  bodo/tests/test_streaming/test_gpu_batch_gen.cpp
+              )
+
+              # Ignore iceberg tests since PyIceberg is not compatible with GPU environment
+              PYTEST_IGNORE_ICEBERG_ARGS=(
+                  --ignore bodo/tests/test_iceberg
+                  --ignore bodo/tests/test_df_lib/test_iceberg.py
+              )
+              PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_ARGS[*]} $PYTEST_IGNORE"
 
               # CPP tests (single GPU)
-              pytest -s -v -Wignore $GPU_CPP_TESTS
+              pytest -s -v -Wignore "${GPU_CPP_TESTS[*]}"
               cpp_single_gpu_exit_code=$?
 
               # CPP tests (multi-gpu)
-              mpiexec -n 4 pytest -s -v -Wignore $GPU_CPP_TESTS
+              mpiexec -n 1 pytest -s -v -Wignore "${GPU_CPP_TESTS[*]}"
               cpp_multi_gpu_exit_code=$?
 
               # Python tests (NUM_WORKERS=NUM GPUS)
-              BODO_NUM_WORKERS=4 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
+              BODO_NUM_WORKERS=1 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
               # Python tests (NUM_WORKERS>NUM GPUS)
-              BODO_NUM_WORKERS=9 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
+              BODO_NUM_WORKERS=3 pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
               exit $((cpp_single_gpu_exit_code + cpp_multi_gpu_exit_code + python_test_exit_code + python_multi_test_exit_code))
@@ -179,6 +189,7 @@ jobs:
             BODO_NUM_WORKERS: ${{ inputs.bodo-num-workers }}
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
             BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ startsWith(inputs.test-type, 'DF_LIB') && '1' || '0' }}
+            BODO_GPU: ${{ inputs.test-type == 'DF_LIB_GPU' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"

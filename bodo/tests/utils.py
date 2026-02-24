@@ -1304,6 +1304,15 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
     return py_out
 
 
+def _pd_fillna_value(series: pd.Series, value) -> pd.Series:
+    """Call pd.Series.fillna in a way that's compatible with older Pandas versions."""
+    pandas_version = int(pd.__version__.split(".")[0])
+    if pandas_version == 2 and value is None:
+        return series
+
+    return series.fillna(value=value)
+
+
 def _test_equal(
     bodo_out,
     py_out,
@@ -1411,12 +1420,16 @@ def _test_equal(
                 or pa.types.is_null(pa_type)
                 or pa.types.is_decimal(pa_type)
             ):
-                py_out = py_out.fillna(None) if py_out.dtype == np.object_ else py_out
+                py_out = (
+                    _pd_fillna_value(py_out, None)
+                    if py_out.dtype == np.object_
+                    else py_out
+                )
                 py_out = py_out.astype(bodo_out.dtype)
 
             # Pandas boolean output may have False instead of NA
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
-                bodo_out = bodo_out.fillna(False)
+                bodo_out = _pd_fillna_value(py_out, False)
 
             # Handle NA/nan mismatch
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.object_:
@@ -1548,7 +1561,11 @@ def _test_equal(
             ):
                 in_arr = py_out[py_out.columns[i]]
                 # Avoid np.nan in object arrays which causes PyArrow errors
-                in_arr = in_arr.fillna(None) if in_arr.dtype == np.object_ else in_arr
+                in_arr = (
+                    _pd_fillna_value(in_arr, None)
+                    if in_arr.dtype == np.object_
+                    else in_arr
+                )
                 py_out[py_out.columns[i]] = pd.array(in_arr, dtype=bodo_dtype)
 
             # Convert object boolean arrays to pyarrow dtype (used in BodoSQL expected output)
@@ -1578,10 +1595,12 @@ def _test_equal(
 
             # Avoid NA mismatch for object columns
             if bodo_dtype == np.object_ and py_dtype == np.object_:
-                bodo_out[bodo_out.columns[i]] = bodo_out[bodo_out.columns[i]].fillna(
-                    None
+                bodo_out[bodo_out.columns[i]] = _pd_fillna_value(
+                    bodo_out[bodo_out.columns[i]], None
                 )
-                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].fillna(None)
+                py_out[py_out.columns[i]] = _pd_fillna_value(
+                    py_out[py_out.columns[i]], None
+                )
 
         # Handle Arrow float types in Index
         if not isinstance(bodo_out.index, pd.MultiIndex):
