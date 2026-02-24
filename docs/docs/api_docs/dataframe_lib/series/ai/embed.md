@@ -21,7 +21,7 @@ Supports OpenAI-compatible endpoints and Amazon Bedrock via the backend paramete
 : __api_key: *str | None*__: The API key for authentication. Required for OpenAI backend. Must not be passed for Bedrock backend.
 
 : __model: *str | None:*__
-    The model to use for generation. If None, the backend's default model will be used. If the backend is Bedrock, this should be the model ID (e.g., "amazon.titan-text-lite-v1:") and may not be None. For OpenAI, this should be the model name (e.g., "gpt-3.5-turbo").
+    The model to use for generation. If None, the backend's default model will be used. If the backend is Bedrock, this should be the model ID (e.g., "us.amazon.nova-lite-v1:0") and may not be None. For OpenAI, this should be the model name (e.g., "gpt-3.5-turbo").
 
 : __base_url: *str | None:*__
     The URL of an OpenAI-compatible LLM endpoint (only applies to OpenAI-style backends).

@@ -16,10 +16,11 @@ from enum import Enum
 from time import sleep
 
 import pandas as pd
+import pyarrow as pa
+from mpi4py import MPI
 from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo.user_logging
-from bodo.mpi4py import MPI
 
 
 class CommandType(str, Enum):
@@ -38,6 +39,8 @@ class CommandType(str, Enum):
     SET_CONFIG = "set_config"
     SPAWN_PROCESS = "spawn_process"
     STOP_PROCESS = "stop_process"
+    SCATTER_JIT = "scatter_jit"
+    GATHER_JIT = "gather_jit"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
@@ -208,20 +211,19 @@ def gatherv_nojit(data, root, comm):
     """A no-JIT version of gatherv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
     """
-
-    if data is not None and not isinstance(
-        data, (pd.DataFrame, pd.Series, ArrowExtensionArray)
-    ):
-        raise ValueError(
-            "gatherv_nojit only supports DataFrame, Series and ArrowExtensionArray input"
-        )
-
+    import bodo
     from bodo.ext import hdist
     from bodo.pandas.utils import (
         BODO_NONE_DUMMY,
         cpp_table_to_df,
         df_to_cpp_table,
     )
+
+    original_data = data
+
+    if isinstance(data, pd.arrays.DatetimeArray):
+        arr = pa.array(data)
+        data = pd.array(arr, dtype=pd.ArrowDtype(arr.type))
 
     # Get data type on receiver since it doesn't have any local data
     rank = bodo.get_rank()
@@ -232,11 +234,34 @@ def gatherv_nojit(data, root, comm):
         if is_receiver:
             data = comm.recv(source=0, tag=11)
         elif rank == 0:
+            if data is not None:
+                sample = (
+                    data.head(0)
+                    if isinstance(data, (pd.DataFrame, pd.Series))
+                    else data[:0]
+                )
+            else:
+                sample = None
             comm.send(
-                data[:0] if isinstance(data, ArrowExtensionArray) else data.head(0),
+                sample,
                 dest=0,
                 tag=11,
             )
+
+    if data is None:
+        return None
+
+    # Fallback to JIT version if unsupported type
+    if (
+        data is not None
+        and not isinstance(data, ArrowExtensionArray)
+        and not _is_supported_gather_scatter_type(data)
+    ):
+        # Import compiler lazily
+        import bodo.decorators
+        from bodo.libs.distributed_api import gatherv
+
+        return gatherv(original_data, False, True, root, comm)
 
     is_series = isinstance(data, pd.Series)
     is_array = isinstance(data, ArrowExtensionArray)
@@ -267,6 +292,23 @@ def gatherv_nojit(data, root, comm):
     return out
 
 
+def _is_supported_gather_scatter_type(data) -> bool:
+    """Make sure data is a DataFrame or Series with types supported in gather/scatter (without categorical dtypes currently)."""
+
+    if isinstance(data, pd.DataFrame):
+        for dtype in data.dtypes:
+            if isinstance(dtype, pd.CategoricalDtype):
+                return False
+
+    if isinstance(data, pd.Series):
+        if isinstance(data.dtype, pd.CategoricalDtype):
+            return False
+
+    return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(
+        data.index, (pd.CategoricalIndex, pd.PeriodIndex, pd.IntervalIndex)
+    )
+
+
 def scatterv_nojit(data, root, comm):
     """A no-JIT version of scatterv for use in spawn mode. This avoids importing the JIT
     compiler which can be slow.
@@ -281,7 +323,15 @@ def scatterv_nojit(data, root, comm):
     is_sender = root == MPI.ROOT
 
     sample_data = comm.bcast(_get_data_sample(data) if is_sender else None, root)
+    original_data = data
     data = sample_data if not is_sender else data
+
+    # Fallback to JIT version if unsupported type
+    if not _is_supported_gather_scatter_type(data):
+        # Import compiler lazily
+        from bodo.libs.distributed_api import scatterv
+
+        return scatterv(original_data, None, True, root, comm)
 
     is_series = isinstance(data, pd.Series)
 
@@ -325,9 +375,13 @@ def _get_data_sample(data):
         # NOTE: handles object columns correctly using Arrow schema inference for Pandas
         return _empty_like(data)
 
-    raise ValueError(
-        "_get_data_sample only supports DataFrame, Series and ArrowExtensionArray input"
-    )
+    if isinstance(data, dict):
+        return {k: _get_data_sample(v) for k, v in data.items()}
+
+    try:
+        return data[:0]
+    except Exception:
+        return data
 
 
 def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):

@@ -71,7 +71,7 @@ def test_date_casting_functions(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
-                lambda val: None
+                lambda val: pd.NA
                 if scalar_to_date_equiv_fn(val) is None
                 else scalar_to_date_equiv_fn(val)
             )
@@ -107,7 +107,7 @@ def test_date_casting_functions_case(
                 lambda val: scalar_to_date_equiv_fn(val)
                 if scalar_to_date_equiv_fn(val) is not None
                 and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
-                else None
+                else pd.NA
             )
         }
     )
@@ -125,7 +125,7 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
+                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
             )
         }
     )
@@ -146,7 +146,7 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=30, freq="10D5H", tz="US/PACIFIC"
+                "1/18/2022", periods=30, freq="10D5h", tz="US/Pacific", unit="ns"
             ),
             "B": [True, False, True, False, True] * 6,
         }
@@ -198,7 +198,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
 
     # Construct expected answer using Pandas
     valid_answers = valid_datetimes.dt.date
-    invalid_answers = pd.Series([None] * len(invalid_str_datetimes))
+    invalid_answers = pd.Series([pd.NA] * len(invalid_str_datetimes))
     expected_output = pd.DataFrame(
         {"DATES": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
     )
@@ -224,7 +224,7 @@ def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
 
     if test_fn == "TRY_TO_DATE":
         expected_output = pd.DataFrame(
-            {"FOO": pd.Series([None] * len(dt_fn_dataframe["TABLE1"]))}
+            {"FOO": pd.Series([pd.NA] * len(dt_fn_dataframe["TABLE1"]))}
         )
         dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
         check_query(
@@ -378,7 +378,7 @@ def test_date_casting_functions_with_invalid_format(
     query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
 
     if test_fn == "TRY_TO_DATE":
-        expected_output = pd.DataFrame({"FOO": pd.Series([None] * 24)})
+        expected_output = pd.DataFrame({"FOO": pd.Series([pd.NA] * 24)})
         check_query(
             query,
             format_input_string_df,
@@ -403,7 +403,7 @@ def test_date_casting_with_colon(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
-                lambda val: None
+                lambda val: pd.NA
                 if scalar_to_date_equiv_fn(val) is None
                 else scalar_to_date_equiv_fn(val)
             )
@@ -425,7 +425,7 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
+                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
             )
         }
     )
@@ -548,7 +548,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Series(
                 [
@@ -572,7 +573,8 @@ _to_timestamp_timestamp_data = [
                     pd.Timestamp("2023-3-1 12:30:00", tz="Australia/Sydney"),
                     None,
                     pd.Timestamp("2025-7-4 9:00:13.250999", tz="Australia/Sydney"),
-                ]
+                ],
+                dtype="datetime64[ns, Australia/Sydney]",
             ),
             pd.Series(
                 [
@@ -671,10 +673,15 @@ def test_to_timestamp_non_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 4 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
-        expected_output[0][ctx["TABLE1"]["B"]] = None
+        expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
 
     check_query(
         query,
@@ -794,10 +801,15 @@ def test_to_timestamp_numeric(
         "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 2 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
-        {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
+        {
+            0: pd.Series(
+                [None if pd.isna(s) else pd.Timestamp(s, tz=tz) for s in answer],
+                dtype=f"datetime64[ns, {tz}]" if tz else "datetime64[ns]",
+            )
+        }
     )
     if use_case:
-        expected_output[0][ctx["TABLE1"]["B"]] = None
+        expected_output[0] = expected_output[0].where(~ctx["TABLE1"]["B"], other=None)
     check_query(
         query,
         ctx,
@@ -829,7 +841,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(1970, 1, 3, 23, 10, 1),
                         pd.Timestamp(2016, 2, 28, 10, 10, 10),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-1",
@@ -853,7 +866,8 @@ def test_to_timestamp_numeric(
                         pd.Timestamp(2021, 9, 29, 11, 12, 27),
                         pd.Timestamp(2023, 2, 14, 18, 37, 5),
                     ]
-                    * 4
+                    * 4,
+                    dtype="datetime64[ns]",
                 ),
             ),
             id="format-2",
@@ -904,7 +918,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00"),
                     pd.Timestamp("2024-08-16 13:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             None,
             pd.Series(
@@ -914,7 +929,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 17:30:00"),
                     pd.Timestamp("2024-08-16 16:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ntz-west_to_east",
         ),
@@ -927,7 +943,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 14:30:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-08-16 16:45:20", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "America/Los_Angeles",
             pd.Series(
@@ -937,7 +954,8 @@ def test_to_timestamp_format_str(
                     None,
                     pd.Timestamp("2024-07-09 10:30:00"),
                     pd.Timestamp("2024-08-16 12:45:20"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="3_arg-ltz_west-utc_to_east",
         ),

@@ -49,7 +49,7 @@ def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
     )
     """
     # set check_dtype=False because of int64 vs Int64 difference
-    check_query(query, basic_df, spark_info, convert_float_nan=True, check_dtype=False)
+    check_query(query, basic_df, spark_info, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -69,7 +69,6 @@ def test_multi_col_null_pivot(basic_df, spark_info, memory_leak_check):
         query,
         basic_df,
         spark_info,
-        convert_float_nan=True,
         is_out_distributed=False,
         check_dtype=False,
     )
@@ -158,7 +157,6 @@ def test_float_pivot(spark_info, memory_leak_check):
         query,
         ctx,
         spark_info,
-        convert_float_nan=True,
         check_dtype=False,
         is_out_distributed=False,
     )

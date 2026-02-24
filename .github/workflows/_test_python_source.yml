@@ -32,6 +32,11 @@ on:
         type: string
         description: The version string of Bodo.
         required: true
+      bodo-num-workers:
+        type: string
+        description: Number of workers to use for Bodo tests.
+        required: false
+        default: "2"
 
 jobs:
   run:
@@ -149,6 +154,7 @@ jobs:
             # Disabling the DataFrame library for spawn tests since some of the tests
             # create Pandas manager states for testing that are not fully functional.
             BODO_DATAFRAME_LIBRARY_WARN: ${{ inputs.test-type == 'NARWHALS' && '0' || '1' }}
+            BODO_NUM_WORKERS: ${{ inputs.bodo-num-workers }}
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
             BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ startsWith(inputs.test-type, 'DF_LIB') && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"

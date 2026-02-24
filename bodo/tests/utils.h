@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 

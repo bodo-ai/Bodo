@@ -7,6 +7,7 @@ import numba
 import numpy as np
 import pandas as pd
 import sklearn.feature_extraction
+from mpi4py import MPI
 from numba.extending import (
     overload,
     overload_attribute,
@@ -23,7 +24,6 @@ from bodo.ml_support.sklearn_ext import (
     parallel_predict_regression,
     parallel_score,
 )
-from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,

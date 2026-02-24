@@ -7,9 +7,9 @@ parameters:
   default: []
 - name: test_type
   type: string
-  default: NORMAL
+  default: COMPILER
   values:
-    - NORMAL
+    - COMPILER
     - SPAWN
     - CACHE
     - DF_LIB
@@ -47,8 +47,13 @@ jobs:
       which unzip
 
       if [[ "$(uname)" == 'Linux' ]]; then
-        wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
-        sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+        if [[ "$(uname -m)" == "x86_64" ]]; then
+          wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+          sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+        else
+          wget https://download.oracle.com/otn_software/linux/instantclient/1925000/instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip
+          sudo $(which unzip) instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip -d /usr/local/lib
+        fi
       else
         wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
         sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
@@ -60,7 +65,7 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodo
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
     env:
@@ -101,7 +106,7 @@ jobs:
 
       if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
-        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_HOME=/opt/hadoop-3.4.0
         export HADOOP_INSTALL=$HADOOP_HOME
         export HADOOP_MAPRED_HOME=$HADOOP_HOME
         export HADOOP_COMMON_HOME=$HADOOP_HOME
@@ -130,28 +135,40 @@ jobs:
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
 
+      pixi_azure() {
+        if [[ "$(uname -m)" == "aarch64" ]]; then
+          # Preload libgomp on aarch64 to avoid dynamic loader issues in Sklearn tests:
+          # https://stackoverflow.com/questions/61065541/importerror-usr-lib-aarch64-linux-gnu-libgomp-so-1-cannot-allocate-memory-in
+          pixi run -e azure env LD_PRELOAD=libgomp.so.1 "$@"
+        else
+          pixi run -e azure "$@"
+        fi
+      }
 
       # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
       PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
       if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
-        pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
+        pixi_azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
         # Disabling the DataFrame library for spawn tests since some of the tests
         # create Pandas manager states for testing that are not fully functional.
         export BODO_ENABLE_DATAFRAME_LIBRARY=0
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+        pixi_azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" $PYTEST_IGNORE \
+          bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
         export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
         export BODO_NUM_WORKERS="$NP"
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and not jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-df-library-non-jit.xml --test-run-title="${{ parameters.name }}-non-jit"
+        pixi_azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and not jit_dependency" $PYTEST_IGNORE \
+          bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
         # Run tests with JIT dependency separately to avoid JIT imports impacting other tests.
-        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and jit_dependency" $PYTEST_IGNORE bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
+        pixi_azure pytest -s -v -Wignore -m "$(PYTEST_MARKER) and jit_dependency" $PYTEST_IGNORE \
+          bodo/tests --junitxml=pytest-report-df-library-jit-dependency.xml --test-run-title="${{ parameters.name }} - JIT"
       else
         # Some tests assume a batch size of 4096 for testing specific behavior.
         export BODO_STREAMING_BATCH_SIZE=4096 
-        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        pixi_azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)

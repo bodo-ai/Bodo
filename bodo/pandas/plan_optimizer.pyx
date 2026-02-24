@@ -9,6 +9,7 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
+import datetime
 from libc.stdint cimport int64_t, uint64_t, int32_t
 import pandas as pd
 import pyarrow.parquet as pq
@@ -321,7 +322,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id) except +
-    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations) except +
+    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols) except +
     cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
@@ -365,6 +366,7 @@ cdef extern from "_plan.h" nogil:
     cdef c_string cpp_table_get_first_field_name(int64_t cpp_table) except +
     cdef object cpp_table_to_pyarrow(int64_t cpp_table, c_bool delete_cpp_table) except +
     cdef void cpp_table_delete(int64_t cpp_table) except +
+    cdef void set_use_cudf(c_bool use_cudf, c_string cache_dir) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -717,6 +719,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, (datetime.datetime, datetime.date)):
+        return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
         return move(make_const_date32_expr(val.value))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
@@ -771,8 +775,24 @@ def python_arith_dunder_to_duckdb(str opstr):
         return "/"
     elif opstr == "__mod__" or opstr == "__rmod__":
         return "%"
+    elif opstr == "__floordiv__" or opstr == "__rfloordiv__":
+        # NOTE: only used for integers since "//" is integer division in duckdb
+        return "//"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
+
+
+def is_integer_expr(object expr):
+    """
+    Check if the expression's output schema is of integer type.
+    """
+    if isinstance(expr, Expression):
+        return pa.types.is_integer(expr.out_schema[0].type)
+
+    if isinstance(expr, int):
+        return True
+
+    return False
 
 
 cdef class ArithOpExpression(Expression):
@@ -789,7 +809,8 @@ cdef class ArithOpExpression(Expression):
         self.out_schema = out_schema
         # The // operator in Python we have to implement as a truediv followed by a floor.
         # Do the semantics work here for negative divisors?
-        if opstr in ["__floordiv__", "__rfloordiv__"]:
+        if opstr in ["__floordiv__", "__rfloordiv__"] and not (is_integer_expr(lhs) and is_integer_expr(rhs)):
+            # "//" is integer division in duckdb, so we need to handle float floor division separately
             truediv_expression = make_arithop_expr(
                 lhs_expr,
                 rhs_expr,
@@ -888,7 +909,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """
     cdef readonly object path
     cdef readonly object storage_options
-    cdef readonly int nrows
+    cdef readonly int64_t nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         from bodo.ext import hdist
@@ -896,17 +917,25 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
+        self.nrows = -1
+        cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        from bodo.ext import hdist
+
+        if self.nrows == -1:
+            self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=True) if bodo.get_rank() == 0 else 0)
         return self.nrows
 
-    def _get_nrows(self):
+    def _get_nrows(self, exact : bool = True):
+        """ Get the number of rows in the Parquet dataset.
+        If exact is False, estimate the number of rows by sampling files.
+        """
         from bodo.io.fs_io import (
             expand_path_globs,
             getfs,
@@ -919,13 +948,50 @@ cdef class LogicalGetParquetRead(LogicalOperator):
 
         # Since we are supplying the filesystem to pq.read_table,
         # Any prefixes e.g. s3:// should be removed.
-        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+        fpath_noprefix, _ = get_fpath_without_protocol_prefix(
             fpath, protocol, parsed_url
         )
 
         fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
 
-        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+        if exact:
+            return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
+
+        if isinstance(fpath_noprefix, str):
+            fpath_noprefix = [fpath_noprefix]
+
+        # TODO: Make parquet file detection more robust.
+        def is_parquet_file(info: pa.fs.FileInfo):
+            return info.extension in ["parquet", "pq"]
+
+        files = []
+
+        for path in fpath_noprefix:
+            info = fs.get_file_info(path)
+
+            if info.type == pa.fs.FileType.File:
+                if is_parquet_file(info):
+                    files.append(path)
+
+            elif info.type == pa.fs.FileType.Directory:
+                selector = pa.fs.FileSelector(path, recursive=True)
+                infos = fs.get_file_info(selector)
+                files.extend(
+                    i.path for i in infos
+                    if i.type == pa.fs.FileType.File
+                    and is_parquet_file(i)
+                )
+
+        n_files = len(files)
+        if n_files == 0:
+            return 0
+
+        n_sampled = max(3, int(0.001 * n_files))
+        sampled = files[:min(n_sampled, n_files)]
+
+        rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
+
+        return int(rows * (n_files / len(sampled)))
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
@@ -950,10 +1016,10 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
 
 
 cdef class LogicalGetPandasReadParallel(LogicalOperator):
-    cdef int nrows
+    cdef int64_t nrows
 
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, int nrows, object result_id):
+    def __cinit__(self, object out_schema, int64_t nrows, object result_id):
         # result_id could be a string or LazyPlanDistributedArg if we are constructing the
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
@@ -1012,7 +1078,7 @@ cdef class LogicalIcebergWrite(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source,
             str table_loc,
             str bucket_region,
-            int max_pq_chunksize,
+            int64_t max_pq_chunksize,
             str compression,
             object partition_tuples,
             object sort_tuples,
@@ -1062,8 +1128,9 @@ cdef class LogicalJoinFilter(LogicalOperator):
             vector[int] join_filter_ids,
             vector[vector[int64_t]] equality_filter_columns,
             vector[vector[c_bool]] equality_is_first_locations):
+        cdef vector[vector[int64_t]] orig_build_key_cols
 
-        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations)
+        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_join_filter.release())
 
     def __str__(self):
@@ -1110,6 +1177,10 @@ cpdef cpp_table_to_arrow_array(cpp_table, delete_cpp_table=True):
     if delete_cpp_table:
         cpp_table_delete(cpp_table)
     return out
+
+
+cpdef c_set_use_cudf(use_cudf, cache_dir):
+    set_use_cudf(use_cudf, cache_dir.encode())
 
 
 cpdef py_optimize_plan(object plan):

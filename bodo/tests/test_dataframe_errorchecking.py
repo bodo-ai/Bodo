@@ -736,7 +736,7 @@ def test_describe_args(memory_leak_check):
         return df.describe(include="all")
 
     def impl_exclude(df):
-        return df.describe(exclude=[np.number])
+        return df.describe(exclude=[np.int32])
 
     df = pd.DataFrame(
         {
@@ -770,7 +770,7 @@ def test_describe_args(memory_leak_check):
                     ]
                 ),
                 # timedelta
-                "C": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                "C": pd.Series(pd.timedelta_range(start="1 day", periods=5, unit="ns")),
                 # list
                 "D": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4], [2]]),
                 # tuple

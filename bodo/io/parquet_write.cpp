@@ -191,7 +191,7 @@ void pq_write_create_dir(const char *_path_name) {
                         &path_name);
 
     create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
-                        "parquet");
+                        "parquet", true);
 }
 
 void pq_write_create_dir_py_entry(const char *_path_name) {
@@ -297,7 +297,7 @@ int64_t pq_write(const char *_path_name,
     // table to a posix or hadoop filesystem.
     if (is_parallel && create_dir) {
         create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
-                            "parquet");
+                            "parquet", true);
     }
 
     // Do not write a file if there are no rows to write.
@@ -364,8 +364,10 @@ int64_t pq_write(const char *_path_name,
             // 'element' as their `name`. This is important for reading Iceberg
             // datasets written by Bodo, but also for standardization.
             ->enable_compliant_nested_types()
-            // Required for copying TIME data to Snowflake
+// Required for copying TIME data to Snowflake
+#if ARROW_VERSION_MAJOR >= 22
             ->set_time_adjusted_to_utc(true)
+#endif
             ->build();
 
     if (has_dictionary_columns) {

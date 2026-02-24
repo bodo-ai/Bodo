@@ -411,7 +411,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         Tuple[str, Dict[str, Any], str]: Returns the generated func_text, a dictionary
             containing the lowered global variables and the SQL plan.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -713,6 +713,7 @@ _numba_to_sql_column_type_map = {
     types.float64: SqlTypeEnum.Float64.value,
     types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
+    bodo.types.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.types.string_type: SqlTypeEnum.String.value,
     bodo.types.bytes_type: SqlTypeEnum.Binary.value,

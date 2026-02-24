@@ -35,7 +35,8 @@ def smoke_ctx():
         }
     )
     t = pd.Series(
-        [(pd.Timestamp("2020-1-1") + pd.Timedelta(days=i)) for i in range(1461)]
+        [(pd.Timestamp("2020-1-1") + pd.Timedelta(days=i)) for i in range(1461)],
+        dtype="datetime64[ns]",
     )
     t3 = pd.DataFrame(
         {
@@ -70,7 +71,8 @@ def smoke_shipping_ctx():
                         )
                     )
                     for i in range(10**6)
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             "STORE_ID": pd.Series(
                 [1234 + (i % np.round(np.sqrt(i + 1))) for i in range(10**6)],
@@ -391,6 +393,7 @@ def test_smoke_groupby_aggregation(smoke_ctx, spark_info, memory_leak_check):
 
 
 @pytest.mark.smoke
+@pytest.mark.timeout(2000)
 def test_smoke_nogroup_aggregation(smoke_ctx, spark_info, memory_leak_check):
     """
     Tests only no-groupby aggregation

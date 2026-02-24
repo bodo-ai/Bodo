@@ -4,9 +4,9 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,

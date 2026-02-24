@@ -1209,6 +1209,10 @@ class LazyPlanDistributedArg:
         may change (distributed to collected) and the result ID may not be valid
         anymore.
         """
+        from bodo.pandas.frame import BodoDataFrame
+        from bodo.pandas.lazy_wrapper import ExecState
+        from bodo.pandas.series import BodoSeries
+
         if getattr(self.df._mgr, "_md_result_id", None) is not None:
             # The dataframe is already distributed so we can use the existing result ID
             self.res_id = self.df._mgr._md_result_id
@@ -1218,6 +1222,15 @@ class LazyPlanDistributedArg:
         else:
             # The dataframe is not distributed yet so we need to scatter it
             # and create a new result ID.
+            # Convert BodoDataFrame/BodoSeries to Pandas before scattering
+            if isinstance(self.df, (BodoSeries, BodoDataFrame)):
+                assert self.df._exec_state == ExecState.COLLECTED, (
+                    "Only collected BodoDataFrame and BodoSeries can be scattered"
+                )
+                if isinstance(self.df, BodoSeries):
+                    self.df = pd.Series(self.df, copy=False)
+                else:
+                    self.df = pd.DataFrame(self.df, copy=False)
             mgr = bodo.spawn.spawner.get_spawner().scatter_data(self.df)
             self.res_id = mgr._md_result_id
             self.mgr = mgr
@@ -1272,7 +1285,14 @@ def count_plan(self):
 
 
 def _get_df_python_func_plan(
-    df_plan, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
+    df_plan,
+    empty_data,
+    func,
+    args,
+    kwargs,
+    is_method=True,
+    cfunc_decorator=None,
+    use_arrow_dtypes=None,
 ):
     """Create plan for calling some function or method on a DataFrame. Creates a
     ScalarFuncExpression with provided arguments and a LogicalProjection.
@@ -1285,6 +1305,7 @@ def _get_df_python_func_plan(
             is_method,
             args,
             kwargs,
+            use_arrow_dtypes,
         )
         if cfunc_decorator is None
         else (func, cfunc_decorator)

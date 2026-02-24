@@ -36,6 +36,13 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install pipx
+        run: python -m pip install pipx
+
       - uses: actions/checkout@v5
 
       # https://github.com/actions/runner-images/issues/10624
@@ -52,9 +59,8 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.9.0
+        uses: prefix-dev/setup-pixi@v0.9.3
         with:
-          pixi-version: v0.40.2
           cache: true
           cache-write: ${{ github.event_name == 'schedule'}}
           environments: ${{ contains(inputs.os, 'macos') && 'pip-cpp-macos' || 'pip-cpp-win' }}
@@ -82,16 +88,24 @@ jobs:
           echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
-        run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
+        run: python -m pipx run cibuildwheel
         env:
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
             curl -fsSL https://pixi.sh/install.sh | bash
             source ~/.bashrc
+
             # Global Tools
-            pixi global install sccache ninja
+            pixi global install sccache ninja mold
+
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
+            ARCH=$(uname -m)
+            PKGS="libcurl-devel zlib-devel openssl-devel libzstd-devel rdma-core-devel"
+            if [ "$ARCH" = "x86_64" ]; then
+              PKGS="$PKGS libpsm2"
+            fi
+            dnf install -y $PKGS
+
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -105,28 +119,19 @@ jobs:
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: >
             pip install delvewheel && 
-            if exist "{package}\bodo\mpi4py\_vendored_mpi4py" rmdir /s /q "{package}\bodo\mpi4py\_vendored_mpi4py" && 
             if exist "{package}\build" rmdir /s /q "{package}\build"
           CIBW_BEFORE_BUILD_MACOS: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
           CIBW_BEFORE_BUILD_LINUX: |
-            # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
-            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            BODO_VENDOR_MPI4PY=1
             BODO_WINDOWS_BUILD_TYPE="Release"
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
@@ -136,8 +141,6 @@ jobs:
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '11.0' }}
-            BODO_VENDOR_MPICH=1
-            BODO_VENDOR_MPI4PY=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos-win
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
@@ -150,7 +153,6 @@ jobs:
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             BODO_VENDOR_MPICH=1
-            BODO_VENDOR_MPI4PY=1
             CONDA_PREFIX=""
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
             NO_HDF5=1
@@ -163,8 +165,7 @@ jobs:
             sccache --show-stats &&
             delvewheel repair --exclude impi.dll --exclude msmpi.dll
             --exclude arrow.dll --exclude arrow_acero.dll --exclude arrow_dataset.dll --exclude arrow_python.dll
-            --exclude parquet.dll -v -w {dest_dir} {wheel} && 
-            python buildscripts/bodo/pip/windows/patch_bodo_for_pip.py -p {dest_dir}
+            --exclude parquet.dll -v -w {dest_dir} {wheel}
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
@@ -172,15 +173,13 @@ jobs:
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
             -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
             -e libarrow_substrait -e libparquet
-            --require-archs {delocate_archs} -v {wheel} &&
-            python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} &&
-            mv {wheel} {dest_dir}
+            --require-archs {delocate_archs} -v {wheel} && mv {wheel} {dest_dir}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
             auditwheel -v repair
             --exclude libmpi.so.12 --exclude libmpi.so.40
-            --exclude libarrow.so.2200 --exclude libarrow_acero.so.2200 --exclude libarrow_dataset.so.2200
-            --exclude libarrow_python.so.2200 --exclude libparquet.so.2200
+            --exclude libarrow.so.2300 --exclude libarrow_acero.so.2300 --exclude libarrow_dataset.so.2300
+            --exclude libarrow_python.so.2300 --exclude libparquet.so.2300
             --exclude libaws-cpp-sdk-core.so --exclude libaws-crt-cpp.so --exclude libaws-c-mqtt.so.1.0.0
             --exclude libaws-c-event-stream.so.1.0.0 --exclude libaws-c-s3.so.0unstable --exclude libaws-c-auth.so.1.0.0
             --exclude libaws-c-http.so.1.0.0 --exclude libaws-c-io.so.1.0.0 --exclude libaws-c-cal.so.1.0.0

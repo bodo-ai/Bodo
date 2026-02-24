@@ -10,7 +10,12 @@ import pytest
 from numba.core.errors import TypingError  # noqa TID253
 
 import bodo
-from bodo.tests.utils import check_func, pytest_mark_spawn_mode, temp_env_override
+from bodo.tests.utils import (
+    _test_equal,
+    check_func,
+    pytest_mark_spawn_mode,
+    temp_env_override,
+)
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = [pytest.mark.test_docs]
@@ -36,7 +41,7 @@ def test_quickstart_local_python_df():
 
     with ensure_clean2(output_path):
         pandas_df.to_parquet(output_path)
-        pandas_out = pd.read_parquet(output_path)
+        pandas_out = pd.read_parquet(output_path, dtype_backend="pyarrow")
 
     def bodo_groupby_write():
         import bodo.pandas as pd
@@ -49,12 +54,12 @@ def test_quickstart_local_python_df():
 
     with ensure_clean2(output_path):
         bodo_groupby_write()
-        bodo_out = pd.read_parquet(output_path)
+        bodo_out = pd.read_parquet(output_path, dtype_backend="pyarrow")
 
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out, check_dtype=False)
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
@@ -77,14 +82,14 @@ def test_quickstart_local_python_jit():
     with ensure_clean2(output_df_path):
         S = bodo.jit(cache=True, spawn=True)(computation)(df)
         pd.DataFrame({"C": S}).to_parquet(output_df_path)
-        bodo_out = pd.read_parquet(output_df_path)
+        bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         S = computation(df)
         pd.DataFrame({"C": S}).to_parquet(output_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    _test_equal(bodo_out, pandas_out)
 
 
 @pytest.mark.iceberg
@@ -104,7 +109,7 @@ def test_quickstart_local_iceberg_df():
     df.to_iceberg("test_table", location="./iceberg_warehouse")
 
     out_df = pd.read_iceberg("test_table", location="./iceberg_warehouse")
-    pd.testing.assert_frame_equal(out_df, df)
+    _test_equal(out_df, df)
 
 
 @pytest.mark.iceberg
@@ -140,7 +145,7 @@ def test_quickstart_local_iceberg_jit():
             return df
 
         out_df = example_read_iceberg()
-        pd.testing.assert_frame_equal(out_df, input_df)
+        _test_equal(out_df, input_df)
 
 
 @pytest.fixture(scope="module")
@@ -148,7 +153,7 @@ def devguide_df_path():
     """Writes to parquet file used by multiple examples in docs/quick_start/devguide.md"""
     df = pd.DataFrame(
         {
-            "A": np.repeat(pd.date_range("2013-01-03", periods=1000), 1),
+            "A": np.repeat(pd.date_range("2013-01-03", periods=1000, unit="ns"), 1),
             "B": np.arange(1_000),
         }
     )
@@ -170,7 +175,7 @@ def test_devguide_transform(devguide_df_path):
     output_df_path = "output_df.pq"
 
     def data_transform(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         df["B"] = df.apply(
             lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
         )
@@ -181,22 +186,20 @@ def test_devguide_transform(devguide_df_path):
     with temp_env_override({"BODO_NUM_WORKERS": "1"}):
         with ensure_clean2(output_df_path):
             bodo.jit(cache=True, spawn=True)(data_transform)(devguide_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+            bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         data_transform(devguide_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     bodo_out["A"] = bodo_out["A"].astype("datetime64[ns]")
-    pd.testing.assert_frame_equal(
-        bodo_out, pandas_out, check_exact=False, check_dtype=False
-    )
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
 def test_devguide_parallel1(devguide_df_path):
     def load_data_bodo(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         return df
 
     # BODO_NUM_WORKERS=2 python load_data.py
@@ -204,7 +207,7 @@ def test_devguide_parallel1(devguide_df_path):
         bodo_out = bodo.jit(spawn=True)(load_data_bodo)(devguide_df_path)
         pandas_out = load_data_bodo(devguide_df_path)
 
-    pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    _test_equal(bodo_out, pandas_out)
 
 
 @pytest_mark_spawn_mode
@@ -212,7 +215,7 @@ def test_devguide_parallel2(devguide_df_path):
     output_df_path = "output_df.pq"
 
     def data_groupby(devguide_df_path):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         df2 = df.groupby("A", as_index=False).sum()
         df2.to_parquet(output_df_path)
 
@@ -220,18 +223,16 @@ def test_devguide_parallel2(devguide_df_path):
     with temp_env_override({"BODO_NUM_WORKERS": "8"}):
         with ensure_clean2(output_df_path):
             bodo.jit(cache=True, spawn=True)(data_groupby)(devguide_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+            bodo_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     with ensure_clean2(output_df_path):
         data_groupby(devguide_df_path)
-        pandas_out = pd.read_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path, dtype_backend="pyarrow")
 
     bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
     pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
 
-    pd.testing.assert_frame_equal(
-        bodo_out, pandas_out, check_exact=False, check_dtype=False
-    )
+    _test_equal(bodo_out, pandas_out, check_dtype=False)
 
 
 @pytest_mark_spawn_mode
@@ -240,7 +241,7 @@ def test_devguide_type_error(devguide_df_path):
 
     @bodo.jit(spawn=True)
     def groupby_keys(devguide_df_path, extra_keys):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         keys = [c for c in df.columns if c not in ["B", "C"]]
         if extra_keys:
             keys.append("B")
@@ -264,7 +265,7 @@ def test_devguide_groupby_keys_append(devguide_df_path):
         return keys
 
     def groupby_keys(devguide_df_path, extra_keys):
-        df = pd.read_parquet(devguide_df_path)
+        df = pd.read_parquet(devguide_df_path, dtype_backend="pyarrow")
         keys = get_keys(df.columns, extra_keys)
         df2 = df.groupby(keys).sum()
         return df2

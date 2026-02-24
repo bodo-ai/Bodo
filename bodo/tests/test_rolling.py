@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
+    _test_equal,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -48,9 +49,7 @@ def test_fixed_index(test_df, memory_leak_check):
         return df.rolling(2).mean()
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(test_df), impl(test_df), check_column_type=False
-    )
+    _test_equal(bodo_func(test_df), impl(test_df))
 
 
 @pytest.mark.slow
@@ -131,13 +130,20 @@ def test_fixed_index_groupby():
 
     df = pd.DataFrame(
         {
-            "A": [1, 2, 24, None] * 5,
+            "A": pd.array([1, 2, 24, None] * 5, dtype="Int64"),
             "B": ["421", "f31"] * 10,
             "C": [1.51, 2.421, 233232, 12.21] * 5,
         }
     )
     # Groupby ordering isn't defined so we must sort.
-    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.slow
@@ -148,15 +154,18 @@ def test_variable_on_index(memory_leak_check):
     bodo_func = bodo.jit(impl)
     df = pd.DataFrame(
         {"B": [0, 1, 2, np.nan, 4]},
-        [
-            pd.Timestamp("20130101 09:00:00"),
-            pd.Timestamp("20130101 09:00:02"),
-            pd.Timestamp("20130101 09:00:03"),
-            pd.Timestamp("20130101 09:00:05"),
-            pd.Timestamp("20130101 09:00:06"),
-        ],
+        pd.array(
+            [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+            dtype="datetime64[ns]",
+        ),
     )
-    pd.testing.assert_frame_equal(bodo_func(df), impl(df), check_column_type=False)
+    _test_equal(bodo_func(df), impl(df))
 
 
 @pytest.mark.slow
@@ -189,13 +198,16 @@ def test_column_select(memory_leak_check):
         {
             "A": [5, 12, 21, np.nan, 3],
             "B": [0, 1, 2, np.nan, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl1, (df,), check_dtype=False)
@@ -235,14 +247,17 @@ def test_min_periods(memory_leak_check):
         {
             "A": [5, 12, np.nan, np.nan, 3, np.nan],
             "B": [0, 1, 2, np.nan, 4, np.nan],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                    pd.Timestamp("20130101 09:00:07"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl1, (df, False, 1), check_dtype=False)
@@ -276,13 +291,16 @@ def test_apply_raw_false(memory_leak_check):
         {
             "A": [5, 12, 21, 3.2, 3],
             "B": [0, 1, 2, 1.9, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         },
         index=[3, 1, 5, 11, 3],
     )
@@ -347,17 +365,20 @@ def test_groupby_rolling(is_slow_run):
         {
             "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
             "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
-            "time": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-                pd.Timestamp("20130101 09:00:08"),
-                pd.Timestamp("20130101 09:00:10"),
-                pd.Timestamp("20130101 09:00:11"),
-            ],
+            "time": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                    pd.Timestamp("20130101 09:00:07"),
+                    pd.Timestamp("20130101 09:00:08"),
+                    pd.Timestamp("20130101 09:00:10"),
+                    pd.Timestamp("20130101 09:00:11"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     check_func(impl3, (df,), sort_output=True, reset_index=True, check_dtype=False)
@@ -428,13 +449,16 @@ def test_rolling_error_checking():
         {
             "A": [5, 12, 21, np.nan, 3],
             "B": [0, 1, 2, np.nan, 4],
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-            ],
+            "C": pd.array(
+                [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                dtype="datetime64[ns]",
+            ),
         }
     )
     with pytest.raises(BodoError, match=r"rolling\(\): center must be a boolean"):
@@ -487,13 +511,9 @@ class TestRolling(unittest.TestCase):
 
             for args in itertools.product(wins, centers):
                 df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-                )
+                _test_equal(bodo_func(df, *args), test_impl(df, *args))
                 df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-                )
+                _test_equal(bodo_func(df, *args), test_impl(df, *args))
 
     def test_fixed2(self):
         # test sequentially with generated dfs
@@ -511,9 +531,7 @@ class TestRolling(unittest.TestCase):
             bodo_func = bodo.jit(test_impl)
             for n, w, c in itertools.product(sizes, wins, centers):
                 df = pd.DataFrame({"B": np.arange(n)})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df, w, c), test_impl(df, w, c), check_column_type=False
-                )
+                _test_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_apply1(self):
         # test sequentially with manually created dfs
@@ -527,13 +545,9 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         for args in itertools.product(wins, centers):
             df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-            )
+            _test_equal(bodo_func(df, *args), test_impl(df, *args))
             df = pd.DataFrame({"B": [0, 1, 2, -2, 4]})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, *args), test_impl(df, *args), check_column_type=False
-            )
+            _test_equal(bodo_func(df, *args), test_impl(df, *args))
 
     def test_fixed_apply2(self):
         # test sequentially with generated dfs
@@ -549,9 +563,7 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
         for n, w, c in itertools.product(sizes, wins, centers):
             df = pd.DataFrame({"B": np.arange(n)})
-            pd.testing.assert_frame_equal(
-                bodo_func(df, w, c), test_impl(df, w, c), check_column_type=False
-            )
+            _test_equal(bodo_func(df, w, c), test_impl(df, w, c))
 
     def test_fixed_parallel1(self):
         def test_impl(n, w, center):
@@ -602,25 +614,31 @@ class TestRolling(unittest.TestCase):
         df1 = pd.DataFrame(
             {
                 "B": [0, 1, 2, np.nan, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:00"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:05"),
-                    pd.Timestamp("20130101 09:00:06"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         df2 = pd.DataFrame(
             {
                 "B": [0, 1, 2, -2, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:01"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:04"),
-                    pd.Timestamp("20130101 09:00:09"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:01"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:04"),
+                        pd.Timestamp("20130101 09:00:09"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         wins = ("2s",)
@@ -636,12 +654,8 @@ class TestRolling(unittest.TestCase):
             # XXX: skipping min/max for this test since the behavior of Pandas
             # is inconsistent: it assigns NaN to last output instead of 4!
             if func_name not in ("min", "max"):
-                pd.testing.assert_frame_equal(
-                    bodo_func(df1), test_impl(df1), check_column_type=False
-                )
-            pd.testing.assert_frame_equal(
-                bodo_func(df2), test_impl(df2), check_column_type=False
-            )
+                _test_equal(bodo_func(df1), test_impl(df1))
+            _test_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable2(self):
         # test sequentially with generated dfs
@@ -658,36 +672,40 @@ class TestRolling(unittest.TestCase):
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df), test_impl(df), check_column_type=False
-                )
+                _test_equal(bodo_func(df), test_impl(df))
 
     def test_variable_apply1(self):
         # test sequentially with manually created dfs
         df1 = pd.DataFrame(
             {
                 "B": [0, 1, 2, np.nan, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:00"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:05"),
-                    pd.Timestamp("20130101 09:00:06"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         df2 = pd.DataFrame(
             {
                 "B": [0, 1, 2, -2, 4],
-                "time": [
-                    pd.Timestamp("20130101 09:00:01"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:04"),
-                    pd.Timestamp("20130101 09:00:09"),
-                ],
+                "time": pd.array(
+                    [
+                        pd.Timestamp("20130101 09:00:01"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:04"),
+                        pd.Timestamp("20130101 09:00:09"),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
             }
         )
         wins = ("2s",)
@@ -700,12 +718,8 @@ class TestRolling(unittest.TestCase):
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
-            pd.testing.assert_frame_equal(
-                bodo_func(df1), test_impl(df1), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(df2), test_impl(df2), check_column_type=False
-            )
+            _test_equal(bodo_func(df1), test_impl(df1))
+            _test_equal(bodo_func(df2), test_impl(df2))
 
     def test_variable_apply2(self):
         # test sequentially with generated dfs
@@ -723,11 +737,9 @@ class TestRolling(unittest.TestCase):
             test_impl = loc_vars["test_impl"]
             bodo_func = bodo.jit(test_impl)
             for n in sizes:
-                time = pd.date_range(start="1/1/2018", periods=n, freq="s")
+                time = pd.date_range(start="1/1/2018", periods=n, freq="s", unit="ns")
                 df = pd.DataFrame({"B": np.arange(n), "time": time})
-                pd.testing.assert_frame_equal(
-                    bodo_func(df), test_impl(df), check_column_type=False
-                )
+                _test_equal(bodo_func(df), test_impl(df))
 
     def test_variable_parallel1(self):
         wins = ("2s",)
@@ -862,24 +874,16 @@ class TestRolling(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl(*args), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl(*args), check_column_type=False
-            )
+            _test_equal(bodo_func(*args), test_impl(*args))
+            _test_equal(bodo_func(*args), test_impl(*args))
 
         def test_impl2(df, df2, w, c):
             return df.rolling(w, center=c).corr(df2)
 
         bodo_func = bodo.jit(test_impl2)
         for args in itertools.product([df1, df2], [df1, df2], wins, centers):
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl2(*args), check_column_type=False
-            )
-            pd.testing.assert_frame_equal(
-                bodo_func(*args), test_impl2(*args), check_column_type=False
-            )
+            _test_equal(bodo_func(*args), test_impl2(*args))
+            _test_equal(bodo_func(*args), test_impl2(*args))
 
 
 if __name__ == "__main__":

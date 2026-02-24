@@ -55,13 +55,15 @@ def test_conditional_event_pure(memory_leak_check):
                     [
                         pd.Timestamp(f"201{y}-01-01")
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 "TIMESTAMP_LTZ": pd.Series(
                     [
-                        pd.Timestamp(f"201{y}-01-01", tz="US/PACIFIC")
+                        pd.Timestamp(f"201{y}-01-01", tz="US/Pacific")
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
                 "DATE": pd.Series(
                     [
@@ -564,8 +566,11 @@ def test_bool_agg(memory_leak_check):
                     [None, False, True, None, True, True, False, None],
                     dtype=pd.BooleanDtype(),
                 ),
-                "P": [pd.Timestamp("2023-3-14"), pd.Timestamp("2023-7-4")]
-                + [pd.Timestamp("2023-1-1")] * 6,
+                "P": pd.Series(
+                    [pd.Timestamp("2023-3-14"), pd.Timestamp("2023-7-4")]
+                    + [pd.Timestamp("2023-1-1")] * 6,
+                    dtype="datetime64[ns]",
+                ),
                 "O": range(8),
             }
         )

@@ -245,11 +245,11 @@ from bodo.tests.utils import check_func, no_default
         pytest.param(
             (
                 np.append(
-                    pd.date_range("2017-07-03", "2017-07-17").date,
+                    pd.date_range("2017-07-03", "2017-07-17", unit="ns").date,
                     [datetime.date(2016, 3, 3)],
                 ),
                 np.append(
-                    pd.date_range("2017-07-15", "2017-09-02").date,
+                    pd.date_range("2017-07-15", "2017-09-02", unit="ns").date,
                     [datetime.date(2018, 6, 7)],
                 ),
             ),
@@ -601,10 +601,11 @@ def test_cbrt(num_arr):
                 datetime.timedelta(days=11, seconds=4, weeks=4),
                 datetime.timedelta(days=42, seconds=11, weeks=4),
                 datetime.timedelta(days=5, seconds=123, weeks=4),
-            ]
+            ],
+            dtype="timedelta64[ns]",
         ),
         np.append(
-            pd.date_range("2017-07-03", "2017-07-17").date,
+            pd.date_range("2017-07-03", "2017-07-17", unit="ns").date,
             [datetime.date(2016, 3, 3)],
         ),
         pd.array(
@@ -646,6 +647,10 @@ def test_any(bodo_arr_val, memory_leak_check):
         # Python's logical or won't return a bool so set to bool
         return bool(np.any(A))
 
+    if pd.api.types.is_string_dtype(bodo_arr_val):
+        # Not supported for string arrays
+        return
+
     if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
         # Reduce op is not supported on integer arrays
         # This tests that there is a parallel version for a Numpy Array type
@@ -664,6 +669,10 @@ def test_all(bodo_arr_val, memory_leak_check):
     def test_impl(A):
         # Python's logical and won't return a bool so set to bool
         return bool(np.all(A))
+
+    if pd.api.types.is_string_dtype(bodo_arr_val):
+        # Not supported for string arrays
+        return
 
     if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
         # Reduce op is not supported on integer arrays
@@ -745,7 +754,9 @@ def test_np_random_multivariate_normal(memory_leak_check):
             id="DecimalArray",
         ),
         pytest.param(
-            np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
+            np.append(
+                pd.date_range("2020-01-14", "2020-01-22", unit="ns").date, [None]
+            ),
             id="DateArray",
         ),
         pytest.param(
@@ -771,7 +782,7 @@ def test_np_random_multivariate_normal(memory_leak_check):
         pytest.param(
             pd.Categorical(
                 np.append(
-                    pd.timedelta_range(start="1 day", periods=9),
+                    pd.timedelta_range(start="1 day", periods=9, unit="ns"),
                     [np.timedelta64("NaT")],
                 )
             ),
@@ -1004,6 +1015,7 @@ def test_setna_getitem(mutable_bodo_arr, memory_leak_check):
 
 
 # TODO: Add memory leak check when constant lowering memory leak is fixed.
+@pytest.mark.skip("Setitem isn't fully supported in Pandas 3")
 @pytest.mark.slow
 def test_bad_setitem(mutable_bodo_arr):
     """

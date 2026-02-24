@@ -1,7 +1,7 @@
 #include "_theta_sketches.h"
 #include <arrow/python/api.h>
-#include <DataSketches/theta_union.hpp>
 #include <algorithm>
+#include <theta_union.hpp>
 
 #include "_array_utils.h"
 #include "_distributed.h"

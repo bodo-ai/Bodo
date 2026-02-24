@@ -9,7 +9,7 @@ from typing import Any, Literal
 if typing.TYPE_CHECKING:
     from pandas import DataFrame, Series
 
-from bodo.mpi4py import MPI
+from mpi4py import MPI
 
 PROCESS_GROUP_INIT_RETRIES = 5
 

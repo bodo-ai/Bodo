@@ -21,7 +21,7 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.12', '3.11', '3.10']
+        python-version: ['3.14', '3.13', '3.12', '3.11', '3.10']
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
@@ -35,8 +35,8 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        # On pull requests, only test building for 3.13
-        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.13"]' || '["3.13", "3.12", "3.11", "3.10"]') }}
+        # On pull requests, only test building for 3.14
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.14"]' || '["3.14", "3.13", "3.12", "3.11", "3.10"]') }}
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
@@ -48,9 +48,9 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        # On pull requests, only test building for 3.13
-        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.13"]' || '["3.13", "3.12", "3.11", "3.10"]') }}
-        os: ['macos-13', 'macos-14', 'windows-latest']
+        # On pull requests, only test building for 3.14
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.14"]' || '["3.14", "3.13", "3.12", "3.11", "3.10"]') }}
+        os: ['macos-14', 'windows-latest']
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
       python-version: ${{ matrix.python-version }}

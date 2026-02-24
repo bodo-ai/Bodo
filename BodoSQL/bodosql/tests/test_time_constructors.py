@@ -88,7 +88,8 @@ def to_time_fn(request):
                         pd.Timestamp("2022-7-4 20:21:22"),
                         pd.Timestamp("2023-8-15 8:30:00.123456789"),
                         pd.Timestamp("2019-1-1"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
                 pd.Series(
                     [
@@ -114,7 +115,8 @@ def to_time_fn(request):
                         pd.Timestamp("2022-7-4 20:21:22", tz="US/Pacific"),
                         pd.Timestamp("2023-8-15 8:30:00.123456789", tz="US/Pacific"),
                         pd.Timestamp("2019-1-1", tz="US/Pacific"),
-                    ]
+                    ],
+                    dtype="datetime64[ns, US/Pacific]",
                 ),
                 pd.Series(
                     [

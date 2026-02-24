@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 import pyarrow as pa
+from mpi4py import MPI
 from numba.core import types
 
 import bodo
@@ -25,7 +26,6 @@ from bodo.io.helpers import (
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.map_arr_ext import contains_map_array
-from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type, raise_bodo_error
@@ -304,6 +304,14 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = "NUMBER(38, 0)"
             elif numpy_type.startswith("float"):
                 sf_schema[col_name] = "REAL"
+        elif col_type == bodo.types.timedelta_array_type:
+            sf_schema[col_name] = "NUMBER(38, 0)"
+            if bodo.get_rank() == 0:
+                warnings.warn(
+                    BodoWarning(
+                        f"to_sql(): {col_name} with type 'timedelta' will be written as integer values (ns frequency) to the database."
+                    )
+                )
         elif is_str_arr_type(col_type):
             if column_precisions is None or column_precisions[col_idx] < 0:
                 sf_schema[col_name] = "TEXT"

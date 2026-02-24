@@ -5,6 +5,7 @@ import sys
 import numba
 import numpy as np
 import sklearn.naive_bayes
+from mpi4py import MPI
 from numba.extending import (
     overload,
     overload_method,
@@ -18,7 +19,6 @@ from bodo.ml_support.sklearn_ext import (
     parallel_predict,
     parallel_score,
 )
-from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,

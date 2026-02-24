@@ -15,6 +15,7 @@ import numba
 import numpy as np
 import pyarrow as pa
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
@@ -53,7 +54,6 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import (
     BodoError,
@@ -582,7 +582,7 @@ def pyarrow_type_to_numba(arrow_type):
             pa.types.is_string(arrow_type.value_type)
             or pa.types.is_large_string(arrow_type.value_type)
         )
-        and pa.types.is_int32(arrow_type.index_type)
+        and pa.types.is_integer(arrow_type.index_type)
     ):
         return dict_str_arr_type
 
@@ -604,12 +604,7 @@ def pyarrow_type_to_numba(arrow_type):
         return bodo.types.TimeArrayType(precision)
 
     if pa.types.is_duration(arrow_type):
-        if arrow_type.unit == "ns":
-            return bodo.types.timedelta_array_type
-        else:
-            raise BodoError(
-                f"Unsupported Arrow duration type {arrow_type}, only nanoseconds supported"
-            )
+        return bodo.types.timedelta_array_type
 
     raise BodoError(
         f"Conversion from PyArrow type {arrow_type} to Bodo array type not supported yet"

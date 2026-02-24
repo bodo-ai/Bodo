@@ -40,8 +40,8 @@ def simulate_lateral_flatten_array(
         out_dict[i] = []
     for i in range(len(df)):
         sub_arr = column_to_explode.iloc[i]
-        explode_length = 0 if sub_arr is None else len(sub_arr)
-        dummy_row = outer and (sub_arr is None or len(sub_arr) == 0)
+        explode_length = 0 if sub_arr is None or sub_arr is pd.NA else len(sub_arr)
+        dummy_row = outer and (sub_arr is None or sub_arr is pd.NA or len(sub_arr) == 0)
         if dummy_row:
             explode_length = 1
         if explode_length == 0:
@@ -52,12 +52,12 @@ def simulate_lateral_flatten_array(
                 out_dict[j].append(val)
         if output_idx:
             if dummy_row:
-                out_dict["idx"].append(None)
+                out_dict["idx"].append(pd.NA)
             else:
                 out_dict["idx"].extend(list(range(explode_length)))
         if output_val:
             if dummy_row:
-                out_dict["val"].append(None)
+                out_dict["val"].append(pd.NA)
             else:
                 out_dict["val"].extend(sub_arr)
         if output_this:
@@ -103,11 +103,11 @@ def simulate_lateral_flatten_json(
             explode_length = len(json_obj)
             json_obj = dict(json_obj)
             for k, v in json_obj.items():
-                keys.append(k)
-                vals.append(v)
+                keys.append(pd.NA if k is None else k)
+                vals.append(pd.NA if v is None else v)
         if outer and (json_obj is None or json_obj is pd.NA or len(json_obj) == 0):
-            keys.append(None)
-            vals.append(None)
+            keys.append(pd.NA)
+            vals.append(pd.NA)
             explode_length = 1
         if explode_length == 0:
             continue
@@ -188,7 +188,8 @@ def test_lateral_flatten_array(
                     [13],
                     [14, None],
                     [15],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
             "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U".split(","),
             "d": pd.Series(
@@ -203,7 +204,8 @@ def test_lateral_flatten_array(
                     ["Y"],
                     [],
                     ["Z"],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             "e": pd.Series(
                 [1, 2, None, 8, 16, 32, 64, 128, None, 512], dtype=pd.Int32Dtype()

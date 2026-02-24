@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+from mpi4py import MPI
 
 import bodo
 from bodo import BodoWarning
@@ -38,7 +39,6 @@ from bodo.io.parquet_pio import (
     filter_row_groups_from_start_of_dataset_heuristic,
     schema_with_dict_cols,
 )
-from bodo.mpi4py import MPI
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     import pyarrow.fs as pa_fs

@@ -33,7 +33,6 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_subquery_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -43,8 +42,13 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
-#include "duckdb/transaction/duck_transaction_manager.hpp"
-#include "physical/project.h"
+#include "optimizer/runtime_join_filter.h"
+
+#ifdef USE_CUDF
+#include <rmm/cuda_device.hpp>
+#include "../libs/gpu_utils.h"
+#include "cuda_runtime_api.h"
+#endif
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -80,8 +84,15 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
+
+    // Insert and pushdown runtime join filters after optimization since they
+    // aren't relational
+    RuntimeJoinFilterPushdownOptimizer runtime_join_filter_pushdown_optimizer;
+    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+        runtime_join_filter_pushdown_optimizer.VisitOperator(optimized_plan);
+
     return out_plan;
 }
 
@@ -1191,9 +1202,11 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
-    std::vector<std::vector<bool>> is_first_locations) {
+    std::vector<std::vector<bool>> is_first_locations,
+    std::vector<std::vector<int64_t>> orig_build_key_cols) {
     return duckdb::make_uniq<bodo::LogicalJoinFilter>(
-        to_duckdb(source), filter_ids, filter_columns, is_first_locations);
+        to_duckdb(source), filter_ids, filter_columns, is_first_locations,
+        orig_build_key_cols);
 }
 
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
@@ -1223,10 +1236,27 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+#ifdef USE_CUDF
+    // Assign ranks to cuda devices
+    int prev_device = -1;
+    rmm::cuda_device_id gpu_id = get_gpu_id();
+    if (gpu_id.value() != -1) {
+        cudaGetDevice(&prev_device);
+        cudaSetDevice(gpu_id.value());
+    }
+#endif
+
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::variant<std::shared_ptr<table_info>, PyObject *> output =
         executor.ExecutePipelines();
+
+#ifdef USE_CUDF
+    // Reset to previous cuda device
+    if (gpu_id.value() != -1) {
+        cudaSetDevice(prev_device);
+    }
+#endif
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
@@ -1547,6 +1577,28 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     return {return_names, logical_types};
 }
 
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names) {
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(types.size());
+
+    for (size_t i = 0; i < types.size(); ++i) {
+        std::string name;
+        if (!names.empty()) {
+            if (i >= names.size()) {
+                throw std::invalid_argument("names.size() < types.size()");
+            }
+            name = names[i];
+        } else {
+            name = "col_" + std::to_string(i);
+        }
+        auto dtype = duckdbTypeToArrow(types[i]);
+        fields.push_back(arrow::field(name, std::move(dtype)));
+    }
+    return arrow::schema(std::move(fields));
+}
+
 std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     const std::shared_ptr<arrow::Field> &field) {
     // Convert Arrow type to DuckDB LogicalType
@@ -1815,6 +1867,18 @@ void cpp_table_delete(int64_t cpp_table) {
     table_info *table = reinterpret_cast<table_info *>(cpp_table);
     delete table;
 }
+
+bool g_use_cudf;
+std::string g_cache_dir;
+
+void set_use_cudf(bool use_cudf, std::string cache_dir) {
+    g_use_cudf = use_cudf;
+    g_cache_dir = cache_dir;
+}
+
+bool get_use_cudf() { return g_use_cudf; }
+
+std::string get_cache_dir() { return g_cache_dir; }
 
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

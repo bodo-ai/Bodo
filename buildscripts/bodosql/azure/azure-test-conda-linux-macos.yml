@@ -44,7 +44,7 @@ jobs:
   - bash: |
       set -exo pipefail
 
-      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodo
       pixi run -e azure build-bodosql
       pixi run -e azure build-iceberg
       pixi run -e azure -- sccache --show-stats
@@ -83,7 +83,7 @@ jobs:
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
-        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_HOME=/opt/hadoop-3.4.0
         export HADOOP_INSTALL=$HADOOP_HOME
         export HADOOP_MAPRED_HOME=$HADOOP_HOME
         export HADOOP_COMMON_HOME=$HADOOP_HOME

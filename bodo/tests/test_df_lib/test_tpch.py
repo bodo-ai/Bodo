@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import benchmarks.tpch.dataframe_lib as tpch
+import benchmarks.tpch.bodo.dataframe_queries as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
@@ -39,7 +39,22 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
             "partsupp",
         ]
     ]
-    bd_args = [bd.from_pandas(df) for df in pd_args]
+    bd_kwargs = {"pd": bd}
+    bd_args = [
+        getattr(tpch, f"load_{key}")(datapath, **bd_kwargs)
+        for key in tpch._query_to_args[int(query_func.__name__[-2:])]
+        if key
+        in [
+            "lineitem",
+            "part",
+            "orders",
+            "customer",
+            "nation",
+            "region",
+            "supplier",
+            "partsupp",
+        ]
+    ]
 
     pd_result = query_func(*pd_args, **pd_kwargs)
 
@@ -153,7 +168,7 @@ def test_tpch_q20():
 
 
 def test_tpch_q21():
-    run_tpch_query_test(tpch.tpch_q21, ctes_created=1)
+    run_tpch_query_test(tpch.tpch_q21, ctes_created=2)
 
 
 def test_tpch_q22():

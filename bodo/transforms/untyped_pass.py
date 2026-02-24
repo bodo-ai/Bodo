@@ -71,7 +71,12 @@ from bodo.utils.typing import (
     to_nullable_type,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import check_java_installation, is_assign, is_call, is_expr
+from bodo.utils.utils import (
+    check_java_installation,
+    is_assign,
+    is_call,
+    is_expr,
+)
 
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover
@@ -900,6 +905,8 @@ class UntypedPass:
         Enable typing for dictionary data arg to bodosql.BodoSQLContext({'table1': df}).
         Converts constant dictionary to tuple with sentinel.
         """
+        import bodosql.compiler  # isort:skip # noqa
+
         kws = dict(rhs.kws)
         data_arg = get_call_expr_arg(
             "bodosql.BodoSQLContext", rhs.args, kws, 0, "tables"
@@ -1445,7 +1452,6 @@ class UntypedPass:
         # false_values=None, skipinitialspace=False, skiprows=None, skipfooter=0,
         # nrows=None, na_values=None, keep_default_na=True, na_filter=True,
         # verbose=_NoDefault.no_default, skip_blank_lines=True, parse_dates=None,
-        # infer_datetime_format=_NoDefault.no_default,
         # keep_date_col=_NoDefault.no_default, date_parser=_NoDefault.no_default,
         # date_format=None, dayfirst=False, cache_dates=True, iterator=False,
         # chunksize=None, compression='infer', thousands=None, decimal='.',
@@ -1865,7 +1871,6 @@ class UntypedPass:
             ("verbose", False),
             ("skip_blank_lines", True),
             ("parse_dates", False),
-            ("infer_datetime_format", False),
             ("keep_date_col", False),
             ("date_parser", None),
             ("date_format", None),
@@ -1918,6 +1923,7 @@ class UntypedPass:
             "storage_options",
             "sample_nrows",
             "_bodo_read_as_dict",
+            "dtype_backend",
         }
         # Iterate through the provided args. If an argument is in the supported_args,
         # skip it. Otherwise we check that the value matches the default value.
@@ -2886,6 +2892,7 @@ class UntypedPass:
             "engine",
             "columns",
             "storage_options",
+            "dtype_backend",
             "_bodo_chunksize",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
@@ -3401,7 +3408,7 @@ def _get_json_df_type_from_file(
     path is invalid.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3465,7 +3472,7 @@ def _get_excel_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3710,7 +3717,7 @@ def _get_sql_df_type_from_db(
         A large tuple containing: (#TODO: document this)
 
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -4016,7 +4023,7 @@ def _get_csv_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

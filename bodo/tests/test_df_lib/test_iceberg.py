@@ -514,7 +514,7 @@ def test_table_read_partitioned_file_pruning(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
-    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12")]
+    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12").date()]
     assert bodo_out2.is_lazy_plan()
     pre, post = bpd.plan.getPlanStatistics(bodo_out2._mgr._plan)
     assert pre == 3
@@ -724,6 +724,49 @@ def test_read_iceberg_rename():
     _test_equal(
         bdf,
         pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_join_filter(
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    table_name = "SIMPLE_NUMERIC_TABLE"
+    part_table_name = "part_NUMERIC_TABLE_E_identity"
+    table_names = [table_name, part_table_name]
+    db_schema, warehouse_loc = iceberg_database(table_names)
+    df1 = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    df2 = pyiceberg_reader.read_iceberg_table_single_rank(part_table_name, db_schema)
+    df3 = df1.merge(df2, left_on="A", right_on="E")
+
+    bdf1 = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        catalog_properties={
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bdf2 = bpd.read_iceberg(
+        f"{db_schema}.{part_table_name}",
+        None,
+        catalog_properties={
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bdf3 = bdf1.merge(bdf2, left_on="A", right_on="E")
+    # TODO: Figure out how to test that no files are read from the partition table automatically.
+    # (A and E have no matching values)
+    # It was manually confirmed when the test was written.
+
+    _test_equal(
+        bdf3,
+        df3,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,

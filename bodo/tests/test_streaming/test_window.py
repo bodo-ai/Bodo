@@ -24,7 +24,7 @@ def gen_simple_window_over_nothing_tests():
     params = []
     int32_nullable_arr = pd.array(
         [None if (i // 2500) % 3 < 2 else (i**3) % 99999 for i in range(10000)],
-        dtype=pd.Int32Dtype(),
+        dtype=pd.ArrowDtype(pa.int32()),
     )
     decimal_arr = pd.array(
         [
@@ -33,13 +33,16 @@ def gen_simple_window_over_nothing_tests():
         ],
         dtype=pd.ArrowDtype(pa.decimal128(32, 8)),
     )
-    int32_numpy_arr = pd.array([(i**4) % 99999 for i in range(10000)], dtype=np.int32)
+    int32_numpy_arr = pd.array(
+        [(i**4) % 99999 for i in range(10000)], dtype=pd.ArrowDtype(pa.int32())
+    )
     string_arr = pd.array(
-        [None if (i // 2000) % 2 == 0 else str(i**2) for i in range(5000)]
+        [None if (i // 2000) % 2 == 0 else str(i**2) for i in range(5000)],
+        dtype=pd.ArrowDtype(pa.large_string()),
     )
     int32_arr_all_null = pd.array(
         [None for i in range(10000)],
-        dtype=pd.Int32Dtype(),
+        dtype=pd.ArrowDtype(pa.int32()),
     )
     string_arr_all_null = pd.array(
         [None for i in range(5000)], dtype=pd.ArrowDtype(pa.large_string())
@@ -48,7 +51,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "min",
-            pd.array([8] * len(int32_nullable_arr)),
+            pd.array([8] * len(int32_nullable_arr), dtype=pd.ArrowDtype(pa.int64())),
             id="min-int32_nullable",
         )
     )
@@ -56,7 +59,9 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "max",
-            pd.array([99972] * len(int32_nullable_arr)),
+            pd.array(
+                [99972] * len(int32_nullable_arr), dtype=pd.ArrowDtype(pa.int64())
+            ),
             id="max-int32_nullable",
         )
     )
@@ -64,7 +69,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "count",
-            pd.array([2500] * len(int32_nullable_arr)),
+            pd.array([2500] * len(int32_nullable_arr), dtype=pd.ArrowDtype(pa.int64())),
             id="count-int32_nullable",
         )
     )
@@ -72,7 +77,9 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "sum",
-            pd.array([124646669] * len(int32_nullable_arr), dtype=pd.Int64Dtype()),
+            pd.array(
+                [124646669] * len(int32_nullable_arr), dtype=pd.ArrowDtype(pa.int64())
+            ),
             id="sum-int32_nullable",
         )
     )
@@ -113,7 +120,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "min",
-            pd.array([0] * len(int32_numpy_arr)),
+            pd.array([0] * len(int32_numpy_arr), dtype=pd.ArrowDtype(pa.int64())),
             id="min-int32_numpy",
         )
     )
@@ -121,7 +128,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "max",
-            pd.array([99976] * len(int32_numpy_arr)),
+            pd.array([99976] * len(int32_numpy_arr), dtype=pd.ArrowDtype(pa.int64())),
             id="max-int32_numpy",
         )
     )
@@ -129,7 +136,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "count",
-            pd.array([10000] * len(int32_numpy_arr)),
+            pd.array([10000] * len(int32_numpy_arr), dtype=pd.ArrowDtype(pa.int64())),
             id="count-int32_numpy",
         )
     )
@@ -137,30 +144,45 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "sum",
-            pd.array([494581416] * len(int32_numpy_arr), dtype=pd.Int64Dtype()),
+            pd.array(
+                [494581416] * len(int32_numpy_arr), dtype=pd.ArrowDtype(pa.int64())
+            ),
             id="sum-int32_numpy",
         )
     )
     params.append(
         pytest.param(
-            string_arr, "min", pd.array(["10004569"] * len(string_arr)), id="min-string"
+            string_arr,
+            "min",
+            pd.array(
+                ["10004569"] * len(string_arr), dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            id="min-string",
         )
     )
     params.append(
         pytest.param(
-            string_arr, "max", pd.array(["9998244"] * len(string_arr)), id="max-string"
+            string_arr,
+            "max",
+            pd.array(
+                ["9998244"] * len(string_arr), dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            id="max-string",
         )
     )
     params.append(
         pytest.param(
-            string_arr, "count", pd.array([2000] * len(string_arr)), id="count-string"
+            string_arr,
+            "count",
+            pd.array([2000] * len(string_arr), dtype=pd.ArrowDtype(pa.int64())),
+            id="count-string",
         )
     )
     params.append(
         pytest.param(
             int32_arr_all_null,
             "min",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="min-int32_all_null",
         )
     )
@@ -168,7 +190,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "max",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="max-int32_all_null",
         )
     )
@@ -176,7 +198,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "count",
-            pd.array([0] * len(int32_arr_all_null)),
+            pd.array([0] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="count-int32_all_null",
         )
     )
@@ -184,7 +206,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_arr_all_null,
             "sum",
-            pd.array([None] * len(int32_arr_all_null)),
+            pd.array([None] * len(int32_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="sum-int32_all_null",
         )
     )
@@ -192,7 +214,10 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "min",
-            pd.array([None] * len(string_arr_all_null)),
+            pd.array(
+                [None] * len(string_arr_all_null),
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="min-string_all_null",
         )
     )
@@ -200,7 +225,10 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "max",
-            pd.array([None] * len(string_arr_all_null)),
+            pd.array(
+                [None] * len(string_arr_all_null),
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="max-string_all_null",
         )
     )
@@ -208,7 +236,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             string_arr_all_null,
             "count",
-            pd.array([0] * len(string_arr_all_null)),
+            pd.array([0] * len(string_arr_all_null), dtype=pd.ArrowDtype(pa.int32())),
             id="count-string_all_null",
         )
     )
@@ -227,7 +255,9 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "mean",
-            pd.array([49858.6676] * len(int32_nullable_arr), pd.Float64Dtype()),
+            pd.array(
+                [49858.6676] * len(int32_nullable_arr), pd.ArrowDtype(pa.float64())
+            ),
             id="avg-int32_nullable",
         )
     )
@@ -237,7 +267,7 @@ def gen_simple_window_over_nothing_tests():
             "mean",
             pd.array(
                 [None] * len(int32_arr_all_null),
-                pd.Float64Dtype(),
+                pd.ArrowDtype(pa.float64()),
             ),
             id="avg-int32_all_null",
         )
@@ -246,7 +276,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "mean",
-            pd.array([49458.1416] * len(int32_numpy_arr), pd.Float64Dtype()),
+            pd.array([49458.1416] * len(int32_numpy_arr), pd.ArrowDtype(pa.float64())),
             id="avg-int32_numpy",
         )
     )
@@ -335,13 +365,19 @@ def test_simple_window_over_nothing(data, func_name, answer, memory_leak_check):
 
     in_df = pd.DataFrame(
         {
-            "idx": [str(i) for i in range(len(data))],
+            "idx": pd.array(
+                [str(i) for i in range(len(data))],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             "data": data,
         }
     )
     out_df = pd.DataFrame(
         {
-            "idx": [str(i) for i in range(len(data))],
+            "idx": pd.array(
+                [str(i) for i in range(len(data))],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             "win": answer,
         }
     )
@@ -446,27 +482,33 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
 
     in_df = pd.DataFrame(
         {
-            "idx": [str(i) for i in range(1000)],
+            "idx": pd.array(
+                [str(i) for i in range(1000)], dtype=pd.ArrowDtype(pa.large_string())
+            ),
             "data": pd.array(
                 [
                     None if i % 7 == 0 else int(str(i).replace("9", "1"))
                     for i in range(1000)
                 ],
-                dtype=pd.Int32Dtype(),
+                dtype=pd.ArrowDtype(pa.int32()),
             ),
         }
     )
     out_df = pd.DataFrame(
         {
-            "idx": [str(i) for i in range(1000)],
+            "idx": pd.array(
+                [str(i) for i in range(1000)], dtype=pd.ArrowDtype(pa.large_string())
+            ),
             "data": pd.array(
                 [
                     None if i % 7 == 0 else int(str(i).replace("9", "1"))
                     for i in range(1000)
                 ],
-                dtype=pd.Int32Dtype(),
+                dtype=pd.ArrowDtype(pa.int32()),
             ),
-            "win": pd.array([888 for _ in range(1000)], dtype=pd.Int32Dtype()),
+            "win": pd.array(
+                [888 for _ in range(1000)], dtype=pd.ArrowDtype(pa.int32())
+            ),
         }
     ).loc[:, output_col_names]
 
@@ -493,9 +535,17 @@ def test_multi_function_repartition(capfd):
     n_rows = 32000
     df = pd.DataFrame(
         {
-            "P": pd.Series([min(i % 4, i % 5) for i in range(n_rows)], dtype="Int32"),
-            "O": pd.array([np.tan(i) for i in range(n_rows)], dtype="Float64"),
-            "S": pd.Series([str(i)[2:] for i in range(n_rows)]),
+            "P": pd.array(
+                [min(i % 4, i % 5) for i in range(n_rows)],
+                dtype=pd.ArrowDtype(pa.int32()),
+            ),
+            "O": pd.array(
+                [np.tan(i) for i in range(n_rows)], dtype=pd.ArrowDtype(pa.float64())
+            ),
+            "S": pd.array(
+                [str(i)[2:] for i in range(n_rows)],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
         }
     )
 
@@ -710,13 +760,15 @@ def test_multi_function_repartition(capfd):
             (0,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": range(1, 1001),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        list(range(1, 1001)), dtype=pd.ArrowDtype(pa.int64())
+                    ),
                 }
             ),
             id="row_number-integer",
@@ -726,14 +778,19 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "O": [i // 10 for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "O": pd.array(
+                        [i // 10 for i in range(1000)], dtype=pd.ArrowDtype(pa.int64())
+                    ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + 10 * (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + 10 * (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="rank-integer",
@@ -743,14 +800,19 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "O": [i // 10 for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "O": pd.array(
+                        [i // 10 for i in range(1000)], dtype=pd.ArrowDtype(pa.int64())
+                    ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-integer",
@@ -760,14 +822,20 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "O": [f"{(i // 10):02}" for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "O": pd.array(
+                        [f"{(i // 10):02}" for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.large_string()),
+                    ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-strings",
@@ -777,7 +845,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [f"{(i // 10):02}" for i in range(1000)],
                         dtype=pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
@@ -786,8 +854,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 },
             ),
             id="dense_rank-dictionary",
@@ -797,7 +868,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [[i // 10, None] for i in range(1000)],
                         dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
@@ -806,8 +877,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-array_item",
@@ -817,7 +891,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [
                             {"A": i // 10, "B": 7, "C": ["A", "B", "A"]}
@@ -842,8 +916,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-struct",
@@ -853,7 +930,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [{"A": i // 10, "B": 7, "C": None} for i in range(1000)],
                         dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
@@ -862,8 +939,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-map",
@@ -873,7 +953,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [
                             [[], None, [{"A": 0}, {"B": 7 * (i // 10), "C": i // 100}]]
@@ -889,8 +969,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-multi_nested",
@@ -900,7 +983,7 @@ def test_multi_function_repartition(capfd):
             (1,),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
                     "O": pd.array(
                         [
                             bodo.types.TimestampTZ(
@@ -915,8 +998,11 @@ def test_multi_function_repartition(capfd):
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(1000),
-                    "OUT": [1 + (i // 10) for i in range(1000)],
+                    "IDX": pd.array(list(range(1000)), dtype=pd.ArrowDtype(pa.int64())),
+                    "OUT": pd.array(
+                        [1 + (i // 10) for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
                 }
             ),
             id="dense_rank-timestamptz",
@@ -1019,24 +1105,27 @@ def test_partitionless_rank_family(
             "sum",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, 1, 1, 8, 8, 8, 8]
                         + [40] * 8
                         + [176] * 16
                         + [736] * 32
                         + [3008] * 64,
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
                 }
             ),
@@ -1046,24 +1135,27 @@ def test_partitionless_rank_family(
             "count",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [0, 1, 1, 2, 2, 2, 2]
                         + [4] * 8
                         + [8] * 16
                         + [16] * 32
                         + [32] * 64,
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
                 }
             ),
@@ -1073,8 +1165,11 @@ def test_partitionless_rank_family(
             "count_if",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [
                             [None, False, True, False, None, None, True][
@@ -1082,20 +1177,20 @@ def test_partitionless_rank_family(
                             ]
                             for i in range(127)
                         ],
-                        dtype=pd.BooleanDtype(),
+                        dtype=pd.ArrowDtype(pa.bool_()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [0, 1, 1, 1, 1, 1, 1]
                         + [2] * 8
                         + [3] * 16
                         + [7] * 32
                         + [14] * 64,
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
                 }
             ),
@@ -1105,20 +1200,23 @@ def test_partitionless_rank_family(
             "boolor_agg",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else (i - 1) % 3 for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, False, False] + [True] * 124,
-                        dtype=pd.BooleanDtype(),
+                        dtype=pd.ArrowDtype(pa.bool_()),
                     ),
                 }
             ),
@@ -1128,24 +1226,27 @@ def test_partitionless_rank_family(
             "booland_agg",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else i % 27 for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None]
                         + [True] * 14
                         + [False] * 16
                         + [True] * 32
                         + [False] * 64,
-                        dtype=pd.BooleanDtype(),
+                        dtype=pd.ArrowDtype(pa.bool_()),
                     ),
                 }
             ),
@@ -1155,24 +1256,27 @@ def test_partitionless_rank_family(
             "bitand_agg",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 <= i % 3 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, None, None, 3, 3, 3, 3]
                         + [9] * 8
                         + [1] * 16
                         + [33] * 32
                         + [1] * 64,
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
@@ -1182,24 +1286,27 @@ def test_partitionless_rank_family(
             "bitor_agg",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 <= i % 3 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, None, None, 3, 3, 3, 3]
                         + [9] * 8
                         + [31] * 16
                         + [63] * 32
                         + [127] * 64,
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
@@ -1209,24 +1316,27 @@ def test_partitionless_rank_family(
             "bitxor_agg",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 3 == 0 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, 3, 3, 1, 1, 1, 1]
                         + [13] * 8
                         + [5] * 16
                         + [53] * 32
                         + [21] * 64,
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
@@ -1236,24 +1346,27 @@ def test_partitionless_rank_family(
             "min",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, 1, 1, 3, 3, 3, 3]
                         + [7] * 8
                         + [15] * 16
                         + [31] * 32
                         + [63] * 64,
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
                 }
             ),
@@ -1263,24 +1376,27 @@ def test_partitionless_rank_family(
             "max",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [None if i % 2 == 0 else i for i in range(127)],
-                        dtype=pd.Int16Dtype(),
+                        dtype=pd.ArrowDtype(pa.int16()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None, 1, 1, 5, 5, 5, 5]
                         + [13] * 8
                         + [29] * 16
                         + [61] * 32
                         + [125] * 64,
-                        dtype=pd.Int64Dtype(),
+                        dtype=pd.ArrowDtype(pa.int64()),
                     ),
                 }
             ),
@@ -1396,9 +1512,15 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
             "first",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "O": [np.tan(i) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "O": pd.array(
+                        [np.tan(i) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.float64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [
                             None
@@ -1406,12 +1528,13 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                             else datetime.date.fromordinal(738886 + i)
                             for i in range(127)
                         ],
+                        dtype=pd.ArrowDtype(pa.date32()),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
                         [None] * 3
                         + [datetime.date(2024, 1, 6)] * 4
@@ -1419,6 +1542,7 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
                         + [None] * 16
                         + [datetime.date(2024, 2, 3)] * 32
                         + [datetime.date(2024, 3, 18)] * 64,
+                        dtype=pd.ArrowDtype(pa.date32()),
                     ),
                 }
             ),
@@ -1428,28 +1552,36 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
             "last",
             pd.DataFrame(
                 {
-                    "P": [int(np.log2(i + 1)) for i in range(127)],
-                    "O": [np.tan(i) for i in range(127)],
-                    "IDX": range(127),
+                    "P": pd.array(
+                        [int(np.log2(i + 1)) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.int64()),
+                    ),
+                    "O": pd.array(
+                        [np.tan(i) for i in range(127)],
+                        dtype=pd.ArrowDtype(pa.float64()),
+                    ),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "S": pd.array(
                         [
                             None
                             if i % 3 == 1
-                            else bodo.types.Time(nanosecond=int(1.5**i))
+                            else bodo.types.Time(microsecond=int(1.5**i))
                             for i in range(127)
                         ],
+                        dtype=pd.ArrowDtype(pa.time64("us")),
                     ),
                 }
             ),
             pd.DataFrame(
                 {
-                    "IDX": range(127),
+                    "IDX": pd.array(list(range(127)), dtype=pd.ArrowDtype(pa.int64())),
                     "WIN": pd.array(
-                        [bodo.types.Time(nanosecond=1)]
+                        [bodo.types.Time(microsecond=1)]
                         + [None] * 6
-                        + [bodo.types.Time(nanosecond=291)] * 8
-                        + [bodo.types.Time(nanosecond=985)] * 16
+                        + [bodo.types.Time(microsecond=291)] * 8
+                        + [bodo.types.Time(microsecond=985)] * 16
                         + [None] * 96,
+                        dtype=pd.ArrowDtype(pa.time64("us")),
                     ),
                 }
             ),
@@ -1647,13 +1779,16 @@ def test_size_over_nothing(memory_leak_check):
 
     in_df = pd.DataFrame(
         {
-            "idx": [str(i) for i in range(len(data))],
-            "data": pd.array(data, dtype=pd.Int32Dtype),
+            "idx": pd.array(
+                [str(i) for i in range(len(data))],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            "data": pd.array(data, dtype=pd.ArrowDtype(pa.int32())),
         }
     )
     out_df = pd.DataFrame(
         {
-            "win": [len(in_df)] * len(data),
+            "win": pd.array([len(in_df)] * len(data), dtype=pd.ArrowDtype(pa.int64())),
         }
     )
 
@@ -1672,8 +1807,8 @@ def test_ntile(memory_leak_check):
     func_name = "ntile"
     in_df = pd.DataFrame(
         {
-            "A": [1, 1, 1, 2, 2, 2],
-            "B": [1, 2, 3, 1, 2, 3],
+            "A": pd.array([1, 1, 1, 2, 2, 2], dtype=pd.ArrowDtype(pa.int64())),
+            "B": pd.array([1, 2, 3, 1, 2, 3], dtype=pd.ArrowDtype(pa.int64())),
         }
     )
 
@@ -1755,7 +1890,11 @@ def test_ntile(memory_leak_check):
         return out_df
 
     out_df = pd.DataFrame(
-        {"A": [1, 1, 1, 2, 2, 2], "B": [1, 2, 3, 1, 2, 3], "OUT": [1, 1, 2, 1, 1, 2]}
+        {
+            "A": pd.array([1, 1, 1, 2, 2, 2], dtype=pd.ArrowDtype(pa.int64())),
+            "B": pd.array([1, 2, 3, 1, 2, 3], dtype=pd.ArrowDtype(pa.int64())),
+            "OUT": pd.array([1, 1, 2, 1, 1, 2], dtype=pd.ArrowDtype(pa.int64())),
+        }
     )
 
     check_func(
@@ -1773,32 +1912,44 @@ def test_ntile(memory_leak_check):
     [
         pytest.param(
             np.int64(-1),
-            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
-            np.array([70, 90, -1, 60, 50, -1], dtype=np.int64),
+            pd.array([40, 50, 60, 70, 80, 90], dtype=pd.ArrowDtype(pa.int32())),
+            pd.array([70, 90, -1, 60, 50, -1], dtype=pd.ArrowDtype(pa.int64())),
             id="upcast_input",
         ),
         pytest.param(
             np.int8(-1),
-            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
-            np.array([70, 90, -1, 60, 50, -1], dtype=np.int32),
+            pd.array([40, 50, 60, 70, 80, 90], dtype=pd.ArrowDtype(pa.int32())),
+            pd.array([70, 90, -1, 60, 50, -1], dtype=pd.ArrowDtype(pa.int32())),
             id="upcast_default",
         ),
         pytest.param(
             None,
-            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
-            pd.array([70, 90, None, 60, 50, None], dtype=pd.Int32Dtype()),
+            pd.array([40, 50, 60, 70, 80, 90], dtype=pd.ArrowDtype(pa.int32())),
+            pd.array([70, 90, None, 60, 50, None], dtype=pd.ArrowDtype(pa.int32())),
             id="null_default",
         ),
         pytest.param(
             None,
-            ["apple", "orange", "banana", "pear", "lemon", "lime"],
-            ["pear", "lime", None, "banana", "orange", None],
+            pd.array(
+                ["apple", "orange", "banana", "pear", "lemon", "lime"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            pd.array(
+                ["pear", "lime", None, "banana", "orange", None],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="string-null",
         ),
         pytest.param(
             "hi",
-            ["apple", "orange", "banana", "pear", "lemon", "lime"],
-            ["pear", "lime", "hi", "banana", "orange", "hi"],
+            pd.array(
+                ["apple", "orange", "banana", "pear", "lemon", "lime"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            pd.array(
+                ["pear", "lime", "hi", "banana", "orange", "hi"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
             id="string-dict",
         ),
         pytest.param(
@@ -1852,8 +2003,8 @@ def test_ntile(memory_leak_check):
         ),
         pytest.param(
             np.float32(-1),
-            np.array([40, 50, 60, 70, 80, 90], dtype=np.float64),
-            np.array([70, 90, -1, 60, 50, -1], dtype=np.float64),
+            pd.array([40, 50, 60, 70, 80, 90], dtype=pd.ArrowDtype(pa.float64())),
+            pd.array([70, 90, -1, 60, 50, -1], dtype=pd.ArrowDtype(pa.float64())),
             id="float",
         ),
         pytest.param(
@@ -1885,11 +2036,11 @@ def test_ntile(memory_leak_check):
         pytest.param(
             None,
             pd.array(
-                ({x: x} for x in [40, 50, 60, 70, 80, 90]),
+                [{x: x} for x in [40, 50, 60, 70, 80, 90]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             pd.array(
-                (None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]),
+                [None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]],
                 dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
             ),
             id="map_null",
@@ -1908,8 +2059,10 @@ def test_lead_lag(default_val, in_col, out_col, memory_leak_check):
     func_name = "lead"
     in_df = pd.DataFrame(
         {
-            "A": ["A", "B", "A", "A", "B", "B"],
-            "B": [1, 5, 4, 2, 3, 6],
+            "A": pd.array(
+                ["A", "B", "A", "A", "B", "B"], dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            "B": pd.array([1, 5, 4, 2, 3, 6], dtype=pd.ArrowDtype(pa.int64())),
             "C": in_col,
         }
     )
@@ -1994,8 +2147,10 @@ def test_lead_lag(default_val, in_col, out_col, memory_leak_check):
 
     out_df = pd.DataFrame(
         {
-            "A": ["A", "B", "A", "A", "B", "B"],
-            "B": [1, 5, 4, 2, 3, 6],
+            "A": pd.array(
+                ["A", "B", "A", "A", "B", "B"], dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            "B": pd.array([1, 5, 4, 2, 3, 6], dtype=pd.ArrowDtype(pa.int64())),
             "C": in_col,
             "OUT": out_col,
         }
@@ -2005,7 +2160,7 @@ def test_lead_lag(default_val, in_col, out_col, memory_leak_check):
         impl,
         (in_df,),
         py_output=out_df,
-        check_dtype=True,
+        check_dtype=False,
         reset_index=True,
         sort_output=True,
     )

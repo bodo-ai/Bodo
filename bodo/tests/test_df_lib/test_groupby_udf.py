@@ -191,6 +191,9 @@ def test_agg_mix_udf_builtin(groupby_df):
         pytest.param(
             lambda df, func: df.groupby(by=["A"]).apply(func, include_groups=False),
             id="apply",
+            marks=pytest.mark.skip(
+                "Skip tests on Nightly CI to reduce memory footprint."
+            ),
         ),
     ],
 )
@@ -205,7 +208,7 @@ def test_groupby_udf_types(impl, val_col, func):
     with assert_executed_plan_count(0):
         bdf2 = impl(bdf, func)
 
-    _test_equal(bdf2, df2, check_pandas_types=False)
+    _test_equal(bdf2, df2, check_pandas_types=False, reset_index=True)
 
 
 def test_agg_udf_errorchecking(groupby_df):
@@ -266,6 +269,7 @@ def test_agg_null_keys(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, reset_index=(not as_index))
 
 
+@pytest.mark.skip(reason="TODO[BSE-5254]: Fix CI error with map")
 def test_apply_basic(dropna, as_index):
     """Test basic groupby apply example"""
     df = pd.DataFrame(
@@ -276,6 +280,7 @@ def test_apply_basic(dropna, as_index):
             "BB": ["a", "b"] * 6,
         }
     )
+    df["A"] = df["A"].astype("string[pyarrow]")
 
     bdf = bd.from_pandas(df)
 

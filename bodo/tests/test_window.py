@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -45,25 +46,26 @@ def test_window_df():
 
     return pd.DataFrame(
         {
-            "A": pd.Series(["A", "B", "C"] * 5),
-            "B": pd.Series(
+            "A": pd.array(["A", "B", "C"] * 5, dtype=pd.ArrowDtype(pa.string())),
+            "B": pd.array(
                 [None if i % 5 == 0 else int(10 * np.tan(i)) for i in range(15)],
-                dtype=pd.Int32Dtype(),
+                dtype=pd.ArrowDtype(pa.int32()),
             ),
-            "C": pd.Series(list("ALPHATHETAGAMMA")),
-            "D": pd.Series([0] * 12 + [1] * 3),
-            "E": pd.Series(
+            "C": pd.array(list("ALPHATHETAGAMMA"), dtype=pd.ArrowDtype(pa.string())),
+            "D": pd.array([0] * 12 + [1] * 3, dtype=pd.ArrowDtype(pa.int64())),
+            "E": pd.array(
                 [[True, False, None, True, False][i % 5] for i in range(15)],
-                dtype=pd.BooleanDtype(),
+                dtype=pd.ArrowDtype(pa.bool_()),
             ),
-            "F": pd.Series(
-                [["A", "B", "A", None, "A", "B", None][i % 7] for i in range(15)]
+            "F": pd.array(
+                [["A", "B", "A", None, "A", "B", None][i % 7] for i in range(15)],
+                dtype=pd.ArrowDtype(pa.string()),
             ),
-            "G": pd.Series(
+            "G": pd.array(
                 [None if i % 6 == 0 else i // 4 for i in range(15)],
-                dtype=pd.Int32Dtype(),
+                dtype=pd.ArrowDtype(pa.int32()),
             ),
-            "H": pd.Series(list(range(15)), dtype=np.int32),
+            "H": pd.array(list(range(15)), dtype=pd.ArrowDtype(pa.int32())),
             "I": pd.Series(
                 [
                     None
@@ -72,29 +74,42 @@ def test_window_df():
                     for i in range(15)
                 ]
             ),
-            "J": pd.Series(
-                [None if i % 2 == 0 else i / 2 for i in range(15)], dtype=np.float32
+            "J": pd.array(
+                [None if i % 2 == 0 else i / 2 for i in range(15)],
+                dtype=pd.ArrowDtype(pa.float32()),
             ),
-            "K": pd.Series([True, False, False] * 5, dtype=np.bool_),
-            "L": [
-                None if i % 5 == 2 else "ABCDEFGHIJKLMNOP"[i : i + i % 3 + 2]
-                for i in range(15)
-            ],
-            "M": [None if i % 7 == 5 else Decimal(2 ** (4 - i % 8)) for i in range(15)],
-            "N": [
-                None
-                if i % 5 == 4
-                else datetime.date(1999, 12, 30)
-                + datetime.timedelta(days=5 ** (5 - i % 6))
-                for i in range(15)
-            ],
-            "O": [
-                None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
-                for i in range(15)
-            ],
-            "P": pd.Series(
+            "K": pd.array([True, False, False] * 5, dtype=pd.ArrowDtype(pa.bool_())),
+            "L": pd.array(
+                [
+                    None if i % 5 == 2 else "ABCDEFGHIJKLMNOP"[i : i + i % 3 + 2]
+                    for i in range(15)
+                ],
+                dtype=pd.ArrowDtype(pa.string()),
+            ),
+            "M": pd.array(
+                [None if i % 7 == 5 else Decimal(2 ** (4 - i % 8)) for i in range(15)],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+            ),
+            "N": pd.array(
+                [
+                    None
+                    if i % 5 == 4
+                    else datetime.date(1999, 12, 30)
+                    + datetime.timedelta(days=5 ** (5 - i % 6))
+                    for i in range(15)
+                ],
+                dtype=pd.ArrowDtype(pa.date32()),
+            ),
+            "O": pd.array(
+                [
+                    None if i % 8 == 4 else bodo.types.Time(microsecond=10**i)
+                    for i in range(15)
+                ],
+                dtype=pd.ArrowDtype(pa.time64("ns")),
+            ),
+            "P": pd.array(
                 [None if i > 10 else (i + 3) ** 2 for i in range(15)],
-                dtype=pd.UInt8Dtype(),
+                dtype=pd.ArrowDtype(pa.uint8()),
             ),
             "Q": nullable_float_arr_maker(list(range(15)), [12, 14], [5, 7]),
             "R": nullable_float_arr_maker(
@@ -129,23 +144,26 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            5,
-                            4,
-                            3,
-                            4,
-                            3,
-                            5,
-                            3,
-                            2,
-                            2,
-                            2,
-                            5,
-                            1,
-                            1,
-                            1,
-                            4,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                5,
+                                4,
+                                3,
+                                4,
+                                3,
+                                5,
+                                3,
+                                2,
+                                2,
+                                2,
+                                5,
+                                1,
+                                1,
+                                1,
+                                4,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -160,23 +178,26 @@ def permute_df_and_answer(df, answer):
                 ("last", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            4,
-                            2,
-                            3,
-                            3,
-                            5,
-                            1,
-                            2,
-                            4,
-                            2,
-                            5,
-                            3,
-                            4,
-                            1,
-                            1,
-                            5,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                4,
+                                2,
+                                3,
+                                3,
+                                5,
+                                1,
+                                2,
+                                4,
+                                2,
+                                5,
+                                3,
+                                4,
+                                1,
+                                1,
+                                5,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -191,7 +212,10 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [False] * 11 + [True] * 3 + [False],
+                        "AGG_OUTPUT_0": pd.array(
+                            [False] * 11 + [True] * 3 + [False],
+                            dtype=pd.ArrowDtype(pa.bool_()),
+                        ),
                     }
                 ),
             ),
@@ -206,7 +230,10 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [True] * 3 + [False] * 12,
+                        "AGG_OUTPUT_0": pd.array(
+                            [True] * 3 + [False] * 12,
+                            dtype=pd.ArrowDtype(pa.bool_()),
+                        ),
                     }
                 ),
             ),
@@ -221,9 +248,18 @@ def permute_df_and_answer(df, answer):
                 ("first",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": list(range(1, 13)) + [1, 2, 3],
-                        "AGG_OUTPUT_1": [True] + [False] * 11 + [True, False, False],
-                        "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
+                        "AGG_OUTPUT_0": pd.array(
+                            list(range(1, 13)) + [1, 2, 3],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [True] + [False] * 11 + [True, False, False],
+                            dtype=pd.ArrowDtype(pa.bool_()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            list(range(1, 13)) + [1, 2, 3],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -238,74 +274,86 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            1,
-                            4,
-                            3,
-                            3,
-                            1,
-                            4,
-                            3,
-                            2,
-                            4,
-                            1,
-                            3,
-                            1,
-                            5,
-                            5,
-                            1,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            1,
-                            4,
-                            2,
-                            2,
-                            1,
-                            3,
-                            2,
-                            2,
-                            3,
-                            1,
-                            3,
-                            1,
-                            3,
-                            5,
-                            1,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            0.0,
-                            0.75,
-                            0.5,
-                            0.5,
-                            0.0,
-                            0.75,
-                            0.5,
-                            0.25,
-                            0.75,
-                            0.0,
-                            0.5,
-                            0.0,
-                            1.0,
-                            1.0,
-                            0.0,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            0.4,
-                            0.8,
-                            0.6,
-                            0.8,
-                            0.2,
-                            1.0,
-                            0.8,
-                            0.4,
-                            1.0,
-                            0.4,
-                            0.6,
-                            0.4,
-                            1.0,
-                            1.0,
-                            0.4,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                1,
+                                4,
+                                3,
+                                3,
+                                1,
+                                4,
+                                3,
+                                2,
+                                4,
+                                1,
+                                3,
+                                1,
+                                5,
+                                5,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                1,
+                                4,
+                                2,
+                                2,
+                                1,
+                                3,
+                                2,
+                                2,
+                                3,
+                                1,
+                                3,
+                                1,
+                                3,
+                                5,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                0.0,
+                                0.75,
+                                0.5,
+                                0.5,
+                                0.0,
+                                0.75,
+                                0.5,
+                                0.25,
+                                0.75,
+                                0.0,
+                                0.5,
+                                0.0,
+                                1.0,
+                                1.0,
+                                0.0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [
+                                0.4,
+                                0.8,
+                                0.6,
+                                0.8,
+                                0.2,
+                                1.0,
+                                0.8,
+                                0.4,
+                                1.0,
+                                0.4,
+                                0.6,
+                                0.4,
+                                1.0,
+                                1.0,
+                                0.4,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),
@@ -323,74 +371,86 @@ def permute_df_and_answer(df, answer):
                 ("first",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            1,
-                            1,
-                            1,
-                            1,
-                            3,
-                            1,
-                            1,
-                            1,
-                            1,
-                            1,
-                            1,
-                            4,
-                            1,
-                            2,
-                            4,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            1,
-                            1,
-                            1,
-                            1,
-                            2,
-                            1,
-                            1,
-                            1,
-                            1,
-                            1,
-                            1,
-                            3,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.5,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.75,
-                            0.0,
-                            1.0,
-                            0.75,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            0.4,
-                            1.0,
-                            1.0,
-                            1.0,
-                            0.6,
-                            1.0,
-                            1.0,
-                            1.0,
-                            1.0,
-                            0.4,
-                            1.0,
-                            1.0,
-                            0.5,
-                            1.0,
-                            1.0,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                1,
+                                1,
+                                1,
+                                1,
+                                3,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                4,
+                                1,
+                                2,
+                                4,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                1,
+                                1,
+                                1,
+                                1,
+                                2,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                3,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.5,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.75,
+                                0.0,
+                                1.0,
+                                0.75,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [
+                                0.4,
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.6,
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.4,
+                                1.0,
+                                1.0,
+                                0.5,
+                                1.0,
+                                1.0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),
@@ -407,10 +467,22 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": list(range(1, 13)) + [1] * 3,
-                        "AGG_OUTPUT_1": list(range(1, 13)) + [1] * 3,
-                        "AGG_OUTPUT_2": [i / 11 for i in range(12)] + [0] * 3,
-                        "AGG_OUTPUT_3": [(i + 1) / 12 for i in range(12)] + [1] * 3,
+                        "AGG_OUTPUT_0": pd.array(
+                            list(range(1, 13)) + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            list(range(1, 13)) + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [i / 11 for i in range(12)] + [0] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [(i + 1) / 12 for i in range(12)] + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),
@@ -434,60 +506,78 @@ def permute_df_and_answer(df, answer):
                 ("first",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [1] * 6 + [2] * 6 + [1, 1, 2],
-                        "AGG_OUTPUT_1": [1] * 4 + [2] * 4 + [3] * 4 + [1, 2, 3],
-                        "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
-                        "AGG_OUTPUT_3": [
-                            1,
-                            1,
-                            1,
-                            2,
-                            2,
-                            2,
-                            3,
-                            3,
-                            4,
-                            4,
-                            5,
-                            5,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_4": [
-                            1,
-                            1,
-                            2,
-                            2,
-                            3,
-                            3,
-                            4,
-                            4,
-                            5,
-                            5,
-                            6,
-                            6,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_5": [
-                            1,
-                            1,
-                            2,
-                            2,
-                            3,
-                            4,
-                            5,
-                            6,
-                            7,
-                            8,
-                            9,
-                            10,
-                            1,
-                            2,
-                            3,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [1] * 6 + [2] * 6 + [1, 1, 2],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [1] * 4 + [2] * 4 + [3] * 4 + [1, 2, 3],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            list(range(1, 13)) + [1, 2, 3],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [
+                                1,
+                                1,
+                                1,
+                                2,
+                                2,
+                                2,
+                                3,
+                                3,
+                                4,
+                                4,
+                                5,
+                                5,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [
+                                1,
+                                1,
+                                2,
+                                2,
+                                3,
+                                3,
+                                4,
+                                4,
+                                5,
+                                5,
+                                6,
+                                6,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_5": pd.array(
+                            [
+                                1,
+                                1,
+                                2,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -511,108 +601,126 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            1,
-                            5,
-                            4,
-                            5,
-                            5,
-                            2,
-                            4,
-                            5,
-                            4,
-                            4,
-                            3,
-                            3,
-                            0,
-                            1,
-                            1,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            1,
-                            12,
-                            6,
-                            9,
-                            11,
-                            2,
-                            8,
-                            10,
-                            5,
-                            7,
-                            3,
-                            4,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            0,
-                            5,
-                            2,
-                            4,
-                            5,
-                            0,
-                            3,
-                            4,
-                            2,
-                            3,
-                            0,
-                            1,
-                            0,
-                            0,
-                            1,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            0,
-                            5,
-                            4,
-                            4,
-                            4,
-                            1,
-                            4,
-                            4,
-                            3,
-                            4,
-                            1,
-                            2,
-                            0,
-                            0,
-                            1,
-                        ],
-                        "AGG_OUTPUT_4": [
-                            1,
-                            6,
-                            3,
-                            5,
-                            6,
-                            1,
-                            4,
-                            5,
-                            3,
-                            4,
-                            2,
-                            2,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_5": [
-                            0,
-                            6,
-                            2,
-                            4,
-                            5,
-                            0,
-                            3,
-                            5,
-                            1,
-                            3,
-                            1,
-                            1,
-                            0,
-                            0,
-                            0,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                1,
+                                5,
+                                4,
+                                5,
+                                5,
+                                2,
+                                4,
+                                5,
+                                4,
+                                4,
+                                3,
+                                3,
+                                0,
+                                1,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                1,
+                                12,
+                                6,
+                                9,
+                                11,
+                                2,
+                                8,
+                                10,
+                                5,
+                                7,
+                                3,
+                                4,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                0,
+                                5,
+                                2,
+                                4,
+                                5,
+                                0,
+                                3,
+                                4,
+                                2,
+                                3,
+                                0,
+                                1,
+                                0,
+                                0,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [
+                                0,
+                                5,
+                                4,
+                                4,
+                                4,
+                                1,
+                                4,
+                                4,
+                                3,
+                                4,
+                                1,
+                                2,
+                                0,
+                                0,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [
+                                1,
+                                6,
+                                3,
+                                5,
+                                6,
+                                1,
+                                4,
+                                5,
+                                3,
+                                4,
+                                2,
+                                2,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_5": pd.array(
+                            [
+                                0,
+                                6,
+                                2,
+                                4,
+                                5,
+                                0,
+                                3,
+                                5,
+                                1,
+                                3,
+                                1,
+                                1,
+                                0,
+                                0,
+                                0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -636,10 +744,22 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_1": [9] * 12 + [3] * 3,
-                        "AGG_OUTPUT_2": [10] * 12 + [2] * 3,
-                        "AGG_OUTPUT_3": [5] * 12 + [1] * 3,
+                        "AGG_OUTPUT_0": pd.array(
+                            [12] * 12 + [3] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [9] * 12 + [3] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [10] * 12 + [2] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [5] * 12 + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -661,57 +781,66 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            4,
-                            4,
-                            7,
-                            7,
-                            5,
-                            5,
-                            7,
-                            6,
-                            7,
-                            7,
-                            6,
-                            7,
-                            3,
-                            3,
-                            3,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            0,
-                            3,
-                            1,
-                            3,
-                            3,
-                            0,
-                            3,
-                            3,
-                            0,
-                            2,
-                            0,
-                            0,
-                            0,
-                            0,
-                            1,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            3,
-                            0,
-                            1,
-                            0,
-                            0,
-                            2,
-                            1,
-                            0,
-                            1,
-                            1,
-                            2,
-                            2,
-                            1,
-                            0,
-                            0,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                4,
+                                4,
+                                7,
+                                7,
+                                5,
+                                5,
+                                7,
+                                6,
+                                7,
+                                7,
+                                6,
+                                7,
+                                3,
+                                3,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                0,
+                                3,
+                                1,
+                                3,
+                                3,
+                                0,
+                                3,
+                                3,
+                                0,
+                                2,
+                                0,
+                                0,
+                                0,
+                                0,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                3,
+                                0,
+                                1,
+                                0,
+                                0,
+                                2,
+                                1,
+                                0,
+                                1,
+                                1,
+                                2,
+                                2,
+                                1,
+                                0,
+                                0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -733,57 +862,66 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            0,
-                            11,
-                            5,
-                            8,
-                            10,
-                            1,
-                            7,
-                            9,
-                            4,
-                            6,
-                            2,
-                            3,
-                            0,
-                            1,
-                            2,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            0,
-                            9,
-                            3,
-                            6,
-                            8,
-                            0,
-                            5,
-                            7,
-                            2,
-                            4,
-                            0,
-                            1,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            3,
-                            5,
-                            4,
-                            5,
-                            5,
-                            3,
-                            5,
-                            5,
-                            4,
-                            5,
-                            4,
-                            4,
-                            1,
-                            1,
-                            1,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                0,
+                                11,
+                                5,
+                                8,
+                                10,
+                                1,
+                                7,
+                                9,
+                                4,
+                                6,
+                                2,
+                                3,
+                                0,
+                                1,
+                                2,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                0,
+                                9,
+                                3,
+                                6,
+                                8,
+                                0,
+                                5,
+                                7,
+                                2,
+                                4,
+                                0,
+                                1,
+                                1,
+                                2,
+                                3,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                3,
+                                5,
+                                4,
+                                5,
+                                5,
+                                3,
+                                5,
+                                5,
+                                4,
+                                5,
+                                4,
+                                4,
+                                1,
+                                1,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -805,57 +943,66 @@ def permute_df_and_answer(df, answer):
                 ("first", "first"),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            12,
-                            1,
-                            7,
-                            4,
-                            2,
-                            11,
-                            5,
-                            3,
-                            8,
-                            6,
-                            10,
-                            9,
-                            3,
-                            2,
-                            1,
-                        ],
-                        "AGG_OUTPUT_1": [
-                            9,
-                            0,
-                            6,
-                            3,
-                            1,
-                            9,
-                            4,
-                            2,
-                            7,
-                            5,
-                            9,
-                            8,
-                            2,
-                            1,
-                            0,
-                        ],
-                        "AGG_OUTPUT_2": [
-                            5,
-                            0,
-                            2,
-                            1,
-                            1,
-                            5,
-                            1,
-                            1,
-                            3,
-                            2,
-                            5,
-                            4,
-                            1,
-                            1,
-                            1,
-                        ],
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                12,
+                                1,
+                                7,
+                                4,
+                                2,
+                                11,
+                                5,
+                                3,
+                                8,
+                                6,
+                                10,
+                                9,
+                                3,
+                                2,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [
+                                9,
+                                0,
+                                6,
+                                3,
+                                1,
+                                9,
+                                4,
+                                2,
+                                7,
+                                5,
+                                9,
+                                8,
+                                2,
+                                1,
+                                0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                5,
+                                0,
+                                2,
+                                1,
+                                1,
+                                5,
+                                1,
+                                1,
+                                3,
+                                2,
+                                5,
+                                4,
+                                1,
+                                1,
+                                1,
+                            ],
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -883,12 +1030,30 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [9] * 12 + [2] * 3,
-                        "AGG_OUTPUT_1": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_2": [9] * 12 + [2] * 3,
-                        "AGG_OUTPUT_3": [6] * 12 + [1] * 3,
-                        "AGG_OUTPUT_4": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_5": [4] * 12 + [1] * 3,
+                        "AGG_OUTPUT_0": pd.array(
+                            [9] * 12 + [2] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [12] * 12 + [3] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [9] * 12 + [2] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [6] * 12 + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [12] * 12 + [3] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_5": pd.array(
+                            [4] * 12 + [1] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
                     }
                 ),
             ),
@@ -920,14 +1085,22 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [563799.694444] * 12 + [1801.333333] * 3
+                        "AGG_OUTPUT_0": pd.array(
+                            [563799.694444] * 12 + [1801.333333] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_1": pd.Series(
-                            [501155.283951] * 12 + [1200.888889] * 3
+                        "AGG_OUTPUT_1": pd.array(
+                            [501155.283951] * 12 + [1200.888889] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_2": pd.Series([750.865963] * 12 + [42.442117] * 3),
-                        "AGG_OUTPUT_3": pd.Series([707.923219] * 12 + [34.653844] * 3),
+                        "AGG_OUTPUT_2": pd.array(
+                            [750.865963] * 12 + [42.442117] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [707.923219] * 12 + [34.653844] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                         "AGG_OUTPUT_4": nullable_float_arr_maker(
                             [0.0] * 15, [12, 13, 14], list(range(12))
                         ),
@@ -1040,13 +1213,24 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": pd.Series([-257.777778] * 12 + [23.333333] * 3),
-                        "AGG_OUTPUT_1": pd.Series([5.5] * 12 + [13.0] * 3),
+                        "AGG_OUTPUT_0": pd.array(
+                            [-257.777778] * 12 + [23.333333] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_1": pd.array(
+                            [5.5] * 12 + [13.0] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                         "AGG_OUTPUT_2": nullable_float_arr_maker(
                             [13.0] * 15, [-1], list(range(12))
                         ),
-                        "AGG_OUTPUT_3": pd.Series([3.0] * 12 + [6.5] * 3),
-                        "AGG_OUTPUT_4": pd.Series([74.0] * 12 + [None] * 3),
+                        "AGG_OUTPUT_3": pd.array(
+                            [3.0] * 12 + [6.5] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [74.0] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.float64())
+                        ),
                     }
                 ),
             ),
@@ -1086,74 +1270,86 @@ def permute_df_and_answer(df, answer):
                             [11, 13, 14],
                             list(range(1, 7)),
                         ),
-                        "AGG_OUTPUT_2": [
-                            -257.77777777777777,
-                            -257.77777777777777,
-                            -291.875,
-                            -330.57142857142856,
-                            -385.5,
-                            -464.8,
-                            -464.8,
-                            -580.5,
-                            -776.6666666666666,
-                            -1131.5,
-                            -2259.0,
-                            -2259.0,
-                            23.333333333333332,
-                            38.0,
-                            72.0,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            None,
-                            0.0,
-                            0.5,
-                            1.0,
-                            1.5,
-                            2.0,
-                            2.5,
-                            3.0,
-                            3.5,
-                            4.0,
-                            4.5,
-                            5.0,
-                            None,
-                            12.0,
-                            12.5,
-                        ],
-                        "AGG_OUTPUT_4": [
-                            3.0,
-                            3.0,
-                            3.0,
-                            3.5,
-                            3.5,
-                            4.0,
-                            4.0,
-                            4.5,
-                            4.5,
-                            5.0,
-                            5.0,
-                            5.5,
-                            6.5,
-                            6.5,
-                            6.5,
-                        ],
-                        "AGG_OUTPUT_5": [
-                            12.5,
-                            16.666666666666668,
-                            21.5,
-                            31.5,
-                            43.5,
-                            57.5,
-                            73.5,
-                            91.5,
-                            111.5,
-                            133.5,
-                            144.66666666666666,
-                            156.5,
-                            None,
-                            None,
-                            None,
-                        ],
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                -257.77777777777777,
+                                -257.77777777777777,
+                                -291.875,
+                                -330.57142857142856,
+                                -385.5,
+                                -464.8,
+                                -464.8,
+                                -580.5,
+                                -776.6666666666666,
+                                -1131.5,
+                                -2259.0,
+                                -2259.0,
+                                23.333333333333332,
+                                38.0,
+                                72.0,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [
+                                None,
+                                0.0,
+                                0.5,
+                                1.0,
+                                1.5,
+                                2.0,
+                                2.5,
+                                3.0,
+                                3.5,
+                                4.0,
+                                4.5,
+                                5.0,
+                                None,
+                                12.0,
+                                12.5,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [
+                                3.0,
+                                3.0,
+                                3.0,
+                                3.5,
+                                3.5,
+                                4.0,
+                                4.0,
+                                4.5,
+                                4.5,
+                                5.0,
+                                5.0,
+                                5.5,
+                                6.5,
+                                6.5,
+                                6.5,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
+                        "AGG_OUTPUT_5": pd.array(
+                            [
+                                12.5,
+                                16.666666666666668,
+                                21.5,
+                                31.5,
+                                43.5,
+                                57.5,
+                                73.5,
+                                91.5,
+                                111.5,
+                                133.5,
+                                144.66666666666666,
+                                156.5,
+                                None,
+                                None,
+                                None,
+                            ],
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),
@@ -1174,20 +1370,25 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [74.000] * 12 + [None] * 3, dtype=None
+                        "AGG_OUTPUT_0": pd.array(
+                            [74.000] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_1": pd.Series(
-                            [2901.800000] * 12 + [None] * 3, dtype=None
+                        "AGG_OUTPUT_1": pd.array(
+                            [2901.800000] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [2638.000000] * 12 + [None] * 3, dtype=None
+                        "AGG_OUTPUT_2": pd.array(
+                            [2638.000000] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_3": pd.Series(
-                            [53.868358059] * 12 + [None] * 3, dtype=None
+                        "AGG_OUTPUT_3": pd.array(
+                            [53.868358059] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
-                        "AGG_OUTPUT_4": pd.Series(
-                            [51.361464154] * 12 + [None] * 3, dtype=None
+                        "AGG_OUTPUT_4": pd.array(
+                            [51.361464154] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.float64()),
                         ),
                     }
                 ),
@@ -1218,16 +1419,31 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [None] * 12 + [-6] * 3, dtype=pd.Int32Dtype()
+                        "AGG_OUTPUT_0": pd.array(
+                            [None] * 12 + [-6] * 3, dtype=pd.ArrowDtype(pa.int32())
                         ),
-                        "AGG_OUTPUT_1": pd.Series([True] * 15, dtype=np.bool_),
-                        "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
-                        "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
-                        "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [bodo.types.Time(nanosecond=1)] * 12
-                        + [None] * 3,
-                        "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
+                        "AGG_OUTPUT_1": pd.array(
+                            [True] * 15, dtype=pd.ArrowDtype(pa.bool_())
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [Decimal("16")] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [0] * 12 + [12] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
+                        ),
+                        "AGG_OUTPUT_4": pd.array(
+                            [datetime.date(2008, 7, 20)] * 15,
+                            dtype=pd.ArrowDtype(pa.date32()),
+                        ),
+                        "AGG_OUTPUT_5": pd.array(
+                            [bodo.types.Time(microsecond=1)] * 12 + [None] * 3,
+                            pd.ArrowDtype(pa.time64("ns")),
+                        ),
+                        "AGG_OUTPUT_6": pd.array(
+                            ["AB"] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.string())
+                        ),
                     }
                 ),
             ),
@@ -1251,12 +1467,20 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [0] * 12 + [12] * 3,
-                        "AGG_OUTPUT_1": pd.Series([None] * 15, dtype=pd.Int32Dtype()),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [True] * 12 + [None] * 3, dtype=pd.BooleanDtype()
+                        "AGG_OUTPUT_0": pd.array(
+                            [0] * 12 + [12] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
                         ),
-                        "AGG_OUTPUT_3": ["A"] * 12 + ["M"] * 3,
+                        "AGG_OUTPUT_1": pd.array(
+                            [None] * 15, dtype=pd.ArrowDtype(pa.int32())
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [True] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.bool_())
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            ["A"] * 12 + ["M"] * 3,
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
                     }
                 ),
             ),
@@ -1280,11 +1504,11 @@ def permute_df_and_answer(df, answer):
                 ("first",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": pd.Series(
+                        "AGG_OUTPUT_0": pd.array(
                             [None] + [0] * 11 + [None] + [12, 12],
-                            dtype=pd.Int32Dtype(),
+                            dtype=pd.ArrowDtype(pa.int32()),
                         ),
-                        "AGG_OUTPUT_1": pd.Series(
+                        "AGG_OUTPUT_1": pd.array(
                             [
                                 None,
                                 None,
@@ -1302,18 +1526,20 @@ def permute_df_and_answer(df, answer):
                                 None,
                                 6.5,
                             ],
-                            dtype=np.float32,
+                            dtype=pd.ArrowDtype(pa.float32()),
                         ),
                         # This answer is identical to the input column M
                         "AGG_OUTPUT_2": pd.Series(
                             [
                                 None if i % 7 == 5 else Decimal(2 ** (4 - i % 8))
                                 for i in range(15)
-                            ]
+                            ],
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
                         ),
-                        "AGG_OUTPUT_3": [None] * 2
-                        + list("AAAALPHATH")
-                        + [None, None, "M"],
+                        "AGG_OUTPUT_3": pd.array(
+                            [None] * 2 + list("AAAALPHATH") + [None, None, "M"],
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
                     }
                 ),
             ),
@@ -1337,12 +1563,21 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [11] * 12 + [14] * 3,
-                        "AGG_OUTPUT_1": pd.Series(
-                            [5.5] * 12 + [None] * 3, dtype=np.float32
+                        "AGG_OUTPUT_0": pd.array(
+                            [11] * 12 + [14] * 3,
+                            dtype=pd.ArrowDtype(pa.int64()),
                         ),
-                        "AGG_OUTPUT_2": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
-                        "AGG_OUTPUT_3": ["LMNO"] * 12 + ["OP"] * 3,
+                        "AGG_OUTPUT_1": pd.array(
+                            [5.5] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.float32())
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.date32()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            ["LMNO"] * 12 + ["OP"] * 3,
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
                     }
                 ),
             ),
@@ -1367,22 +1602,33 @@ def permute_df_and_answer(df, answer):
                 pd.DataFrame(
                     {
                         # This answer is identical to the input column
-                        "AGG_OUTPUT_0": pd.Series(
+                        "AGG_OUTPUT_0": pd.array(
                             [
                                 [True, False, None, True, False][i % 5]
                                 for i in range(15)
                             ],
-                            dtype=pd.BooleanDtype(),
+                            dtype=pd.ArrowDtype(pa.bool_()),
                         ),
-                        "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                        "AGG_OUTPUT_1": pd.array(
+                            [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                            dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+                        ),
                         # This answer is identical to the input column
-                        "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
-                            for i in range(15)
-                        ],
-                        "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
-                        + ["LMNO"] * 3
-                        + [None] * 6,
+                        "AGG_OUTPUT_2": pd.array(
+                            [
+                                None
+                                if i % 8 == 4
+                                else bodo.types.Time(microsecond=10**i)
+                                for i in range(15)
+                            ],
+                            dtype=pd.ArrowDtype(pa.time64("ns")),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
+                            + ["LMNO"] * 3
+                            + [None] * 6,
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
                     }
                 ),
             ),
@@ -1406,14 +1652,20 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [None] * 12 + ["OP"] * 3,
-                        "AGG_OUTPUT_1": pd.Series(
-                            [6] * 12 + [None] * 3, dtype=pd.Int32Dtype()
+                        "AGG_OUTPUT_0": pd.array(
+                            [None] * 12 + ["OP"] * 3,
+                            dtype=pd.ArrowDtype(pa.string()),
                         ),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [False] * 12 + [True] * 3, dtype=pd.BooleanDtype()
+                        "AGG_OUTPUT_1": pd.array(
+                            [6] * 12 + [None] * 3, dtype=pd.ArrowDtype(pa.int32())
                         ),
-                        "AGG_OUTPUT_3": [None] * 15,
+                        "AGG_OUTPUT_2": pd.array(
+                            [False] * 12 + [True] * 3, dtype=pd.ArrowDtype(pa.bool_())
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [None] * 15,
+                            dtype=pd.ArrowDtype(pa.date32()),
+                        ),
                     }
                 ),
             ),
@@ -1440,15 +1692,24 @@ def permute_df_and_answer(df, answer):
                 ("last",),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [None] + ["BCD"] * 11 + [None, "NOP", "NOP"],
-                        "AGG_OUTPUT_1": pd.Series(
-                            [11, None, -2, 8, -67, -4, None, -2259] + [None] * 7,
-                            dtype=pd.Int32Dtype(),
+                        "AGG_OUTPUT_0": pd.array(
+                            [None] + ["BCD"] * 11 + [None, "NOP", "NOP"],
+                            dtype=pd.ArrowDtype(pa.string()),
                         ),
-                        "AGG_OUTPUT_2": [None] * 4
-                        + ["A", "T", "H", "E", "T", "A", "G", "A"]
-                        + [None] * 3,
-                        "AGG_OUTPUT_3": [None] * 15,
+                        "AGG_OUTPUT_1": pd.array(
+                            [11, None, -2, 8, -67, -4, None, -2259] + [None] * 7,
+                            dtype=pd.ArrowDtype(pa.int32()),
+                        ),
+                        "AGG_OUTPUT_2": pd.array(
+                            [None] * 4
+                            + ["A", "T", "H", "E", "T", "A", "G", "A"]
+                            + [None] * 3,
+                            dtype=pd.ArrowDtype(pa.string()),
+                        ),
+                        "AGG_OUTPUT_3": pd.array(
+                            [None] * 15,
+                            dtype=pd.ArrowDtype(pa.date32()),
+                        ),
                     }
                 ),
             ),
@@ -1466,20 +1727,23 @@ def permute_df_and_answer(df, answer):
                 (),
                 pd.DataFrame(
                     {
-                        "AGG_OUTPUT_0": [
-                            0.011057,
-                            0.019656,
-                            0.030713,
-                            0.044226,
-                            0.060197,
-                            0.078624,
-                            0.099509,
-                            0.122850,
-                            0.148649,
-                            0.176904,
-                            0.207617,
-                        ]
-                        + [None] * 4,
+                        "AGG_OUTPUT_0": pd.array(
+                            [
+                                0.011057,
+                                0.019656,
+                                0.030713,
+                                0.044226,
+                                0.060197,
+                                0.078624,
+                                0.099509,
+                                0.122850,
+                                0.148649,
+                                0.176904,
+                                0.207617,
+                            ]
+                            + [None] * 4,
+                            dtype=pd.ArrowDtype(pa.float64()),
+                        ),
                     }
                 ),
             ),

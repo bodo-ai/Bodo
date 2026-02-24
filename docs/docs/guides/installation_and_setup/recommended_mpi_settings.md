@@ -151,7 +151,7 @@ To confirm correct settings are enabled, run following
 `mpiexec` with `I_MPI_DEBUG=5` :
 
 ```shell
-I_MPI_DEBUG=5 mpiexec -f hostfile -rr -n <CORES> python -u -c "from bodo.mpi4py import MPI"
+I_MPI_DEBUG=5 mpiexec -f hostfile -rr -n <CORES> python -u -c "from mpi4py import MPI"
 ```
 
 Check that `libfabric provider` is `efa` and

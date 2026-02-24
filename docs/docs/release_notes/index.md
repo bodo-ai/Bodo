@@ -1,5 +1,9 @@
 # Release Notes {#releases}
 
+-   [Bodo.ai 2026.2 Release][February_2026]
+-   [Bodo.ai 2026.1 Release][January_2026]
+-   [Bodo.ai 2025.12 Release][December_2025]
+-   [Bodo.ai 2025.11 Release][November_2025]
 -   [Bodo.ai 2025.10 Release][October_2025]
 -   [Bodo.ai 2025.9 Release][September_2025]
 -   [Bodo.ai 2025.8 Release][August_2025]

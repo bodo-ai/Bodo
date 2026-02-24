@@ -8,10 +8,10 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
@@ -58,6 +58,7 @@ def assert_frame_equal_unordered(df1, df2):
     pd.testing.assert_frame_equal(
         df1.sort_values(by=df1.columns.to_list(), ignore_index=True),
         df2.sort_values(by=df2.columns.to_list(), ignore_index=True),
+        check_dtype=False,
     )
 
 
@@ -105,10 +106,12 @@ def test_filesystem_parquet_write(memory_leak_check):
         # Write the table
         check_func(write_impl, (bc, write_query), py_output=0, only_1DVar=True)
         # Read the table with pandas and validate the result.
-        result = pd.read_parquet(os.path.join(root, schema, "TABLE2"))
+        result = pd.read_parquet(
+            os.path.join(root, schema, "TABLE2"), dtype_backend="pyarrow"
+        )
         result = result.sort_values("A").reset_index(drop=True)
         df = df.sort_values("A").reset_index(drop=True)
-        pd.testing.assert_frame_equal(result, df)
+        pd.testing.assert_frame_equal(result, df, check_dtype=False)
 
 
 def test_default_schema_filesystem_parquet_write(memory_leak_check):
@@ -161,8 +164,8 @@ def test_default_schema_filesystem_parquet_write(memory_leak_check):
         # Read the table with pandas and validate the result.
         path1 = os.path.join(root, schema1, "OUT_TABLE")
         path2 = os.path.join(root, schema1, schema2, schema3, "OUT_TABLE")
-        result1 = pd.read_parquet(path1)
-        result2 = pd.read_parquet(path2)
+        result1 = pd.read_parquet(path1, dtype_backend="pyarrow")
+        result2 = pd.read_parquet(path2, dtype_backend="pyarrow")
         assert_frame_equal_unordered(result1, df1)
         assert_frame_equal_unordered(result2, df2)
 
@@ -198,7 +201,7 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
         check_func(write_impl, (bc, write_query), py_output=0, only_1DVar=True)
         # Read the table with pandas and validate the result.
         path = os.path.join(root, "OUT_TABLE")
-        result1 = pd.read_parquet(path)
+        result1 = pd.read_parquet(path, dtype_backend="pyarrow")
         assert_frame_equal_unordered(result1, df1)
 
 

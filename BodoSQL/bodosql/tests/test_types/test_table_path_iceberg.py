@@ -233,6 +233,7 @@ def test_explicit_dict_encoding(
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     bodo.tests.utils.test_spawn_mode_enabled,
     reason="Spawn workers don't set READ_STR_AS_DICT_THRESHOLD",

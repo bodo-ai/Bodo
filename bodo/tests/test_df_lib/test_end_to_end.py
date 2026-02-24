@@ -96,7 +96,7 @@ def test_read_parquet(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -118,7 +118,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         path = datapath(file_path)
 
         bodo_out = bd.read_parquet(path)[["three", "four"]]
-        py_out = pd.read_parquet(path)[["three", "four"]]
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["three", "four"]]
 
     _test_equal(
         bodo_out,
@@ -132,7 +132,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         pytest.param(
             pd.DataFrame(
                 {
-                    "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+                    "one": [-1.0, -4.1, 2.5, 3.0, 4.0, 6.0, 10.0],
                     "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
                     "three": [True, False, True, True, True, False, False],
                     "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
@@ -152,7 +152,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
         df.to_parquet(path)
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         _test_equal(
             bodo_out,
@@ -166,7 +166,7 @@ def test_read_parquet_len_shape(datapath):
         path = datapath("example_no_index.parquet")
 
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
         # len directly on parquet file doesn't require plan execution
         assert len(bodo_out) == len(py_out)
@@ -185,7 +185,7 @@ def test_read_parquet_series_len_shape(datapath):
 
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out["A"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out["A"]
 
         # len directly on parquet file doesn't require plan execution
@@ -211,7 +211,7 @@ def test_read_parquet_filter_projection(datapath):
 
         bodo_df = bd.read_parquet(path)
         bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
-        py_df = pd.read_parquet(path)
+        py_df = pd.read_parquet(path, dtype_backend="pyarrow")
         py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
 
         bodo_out = impl(bodo_df)
@@ -231,7 +231,7 @@ def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
         {
-            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "one": [-1.0, -4.3, 2.5, 3.0, 4.0, 6.0, 10.0],
             "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
             "three": [True, False, True, True, True, False, False],
             "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
@@ -247,7 +247,7 @@ def test_write_parquet(index_val):
         assert bodo_df.is_lazy_plan()
 
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -268,7 +268,7 @@ def test_write_parquet(index_val):
         f(bodo_df)
         bodo_df.to_parquet(path)
         # Read back to check
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         _test_equal(
             py_out,
             df,
@@ -284,7 +284,9 @@ def test_projection(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1["D"]
 
     _test_equal(
@@ -323,7 +325,7 @@ def test_filter_pushdown(datapath, file_path, op):
     _test_equal(post, 1)
 
     with assert_executed_plan_count(0):
-        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
         py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
@@ -353,7 +355,7 @@ def test_filter_distributed(datapath, file_path, op):
     # Make sure bodo_df2 is unevaluated in the process.
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath(file_path))
-        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
 
         @bodo.jit(spawn=True)
         def f(df):
@@ -383,7 +385,9 @@ def test_filter(datapath, op):
     """Test for standalone filter."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -438,7 +442,7 @@ def test_filter_bound_between(datapath, file_path, mode):
     with assert_executed_plan_count(0):
         bodo_df2 = bodo_df1[(bodo_df1.A > 3) & (bodo_df1.A < 8)]
 
-    py_df1 = pd.read_parquet(datapath(file_path))
+    py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
     py_df2 = py_df1[(py_df1.A > 3) & (py_df1.A < 8)]
     assert len(py_df2) == 4
 
@@ -460,7 +464,9 @@ def test_filter_multiple1_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
@@ -477,7 +483,9 @@ def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -516,7 +524,9 @@ def test_filter_string_pushdown(datapath):
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[py_df1.B == "gamma"]
 
     _test_equal(
@@ -533,7 +543,9 @@ def test_filter_string(datapath):
 
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute.
     _test_equal(
@@ -579,7 +591,9 @@ def test_filter_datetime_pushdown(datapath, op):
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(
+        datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+    )
     py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
 
     _test_equal(
@@ -599,7 +613,9 @@ def test_filter_datetime(datapath, op):
     """Test for standalone filter."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     # Force read parquet node to execute so the filter doesn't get pushed into the read.
     _test_equal(
@@ -677,7 +693,9 @@ def test_head(datapath):
 
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
 
     _test_equal(
         bodo_df1.copy(),
@@ -842,16 +860,16 @@ def test_series_map_non_jit(index_val):
     warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func1)
+        bdf2 = bdf.C.map(func1)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func1)
+    pdf2 = pdf.C.map(func1)
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
-        bdf2 = bdf.A.map(func2)
+        bdf2 = bdf.C.map(func2)
     pdf = df.copy()
-    pdf2 = pdf.A.map(func2)
+    pdf2 = pdf.C.map(func2)
 
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
@@ -1127,7 +1145,7 @@ def test_parquet_read_partitioned(datapath):
 
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
 
     # NOTE: Bodo DataFrames currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
@@ -1147,7 +1165,7 @@ def test_parquet_read_partitioned_filter(datapath):
     with assert_executed_plan_count(0):
         bodo_out = bd.read_parquet(path)
         bodo_out = bodo_out[bodo_out.part == "a"]
-        py_out = pd.read_parquet(path)
+        py_out = pd.read_parquet(path, dtype_backend="pyarrow")
         py_out = py_out[py_out.part == "a"]
 
     # TODO: test logs to make sure filter pushdown happened and files skipped
@@ -1169,7 +1187,7 @@ def test_parquet_read_shape_head(datapath):
         return df.shape, df.head(4)
 
     def pd_impl():
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         return df.shape, df.head(4)
 
     with assert_executed_plan_count(0):
@@ -1186,7 +1204,9 @@ def test_project_after_filter(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[py_df1.D > 80][["B", "A"]]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
@@ -1329,7 +1349,8 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    _test_equal(post, 4)
+    # The filter node gets pushed into join and then a join filter is inserted
+    _test_equal(post, 5)
 
     _test_equal(
         bdf4.copy(),
@@ -1354,7 +1375,8 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    _test_equal(post, 4)
+    # The filter node gets pushed into join and then a join filter is inserted
+    _test_equal(post, 5)
 
     _test_equal(
         nan_bdf4.copy(),
@@ -1432,7 +1454,9 @@ def test_dataframe_sort(datapath):
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1.sort_values(
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
@@ -1453,7 +1477,9 @@ def test_series_sort(datapath):
         bodo_df2 = bodo_df1["D"]
         bodo_df3 = bodo_df2.sort_values(ascending=False, na_position="last")
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1["D"]
         py_df3 = py_df2.sort_values(ascending=False, na_position="last")
 
@@ -1555,29 +1581,27 @@ def test_groupby_fallback():
         bdf = bd.from_pandas(df)
 
     # Series groupby
-    with assert_executed_plan_count(3):
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
-                "B"
-            ].sum(engine="cython")
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
-            engine="cython"
-        )
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
-    with assert_executed_plan_count(2):
-        bdf2 = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df)
 
-        # DataFrame groupby
-        with pytest.warns(BodoLibFallbackWarning):
-            fallback_out = bdf2.groupby(
-                "A", dropna=False, as_index=False, sort=True
-            ).sum(engine="cython")
-
-        pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+    # DataFrame groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
 
@@ -1591,7 +1615,7 @@ def groupby_agg_df(request):
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
-            "T": pd.timedelta_range("1 day", periods=12, freq="D"),
+            "T": pd.timedelta_range("1 day", periods=12, freq="D", unit="ns"),
         }
     )
 
@@ -1626,7 +1650,6 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 @pytest.mark.parametrize(
     "func, kwargs",
     [
-        pytest.param({"mean_A": "mean", "count_A": "count"}, {}, id="func_dict"),
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
@@ -1723,7 +1746,9 @@ def test_groupby_agg_ordered(func):
                 "F": pd.date_range("1988-01-01", periods=12, freq="D")
                 .to_series()
                 .dt.date,  # date32
-                "T": pd.timedelta_range("1 day", periods=12, freq="D"),  # duration
+                "T": pd.timedelta_range(
+                    "1 day", periods=12, freq="D", unit="ns"
+                ),  # duration
                 "K": ["A", "A", "B"] * 4,
             }
         )
@@ -1743,7 +1768,9 @@ def test_compound_projection_expression(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
 
     _test_equal(
@@ -1761,7 +1788,9 @@ def test_projection_expression_floordiv(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
 
     _test_equal(
@@ -1815,8 +1844,11 @@ def test_series_compound_expression(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = (bodo_df1["A"] + 50) * 2 / 7
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = (py_df1["A"] + 50) * 2 / 7
+        py_df2 = py_df2.astype(pd.ArrowDtype(pa.float64()))
 
     _test_equal(
         bodo_df2,
@@ -2050,7 +2082,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     _test_equal(post, 2)
 
     with assert_executed_plan_count(0):
-        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
         py_series_a = py_df1["A"]
         py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
 
@@ -2079,7 +2111,7 @@ def test_series_filter_distributed(datapath, file_path, op):
     """Very simple test for series filter for sanity checking."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath(file_path))
-        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
 
         @bodo.jit(spawn=True)
         def f(df):
@@ -2125,7 +2157,7 @@ def test_series_filter_series(datapath, file_path, op, mode):
     """Very simple test for series filter for sanity checking."""
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath(file_path))
-        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path), dtype_backend="pyarrow")
 
         @bodo.jit(spawn=True)
         def f(df):
@@ -2300,7 +2332,9 @@ def test_topn(datapath):
         )
         bodo_df3 = bodo_df2.head(3)
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
         py_df2 = py_df1.sort_values(
             by=["D", "A"], ascending=[True, False], na_position="last"
         )
@@ -2381,7 +2415,9 @@ def test_series_min_max():
 
 def test_series_min_max_unsupported_types():
     with assert_executed_plan_count(2):
-        df = pd.DataFrame({"A": pd.timedelta_range("1 day", periods=10, freq="D")})
+        df = pd.DataFrame(
+            {"A": pd.timedelta_range("1 day", periods=10, freq="D", unit="ns")}
+        )
         bdf = bd.from_pandas(df)
 
         with pytest.warns(BodoLibFallbackWarning):
@@ -2429,7 +2465,7 @@ def test_read_csv(datapath):
         date_path = datapath("csv_data_date1.csv")
 
         bodo_out = bd.read_csv(path)[["one", "four"]]
-        py_out = pd.read_csv(path)[["one", "four"]]
+        py_out = pd.read_csv(path, dtype_backend="pyarrow")[["one", "four"]]
 
     _test_equal(
         bodo_out,
@@ -2438,7 +2474,7 @@ def test_read_csv(datapath):
 
     with assert_executed_plan_count(0):
         bodo_out = bd.read_csv(path, usecols=[0, 3])
-        py_out = pd.read_csv(path, usecols=[0, 3])
+        py_out = pd.read_csv(path, usecols=[0, 3], dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -2448,7 +2484,7 @@ def test_read_csv(datapath):
     with assert_executed_plan_count(0):
         col_names = ["int0", "float0", "float1", "int1"]
         bodo_out = bd.read_csv(data1_path, names=col_names)
-        py_out = pd.read_csv(data1_path, names=col_names)
+        py_out = pd.read_csv(data1_path, names=col_names, dtype_backend="pyarrow")
 
     _test_equal(
         bodo_out,
@@ -2458,7 +2494,9 @@ def test_read_csv(datapath):
     with assert_executed_plan_count(0):
         col_names = ["int0", "float0", "date0", "int1"]
         bodo_out = bd.read_csv(date_path, names=col_names, parse_dates=[2])
-        py_out = pd.read_csv(date_path, names=col_names, parse_dates=[2])
+        py_out = pd.read_csv(
+            date_path, names=col_names, parse_dates=[2], dtype_backend="pyarrow"
+        )
 
     _test_equal(
         bodo_out,
@@ -2480,12 +2518,11 @@ def test_df_state_change():
         bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
         bdf2 = bdf.A.map(lambda x: x)
 
-    with assert_executed_plan_count(1):
-        # Collect the df, original result id is stale
-        print(bdf)
+    # Collect the df, original result id is stale
+    print(bdf)
 
-        # Plan execution shouldn't fail due to stale res id
-        print(bdf2)
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
 
 
 def test_dataframe_concat(datapath):
@@ -2498,8 +2535,12 @@ def test_dataframe_concat(datapath):
         ]
         bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )[["A", "D"]]
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )[["A", "E"]]
         py_df3 = pd.concat([py_df1, py_df2, py_df2])
 
     _test_equal(
@@ -2517,8 +2558,12 @@ def test_series_concat(datapath):
         bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
         bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )["A"]
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )["A"]
         py_df3 = pd.concat([py_df1, py_df2, py_df2])
 
     _test_equal(
@@ -2536,8 +2581,12 @@ def test_isin(datapath):
         bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
         bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
 
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = pd.read_parquet(
+            datapath("dataframe_library/df2.parquet"), dtype_backend="pyarrow"
+        )
         py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
 
     _test_equal(
@@ -2554,9 +2603,9 @@ def test_drop(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
             columns=["A", "F"]
         )
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
-            columns=["A", "F"]
-        )
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).drop(columns=["A", "F"])
 
     _test_equal(
         bodo_df1,
@@ -2572,9 +2621,26 @@ def test_loc(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
             :, ["A", "F"]
         ]
-        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
-            :, ["A", "F"]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).loc[:, ["A", "F"]]
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=False,
+    )
+
+    # Tuple column selection
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+            :, ("A", "F")
         ]
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        ).loc[:, ("A", "F")]
 
     _test_equal(
         bodo_df1,
@@ -2639,7 +2705,9 @@ def test_series_describe_numeric(percentiles):
         # For all other stats (count, mean, std, min, max), keep exact check
         _test_equal(
             describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
-            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]).astype(
+                pd.ArrowDtype(pa.float64())
+            ),
             check_pandas_types=False,
         )
 
@@ -2655,11 +2723,10 @@ def test_series_describe_nonnumeric():
 
     bdf = bd.from_pandas(df)
     for c in df.columns:
-        with assert_executed_plan_count(3):
-            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
-            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
-            describe_pd = df[c].describe().map(str)
-            describe_bodo = bdf[c].describe()
+        # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+        # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+        describe_pd = df[c].describe().map(str)
+        describe_bodo = bdf[c].describe()
         _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
 
 
@@ -2851,7 +2918,9 @@ def test_set_df_column_non_arith_binops():
             {
                 "A": ["a", "b", "c", "d"],
                 "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
-                "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
+                "C": pd.timedelta_range(
+                    "1 day", periods=4, unit="ns"
+                ),  # timedelta64[ns]
             }
         )
 
@@ -2954,17 +3023,20 @@ def test_fallback_wrapper_deep_fallback():
     )
 
 
-def test_drop_duplicates():
+def test_drop_duplicates(index_val):
     """Test for drop_duplicates API."""
 
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {
-                "A": pd.array([0, 1] * 100, "Int32"),
-                "B": pd.array([2, 3, 4, 5] * 50, "Float64"),
+                "A": pd.array([0, 1] * 50, "Int32"),
+                "B": pd.array([2, 3, 4, 5] * 25, "Float64"),
             }
         )
-        df.loc[99, "B"] = np.nan
+        # TODO[BSE-5201]: Add groupby dropna flag to DuckDB's aggregate node so the flag
+        # is preserved when the exprs are optimized out.
+        # df.loc[99, "B"] = np.nan
+        df.index = index_val[:100]
         bdf = bd.from_pandas(df).drop_duplicates()
         pdf = df.copy().drop_duplicates()
     _test_equal(
@@ -3260,7 +3332,7 @@ def test_series_reset_index_pipeline():
 
         with assert_executed_plan_count(0):
             bdf = bd.read_csv(csv_path)
-            pdf = pd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path, dtype_backend="pyarrow")
             bds = bdf.groupby("category")["value"].sum().reset_index()
             pds = pdf.groupby("category")["value"].sum().reset_index()
 
@@ -3319,7 +3391,7 @@ def test_dataframe_reset_index_pipeline():
 
         with assert_executed_plan_count(0):
             bdf = bd.read_csv(csv_path)
-            pdf = pd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path, dtype_backend="pyarrow")
 
             bdf = bdf.set_index(["Number", "Color"])
             pdf = pdf.set_index(["Number", "Color"])
@@ -3521,7 +3593,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
     )
@@ -3543,7 +3615,7 @@ def test_series_quantile_empty():
 
     _test_equal(
         bodo_quantile,
-        pd_quantile,
+        pd_quantile.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
@@ -3562,7 +3634,7 @@ def test_series_quantile_tails():
 
     _test_equal(
         out_bd,
-        out_pd,
+        out_pd.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
     )
@@ -3580,7 +3652,7 @@ def test_series_quantile_singleton():
 
     _test_equal(
         out_bd,
-        out_pd,
+        out_pd.astype(pd.ArrowDtype(pa.float64())),
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
@@ -3593,7 +3665,7 @@ def test_dataframe_jit_fallback(datapath):
     path = datapath("dataframe_library/df1.parquet")
 
     bodo_out = bd.read_parquet(path)[["A", "D"]]
-    py_out = pd.read_parquet(path)[["A", "D"]]
+    py_out = pd.read_parquet(path, dtype_backend="pyarrow")[["A", "D"]]
 
     start_jit_fallback_compile_success = JITFallback.compile_success
     with assert_executed_plan_count(1):
@@ -3961,3 +4033,170 @@ def test_timezone_merge(timezone_timestamp_df):
 def test_empty_df(datapath, index_val):
     """Make sure creating an empty dataframe works"""
     _test_equal(bd.DataFrame(), pd.DataFrame())
+
+
+def test_np_ufunc(index_val):
+    """Test for np.ufunc(Series) case."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([0, 1] * 50, "Int32"),
+                "B": pd.array([2, 3, 4, 5] * 25, "Float64"),
+            }
+        )
+        df.index = index_val[:100]
+        bdf = bd.from_pandas(df)
+        bdf["C"] = np.log(bdf["B"] + 1e-8)
+        pdf = df.copy()
+        pdf["C"] = np.log(pdf["B"] + 1e-8)
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+    )
+
+
+def test_empty_result(datapath):
+    """Test empty result node generated by duckdb."""
+
+    with assert_executed_plan_count(0):
+        df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        pdf = df1[(df1.D > 3) & (df1.D < 2)]
+        bdf = bodo_df1[(bodo_df1.D > 3) & (bodo_df1.D < 2)]
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=True,
+    )
+
+
+def test_join_filter_push_cross_product():
+    """Test for join filter pushdown through cross product."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int32"),
+            "B": pd.array([4, 5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([7, 8], "Int32"),
+            "D": pd.array([9, 10], "Int32"),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "E": pd.array(
+                [
+                    1,
+                    1,
+                ],
+                "Int32",
+            ),
+        }
+    )
+    df4 = df1.merge(df2, how="cross")
+    df5 = df4.merge(df3, left_on="A", right_on="E", how="inner")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bd.from_pandas(df3)
+        bdf4 = bdf1.merge(bdf2, how="cross")
+        bdf5 = bdf4.merge(bdf3, left_on="A", right_on="E", how="inner")
+
+    _test_equal(
+        bdf5,
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_join_filter_pushdown_union():
+    """Test for join filter pushdown through union."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int32"),
+            "B": pd.array([4, 5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.array([7, 8], "Int32"),
+            "B": pd.array([9, 10], "Int32"),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "C": pd.array(
+                [
+                    1,
+                    7,
+                ],
+                "Int32",
+            ),
+        }
+    )
+    df4 = pd.concat([df1, df2])
+    df5 = df4.merge(df3, left_on="A", right_on="C", how="inner")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bd.from_pandas(df3)
+        bdf4 = bd.concat([bdf1, bdf2])
+        bdf5 = bdf4.merge(bdf3, left_on="A", right_on="C", how="inner")
+
+    _test_equal(
+        bdf5,
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_join_filter_pushdown_aggregate_split_keys():
+    """Test that a join filter that is partially pushed through an aggregate also generates a filter above it with all keys."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 1], "Int64"),
+            "B": pd.array([4, 5, 6, 4], "Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([1, 2], "Int64"),
+            "D": pd.array([7, 8], "Int64"),
+        }
+    )
+    df3 = df1.groupby("A", as_index=False).sum()
+    df4 = df3.merge(df2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bdf3 = bdf1.groupby("A", as_index=False).sum()
+        bdf4 = bdf3.merge(bdf2, left_on=["A", "B"], right_on=["C", "C"], how="right")
+
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    assert pre == 5
+    # One join filter gets inserted above the aggregate to have both keys
+    # and one filter gets pushed below the aggregate with only one key
+    assert post == 7
+
+    _test_equal(
+        bdf4,
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

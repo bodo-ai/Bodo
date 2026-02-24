@@ -176,7 +176,7 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
     col_names = bodo.utils.typing.ColNamesMetaType(("C1", "C2", "C3", "C4"))
 
     def impl():
-        df1 = pd.read_parquet(filename)
+        df1 = pd.read_parquet(filename, dtype_backend="pyarrow")
         A = np.ones(len(df1))
         T2 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
@@ -187,7 +187,7 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), df1.index, col_names)
         return df2
 
-    in_df = pd.read_parquet(filename)
+    in_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     py_output = pd.DataFrame(
         {
             "C1": in_df.iloc[:, 2],

@@ -108,7 +108,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             lambda: (
                 pd.Series(
                     [
-                        None if i % 7 < 2 else bodo.types.Time(nanosecond=3**i)
+                        None if i % 7 < 2 else bodo.types.Time(microsecond=3**i)
                         for i in range(45)
                     ]
                 ),
@@ -390,7 +390,7 @@ def array_agg_func(group):
     order = order.sort_values(ascending=True, na_position="last").index
     col = group["data"].iloc[order]
     col = col.dropna()
-    return col.values
+    return col.array
 
 
 def test_array_agg_regular(array_agg_data, memory_leak_check):
@@ -459,12 +459,12 @@ def array_agg_distinct_func(group):
         )["A"]
         as_str[sorted_col_without_na.apply(lambda x: len(x) == 0)] = "<EMPTY>"
         mask = as_str != as_str.shift(1)
-        return sorted_col_without_na[mask].values
+        return sorted_col_without_na[mask].array
     else:
         order = group["data"].set_axis(range(len(group)))
         order = order.sort_values(ascending=True, na_position="last").index
         col = group["data"].iloc[order]
-        return col.dropna().drop_duplicates().values
+        return col.dropna().drop_duplicates().array
 
 
 def test_array_agg_distinct(array_agg_data, memory_leak_check):
@@ -659,8 +659,13 @@ def test_array_agg_any_value(memory_leak_check):
     answer = pd.DataFrame(
         {
             "key_a": ["A", "B", "C"],
-            "res_i": [[0, 1, 2], [], [-1]],
-            "res_s": [["0.0", "3.14", "2.718"], [], ["-1.5"]],
+            "res_i": pd.array(
+                [[0, 1, 2], [], [-1]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+            ),
+            "res_s": pd.array(
+                [["0.0", "3.14", "2.718"], [], ["-1.5"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
         }
     )
 

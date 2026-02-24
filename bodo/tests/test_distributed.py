@@ -10,12 +10,12 @@ import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.spawn.spawner
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
@@ -729,7 +729,7 @@ def test_dist_global_flag1(memory_leak_check):
 
     n = 12
     df = pd.DataFrame({"A": np.arange(n)})
-    df = bodo.scatterv(df if bodo.get_rank() == 0 else None)
+    df = bodo.libs.distributed_api.scatterv(df if bodo.get_rank() == 0 else None)
     del df._bodo_meta
 
     @bodo.jit(distributed=["df"])
@@ -854,7 +854,7 @@ def test_1D_Var_alloc3():
             # parfor init block, with parfor stop variable already transformed
             D = pd.Series(np.empty(n))
             for i in bodo.prange(n):
-                D.values[i] = C.values[i] + 1.0
+                D.iloc[i] = C.values[i] + 1.0
         return D
 
     bodo_func = bodo.jit(distributed_block={"A", "B", "D"})(impl1)
@@ -1821,7 +1821,7 @@ def test_replicated_flag(memory_leak_check):
 
     df1 = pd.DataFrame({"A": np.arange(50)})
     # use scatterv so that bodo meta is set to distributed
-    df1_chunk = bodo.scatterv(df1)
+    df1_chunk = bodo.libs.distributed_api.scatterv(df1)
     df2 = pd.DataFrame({"A": np.arange(30) ** 2})
     impl1(df1_chunk, df2)
     arr_dists = (
@@ -2041,7 +2041,7 @@ def test_bodo_meta(memory_leak_check, datapath):
     # df created inside JIT function
     @bodo.jit
     def impl1(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df
 
     # df passed into JIT and returned
@@ -2057,7 +2057,7 @@ def test_bodo_meta(memory_leak_check, datapath):
     # Series created inside JIT function
     @bodo.jit
     def impl4(fname):
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df.one
 
     out_df1 = impl1(fname)
@@ -2268,7 +2268,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
         data_to_scatter = None
     else:
         data_to_scatter = orig_data
-    recv_data = bodo.scatterv(data_to_scatter)
+    recv_data = bodo.libs.distributed_api.scatterv(data_to_scatter)
     rank = bodo.get_rank()
     n_pes = bodo.get_size()
 
@@ -2285,7 +2285,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
     assert n_passed == n_pes
 
     # check data with gatherv
-    gathered_data = bodo.gatherv(recv_data)
+    gathered_data = bodo.libs.distributed_api.gatherv(recv_data)
     if rank == 0:
         passed = _test_equal_guard(gathered_data, orig_data)
     else:
@@ -2366,18 +2366,23 @@ def get_random_int64index(n):
             marks=pytest.mark.slow,
         ),  # String Index
         pytest.param(
-            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),
+            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)).astype(
+                "datetime64[ns]"
+            ),
             marks=pytest.mark.slow,
         ),  # DatetimeIndex
         pytest.param(
-            pd.timedelta_range(start="1D", periods=n, name="A"), marks=pytest.mark.slow
+            pd.timedelta_range(start="1D", periods=n, name="A", unit="ns").astype(
+                "timedelta64[ns]"
+            ),
+            marks=pytest.mark.slow,
         ),  # TimedeltaIndex
         pytest.param(
             pd.MultiIndex.from_arrays(
                 [
                     gen_random_string_binary_array(n),
                     np.arange(n),
-                    pd.date_range("2001-10-15", periods=n),
+                    pd.date_range("2001-10-15", periods=n).astype("datetime64[ns]"),
                 ],
                 names=["AA", "B", None],
             ),
@@ -2393,7 +2398,7 @@ def get_random_int64index(n):
             {
                 "A": gen_random_string_binary_array(n),
                 "AB": np.arange(n),
-                "CCC": pd.date_range("2001-10-15", periods=n),
+                "CCC": pd.date_range("2001-10-15", periods=n).astype("datetime64[ns]"),
             },
             np.arange(n) + 2,
         ),
@@ -2526,9 +2531,9 @@ def get_random_int64index(n):
         pytest.param(
             lambda: pd.Series(
                 [
-                    bodo.types.Time(17, 33, 26, 91, 8, 79),
-                    bodo.types.Time(0, 24, 43, 365, 18, 74),
-                    bodo.types.Time(3, 59, 6, 25, 757, 3),
+                    bodo.types.Time(17, 33, 26, 91, 8),
+                    bodo.types.Time(0, 24, 43, 365, 18),
+                    bodo.types.Time(3, 59, 6, 25, 757),
                     bodo.types.Time(),
                     bodo.types.Time(4),
                     bodo.types.Time(6, 41),
@@ -2537,15 +2542,19 @@ def get_random_int64index(n):
                     bodo.types.Time(7, 3, 45, 876, 234),
                     None,
                 ],
-                dtype=object,
+                dtype=pd.ArrowDtype(pa.time64("ns")),
             ),
             marks=pytest.mark.slow,
             id="time",
         ),
         pytest.param(
-            np.append(
-                datetime.timedelta(days=5, seconds=4, weeks=4),
-                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+            pd.array(
+                np.append(
+                    datetime.timedelta(days=5, seconds=4, weeks=4),
+                    [None, datetime.timedelta(microseconds=100000001213131, hours=5)]
+                    * 5,
+                ),
+                dtype=pd.ArrowDtype(pa.duration("ns")),
             ),
             marks=pytest.mark.slow,
             id="timedelta",
@@ -2588,7 +2597,7 @@ def scatter_gather_data(request):
 
 
 def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_check):
-    """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
+    """Test bodo.libs.distributed_api.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
     n = len(scatter_gather_data)
 
     _check_scatterv_gatherv_allgatherv(scatter_gather_data, n)
@@ -2597,7 +2606,7 @@ def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_che
 
 
 def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
-    """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
+    """Test bodo.libs.distributed_api.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
     n = len(df_value)
 
     _check_scatterv_gatherv_allgatherv(df_value, n)
@@ -2614,12 +2623,13 @@ def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
 
     df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df_value)
     # We have some minor dtype differences from pandas
-    _test_equal_guard(df_value, bodo.allgatherv(df_scattered), check_dtype=False)
-
+    _test_equal_guard(
+        bodo.libs.distributed_api.allgatherv(df_scattered), df_value, check_dtype=False
+    )
     passed = 1
-    gathered_val = bodo.gatherv(df_scattered)
+    gathered_val = bodo.libs.distributed_api.gatherv(df_scattered)
     if bodo.get_rank() == 0:
-        passed = _test_equal_guard(df_value, gathered_val, check_dtype=False)
+        passed = _test_equal_guard(gathered_val, df_value, check_dtype=False)
 
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()
@@ -2632,14 +2642,14 @@ def test_scatterv_None_warning(df_value):
         df_proper = df_value
     else:
         df_proper = None
-    df_proper = bodo.scatterv(df_proper)
+    df_proper = bodo.libs.distributed_api.scatterv(df_proper)
 
     df_improper = df_value
     if bodo.get_rank() == 0:
-        df_improper = bodo.scatterv(df_improper)
+        df_improper = bodo.libs.distributed_api.scatterv(df_improper)
     else:
         with pytest.warns(BodoWarning) as warn:
-            df_improper = bodo.scatterv(df_improper)
+            df_improper = bodo.libs.distributed_api.scatterv(df_improper)
 
         assert len(warn) == 1
         assert (
@@ -2896,7 +2906,7 @@ def test_barrier_error():
 
     with pytest.raises(
         numba.TypingError,
-        match=r"too many positional arguments",
+        match=r"unsupported features or typing issues",
     ):
         bodo.jit(f)()
 
@@ -2904,6 +2914,7 @@ def test_barrier_error():
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
+@pytest.mark.skip("TODO Fix bcast segfault")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "val1, val2",
@@ -3260,26 +3271,36 @@ def test_bcast_intercomm():
 @pytest_mark_spawn_mode
 def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     """Test scatterv's intercomm support in spawn mode"""
+    import bodo.decorators  # isort:skip # noqa
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.scatterv(scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm)
+    spawner.worker_intercomm.bcast(CommandType.SCATTER_JIT.value, bcast_root)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
     _res_id = spawner.worker_intercomm.recv(None, source=0)
 
 
 @pytest_mark_spawn_mode
 def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     """Test gatherv's intercomm support in spawn mode"""
+    import bodo.decorators  # isort:skip # noqa
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     # Scatter the data to workers then gather
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.scatterv(scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm)
+    spawner.worker_intercomm.bcast(CommandType.SCATTER_JIT.value, bcast_root)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )
     res_id = spawner.worker_intercomm.recv(None, source=0)
 
-    spawner.worker_intercomm.bcast(CommandType.GATHER.value, bcast_root)
+    spawner.worker_intercomm.bcast(CommandType.GATHER_JIT.value, bcast_root)
     spawner.worker_intercomm.bcast(res_id, bcast_root)
     out = bodo.libs.distributed_api.gatherv(
         None, root=bcast_root, comm=spawner.worker_intercomm

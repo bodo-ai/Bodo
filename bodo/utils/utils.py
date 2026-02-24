@@ -19,6 +19,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, sigutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
@@ -56,7 +57,6 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.mpi4py import MPI
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.typing import (
     NOT_CONSTANT,
@@ -304,6 +304,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         bodo.types.null_array_type,
         bodo.types.datetime_date_array_type,
         bodo.types.boolean_array_type,
+        bodo.types.timedelta_array_type,
     ) or isinstance(
         arr_type,
         (

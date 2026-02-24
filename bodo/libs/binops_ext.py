@@ -386,6 +386,14 @@ def create_overload_arith_op(op):
                 lhs, rhs
             )
 
+        if op == operator.sub and (
+            isinstance(lhs, bodo.types.DatetimeArrayType)
+            or isinstance(rhs, bodo.types.DatetimeArrayType)
+        ):
+            return bodo.libs.pd_datetime_arr_ext.overload_sub_operator_datetime_arr(
+                lhs, rhs
+            )
+
         # Start of Misc Operations
 
         # add operator
@@ -723,7 +731,9 @@ def sub_datetime_and_timedeltas(lhs, rhs):
     td_cond = (is_timedelta_type(lhs) or lhs == datetime_datetime_type) and (
         is_timedelta_type(rhs)
     )
-    array_cond = lhs == timedelta_array_type and rhs == datetime_timedelta_type
+    array_cond = (lhs == timedelta_array_type and rhs == datetime_timedelta_type) or (
+        lhs == datetime_timedelta_type and rhs == timedelta_array_type
+    )
 
     return td_cond or array_cond
 

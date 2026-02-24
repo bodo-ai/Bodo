@@ -33,7 +33,7 @@ def test_series_dt_not_supported(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def impl():
-        rng = pd.date_range("20/02/2020", periods=5, freq="M")
+        rng = pd.date_range("20/02/2020", periods=5, freq="ME")
         ts = pd.Series(np.random.randn(len(rng)), index=rng)
         ps = ts.to_period()
         return ps

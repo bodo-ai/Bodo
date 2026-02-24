@@ -63,15 +63,15 @@ def generate_date_trunc_func(part: str):
             elif standardized_part == "day":
                 return ts_input.normalize()
             elif standardized_part == "hour":
-                return ts_input.floor("H")
+                return ts_input.floor("h")
             elif standardized_part == "minute":
-                return ts_input.floor("T")
+                return ts_input.floor("min")
             elif standardized_part == "second":
-                return ts_input.floor("S")
+                return ts_input.floor("s")
             elif standardized_part == "millisecond":
                 return ts_input.floor("ms")
             elif standardized_part == "microsecond":
-                return ts_input.floor("U")
+                return ts_input.floor("us")
             else:
                 assert standardized_part == "nanosecond"
                 return ts_input

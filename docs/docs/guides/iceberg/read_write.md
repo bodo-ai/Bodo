@@ -88,6 +88,7 @@ The following catalogs are supported:
 
 - AWS Glue Catalog
     - Connection string must be of the form `iceberg+glue?<params>`.
+    - Parameters `glue.id` (account id) and `glue.region` can be used to specify different catalogs.
     - Parameter `type` will be ignored if specified.
     - Parameter `warehouse` is required to create a table.
     - E.g. `iceberg+glue` or `iceberg+glue?warehouse=s3://<ICEBERG-BUCKET>`
@@ -161,7 +162,7 @@ def write_iceberg_table(df: pandas.DataFrame):
 #### Table Partitioning and Sorting {#iceberg-partitioning-sorting}
 Bodo supports reading and writing Iceberg tables with partitioning and sorting. Bodo doesn't support creating a new table with partitioning or sorting yet. We recommend using PyIceberg to create a new empty table with partitioning and sorting specified and using Bodo for read and write of actual data. PyIceberg is a dependency of Bodo and is automatically installed when you install Bodo.
 
-Example:  
+Example:
 ```py
 import pandas as pd
 from pyiceberg import schema, types
@@ -176,9 +177,9 @@ catalog = conn_str_to_catalog("iceberg+file://iceberg_db")
 
 # Define the schema for the Iceberg table
 schema = schema.Schema(
-        types.NestedField(0, "id", types.LongType()),  
-        types.NestedField(1, "timestamp", types.TimestamptzType()),  
-        types.NestedField(2, "data", types.StringType()),  # 
+        types.NestedField(0, "id", types.LongType()),
+        types.NestedField(1, "timestamp", types.TimestamptzType()),
+        types.NestedField(2, "data", types.StringType()),  #
 )
 
 

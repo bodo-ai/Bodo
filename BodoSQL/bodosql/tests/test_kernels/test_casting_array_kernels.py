@@ -124,11 +124,16 @@ def numeric_arrays(request):
 @pytest.fixture(
     params=[
         pytest.param(
-            (pd.Series(pd.date_range("01-01-2020", "01-01-2022", 10, None)),),
+            (
+                pd.Series(
+                    pd.date_range("01-01-2020", "01-01-2022", 10, None, unit="ns"),
+                    dtype="datetime64[ns]",
+                ),
+            ),
             id="dt_array",
         ),
         pytest.param(
-            (pd.Series(pd.timedelta_range("1 day", "10 day", 10, None)),),
+            (pd.Series(pd.timedelta_range("1 day", "10 day", 10, None, unit="ns")),),
             id="td_array",
         ),
         pytest.param(
@@ -609,7 +614,11 @@ def test_cast_interval(args, memory_leak_check):
         ),
         pytest.param(
             pd.Series(
-                [None] * 3 + list(pd.date_range("2022-1-1", periods=21, freq="40D5h4s"))
+                [None] * 3
+                + list(
+                    pd.date_range("2022-1-1", periods=21, freq="40D5h4s", unit="ns")
+                ),
+                dtype="datetime64[ns]",
             ).values,
             id="timestamp-vector",
         ),
@@ -753,9 +762,14 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
                 [None] * 3
                 + list(
                     pd.date_range(
-                        "2022-1-1", periods=21, freq="40D5h4s", tz="US/Pacific"
+                        "2022-1-1",
+                        periods=21,
+                        freq="40D5h4s",
+                        tz="US/Pacific",
+                        unit="ns",
                     )
-                )
+                ),
+                dtype="datetime64[ns, US/Pacific]",
             ).array,
             id="vector",
         ),
@@ -800,7 +814,7 @@ def test_cast_tz_aware_to_tz_naive(ts_val, memory_leak_check):
             pd.Series(
                 [None] * 3
                 + list(
-                    pd.date_range("2022-1-1", periods=21, freq="40D5h4s")
+                    pd.date_range("2022-1-1", periods=21, freq="40D5h4s", unit="ns")
                     .to_series()
                     .astype("str")
                 )

@@ -360,8 +360,10 @@ def test_linear_regression(memory_leak_check):
     # classification metrics only.
     # Gather output in rank 0. This can go away when r2_score is supported
     # TODO: return r2_score directly once it's supported.
-    total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
-    total_y_test = bodo.gatherv(y_test, root=0)
+    total_predict_result = bodo.libs.distributed_api.gatherv(
+        bodo_predict_result, root=0
+    )
+    total_y_test = bodo.libs.distributed_api.gatherv(y_test, root=0)
     bodo_coef_ = bodo.jit(distributed=["X_train", "y_train", "X_test", "y_test"])(
         impl_coef
     )(X_train, y_train, X_test, y_test)
@@ -452,8 +454,10 @@ def test_lasso(memory_leak_check):
     # classification metrics only.
     # Gather output in rank 0. This can go away when r2_score is supported
     # TODO: return r2_score directly once it's supported.
-    total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
-    total_y_test = bodo.gatherv(y_test, root=0)
+    total_predict_result = bodo.libs.distributed_api.gatherv(
+        bodo_predict_result, root=0
+    )
+    total_y_test = bodo.libs.distributed_api.gatherv(y_test, root=0)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
         b_score = r2_score(total_y_test, total_predict_result)
@@ -526,8 +530,10 @@ def test_ridge_regression(memory_leak_check):
     # classification metrics only.
     # Gather output in rank 0. This can go away when r2_score is supported
     # TODO: return r2_score directly once it's supported.
-    total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
-    total_y_test = bodo.gatherv(y_test, root=0)
+    total_predict_result = bodo.libs.distributed_api.gatherv(
+        bodo_predict_result, root=0
+    )
+    total_y_test = bodo.libs.distributed_api.gatherv(y_test, root=0)
     bodo_coef_ = bodo.jit(distributed=["X_train", "y_train", "X_test", "y_test"])(
         impl_coef
     )(X_train, y_train, X_test, y_test)

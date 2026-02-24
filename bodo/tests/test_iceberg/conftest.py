@@ -5,9 +5,9 @@ import time
 
 import boto3
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
@@ -66,7 +66,8 @@ def polaris_server():
     enabling "Allow the default Docker socket to be used" in
     advanced settings of Docker Desktop.
     """
-    from testcontainers.core.container import DockerContainer, wait_for_logs
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.waiting_utils import wait_for_logs
 
     # Can't use run_rank0 because containers aren't pickelable
     err = None

@@ -20,7 +20,7 @@ def test_numba_warn_config():
 
     @bodo.jit
     def impl():
-        a = pd.read_parquet("bodo/tests/data/example.parquet")
+        a = pd.read_parquet("bodo/tests/data/example.parquet", dtype_backend="pyarrow")
         return len(a)
 
     numba.config._env_reloader.reset()

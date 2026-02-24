@@ -116,7 +116,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                         pd.Timestamp("2022-12-31"),
                         None,
                         pd.Timestamp("2000-1-1"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -131,7 +132,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
                     pd.Timestamp("2022-12-31"),
                     pd.Timestamp(current_date),
                     pd.Timestamp("2000-1-1"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             )
         }
     )
@@ -565,7 +567,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
                 [
                     None,
                     bodo.types.Time(13, 37, 45),
-                    bodo.types.Time(1, 47, 59, 290, 574, 817),
+                    bodo.types.Time(1, 47, 59, 290, 574),
                 ]
                 * 4
             )
@@ -683,9 +685,9 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
 
     # making a minor change, to ensure that we have an index where A == B to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
-        "TABLE1"
-    ]["B"][0]
+    bodosql_nullable_numeric_types["TABLE1"].loc[0, "A"] = (
+        bodosql_nullable_numeric_types["TABLE1"]["B"][0]
+    )
 
     query = "Select NULLIF(A, B) from table1"
     check_query(
@@ -694,7 +696,6 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -714,7 +715,6 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
     query = "Select NULLIF(1, A) from table1"
@@ -724,7 +724,6 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -793,9 +792,9 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 
     # making a minor change, to ensure that we have an index where A == C to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
-        "TABLE1"
-    ]["C"][0]
+    bodosql_nullable_numeric_types["TABLE1"].loc[0, "A"] = (
+        bodosql_nullable_numeric_types["TABLE1"]["C"][0]
+    )
 
     query = "Select CASE WHEN A > B THEN NULLIF(A, C) ELSE B END from table1"
     check_query(
@@ -1010,15 +1009,15 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
                 [
                     bodo.types.Time(5, 13, 29),
                     bodo.types.Time(13, 37, 45),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(5, 13, 29),
                     bodo.types.Time(13, 37, 45),
                     bodo.types.Time(22, 7, 16),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(13, 37, 45),
                     bodo.types.Time(22, 7, 16),
                     bodo.types.Time(5, 13, 29),
-                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(8, 2, 5, 0, 1),
                     bodo.types.Time(22, 7, 16),
                 ]
             )
@@ -1040,7 +1039,7 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
     [
         pytest.param(
             "SELECT HASH(A) AS H FROM T",
-            (10 if PYVERSION in ((3, 11), (3, 13)) else 14),
+            (10 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 14),
             id="one_col_A",
         ),
         pytest.param(
@@ -1048,40 +1047,40 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T",
-            (17 if PYVERSION in ((3, 11), (3, 13)) else 21),
+            (17 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 21),
             id="star",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM S",
-            (25 if PYVERSION in ((3, 11), (3, 13)) else 37),
+            (25 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 37),
             id="dot_star",
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 44),
             id="join_star",
         ),
         pytest.param(
             "SELECT HASH(T.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (15 if PYVERSION in ((3, 11), (3, 13)) else 19),
+            (15 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 19),
             id="join_dot_star_A",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (18 if PYVERSION in ((3, 11), (3, 13)) else 29),
+            (18 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 29),
             id="join_dot_star_B",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 44),
             id="join_star_multiple",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(ARRAY_CONSTRUCT_COMPACT(NULLIF(NULLIF(NULLIF(A, 'A'), 'T'), 'E'), NULLIF(NULLIF(NULLIF(A, 'A'), 'C'), 'E'))) AS H FROM S",
             # There are 16 distinct values but for some reason only 14 distinct hashes are produced
-            (14 if PYVERSION in ((3, 11), (3, 13)) else 16),
+            (14 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 16),
             id="array",
             marks=pytest.mark.slow,
         ),

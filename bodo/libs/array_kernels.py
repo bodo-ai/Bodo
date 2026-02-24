@@ -3133,7 +3133,10 @@ def ffill_bfill_overload(A, method, parallel=False):
     elif _dtype == types.bool_:
         null_value = "False"
     elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-        null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
+        if _dtype.tz is not None:
+            null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
+        else:
+            null_value = "pd.Timestamp(0)"
     elif _dtype == bodo.types.datetime64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
@@ -3142,6 +3145,8 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
+    elif _dtype == bodo.types.pd_timedelta_type:  # pragma: no cover
+        null_value = "pd.to_timedelta(0)"
     elif _dtype == bodo.types.pd_datetime_tz_naive_type:  # pragma: no cover
         null_value = "NOT_A_TIME"
         global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
@@ -4444,6 +4449,22 @@ def _overload_nan_argmin(arr):
     """
     Argmin function used on Bodo Array types for idxmin
     """
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_max_value(arr)
+            ival = typing.builtins.IndexValue(len(arr), init_val.value)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i].value)
+                ival = min(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
+
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
     if (
@@ -4451,7 +4472,12 @@ def _overload_nan_argmin(arr):
             arr,
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
-        or arr in [boolean_array_type, datetime_date_array_type]
+        or arr
+        in [
+            boolean_array_type,
+            datetime_date_array_type,
+            bodo.types.timedelta_array_type,
+        ]
         or arr.dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values
@@ -4528,12 +4554,33 @@ def _overload_nan_argmax(arr):
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
 
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            n = len(arr)
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_min_value(arr)
+            ival = typing.builtins.IndexValue(len(arr), init_val.value)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i].value)
+                ival = max(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
+
     if (
         isinstance(
             arr,
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
-        or arr in [boolean_array_type, datetime_date_array_type]
+        or arr
+        in [
+            boolean_array_type,
+            datetime_date_array_type,
+            bodo.types.timedelta_array_type,
+        ]
         or arr.dtype == bodo.types.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas
         # skips NA values

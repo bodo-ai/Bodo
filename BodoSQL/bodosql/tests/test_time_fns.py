@@ -193,9 +193,9 @@ def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
             {
                 "T": pd.Series(
                     [
-                        bodo.types.Time(12, 30, 15, precision=0),
-                        bodo.types.Time(1, 2, 3, 4, precision=3),
-                        bodo.types.Time(9, 59, 0, 100, 250, precision=6),
+                        bodo.types.Time(12, 30, 15, precision=9),
+                        bodo.types.Time(1, 2, 3, 4, precision=9),
+                        bodo.types.Time(9, 59, 0, 100, 250, precision=9),
                         bodo.types.Time(20, 45, 1, 123, 456, 789, precision=9),
                         bodo.types.Time(23, 50, 59, 500, 0, 999, precision=9),
                     ]
@@ -301,7 +301,8 @@ def test_time_plus_minus_intervals(query, answer, memory_leak_check):
             pd.Timedelta(minutes=-200),
             pd.Timedelta(hours=4, minutes=3, seconds=2, microseconds=1),
             pd.Timedelta(seconds=3, milliseconds=500),
-        ]
+        ],
+        dtype="timedelta64[ns]",
     )
     ctx = {"TABLE1": pd.DataFrame({"TI": TI, "TD": TD})}
     expected_output = pd.DataFrame({0: answer})

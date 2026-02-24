@@ -313,6 +313,7 @@ SERIES_BINOP_ARGS = [
 ]
 
 
+@pytest.mark.skip("Pandas 3 NA/NaN mismatch in testing")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta

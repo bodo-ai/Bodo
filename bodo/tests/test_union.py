@@ -392,7 +392,9 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
     def impl(customer_path, orders_path):
         is_last1 = False
         _iter_1 = 0
-        state_1 = pd.read_parquet(customer_path, _bodo_chunksize=4000)
+        state_1 = pd.read_parquet(
+            customer_path, _bodo_chunksize=4000, dtype_backend="pyarrow"
+        )
         state_2 = bodo.libs.streaming.union.init_union_state(-1, all=all)
         while not is_last1:
             T1, is_last1 = bodo.io.arrow_reader.read_arrow_next(state_1, True)
@@ -405,7 +407,9 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
 
         is_last2 = False
         _iter_2 = 0
-        state_3 = pd.read_parquet(orders_path, _bodo_chunksize=4000)
+        state_3 = pd.read_parquet(
+            orders_path, _bodo_chunksize=4000, dtype_backend="pyarrow"
+        )
         _temp1 = False
         while not _temp1:
             T2, is_last2 = bodo.io.arrow_reader.read_arrow_next(state_3, True)
@@ -430,12 +434,12 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
         return df1
 
-    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"]).rename(
-        columns={"C_CUSTKEY": "c_custkey"}
-    )
-    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"]).rename(
-        columns={"O_CUSTKEY": "c_custkey"}
-    )
+    cust_df = pd.read_parquet(
+        customer_path, columns=["C_CUSTKEY"], dtype_backend="pyarrow"
+    ).rename(columns={"C_CUSTKEY": "c_custkey"})
+    ord_df = pd.read_parquet(
+        orders_path, columns=["O_CUSTKEY"], dtype_backend="pyarrow"
+    ).rename(columns={"O_CUSTKEY": "c_custkey"})
 
     py_output = pd.concat([cust_df, ord_df], ignore_index=True)
     if not all:
@@ -523,12 +527,12 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
         return df1
 
-    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"]).rename(
-        columns={"C_CUSTKEY": "c_custkey"}
-    )
-    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"]).rename(
-        columns={"O_CUSTKEY": "c_custkey"}
-    )
+    cust_df = pd.read_parquet(
+        customer_path, columns=["C_CUSTKEY"], dtype_backend="pyarrow"
+    ).rename(columns={"C_CUSTKEY": "c_custkey"})
+    ord_df = pd.read_parquet(
+        orders_path, columns=["O_CUSTKEY"], dtype_backend="pyarrow"
+    ).rename(columns={"O_CUSTKEY": "c_custkey"})
 
     py_output = pd.concat([cust_df, ord_df], ignore_index=True)
     py_output = py_output.drop_duplicates()
@@ -567,16 +571,19 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
+                    "b": pd.array(
                         [
-                            1,
-                        ],
-                        [3],
-                        None,
-                        [4, 5, None],
-                        [6, 7, 8, 9],
-                    ]
-                    * 10,
+                            [
+                                1,
+                            ],
+                            [3],
+                            None,
+                            [4, 5, None],
+                            [6, 7, 8, 9],
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                    ),
                 }
             ),
             False,
@@ -586,14 +593,24 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        {"1": 38.7, "2": "xyz"},
-                        {"1": 11.0, "2": "pqr"},
-                        None,
-                        {"1": 329.1, "2": "abc"},
-                        {"1": 329.1, "2": "abc"},
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            {"1": 38.7, "2": "xyz"},
+                            {"1": 11.0, "2": "pqr"},
+                            None,
+                            {"1": 329.1, "2": "abc"},
+                            {"1": 329.1, "2": "abc"},
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("1", pa.float64()),
+                                    pa.field("2", pa.string()),
+                                ]
+                            )
+                        ),
+                    ),
                 }
             ),
             False,
@@ -633,7 +650,10 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [[[1, 2]], [[3, 4]], [[2, 9]]] * 16 + [[[]], None],
+                    "b": pd.array(
+                        [[[1, 2]], [[3, 4]], [[2, 9]]] * 16 + [[[]], None],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
+                    ),
                 }
             ),
             False,
@@ -643,20 +663,32 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
+                    "b": pd.array(
                         [
-                            {"1": 38.7, "2": "xyz"},
-                            {"1": 11.0, "2": "pqr"},
-                        ],
-                        [
-                            {"1": 38.7, "2": "xyz"},
-                            {"1": 11.0, "2": "pqr"},
-                        ],
-                        None,
-                        [{"1": 2819.2, "2": "abc"}],
-                        None,
-                    ]
-                    * 10,
+                            [
+                                {"1": 38.7, "2": "xyz"},
+                                {"1": 11.0, "2": "pqr"},
+                            ],
+                            [
+                                {"1": 38.7, "2": "xyz"},
+                                {"1": 11.0, "2": "pqr"},
+                            ],
+                            None,
+                            [{"1": 2819.2, "2": "abc"}],
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(
+                                pa.struct(
+                                    [
+                                        pa.field("1", pa.float64()),
+                                        pa.field("2", pa.string()),
+                                    ]
+                                )
+                            )
+                        ),
+                    ),
                 }
             ),
             False,
@@ -666,14 +698,19 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        [{"1": 38.7, "2": 33.2}, None],
-                        [{"3": 11.0}],
-                        [{"abc": 398.21, "jakasf": None}],
-                        [],
-                        None,
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            [{"1": 38.7, "2": 33.2}, None],
+                            [{"3": 11.0}],
+                            [{"abc": 398.21, "jakasf": None}],
+                            [],
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.map_(pa.string(), pa.float64()))
+                        ),
+                    ),
                 }
             ),
             True,
@@ -705,14 +742,21 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        {"1": "38.7", "2": "33.2"},
-                        {"1": "11.0", "2": "oarnsio"},
-                        {"1": "398.21", "2": "pqr"},
-                        None,
-                        None,
-                    ]
-                    * 10,
+                    "b": pd.array(
+                        [
+                            {"1": "38.7", "2": "33.2"},
+                            {"1": "11.0", "2": "oarnsio"},
+                            {"1": "398.21", "2": "pqr"},
+                            None,
+                            None,
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("1", pa.string()), pa.field("2", pa.string())]
+                            )
+                        ),
+                    ),
                 }
             ),
             False,

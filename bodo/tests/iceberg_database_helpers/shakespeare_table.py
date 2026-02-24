@@ -13,9 +13,9 @@ TABLE_NAME = "SHAKESPEARE_TABLE"
 def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
-    df = pd.read_csv(f"{os.path.dirname(__file__)}/shakespeare_sample.csv").loc[
-        :, ["PLAY", "ACTSCENELINE", "PLAYER", "PLAYERLINE"]
-    ]
+    df = pd.read_csv(
+        f"{os.path.dirname(__file__)}/shakespeare_sample.csv", dtype_backend="pyarrow"
+    ).loc[:, ["PLAY", "ACTSCENELINE", "PLAYER", "PLAYERLINE"]]
     sql_schema = [
         ("PLAY", "string", True),
         ("ACTSCENELINE", "string", True),

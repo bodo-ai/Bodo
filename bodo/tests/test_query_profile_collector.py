@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _get_dist_arg,
     get_query_profile_location,
@@ -446,7 +446,11 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
         total_max = 0
         is_last_global = False
         reader = pd.read_parquet(
-            path, _bodo_use_index=False, _bodo_chunksize=4096, _bodo_sql_op_id=0
+            path,
+            _bodo_use_index=False,
+            _bodo_chunksize=4096,
+            _bodo_sql_op_id=0,
+            dtype_backend="pyarrow",
         )
         _iter_1 = 0
         bodo.libs.query_profile_collector.start_pipeline(0)

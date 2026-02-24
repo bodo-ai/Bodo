@@ -3,7 +3,7 @@
 #include <arrow/compute/expression.h>
 #include <arrow/scalar.h>
 #include <arrow/type_fwd.h>
-#include <DataSketches/kll_sketch.hpp>
+#include <kll_sketch.hpp>
 #include <memory>
 #include <stdexcept>
 #include <utility>

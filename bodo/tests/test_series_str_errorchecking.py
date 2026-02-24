@@ -714,7 +714,7 @@ def test_center_errorcheck(memory_leak_check):
     def f(S):
         return S.str.center(3)
 
-    S = pd.Series(pd.date_range(start="1/1/2018", periods=5, freq="3ms"))
+    S = pd.Series(pd.date_range(start="1/1/2018", periods=5, freq="3ms", unit="ns"))
     with pytest.raises(BodoError, match="input should be a series of string"):
         bodo.jit(f)(S)
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23...3.31 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.29...3.31 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
 # External Packages
@@ -15,6 +15,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
   set (X86 TRUE)
 else()
   set (X86 FALSE)
+endif()
+
+if (LINUX)
+    # Use mold for linking on Linux systems
+    set(CMAKE_LINKER_TYPE MOLD)
 endif()
 
 # ------------------------- Enable Compilation Caches -------------------------
@@ -112,29 +117,19 @@ if(WIN32)
 endif()
 
 # ----------------------------- Download Apache Datasketches -------------------------
-include(ExternalProject)
-ExternalProject_Add(datasketches
+set(BUILD_TESTS OFF CACHE BOOL "Disable datasketches tests" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "Disable datasketches examples" FORCE) 
+
+FetchContent_Declare(
+  datasketches
   GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
-  GIT_TAG 5.0.2
-  GIT_SHALLOW true
+  GIT_TAG        5.0.2
+  GIT_SHALLOW    TRUE
   GIT_SUBMODULES ""
-  INSTALL_DIR /tmp/datasketches-prefix
-  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/tmp/datasketches-prefix
-  # Override the install command to add DESTDIR
-  # This is necessary to work around an oddity in the RPM (but not other) package
-  # generation, as CMake otherwise picks up the Datasketch files when building
-  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
-  # those files referenced in an "install" rule in the cmake file)
-  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
-  LOG_CONFIGURE ON
-  LOG_BUILD ON
-  LOG_INSTALL ON
-  LOG_OUTPUT_ON_FAILURE ON
+  EXCLUDE_FROM_ALL
 )
 
-ExternalProject_Get_property(datasketches INSTALL_DIR)
-set(datasketches_INSTALL_DIR ${INSTALL_DIR})
-message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
+FetchContent_MakeAvailable(datasketches)
 
 # ---------------------------- Set CMake Options -----------------------------
 
@@ -181,6 +176,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
+option(USE_CUDF "Enable CUDF mode" OFF)
+if(USE_CUDF)
+    add_compile_definitions(USE_CUDF=1)
+endif()
 
 # ----------------------- Apply Compiler Flags -----------------------
 message(STATUS "\n*** Apply Compiler Flags for Targets")
@@ -229,7 +228,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitiz
   if (NOT WIN32)
     add_compile_options(
       "-g"
-      "-O1"
+      "-O0"
       "-fno-omit-frame-pointer"
     )
   else()
@@ -321,16 +320,13 @@ endif()
 
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
-  # NOTE: The new mpich wheels have library dependencies that are not available during the build
-  #       process and cause errors for wheel repair.
-  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
-  message(STATUS "Downloading Bodo's previous version to vendor MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
-  execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
-  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/bodo-*.data/data/*")
+  message(STATUS "Downloading MPICH")
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich --default-timeout=100)
+  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
+  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB MPICH_WHEEL "bodo-*.whl")
+  file(GLOB MPICH_WHEEL "mpich-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
   message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
 
@@ -350,38 +346,12 @@ endif()
 
 cmake_print_variables(MPI_INCLUDE_DIR)
 
-# Vendor MPI4Py
-if(DEFINED ENV{BODO_VENDOR_MPI4PY} AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  message(STATUS "Copying MPI4Py to Source Directory")
-  # Extract the location of the site-packages directory containing mpi4py
-  execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" -c "import mpi4py; print(mpi4py.__path__[0])"
-    OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-  file(GLOB MPI4PY_CONTENTS "${MPI4PY_PACKAGE_DIR}/*")
-  file(COPY ${MPI4PY_CONTENTS} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
-endif()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(PyArrowHelpers)
+setup_pyarrow_dirs()
 
-# Find PyArrow Include and Lib Directory
-# TODO: Use Arrow Directories from Conda Instead if Available
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; print(pyarrow.get_include())"
-  OUTPUT_VARIABLE PYARROW_INCLUDE_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-# PyArrow on Pip bundles the Arrow shared libraries, but named as lib*.EXT.VERSION
-# I.E. libarrow.so.1700 instead of the expected libarrow.so
-# Thus, we need PyArrow to create symlinks to the correct names
-# They have a helper function to do this, and it should be a NOOP with PyArrow on Conda
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "import pyarrow; pyarrow.create_library_symlinks(); print(pyarrow.get_library_dirs()[0])"
-  OUTPUT_VARIABLE PYARROW_LIB_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-cmake_print_variables(PYARROW_INCLUDE_DIR)
-cmake_print_variables(PYARROW_LIB_DIR)
+message(STATUS "PyArrow Includes: ${PYARROW_INCLUDE_DIR}")
+message(STATUS "PyArrow Lib Dirs: ${PYARROW_LIBRARY_DIRS}")
 
 # Numpy Include Directory is provided by scikit-build-core
 # through `Python_NumPy_INCLUDE_DIR`
@@ -408,8 +378,8 @@ python_add_library(csv_json_reader
   "bodo/io/csv_json_reader.cpp"
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
-target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(csv_json_reader PRIVATE arrow arrow_python ${MPI_LIBRARIES})
+target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(csv_json_reader PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
@@ -425,7 +395,7 @@ add_custom_command(
 set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compat.cpp")
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
-target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 # On Windows this is necessary to define due to importing/exporting DLL semantics.
 # See https://github.com/apache/arrow/blob/9105a4109a80a1c01eabb24ee4b9f7c94ee942cb/python/CMakeLists.txt#L472
 target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
@@ -468,7 +438,7 @@ add_custom_command(
 
 python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
-target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
+target_link_directories(memory PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
 install(TARGETS memory DESTINATION "bodo/")
 
@@ -495,7 +465,7 @@ python_add_library(
 )
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
-target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(memory_tester PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
@@ -573,7 +543,7 @@ python_add_library(memory_cpp
   "bodo/libs/_storage_manager.cpp"
 )
 target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIBRARY_DIRS} ${MPI_LIB_DIR})
 target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS memory_cpp DESTINATION "bodo/")
 
@@ -586,11 +556,13 @@ set(sources_list
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"
+  "bodo/pandas/_executor.cpp"
   "bodo/pandas/_util.cpp"
   "bodo/pandas/physical/expression.cpp"
   "bodo/pandas/physical/operator.cpp"
   "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/pandas/physical/reduce.cpp"
+  "bodo/pandas/optimizer/runtime_join_filter.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
@@ -721,6 +693,12 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       "bodo/tests/test_javascript.cpp"
       )
   endif()
+  if (USE_CUDF)
+        set(test_list "${test_list}"
+        "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
+        "bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
+        )
+  endif()
   list(APPEND sources_list "${test_list}")
   list(APPEND allow_implicit_fallthrough_list
     "bodo/tests/test_puffin.cpp"
@@ -736,6 +714,16 @@ else()
 endif()
 cmake_print_variables(NO_HDF5)
 
+if (USE_CUDF)
+    list(APPEND sources_list
+    "bodo/pandas/physical/gpu_expression.cpp"
+    "bodo/pandas/physical/gpu_aggregate.cpp"
+    "bodo/libs/streaming/cuda_join.cpp"
+    "bodo/libs/streaming/cuda_groupby.cpp"
+    "bodo/libs/gpu_utils.cpp"
+    )
+endif()
+
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
@@ -748,7 +736,7 @@ target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOU
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 )
 target_link_libraries(ext PRIVATE
-  duckdb_static
+  duckdb_static datasketches
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -805,8 +793,7 @@ if (NOT WIN32)
   )
 endif()
 
-target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
-target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
+target_link_directories(ext PRIVATE ${PYARROW_LIBRARY_DIRS} "${Python_NumPy_INCLUDE_DIR}/../lib")
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE
   npymath
@@ -855,11 +842,83 @@ else()
   target_link_libraries(ext PRIVATE hdf5)
 endif()
 
+if(USE_CUDF)
+  message(STATUS "Configuring for cudf.")
+  execute_process( COMMAND "${Python_EXECUTABLE}" -c "import os, pathlib; \ root = os.environ.get('CONDA_PREFIX', ''); \ matches = list(pathlib.Path(root).rglob('cuda_runtime.h')); \ print(matches[0].parent if matches else '')" OUTPUT_VARIABLE CUDA_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
+
+  target_include_directories(ext BEFORE PRIVATE
+    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
+  )
+
+  # RMM library defines
+  find_path(RMM_INCLUDE_DIR NAMES rmm/cuda_stream_view.hpp)
+  find_library(RMM_LIB NAMES librmm.so)
+  get_filename_component(RMM_LIBDIR "${RMM_LIB}" DIRECTORY)
+  message(STATUS "RMM include: ${RMM_INCLUDE_DIR} lib: ${RMM_LIBDIR}")
+  add_library(rmm SHARED IMPORTED)
+  set_target_properties(rmm PROPERTIES IMPORTED_LOCATION "${RMM_LIB}")
+  # Rapids defines
+  find_path(RAPIDS_INCLUDE_DIR NAMES cuda/memory_resource cuda/mr/any_resource HINTS "$ENV{CONDA_PREFIX}/include"
+      PATH_SUFFIXES rapids
+      REQUIRED)
+  message(STATUS "Rapids include: ${RAPIDS_INCLUDE_DIR}")
+  # Rapids logger defines
+  find_path(RAPIDS_LOGGER_INCLUDE_DIR NAMES rapids_logger/log_levels.h)
+  find_library(RL_LIB NAMES librapids_logger.so)
+  get_filename_component(RL_LIBDIR "${RL_LIB}" DIRECTORY)
+  message(STATUS "RapidsLogger include: ${RAPIDS_LOGGER_INCLUDE_DIR} lib: ${RL_LIBDIR}")
+  add_library(rapids_logger SHARED IMPORTED)
+  set_target_properties(rapids_logger PROPERTIES IMPORTED_LOCATION "${RL_LIB}")
+  # libcudf defines
+  find_path(LIBCUDF_INCLUDE_DIR NAMES cudf/types.hpp)
+  find_library(LIBCUDF_LIB NAMES libcudf.so)
+  get_filename_component(LIBCUDF_LIBDIR "${LIBCUDF_LIB}" DIRECTORY)
+  message(STATUS "libcudf include: ${LIBCUDF_INCLUDE_DIR} lib: ${LIBCUDF_LIB}")
+  add_library(libcudf SHARED IMPORTED)
+  set_target_properties(libcudf PROPERTIES IMPORTED_LOCATION "${LIBCUDF_LIB}")
+  # libkvikio defines
+  find_library(LIBKVIKIO_LIB NAMES libkvikio.so)
+  get_filename_component(LIBKVIKIO_LIBDIR "${LIBKVIKIO_LIB}" DIRECTORY)
+  message(STATUS "libkvikio lib: ${LIBKVIKIO_LIB} libdir: ${LIBKVIKIO_LIBDIR}")
+  add_library(libkvikio SHARED IMPORTED)
+  set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
+
+  # cudart
+  find_library(LIBCUDART_LIB NAMES libcudart.so.13)
+  get_filename_component(LIBCUDART_LIBDIR "${LIBCUDART_LIB}" DIRECTORY)
+  message(STATUS "libcudart lib: ${LIBCUDART_LIB} libdir: ${LIBCUDART_LIBDIR}")
+  add_library(libcudart SHARED IMPORTED)
+  set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
+
+  # nccl
+  find_library(NCCL_LIB NAMES libnccl.so)
+  get_filename_component(NCCL_LIBDIR "${NCCL_LIB}" DIRECTORY)
+  message(STATUS "libnccl lib: ${NCCL_LIB} libdir: ${NCCL_LIBDIR}")
+  add_library(nccl SHARED IMPORTED)
+  set_target_properties(nccl PROPERTIES IMPORTED_LOCATION "${NCCL_LIB}")
+
+  # RPATH
+  set_target_properties(ext PROPERTIES
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+  )
+
+  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
+  message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
+  target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
+  # Force the linker to include libkvikio even if no symbols are used directly
+      "-Wl,--no-as-needed"
+      libkvikio
+      "-Wl,--as-needed")
+endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
 # set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 # # Exclude Cython generated code from clang-tidy since it can hang
 # set_source_files_properties(bodo/pandas/plan_optimizer.cpp PROPERTIES CXX_CLANG_TIDY "")
 
-add_dependencies(ext csv_json_reader tracing pyarrow_wrappers datasketches)
+add_dependencies(ext csv_json_reader tracing pyarrow_wrappers)
 install(TARGETS ext DESTINATION "bodo/")

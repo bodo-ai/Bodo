@@ -5,6 +5,7 @@ import cloudpickle
 import numba  # noqa TID253
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core import types  # noqa TID253
 
@@ -766,7 +767,7 @@ def test_udf_nest_jit_convert():
     df = pd.DataFrame(
         {
             "A": [1, 1, 3, 4, 1],
-            "B": pd.date_range("2020-01-01", periods=5),
+            "B": pd.date_range("2020-01-01", periods=5, unit="ns"),
             "C": [1, 2, 3, 4, 5],
         }
     )
@@ -953,7 +954,7 @@ def test_pure_func(datapath):
 
     # pq read
     def impl4():
-        return pd.read_parquet(fname_pq)
+        return pd.read_parquet(fname_pq, dtype_backend="pyarrow")
 
     # np read
     def impl5():
@@ -985,7 +986,7 @@ def test_pure_func(datapath):
 
     # csv read
     def impl11():
-        return pd.read_csv(fname_csv)
+        return pd.read_csv(fname_csv, dtype_backend="pyarrow")
 
     # csv write
     def impl12():
@@ -1286,8 +1287,9 @@ def test_dict_scalar_to_array(memory_leak_check):
 
     n = 50
     scalar_str = "testing"
-    full_output = np.array(["testing"] * 50, dtype=object)
-    null_output = np.array([None] * 50)
+    dtype = pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
+    full_output = pd.array(["testing"] * 50, dtype=dtype)
+    null_output = pd.array([None] * 50, dtype=dtype)
 
     check_func(impl1, (scalar_str, n), py_output=full_output)
     check_func(impl1, (None, n), py_output=null_output)

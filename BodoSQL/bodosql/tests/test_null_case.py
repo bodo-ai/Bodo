@@ -19,7 +19,6 @@ def test_null_then(bodosql_nullable_numeric_types, spark_info, memory_leak_check
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -35,7 +34,6 @@ def test_null_then_handled(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -52,7 +50,6 @@ def test_null_then_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -66,7 +63,6 @@ def test_null_else(bodosql_nullable_numeric_types, spark_info, memory_leak_check
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -83,7 +79,6 @@ def test_null_else_handled(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -102,7 +97,6 @@ def test_null_else_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -116,7 +110,6 @@ def test_null_when(bodosql_nullable_numeric_types, spark_info, memory_leak_check
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -132,7 +125,6 @@ def test_null_when_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -147,7 +139,6 @@ def test_null_when_handled_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
     query2 = "Select Case WHEN A IS NULL THEN B ELSE C END FROM table1"
     check_query(
@@ -156,7 +147,6 @@ def test_null_when_handled_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -172,7 +162,6 @@ def test_null_when_handled_multicolumn(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -185,7 +174,6 @@ def test_null_when_or(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -199,7 +187,6 @@ def test_null_when_and(bodosql_nullable_numeric_types, spark_info, memory_leak_c
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 
@@ -215,7 +202,6 @@ def test_null_when_and_shortcircuit(
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=True,
     )
 
 

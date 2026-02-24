@@ -7,6 +7,7 @@ import numba
 import numpy as np
 import pandas as pd
 import sklearn.metrics
+from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
     overload,
@@ -25,7 +26,6 @@ from sklearn.utils.extmath import (
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,

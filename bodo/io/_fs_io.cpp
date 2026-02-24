@@ -304,35 +304,30 @@ void open_file_appendstream(
     *out_stream = hdfs_fs->OpenAppendStream(fname).ValueOrDie();
 }
 
-void create_dir_posix(int myrank, std::string &dirname,
-                      std::string &path_name) {
+void create_dir_posix(int myrank, std::string &dirname, std::string &path_name,
+                      bool recreate_if_present) {
     // create output directory
-    int error = 0;
-    if (std::filesystem::exists(dirname)) {
-        if (!std::filesystem::is_directory(dirname)) {
-            error = 1;
-        }
-    } else {
-        // for the parallel case, 'dirname' is the directory where the
-        // different parts of the distributed table are stored (each as
-        // a file)
-        std::filesystem::create_directories(dirname);
-    }
-    CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
-                            MPI_COMM_WORLD),
-              "create_dir_posix: MPI error on MPI_Allreduce:");
-    if (error) {
-        if (myrank == 0) {
-            std::cerr << "Bodo parquet write ERROR: a process reports "
-                         "that path "
-                      << path_name << " exists and is not a directory"
-                      << std::endl;
+    if (myrank == 0) {
+        if (std::filesystem::exists(dirname)) {
+            if (recreate_if_present) {
+                std::filesystem::remove_all(dirname);
+                std::filesystem::create_directories(dirname);
+            } else if (!std::filesystem::is_directory(dirname)) {
+                std::cerr << "Bodo parquet write ERROR: a process reports "
+                             "that path "
+                          << path_name << " exists and is not a directory"
+                          << std::endl;
+            }
+        } else {
+            std::filesystem::create_directories(dirname);
         }
     }
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "create_dir_posix: MPI error on MPI_Barrier:");
 }
 
 void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
-                     const std::string &file_type) {
+                     const std::string &file_type, bool recreate_if_present) {
     PyObject *f_mod = nullptr;
     // get hdfs_get_fs function
     PyObject *hdfs_func_obj = nullptr;
@@ -344,6 +339,19 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
     hdfs_get_fs(orig_path, &hdfs_fs);
     if (myrank == 0) {
+        if (recreate_if_present) {
+            arrow::Result<arrow::fs::FileInfo> result;
+            result = hdfs_fs->GetFileInfo(dirname);
+            if (!result.ok()) {
+                throw std::runtime_error("GetFileInfo failed.");
+            }
+            arrow::fs::FileInfo info;
+            info = result.ValueOrDie();
+            if (info.type() != arrow::fs::FileType::NotFound) {
+                status = hdfs_fs->DeleteDir(dirname);
+                CHECK_ARROW(status, "Hdfs::DeleteDir", file_type);
+            }
+        }
         status = hdfs_fs->CreateDir(dirname);
         CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
     }
@@ -355,11 +363,13 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
 
 void create_dir_parallel(Bodo_Fs::FsEnum fs_option, int myrank,
                          std::string &dirname, std::string &path_name,
-                         std::string &orig_path, const std::string &file_type) {
+                         std::string &orig_path, const std::string &file_type,
+                         bool recreate_if_present) {
     if (fs_option == Bodo_Fs::posix) {
-        create_dir_posix(myrank, dirname, path_name);
+        create_dir_posix(myrank, dirname, path_name, recreate_if_present);
     } else if (fs_option == Bodo_Fs::hdfs) {
-        create_dir_hdfs(myrank, dirname, orig_path, file_type);
+        create_dir_hdfs(myrank, dirname, orig_path, file_type,
+                        recreate_if_present);
     }
 }
 
@@ -532,8 +542,8 @@ void parallel_in_order_write(
     int64_t buff_size = count * elem_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
-              "parallel_in_order_write: MPI error on MPI_Errhandler_set:");
+    CHECK_MPI(MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+              "parallel_in_order_write: MPI error on MPI_Comm_set_errhandler:");
 
     if (fs_option == Bodo_Fs::s3) {
         int size_tag = 1;

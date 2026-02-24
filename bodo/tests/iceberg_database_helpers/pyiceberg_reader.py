@@ -35,8 +35,9 @@ def read_iceberg_table(table_name: str, database_name: str) -> pd.DataFrame:
 
 def read_iceberg_table_single_rank(table_name, database_name):
     """Same as above but runs on a single rank and broadcasts the result."""
+    from mpi4py import MPI
+
     import bodo
-    from bodo.mpi4py import MPI
 
     if bodo.get_rank() == 0:
         py_out = read_iceberg_table(table_name, database_name)

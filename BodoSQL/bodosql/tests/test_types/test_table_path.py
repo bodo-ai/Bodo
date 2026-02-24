@@ -9,10 +9,10 @@ import os
 
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.sql_plan_cache import BodoSqlPlanCache
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -121,7 +121,7 @@ def test_table_path_pq_bodosqlContext_python(
         return bc.sql("select * from parquet_table")
 
     filename = parquet_filepaths
-    py_output = pd.read_parquet(filename)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow")
     bodosql_output = impl(filename)
     if bodo.get_size() != 1:
         bodosql_output = bodo.allgatherv(bodosql_output)
@@ -163,7 +163,9 @@ def test_table_path_pq_bodosqlContext_jit(
 
     # Should SQL still produce index columns?
     # Should it include an index column within the data?
-    py_output = pd.read_parquet(filename).reset_index(drop=True)
+    py_output = pd.read_parquet(filename, dtype_backend="pyarrow").reset_index(
+        drop=True
+    )
     check_func(impl, (filename,), py_output=py_output)
 
 
@@ -250,7 +252,7 @@ def test_table_path_avoid_unused_table_jit(
     f1 = parquet_filepaths
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
-    py_output = pd.read_parquet(f1).reset_index(drop=True)
+    py_output = pd.read_parquet(f1, dtype_backend="pyarrow").reset_index(drop=True)
     check_func(impl, (f1, f2), py_output=py_output)
     bodo_func = bodo.jit(impl, pipeline_class=TypeInferenceTestPipeline)
     bodo_func(f1, f2)
@@ -279,7 +281,7 @@ def test_table_path_avoid_unused_table_python(
     f1 = parquet_filepaths
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
-    py_output = pd.read_parquet(f1)
+    py_output = pd.read_parquet(f1, dtype_backend="pyarrow")
     bodosql_output = impl(f1, f2)
     _check_query_equal(
         bodosql_output,
@@ -315,7 +317,7 @@ def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     f1 = datapath("sample-parquet-data/partitioned")
     f2 = datapath("tpcxbb-test-data/web_sales")
 
-    py_output = pd.read_parquet(f1)
+    py_output = pd.read_parquet(f1, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     check_func(impl, (f1, f2), py_output=py_output)
     bodo_func = bodo.jit(impl, pipeline_class=TypeInferenceTestPipeline)
@@ -343,7 +345,7 @@ def test_table_path_categorical_unused_table_python(datapath, memory_leak_check)
     f1 = datapath("sample-parquet-data") + "/partitioned"
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
-    py_output = pd.read_parquet(f1)
+    py_output = pd.read_parquet(f1, dtype_backend="pyarrow")
     py_output["part"] = py_output["part"].astype(str)
     bodosql_output = impl(f1, f2)
     _check_query_equal(

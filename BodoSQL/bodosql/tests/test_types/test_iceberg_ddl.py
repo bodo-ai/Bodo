@@ -2,15 +2,16 @@ import os
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
+from mpi4py import MPI
 from numba.core.config import shutil
 from rest_test_harness import RestTestHarness
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 
@@ -18,7 +19,7 @@ from bodo.tests.utils import pytest_one_rank, pytest_polaris, temp_env_override
 from BodoSQL.bodosql.bodosql_types.rest_catalog import RESTCatalog
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
-pytestmark = pytest_polaris + pytest_one_rank
+pytestmark = pytest_polaris + pytest_one_rank + [pytest.mark.slow]
 
 
 @pytest.fixture(scope="session")
@@ -211,14 +212,20 @@ def test_describe_schema(request, harness_name: str, test_views: bool):
             assert harness.check_view_exists(view_identifier)
             py_output = pd.DataFrame(
                 {
-                    "CREATED_ON": [None, None],
+                    "CREATED_ON": pd.array(
+                        [None, None], dtype=pd.ArrowDtype(pa.string())
+                    ),
                     "NAME": [table_name, view_name],
                     "KIND": ["TABLE", "VIEW"],
                 }
             )
         else:
             py_output = pd.DataFrame(
-                {"CREATED_ON": [None], "NAME": [table_name], "KIND": ["TABLE"]}
+                {
+                    "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "NAME": [table_name],
+                    "KIND": ["TABLE"],
+                }
             )
         # Describe schema
         query = f"DESCRIBE SCHEMA {db_schema}"
@@ -1346,7 +1353,7 @@ def test_show_tables_terse(request, harness_name: str, db_schema: str):
         query = f"SHOW TERSE TABLES in {db_schema}"
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None],
+                "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [table_name],
                 "KIND": ["TABLE"],
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
@@ -1384,25 +1391,29 @@ def test_show_tables(request, harness_name: str, db_schema: str):
         query = f"SHOW TABLES in {db_schema}"
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None],
+                "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [table_name.replace('"', "")],
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
                 "KIND": ["TABLE"],
-                "COMMENT": [None],
-                "CLUSTER_BY": [None],
-                "ROWS": [None],
-                "BYTES": [None],
-                "OWNER": [None],
-                "RETENTION_TIME": [None],
-                "AUTOMATIC_CLUSTERING": [None],
-                "CHANGE_TRACKING": [None],
-                "IS_EXTERNAL": [None],
-                "ENABLE_SCHEMA_EVOLUTION": [None],
-                "OWNER_ROLE_TYPE": [None],
-                "IS_EVENT": [None],
-                "IS_HYBRID": [None],
+                "COMMENT": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "CLUSTER_BY": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "ROWS": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "BYTES": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "OWNER": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "RETENTION_TIME": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "AUTOMATIC_CLUSTERING": pd.array(
+                    [None], dtype=pd.ArrowDtype(pa.string())
+                ),
+                "CHANGE_TRACKING": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_EXTERNAL": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "ENABLE_SCHEMA_EVOLUTION": pd.array(
+                    [None], dtype=pd.ArrowDtype(pa.string())
+                ),
+                "OWNER_ROLE_TYPE": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_EVENT": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_HYBRID": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "IS_ICEBERG": ["Y"],
-                "IS_IMMUTABLE": [None],
+                "IS_IMMUTABLE": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
             }
         )
         bodo_output = harness.run_bodo_query(query)
@@ -1434,7 +1445,7 @@ def test_show_views_terse(request, harness_name: str, db_schema: str):
         query = f"SHOW TERSE VIEWS in {db_schema}"
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None],
+                "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [view_name],
                 "KIND": ["VIEW"],
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
@@ -1469,17 +1480,17 @@ def test_show_views(request, harness_name: str, db_schema: str):
         query = f"SHOW VIEWS in {db_schema}"
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None],
+                "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [view_name.replace('"', "")],
-                "RESERVED": [None],
+                "RESERVED": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
-                "COMMENT": [None],
-                "OWNER": [None],
-                "TEXT": [None],
-                "IS_SECURE": [None],
-                "IS_MATERIALIZED": [None],
-                "OWNER_ROLE_TYPE": [None],
-                "CHANGE_TRACKING": [None],
+                "COMMENT": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "OWNER": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "TEXT": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_SECURE": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_MATERIALIZED": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "OWNER_ROLE_TYPE": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                "CHANGE_TRACKING": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
             }
         )
         bodo_output = harness.run_bodo_query(query)
@@ -1514,7 +1525,7 @@ def test_show_objects_terse(request, harness_name: str, db_schema: str):
         query = f"SHOW TERSE OBJECTS in {db_schema}"
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None],
+                "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [table_name],
                 "KIND": ["TABLE"],
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
@@ -1558,33 +1569,45 @@ def test_show_objects(request, harness_name: str, db_schema: str, test_views: bo
             assert harness.check_view_exists(view_identifier)
             py_output = pd.DataFrame(
                 {
-                    "CREATED_ON": [None, None],
+                    "CREATED_ON": pd.array(
+                        [None, None], dtype=pd.ArrowDtype(pa.string())
+                    ),
                     "NAME": [table_name, view_name],
                     "SCHEMA_NAME": [db_schema, db_schema],
                     "KIND": ["TABLE", "VIEW"],
-                    "COMMENT": [None, None],
-                    "CLUSTER_BY": [None, None],
-                    "ROWS": [None, None],
-                    "BYTES": [None, None],
-                    "OWNER": [None, None],
-                    "RETENTION_TIME": [None, None],
-                    "OWNER_ROLE_TYPE": [None, None],
+                    "COMMENT": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                    "CLUSTER_BY": pd.array(
+                        [None, None], dtype=pd.ArrowDtype(pa.string())
+                    ),
+                    "ROWS": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                    "BYTES": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                    "OWNER": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                    "RETENTION_TIME": pd.array(
+                        [None, None], dtype=pd.ArrowDtype(pa.string())
+                    ),
+                    "OWNER_ROLE_TYPE": pd.array(
+                        [None, None], dtype=pd.ArrowDtype(pa.string())
+                    ),
                 }
             )
         else:
             py_output = pd.DataFrame(
                 {
-                    "CREATED_ON": [None],
+                    "CREATED_ON": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
                     "NAME": [table_name],
                     "SCHEMA_NAME": [db_schema],
                     "KIND": ["TABLE"],
-                    "COMMENT": [None],
-                    "CLUSTER_BY": [None],
-                    "ROWS": [None],
-                    "BYTES": [None],
-                    "OWNER": [None],
-                    "RETENTION_TIME": [None],
-                    "OWNER_ROLE_TYPE": [None],
+                    "COMMENT": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "CLUSTER_BY": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "ROWS": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "BYTES": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "OWNER": pd.array([None], dtype=pd.ArrowDtype(pa.string())),
+                    "RETENTION_TIME": pd.array(
+                        [None], dtype=pd.ArrowDtype(pa.string())
+                    ),
+                    "OWNER_ROLE_TYPE": pd.array(
+                        [None], dtype=pd.ArrowDtype(pa.string())
+                    ),
                 }
             )
         # Show objects
@@ -1621,9 +1644,9 @@ def test_show_schemas_terse(request, harness_name: str, db_schema: str):
         query = f'SHOW TERSE SCHEMAS IN "{db_name}"'
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None, None],
+                "CREATED_ON": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [schema_name1, schema_name2],
-                "KIND": [None] * 2,
+                "KIND": pd.array([None] * 2, dtype=pd.ArrowDtype(pa.string())),
                 "SCHEMA_NAME": [
                     f"{db_name}.{schema_name1}",
                     f"{db_name}.{schema_name2}",
@@ -1669,16 +1692,20 @@ def test_show_schemas(request, harness_name: str, db_schema: str):
         query = f'SHOW SCHEMAS IN "{db_name}"'
         py_output = pd.DataFrame(
             {
-                "CREATED_ON": [None, None],
+                "CREATED_ON": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
                 "NAME": [schema_name1, schema_name2],
-                "IS_DEFAULT": [None, None],
-                "IS_CURRENT": [None, None],
+                "IS_DEFAULT": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                "IS_CURRENT": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
                 "DATABASE_NAME": [db_name, db_name],
-                "OWNER": [None, None],
-                "COMMENT": [None, None],
-                "OPTIONS": [None, None],
-                "RETENTION_TIME": [None, None],
-                "OWNER_ROLE_TYPE": [None, None],
+                "OWNER": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                "COMMENT": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                "OPTIONS": pd.array([None, None], dtype=pd.ArrowDtype(pa.string())),
+                "RETENTION_TIME": pd.array(
+                    [None, None], dtype=pd.ArrowDtype(pa.string())
+                ),
+                "OWNER_ROLE_TYPE": pd.array(
+                    [None, None], dtype=pd.ArrowDtype(pa.string())
+                ),
             }
         )
         bodo_output = harness.run_bodo_query(query)

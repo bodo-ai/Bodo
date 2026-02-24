@@ -9,12 +9,11 @@
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
+#include "duckdb/common/insertion_order_preserving_map.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
@@ -32,20 +31,54 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
     static constexpr const duckdb::LogicalOperatorType TYPE =
         duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR;
 
-    LogicalJoinFilter(duckdb::unique_ptr<duckdb::LogicalOperator> source,
-                      const std::vector<int> filter_ids,
-                      const std::vector<std::vector<int64_t>> filter_columns,
-                      const std::vector<std::vector<bool>> is_first_locations)
+    LogicalJoinFilter(
+        duckdb::unique_ptr<duckdb::LogicalOperator> source,
+        const std::vector<int> filter_ids,
+        const std::vector<std::vector<int64_t>> filter_columns,
+        const std::vector<std::vector<bool>> is_first_locations,
+        const std::vector<std::vector<int64_t>> orig_build_key_cols)
         : duckdb::LogicalOperator(
               duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR),
           filter_ids(std::move(filter_ids)),
           filter_columns(std::move(filter_columns)),
-          is_first_locations(std::move(is_first_locations)) {
+          is_first_locations(std::move(is_first_locations)),
+          orig_build_key_cols(std::move(orig_build_key_cols)) {
+        estimated_cardinality = source->estimated_cardinality;
+        has_estimated_cardinality = source->has_estimated_cardinality;
         this->children.push_back(std::move(source));
     }
 
     duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
         return children[0]->GetColumnBindings();
+    }
+
+    duckdb::string GetName() const override { return "LogicalJoinFilter"; }
+    duckdb::InsertionOrderPreservingMap<duckdb::string> ParamsToString()
+        const override {
+        duckdb::InsertionOrderPreservingMap<duckdb::string> map;
+
+        map["filter_ids"] =
+            fmt::format("{}", fmt::join(this->filter_ids, ", "));
+        map["filter_columns"] = "[";
+        for (const auto &cols : this->filter_columns) {
+            map["filter_columns"] +=
+                fmt::format("[{}], ", fmt::join(cols, ", "));
+        }
+        map["filter_columns"] += "]";
+        map["is_first_locations"] = "[";
+        for (const auto &locs : this->is_first_locations) {
+            map["is_first_locations"] +=
+                fmt::format("[{}], ", fmt::join(locs, ", "));
+        }
+        map["is_first_locations"] += "]";
+        map["orig_build_key_cols"] = "[";
+        for (const auto &cols : this->orig_build_key_cols) {
+            map["orig_build_key_cols"] +=
+                fmt::format("[{}], ", fmt::join(cols, ", "));
+        }
+        map["orig_build_key_cols"] += "]";
+
+        return map;
     }
 
     // IDs of joins creating each filter
@@ -54,6 +87,7 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
     const std::vector<std::vector<int64_t>> filter_columns;
     // Indicating for which of the columns is it the first filtering site
     const std::vector<std::vector<bool>> is_first_locations;
+    const std::vector<std::vector<int64_t>> orig_build_key_cols;
 
    protected:
     void ResolveTypes() override { types = children[0]->types; }
@@ -140,7 +174,8 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
-    std::vector<std::vector<bool>> is_first_locations);
+    std::vector<std::vector<bool>> is_first_locations,
+    std::vector<std::vector<int64_t>> orig_build_key_cols);
 
 /**
  * @brief Creates a LogicalSetOperation node.
@@ -582,6 +617,17 @@ std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
 arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
 
 /**
+ * @brief Convert DuckDB types to an Arrow schema
+ *
+ * @param types vector of DuckDB LogicalTypes
+ * @param names optional column names
+ * @return arrow schema
+ */
+std::shared_ptr<arrow::Schema> duckdb_to_arrow_schema(
+    const std::vector<duckdb::LogicalType> &types,
+    const std::vector<std::string> &names = {});
+
+/**
  * @brief Convert an Arrow field to a DuckDB column name and data type.
  *
  * @param field input Arrow field
@@ -665,3 +711,24 @@ std::string cpp_table_get_first_field_name(int64_t cpp_table);
  * @param cpp_table C++ table pointer cast to int64_t
  */
 void cpp_table_delete(int64_t cpp_table);
+
+/**
+ * @brief Sets the use cudf flag.
+ *
+ * @param use_cudf bool that if true enables use of cudf in backend
+ */
+void set_use_cudf(bool use_cudf, std::string cache_dir);
+
+/**
+ * @brief Gets the use cudf flag.
+ *
+ * @return bool that is true if use of cudf in backend is enabled
+ */
+bool get_use_cudf();
+
+/**
+ * @brief Gets the Bodo cache directory.
+ *
+ * @return std::string the Bodo cache directory
+ */
+std::string get_cache_dir();

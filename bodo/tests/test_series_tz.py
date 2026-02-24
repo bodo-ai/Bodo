@@ -16,7 +16,7 @@ def test_tz_series_tz_scalar_comparison(cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     S = pd.date_range(
-        start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+        start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
     ).to_series()
     ts = pd.Timestamp("4/4/2022", tz="Poland")
     check_func(func, (S, ts))
@@ -29,9 +29,11 @@ def test_tz_series_tz_array_comparison(cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     S = pd.date_range(
-        start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+        start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
     ).to_series()
-    arr = pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz="Poland").array
+    arr = pd.date_range(
+        start="2/1/2022", freq="8D2h30min", periods=30, tz="Poland"
+    ).array
     check_func(func, (S, arr))
     check_func(func, (arr, S))
 
@@ -42,12 +44,12 @@ def test_tz_series_tz_series_comparison(cmp_op, memory_leak_check):
     """
     func = generate_comparison_ops_func(cmp_op)
     S1 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland")
         .to_series()
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz="Poland")
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz="Poland")
         .to_series()
         .reset_index(drop=True)
     )
@@ -63,7 +65,7 @@ def test_series_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
 
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland")
         .to_series()
         .reset_index(drop=True)
     )
@@ -97,12 +99,12 @@ def test_series_array_different_tz_unsupported(cmp_op, memory_leak_check):
 
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland")
         .to_series()
         .reset_index(drop=True)
     )
     arr1 = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30).to_series().values
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30).to_series().array
     )
     # Check that comparison is not support between tz-aware and naive
     with pytest.raises(
@@ -115,7 +117,7 @@ def test_series_array_different_tz_unsupported(cmp_op, memory_leak_check):
         func(arr1, S)
     # Check different timezones aren't supported
     arr2 = pd.date_range(
-        start="2/1/2022", freq="8D2H30T", periods=30, tz="US/Pacific"
+        start="2/1/2022", freq="8D2h30min", periods=30, tz="US/Pacific"
     ).array
     with pytest.raises(
         BodoError, match="requires both Timestamps share the same timezone"
@@ -135,12 +137,12 @@ def test_series_different_tz_unsupported(cmp_op, memory_leak_check):
 
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     S1 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="Poland")
         .to_series()
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30)
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30)
         .to_series()
         .reset_index(drop=True)
     )
@@ -155,7 +157,7 @@ def test_series_different_tz_unsupported(cmp_op, memory_leak_check):
         func(S2, S1)
     # Check different timezones aren't supported
     S3 = (
-        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz="US/Pacific")
+        pd.date_range(start="2/1/2022", freq="8D2h30min", periods=30, tz="US/Pacific")
         .to_series()
         .reset_index(drop=True)
     )
@@ -178,7 +180,7 @@ def test_dt_tz_convert_none(memory_leak_check):
         return S.dt.tz_convert(None)
 
     S = pd.date_range(
-        start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+        start="1/1/2022", freq="16D5h", periods=30, tz="Poland"
     ).to_series()
     check_func(impl, (S,))
 
@@ -204,7 +206,7 @@ def test_pd_concat_series(memory_leak_check):
     S1 = (
         pd.date_range(
             start="1/1/2022",
-            freq="16D5H",
+            freq="16D5h",
             periods=30,
             tz="Poland",
         )
@@ -212,7 +214,7 @@ def test_pd_concat_series(memory_leak_check):
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
         .to_series()
         .reset_index(drop=True)
     )
@@ -232,9 +234,11 @@ def test_series_dtype(memory_leak_check, representative_tz):
     def impl(S):
         return S.dtype
 
-    S = pd.date_range(
-        start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
-    ).to_series()
+    S = (
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=representative_tz)
+        .to_series()
+        .astype(f"datetime64[ns, {representative_tz}]")
+    )
     check_func(impl, (S,))
 
 
@@ -251,7 +255,7 @@ def test_pd_concat_series_error(memory_leak_check):
     S1 = (
         pd.date_range(
             start="1/1/2022",
-            freq="16D5H",
+            freq="16D5h",
             periods=30,
             tz="Poland",
         )
@@ -259,12 +263,12 @@ def test_pd_concat_series_error(memory_leak_check):
         .reset_index(drop=True)
     )
     S2 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz="UTC")
         .to_series()
         .reset_index(drop=True)
     )
     S3 = (
-        pd.date_range(start="1/1/2022", freq="16D5H", periods=30)
+        pd.date_range(start="1/1/2022", freq="16D5h", periods=30)
         .to_series()
         .reset_index(drop=True)
     )
@@ -293,7 +297,7 @@ def test_series_shift(memory_leak_check, sample_tz):
 
     data = (
         [None] * 4
-        + list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz=sample_tz))
+        + list(pd.date_range(start="1/1/2022", freq="16D5h", periods=30, tz=sample_tz))
         + [None] * 4
     )
     shift_amount = 3
@@ -303,7 +307,7 @@ def test_series_shift(memory_leak_check, sample_tz):
     check_func(impl2, (S, shift_amount, fill_value))
 
 
-@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+@pytest.mark.parametrize("freq", ["D", "h", "min", "s", "ms", "us", "ns"])
 def test_series_dt_freq_methods(freq, representative_tz, memory_leak_check):
     """Tests the Series.dt freq methods with various frequencies"""
 
@@ -312,7 +316,7 @@ def test_series_dt_freq_methods(freq, representative_tz, memory_leak_check):
         + list(
             pd.date_range(
                 start="1/1/2022 4:31:15.4814",
-                freq="16D5H",
+                freq="16D5h",
                 periods=30,
                 tz=representative_tz,
             )

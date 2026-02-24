@@ -21,7 +21,7 @@ from bodo.tests.utils import check_func, get_num_test_workers
                 datetime.timedelta(days=5, seconds=4, weeks=4),
                 [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
             )
-        ).array
+        ).array.astype("timedelta64[ns]")
     ]
 )
 def timedelta_arr_value(request):
@@ -89,7 +89,9 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
 
     np.random.seed(0)
     idx = np.random.randint(0, len(timedelta_arr_value), 11)
-    val = pd.timedelta_range(start="7 hours", periods=len(idx)).array
+    val = pd.timedelta_range(start="7 hours", periods=len(idx), unit="ns").array.astype(
+        "timedelta64[ns]"
+    )
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
@@ -101,7 +103,9 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
     )
 
     idx = np.random.ranf(len(timedelta_arr_value)) < 0.2
-    val = pd.timedelta_range(start="7 hours", periods=idx.sum()).array
+    val = pd.timedelta_range(
+        start="7 hours", periods=idx.sum(), unit="ns"
+    ).array.astype("timedelta64[ns]")
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
@@ -113,7 +117,9 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
     )
 
     idx = slice(1, 4)
-    val = pd.timedelta_range(start="7 hours", periods=3).array
+    val = pd.timedelta_range(start="7 hours", periods=3, unit="ns").array.astype(
+        "timedelta64[ns]"
+    )
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )

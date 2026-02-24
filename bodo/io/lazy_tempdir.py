@@ -5,7 +5,7 @@ import weakref
 from tempfile import gettempdir
 from uuid import uuid4
 
-from bodo.mpi4py import MPI
+from mpi4py import MPI
 
 
 class LazyTemporaryDirectory:

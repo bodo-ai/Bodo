@@ -8,6 +8,8 @@ import pytest
 import bodo
 
 import bodo.decorators  # isort:skip # noqa
+from mpi4py import MPI
+
 import bodo.io.snowflake
 from bodo.libs.streaming.groupby import (
     delete_groupby_state,
@@ -19,7 +21,6 @@ from bodo.libs.streaming.groupby import (
     init_groupby_state,
 )
 from bodo.memory import default_buffer_pool_bytes_allocated
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _gather_output,
     _get_dist_arg,

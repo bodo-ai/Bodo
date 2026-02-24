@@ -66,8 +66,8 @@ def run_test_internal_caching(ic_queue, first_time):
     # Run the test on the example dataframe above.
     bodo_jit_func(S)
     ret = 0
-    # We know the above test uses bodo.libs.distributed.get_size.
-    bodo_func = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp
+    # We know the above test uses bodo.libs.int_arr_ext.alloc_int_array.
+    bodo_func = bodo.libs.int_arr_ext.alloc_int_array
     sig = bodo_func.signatures[0]
     if first_time:
         # First time run make sure it was a cache miss.

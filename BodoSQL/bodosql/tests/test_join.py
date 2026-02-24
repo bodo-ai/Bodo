@@ -10,10 +10,10 @@ from datetime import date
 import numba
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -48,15 +48,6 @@ def test_join(
     if bodosql.use_cpp_backend and (comparison_ops != "=" or join_type != "FULL OUTER"):
         return
 
-    # For nullable integers convert the pyspark output from
-    # float to object
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -74,7 +65,6 @@ def test_join(
         spark_info,
         check_dtype=False,
         check_names=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )
@@ -104,13 +94,6 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     can be merged if aliased.
     """
     if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
-    if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
     ):
@@ -130,22 +113,12 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
 
 def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check):
     """test simple natural join queries"""
-    # For nullable integers convert the pyspark output from
-    # float to object
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        convert_float_nan = True
-    else:
-        convert_float_nan = False
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -160,7 +133,6 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
         spark_info,
         check_dtype=False,
         check_names=False,
-        convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )
@@ -406,7 +378,10 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "D": pd.Series(list(pd.date_range("2011", "2018", 5)) * 20),
+                "D": pd.Series(
+                    list(pd.date_range("2011", "2018", 5, unit="ns")) * 20,
+                    dtype="datetime64[ns]",
+                ),
                 "S": pd.Series(
                     [
                         None if i % 7 == 0 else chr(65 + (i**2) % 8 + i // 48)
@@ -451,7 +426,11 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="4D7h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None] * 4,
@@ -459,14 +438,22 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
             "B": [None] * 14
             + list(
                 pd.date_range(
-                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                    start="1/1/2022",
+                    freq="12D21h",
+                    periods=20,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             ),
             "C": pd.date_range(
-                start="3/1/2022", freq="1H", periods=34, tz=representative_tz
+                start="3/1/2022", freq="1h", periods=34, tz=representative_tz, unit="ns"
             ),
             "D": pd.date_range(
-                start="1/1/2022", freq="14D20T", periods=34, tz=representative_tz
+                start="1/1/2022",
+                freq="14D20min",
+                periods=34,
+                tz=representative_tz,
+                unit="ns",
             ),
         }
     )
@@ -532,8 +519,12 @@ def test_interval_join_compilation(memory_leak_check):
     )
     df2 = pd.DataFrame(
         {
-            "L": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
-            "R": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
+            "L": pd.date_range(
+                start="2023-01-01", periods=10, freq="D", unit="ns"
+            ).to_series(),
+            "R": pd.date_range(
+                start="2023-01-01", periods=10, freq="D", unit="ns"
+            ).to_series(),
         }
     )
     bc = bodosql.BodoSQLContext({"ARG1": df1, "ARG2": df2})

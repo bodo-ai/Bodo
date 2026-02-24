@@ -1180,7 +1180,11 @@ def test_max_min_tz_aware(memory_leak_check):
     Test max and min on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        list(
+            pd.date_range(
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+            )
+        )
         + [None] * 5
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
@@ -1203,7 +1207,11 @@ def test_count_tz_aware(memory_leak_check):
     Test count and count(*) on a tz-aware timestamp column
     """
     S = pd.Series(
-        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        list(
+            pd.date_range(
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+            )
+        )
         + [None] * 5
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
@@ -1972,7 +1980,10 @@ def test_mixed_nested_agg_keys(memory_leak_check):
         "TABLE1": pd.DataFrame(
             {
                 "A": ["1", "1", "2", "2", "4", "4"],
-                "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+                "B": pd.array(
+                    [["1"], ["1"], ["2"], ["3"], ["4"], ["4"]],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
                 "C": [1, 2, 3, 4, 5, 5],
             }
         )
@@ -1980,7 +1991,10 @@ def test_mixed_nested_agg_keys(memory_leak_check):
     expected = pd.DataFrame(
         {
             "A": ["1", "2", "2", "4"],
-            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "B": pd.array(
+                [["1"], ["2"], ["3"], ["4"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [3, 3, 4, 10],
         }
     )

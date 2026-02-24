@@ -6,27 +6,56 @@
 
 PhysicalReadIceberg::PhysicalReadIceberg(
     PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, std::shared_ptr<arrow::Schema> arrow_schema,
-    int64_t snapshot_id, std::vector<int> &selected_columns,
+    PyObject *iceberg_schema, const std::shared_ptr<arrow::Schema> arrow_schema,
+    const int64_t snapshot_id, const std::vector<int> &selected_columns,
     duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
-    : arrow_schema(std::move(arrow_schema)),
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
+    JoinFilterColStats join_filter_col_stats)
+    : catalog(catalog),
+      table_id(table_id),
+      iceberg_filter(iceberg_filter),
+      iceberg_schema(iceberg_schema),
+      snapshot_id(snapshot_id),
+      filter_exprs(filter_exprs.Copy()),
+      arrow_schema(std::move(arrow_schema)),
+      selected_columns(selected_columns),
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
-      internal_reader(this->create_internal_reader(
-          catalog, table_id, iceberg_filter, iceberg_schema, snapshot_id,
-          filter_exprs, this->arrow_schema, selected_columns, limit_val)),
-
-      out_metadata(std::make_shared<TableMetadata>(
+      join_filter_col_stats(std::move(join_filter_col_stats)),
+      out_metadata(std::make_shared<bodo::TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
-      out_column_names(this->create_out_column_names(selected_columns,
-                                                     this->arrow_schema)) {}
+      out_column_names(
+          this->create_out_column_names(selected_columns, this->arrow_schema)) {
+    Py_INCREF(this->catalog);
+    Py_INCREF(this->iceberg_filter);
+    Py_INCREF(this->iceberg_schema);
+
+    // Determine total rows to read based on limit_val
+    if (limit_val) {
+        // If the limit option is present...
+        if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
+            throw std::runtime_error(
+                "PhysicalReadIceberg unsupported limit type");
+        }
+        // Limit the rows to read to the limit value.
+        this->total_rows_to_read = limit_val->GetConstantValue();
+    }
+}
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
+    if (!this->internal_reader) {
+        time_pt start_init = start_timer();
+
+        this->internal_reader = this->create_internal_reader();
+
+        this->metrics.init_time += end_timer(start_init);
+    }
+
     uint64_t total_rows;
     bool is_last;
+    time_pt start_produce = start_timer();
 
     table_info *batch = internal_reader->read_batch(is_last, total_rows, true);
     auto result =
@@ -34,7 +63,29 @@ PhysicalReadIceberg::ProduceBatch() {
 
     batch->column_names = out_column_names;
     batch->metadata = out_metadata;
+    this->metrics.produce_time += end_timer(start_produce);
+    this->metrics.rows_read += total_rows;
     return std::make_pair(std::shared_ptr<table_info>(batch), result);
+}
+
+void PhysicalReadIceberg::FinalizeSource() {
+    std::vector<MetricBase> metrics;
+    this->internal_reader->ReportReadStageMetrics(metrics);
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(this->op_id, 1),
+        std::move(metrics));
+
+    QueryProfileCollector::Default().SubmitOperatorName(getOpId(), ToString());
+    QueryProfileCollector::Default().SubmitOperatorStageTime(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+        this->metrics.init_time);
+    QueryProfileCollector::Default().SubmitOperatorStageTime(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+        this->metrics.produce_time);
+    QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+        QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+        this->metrics.rows_read);
 }
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
@@ -48,7 +99,7 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
     for (int i : selected_columns) {
         if (!(i >= 0 && i < schema->num_fields())) {
             throw std::runtime_error(
-                "PhysicalReadParquet(): invalid column index " +
+                "PhysicalReadIceberg(): invalid column index " +
                 std::to_string(i) + " for schema with " +
                 std::to_string(schema->num_fields()) + " fields");
         }
@@ -58,31 +109,18 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
 }
 
 std::unique_ptr<IcebergParquetReader>
-PhysicalReadIceberg::create_internal_reader(
-    PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id,
-    duckdb::TableFilterSet &filter_exprs,
-    std::shared_ptr<arrow::Schema> arrow_schema,
-    std::vector<int> &selected_columns,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+PhysicalReadIceberg::create_internal_reader() {
     // Pipeline buffers assume everything is nullable
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
-    int64_t total_rows_to_read = -1;  // Default to read everything.
-    if (limit_val) {
-        // If the limit option is present...
-        if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
-            throw std::runtime_error(
-                "PhysicalReadParquet unsupported limit type");
-        }
-        // Limit the rows to read to the limit value.
-        total_rows_to_read = limit_val->GetConstantValue();
-    }
+    // Insert join filter min/max stats into the duckdb table filters
+    this->filter_exprs = join_filter_col_stats.insert_filters(
+        std::move(this->filter_exprs), this->selected_columns);
 
     // We need to & the iceberg_filter with converted duckdb table filters
     // to apply the filters at the file level.
     PyObjectPtr duckdb_iceberg_filter =
-        duckdbFilterSetToPyicebergFilter(filter_exprs, arrow_schema);
+        duckdbFilterSetToPyicebergFilter(*filter_exprs, arrow_schema);
 
     // Perform the python & to combine the filters
     // IcebergParquetReader takes ownership, so don't decref
@@ -161,7 +199,7 @@ PhysicalReadIceberg::create_internal_reader(
         catalog, table_id.c_str(), true, total_rows_to_read,
         py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
-        get_streaming_batch_size(), -1, snapshot_id);
+        get_streaming_batch_size(), this->getOpId(), snapshot_id);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;
@@ -176,7 +214,7 @@ std::shared_ptr<arrow::Schema> PhysicalReadIceberg::create_out_arrow_schema(
     for (int i : selected_columns) {
         if (!(i >= 0 && i < arrow_schema->num_fields())) {
             throw std::runtime_error(
-                "PhysicalReadParquet(): invalid column index " +
+                "PhysicalReadIceberg(): invalid column index " +
                 std::to_string(i) + " for schema with " +
                 std::to_string(arrow_schema->num_fields()) + " fields");
         }

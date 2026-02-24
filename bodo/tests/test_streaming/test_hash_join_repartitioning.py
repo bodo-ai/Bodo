@@ -7,6 +7,8 @@ import pytest
 import bodo
 
 import bodo.decorators  # isort:skip # noqa
+from mpi4py import MPI
+
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.streaming.join import (
@@ -19,7 +21,6 @@ from bodo.libs.streaming.join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_mark_one_rank, set_broadcast_join, temp_env_override
 
 pytestmark = [

@@ -8,6 +8,7 @@ import datetime
 import gzip
 import io
 import os
+import platform
 import random
 import re
 import shutil
@@ -30,13 +31,13 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import ir, types  # noqa TID253
 from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.pandas as bodo_pd
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
 from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
@@ -1150,7 +1151,7 @@ def _test_equal_guard(
 # We need to sort the index and values for effective comparison
 def sort_series_values_index(S):
     if S.index.dtype == pd.StringDtype("pyarrow"):
-        S.index = S.index.astype("string")
+        S.index = S.index.astype(object)
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(S.index.dtype, pd.ArrowDtype):
@@ -1168,7 +1169,7 @@ def sort_series_values_index(S):
     # Replace PyArrow strings with regular strings since Arrow doesn't support sort for
     # dict(large_string)
     if S1.dtype == pd.StringDtype("pyarrow"):
-        S1 = S1.astype("string")
+        S1 = S1.astype(object)
     return S1.sort_values(kind="mergesort")
 
 
@@ -1206,13 +1207,22 @@ def sort_dataframe_values_index(df):
 
     # Sort only works on hashable datatypes
     # Thus we convert (non-hashable) list-like types to (hashable) tuples
-    df = df.map(
-        lambda x: (
-            tuple(x)
-            if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
-            else x
+    # NOTE: avoiding df updates if not necessary since Pandas converts data types in map
+    if (
+        df.dtypes.map(lambda x: x == np.object_).any()
+        and df.map(
+            lambda x: isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
         )
-    )
+        .any()
+        .any()
+    ):
+        df = df.map(
+            lambda x: (
+                tuple(x)
+                if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
+                else x
+            )
+        )
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(df.index.dtype, pd.ArrowDtype):
@@ -1281,6 +1291,10 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
         # NaN/None values.
         py_out = pd.array(py_out, str(pa_type).capitalize())
 
+    if pd.Series(py_out).isna().all() and len(py_out) > 0:
+        # Avoid all pd.NA inputs since pa.array() fails for them
+        py_out = np.array([None] * len(py_out))
+
     pa_type_no_dict = _get_arrow_type_no_dict(pa_type)
     py_out = pa.array(py_out, pa_type_no_dict)
 
@@ -1300,7 +1314,7 @@ def _test_equal(
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
-    check_pandas_types=True,
+    check_pandas_types=False,
 ) -> None:
     try:
         from scipy.sparse import csr_matrix
@@ -1316,6 +1330,18 @@ def _test_equal(
         py_out = pa.scalar(py_out)
 
     if isinstance(py_out, pd.Series):
+        from bodo.pandas.series import BodoSeries
+
+        if isinstance(bodo_out, BodoSeries):
+            # Avoid changing the plan of bodo_out
+            bodo_out = pd.Series(bodo_out)
+
+        if (
+            bodo_out.dtype == pd.StringDtype("pyarrow", pd.NA)
+            or bodo_out.dtype == np.float64
+        ) and py_out.dtype == np.object_:
+            py_out = py_out.astype(bodo_out.dtype)
+
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
             py_out.dtype, pd.ArrowDtype
         ):
@@ -1325,7 +1351,9 @@ def _test_equal(
             if (
                 pa.types.is_map(pa_type)
                 or pa.types.is_struct(pa_type)
+                or pa.types.is_list(pa_type)
                 or pa.types.is_large_list(pa_type)
+                or pa.types.is_time(pa_type)
             ):
                 py_out = pd.Series(
                     _to_pa_array(
@@ -1340,6 +1368,60 @@ def _test_equal(
                     bodo_out.dtype,
                     py_out.name,
                 )
+            # Convert float types
+            if pa.types.is_floating(pa_type) and py_out.dtype in (
+                np.float32,
+                np.float64,
+            ):
+                py_out = py_out.astype(bodo_out.dtype)
+                # astype converts all NaNs to NAs so need to match it here
+                bodo_out = bodo_out.map(lambda a: pd.NA if np.isnan(a) else a)
+
+            # Avoid integer type mismatch due to NA/nan conversions
+            if pa.types.is_integer(pa_type) and py_out.dtype in (
+                np.object_,
+                np.float64,
+            ):
+                py_out = py_out.astype(bodo_out.dtype)
+
+            # Handle BodoSQL object arrays with None
+            if pa.types.is_floating(pa_type) and py_out.dtype in (np.object_,):
+                py_out = py_out.astype(bodo_out.dtype)
+
+            # Handle all-NA Pandas output stored as float NaNs
+            if (
+                py_out.dtype in (np.float64, np.float32)
+                and pa.types.is_integer(pa_type)
+                and py_out.isnull().all()
+                and bodo_out.isnull().all()
+            ):
+                py_out = pd.Series(
+                    pd.array([pd.NA] * len(py_out), dtype=bodo_out.dtype),
+                    index=py_out.index,
+                    name=py_out.name,
+                )
+
+            # Convert to pyarrow string/binary/date/null dtype
+            if (
+                pa.types.is_string(pa_type)
+                or pa.types.is_large_string(pa_type)
+                or pa.types.is_binary(pa_type)
+                or pa.types.is_large_binary(pa_type)
+                or pa.types.is_date32(pa_type)
+                or pa.types.is_null(pa_type)
+                or pa.types.is_decimal(pa_type)
+            ):
+                py_out = py_out.fillna(None) if py_out.dtype == np.object_ else py_out
+                py_out = py_out.astype(bodo_out.dtype)
+
+            # Pandas boolean output may have False instead of NA
+            if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
+                bodo_out = bodo_out.fillna(False)
+
+            # Handle NA/nan mismatch
+            if pa.types.is_boolean(pa_type) and py_out.dtype == np.object_:
+                py_out = py_out.astype(bodo_out.dtype)
+
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1371,7 +1453,9 @@ def _test_equal(
         # still fails for some reason).
         # Note: The pd.StringDtype must be the left to ensure we pick the correct operator.
         if pd.StringDtype("pyarrow") == bodo_out.dtype:
-            bodo_out = bodo_out.astype(object)
+            py_out = py_out.astype("string[pyarrow]")
+        if isinstance(bodo_out.dtype, pd.ArrowDtype):
+            py_out = py_out.astype(bodo_out.dtype)
         if isinstance(bodo_out, pd.MultiIndex):
             bodo_out = pd.MultiIndex(
                 levels=[
@@ -1393,12 +1477,121 @@ def _test_equal(
             check_categorical=False,
         )
     elif isinstance(py_out, pd.DataFrame):
+        from bodo.pandas.frame import BodoDataFrame
+
+        if isinstance(bodo_out, BodoDataFrame):
+            bodo_out = pd.DataFrame(bodo_out)
+
         if sort_output:
             py_out = sort_dataframe_values_index(py_out)
             bodo_out = sort_dataframe_values_index(bodo_out)
+
         if reset_index:
-            py_out.reset_index(inplace=True, drop=True)
-            bodo_out.reset_index(inplace=True, drop=True)
+            py_out = py_out.reset_index(drop=True)
+            bodo_out = bodo_out.reset_index(drop=True)
+
+        # Convert float columns to pyarrow if bodo_out uses pyarrow to avoid NA/nan
+        # mismatch errors
+        for i, (bodo_dtype, py_dtype) in enumerate(zip(bodo_out.dtypes, py_out.dtypes)):
+            if (
+                isinstance(bodo_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.float32, np.float64)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+                # Convert nan to NA to match previous Pandas behavior
+                bodo_out[bodo_out.columns[i]] = pd.array(
+                    bodo_out[bodo_out.columns[i]].map(
+                        lambda x: pd.NA if pd.isna(x) else x
+                    ),
+                    dtype=bodo_dtype,
+                )
+
+            # Pandas pd.read_parquet(fname, dtype_backend="pyarrow") may create float
+            # data with NAs that don't match Bodo
+            if (
+                isinstance(py_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(py_dtype.pyarrow_dtype)
+                and bodo_dtype in (np.float32, np.float64)
+            ):
+                bodo_out[bodo_out.columns[i]] = pd.array(
+                    bodo_out[bodo_out.columns[i]], dtype=py_dtype
+                )
+                py_out[py_out.columns[i]] = (
+                    py_out[py_out.columns[i]]
+                    .map(lambda a: pd.NA if np.isnan(a) else a)
+                    .astype(py_dtype)
+                )
+
+            # Handle categorical mismatch in pd.read_parquet(fname, dtype_backend="pyarrow")
+            if isinstance(bodo_dtype, pd.CategoricalDtype) and not isinstance(
+                py_dtype, pd.CategoricalDtype
+            ):
+                bodo_out[bodo_out.columns[i]] = bodo_out[bodo_out.columns[i]].astype(
+                    object
+                )
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(object)
+
+            # Convert string/binary/date/.. columns to pyarrow dtype
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_binary(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_string(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_large_string(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_date32(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_null(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_decimal(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_list(bodo_dtype.pyarrow_dtype)
+                or pa.types.is_large_list(bodo_dtype.pyarrow_dtype)
+            ):
+                in_arr = py_out[py_out.columns[i]]
+                # Avoid np.nan in object arrays which causes PyArrow errors
+                in_arr = in_arr.fillna(None) if in_arr.dtype == np.object_ else in_arr
+                py_out[py_out.columns[i]] = pd.array(in_arr, dtype=bodo_dtype)
+
+            # Convert object boolean arrays to pyarrow dtype (used in BodoSQL expected output)
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_boolean(bodo_dtype.pyarrow_dtype) and py_dtype == np.object_
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
+            # Avoid integer type mismatch due to NA/nan conversions in BodoSQL expected output
+            if isinstance(bodo_dtype, pd.ArrowDtype) and (
+                pa.types.is_integer(bodo_dtype.pyarrow_dtype)
+                and py_dtype in (np.object_, np.float64)
+            ):
+                py_out[py_out.columns[i]] = pd.array(
+                    py_out[py_out.columns[i]], dtype=bodo_dtype
+                )
+
+            # Make sure string storage and NAs match
+            if (
+                isinstance(bodo_dtype, pd.StringDtype)
+                and isinstance(py_dtype, pd.StringDtype)
+                and bodo_dtype != py_dtype
+            ):
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(bodo_dtype)
+
+            # Avoid NA mismatch for object columns
+            if bodo_dtype == np.object_ and py_dtype == np.object_:
+                bodo_out[bodo_out.columns[i]] = bodo_out[bodo_out.columns[i]].fillna(
+                    None
+                )
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].fillna(None)
+
+        # Handle Arrow float types in Index
+        if not isinstance(bodo_out.index, pd.MultiIndex):
+            index_dtype = bodo_out.index.dtype
+            if (
+                isinstance(index_dtype, pd.ArrowDtype)
+                and pa.types.is_floating(index_dtype.pyarrow_dtype)
+                and py_out.index.dtype in (np.float32, np.float64)
+            ):
+                py_out.index = py_out.index.astype(index_dtype)
 
         # We return typed extension arrays like StringArray for all APIs but Pandas
         # & Spark doesn't return them by default in all APIs yet.
@@ -1426,7 +1619,9 @@ def _test_equal(
         and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
-        py_out = _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype).to_pandas()
+        py_out = pd.Series(
+            _to_pa_array(py_out, bodo_out.dtype.pyarrow_dtype), dtype=bodo_out.dtype
+        )
         bodo_out = pd.Series(bodo_out)
         if sort_output:
             py_out = py_out.sort_values().reset_index(drop=True)
@@ -1572,10 +1767,12 @@ def _test_equal(
             reset_index,
         )
     elif py_out is pd.NaT:
-        assert py_out is bodo_out
+        # TODO[BSE-5299]: return pd.NaT for pd.to_datetime(None) and pd.to_timedelta(ts_val)
+        # to match Pandas 3
+        assert py_out is bodo_out or bodo_out is None
     # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
     # issues
-    elif py_out is pd.NA and np.isnan(bodo_out):
+    elif py_out is pd.NA and (bodo_out is None or np.isnan(bodo_out)):
         pass
     elif isinstance(py_out, pd.CategoricalDtype):
         np.testing.assert_equal(bodo_out.categories.values, py_out.categories.values)
@@ -1640,7 +1837,7 @@ def _test_equal_struct_array(
 
 
 def _gather_output(bodo_output):
-    """gather bodo output from all processes. Uses bodo.gatherv() if there are no typing
+    """gather bodo output from all processes. Uses bodo.libs.distributed_api.gatherv() if there are no typing
     issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
     """
 
@@ -1653,7 +1850,8 @@ def _gather_output(bodo_output):
 
     try:
         _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        # Use JIT version of gatherv to avoid nanosecond precision loss in some types
+        bodo_output = bodo.libs.distributed_api.gatherv(bodo_output)
     except Exception:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
@@ -2064,7 +2262,7 @@ def check_parallel_coherency(
     parall_output_proc = convert_non_pandas_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
     _check_typing_issues(parall_output_proc)
-    parall_output_final = bodo.gatherv(parall_output_proc)
+    parall_output_final = bodo.libs.distributed_api.gatherv(parall_output_proc)
 
     # Doing the sorting. Mandatory here
     if sort_output:
@@ -2428,14 +2626,17 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
         str_vals.append(val)
 
     # use consistent string array type with Bodo to avoid output comparison errors
-    return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
+    return pd.array(
+        str_vals,
+        dtype=pd.ArrowDtype(pa.large_string() if not is_binary else pa.large_binary()),
+    )
 
 
 def _check_typing_issues(val):
     """Raises an error if there is a typing issue for value 'val'.
     Runs bodo typing on value and converts warnings to errors.
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     try:
@@ -3076,6 +3277,7 @@ pytest_one_rank = [
 polaris_markers = (
     pytest.mark.polaris,
     pytest.mark.iceberg,
+    pytest.mark.slow,
 )
 
 # Decorate
@@ -3320,6 +3522,7 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     from bodo.tests.utils_jit import _nullable_float_arr_maker
 
     S = _nullable_float_arr_maker(L, to_null, to_nan)
+
     # Remove the bodo metadata. It improperly assigns
     # 1D_Var to the series which interferes with the test
     # functionality. Deleting the metadata sets it back to
@@ -3335,7 +3538,9 @@ def cast_dt64_to_ns(df):
     from pandas.api.types import is_datetime64_any_dtype
 
     for c in df.columns:
-        if is_datetime64_any_dtype(df[c]):
+        if is_datetime64_any_dtype(df[c]) and not isinstance(
+            df[c].dtype, pd.ArrowDtype
+        ):
             if isinstance(df[c].dtype, pd.DatetimeTZDtype):
                 df[c] = df[c].astype(pd.DatetimeTZDtype(tz=df[c].dtype.tz))
             else:
@@ -3403,6 +3608,37 @@ def get_num_test_workers():
         return spawner.worker_intercomm.Get_remote_size()
 
     return bodo.get_size()
+
+
+pytest_mark_oracle = compose_decos(
+    (
+        pytest.mark.oracle,
+        pytest.mark.slow,
+        pytest.mark.skipif(
+            (
+                os.name == "posix"
+                and platform.system() == "Linux"
+                and "arm" in platform.machine().lower()
+                or "aarch64" in platform.machine().lower(),
+            )
+            or platform.system() == "Windows",
+            reason="Oracle client not supported on ARM64 Linux or Windows",
+        ),
+    )
+)
+pytest_oracle = [
+    pytest.mark.oracle,
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        (
+            os.name == "posix"
+            and platform.system() == "Linux"
+            and "arm" in platform.machine().lower()
+            or "aarch64" in platform.machine().lower()
+        )
+        or platform.system() == "Windows"
+    ),
+]
 
 
 def compress_dir(dir_name):

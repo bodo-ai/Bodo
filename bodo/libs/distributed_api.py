@@ -29,6 +29,8 @@ import bodo
 # Import compiler
 import bodo.decorators  # isort:skip # noqa
 
+from mpi4py import MPI
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
@@ -64,7 +66,6 @@ from bodo.libs.str_arr_ext import (
     set_bit_to,
     string_array_type,
 )
-from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -200,6 +201,21 @@ def barrier():  # pragma: no cover
     _barrier()
 
 
+@overload(bodo.barrier)
+def barrier_overload():  # pragma: no cover
+    return lambda: _barrier()
+
+
+@overload(bodo.get_rank)
+def get_rank_overload():  # pragma: no cover
+    return lambda: get_rank()
+
+
+@overload(bodo.get_size)
+def get_size_overload():  # pragma: no cover
+    return lambda: get_size()
+
+
 @numba.njit(cache=True)
 def get_cpu_id():  # pragma: no cover
     """
@@ -329,6 +345,7 @@ def isend(arr, size, pe, tag, cond=True):
             ),
         )
         or arr == datetime_date_array_type
+        or arr == bodo.types.timedelta_array_type
     ):
         # return a tuple of requests for data and null arrays
         type_enum = np.int32(numba_to_c_type(arr.dtype))
@@ -530,6 +547,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             bodo.types.timedelta64ns,
             bodo.types.datetime_date_type,
             bodo.types.TimeType,
+            bodo.types.pd_timedelta_type,
         ]
 
         if target_typ not in supported_typs and not isinstance(
@@ -694,9 +712,10 @@ def copy_gathered_null_bytes(
 
 def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=None):
     """Gathers data from all ranks to root."""
+    from mpi4py import MPI
+
     import bodo.libs.distributed_impl
     from bodo.libs.distributed_impl import gatherv_impl_wrapper
-    from bodo.mpi4py import MPI
 
     if allgather and comm is not None:
         raise BodoError("gatherv(): allgather flag not supported in intercomm case")
@@ -723,6 +742,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=Non
     return gatherv_impl_wrapper(data, allgather, warn_if_rep, root, comm_ptr)
 
 
+@overload(bodo.gatherv)
 @overload(gatherv)
 def gatherv_overload(
     data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
@@ -798,6 +818,19 @@ def overload_distributed_transpose(arr):
 @numba.njit(cache=True)
 def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     return rebalance_impl(data, dests, random, random_seed, parallel)
+
+
+@overload(bodo.rebalance)
+def rebalance_overload(
+    data, dests=None, random=False, random_seed=None, parallel=False
+):
+    return (
+        lambda data,
+        dests=None,
+        random=False,
+        random_seed=None,
+        parallel=False: rebalance_impl(data, dests, random, random_seed, parallel)
+    )
 
 
 @numba.generated_jit(nopython=True, no_unliteral=True)
@@ -912,6 +945,19 @@ def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
     return random_shuffle_impl(data, seed, dests, n_samples, parallel)
 
 
+@overload(bodo.random_shuffle)
+def random_shuffle_overload(
+    data, seed=None, dests=None, n_samples=None, parallel=False
+):
+    return (
+        lambda data,
+        seed=None,
+        dests=None,
+        n_samples=None,
+        parallel=False: random_shuffle_impl(data, seed, dests, n_samples, parallel)
+    )
+
+
 @numba.generated_jit(nopython=True)
 def random_shuffle_impl(data, seed=None, dests=None, n_samples=None, parallel=False):
     func_text = (
@@ -984,10 +1030,18 @@ def allgatherv_impl(data, warn_if_rep=True, root=DEFAULT_ROOT):
     )  # pragma: no cover
 
 
+@overload(bodo.allgatherv)
+def allgatherv_overload(data, warn_if_rep=True, root=DEFAULT_ROOT):
+    """support bodo.allgatherv() inside jit functions"""
+    return lambda data, warn_if_rep=True, root=DEFAULT_ROOT: gatherv(
+        data, True, warn_if_rep, root
+    )  # pragma: no cover
+
+
 def _bcast_dtype(data, root=DEFAULT_ROOT, comm=None):
     """broadcast data type from rank 0 using mpi4py"""
     try:
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
     except ImportError:  # pragma: no cover
         raise BodoError("mpi4py is required for scatterv")
 
@@ -1246,9 +1300,10 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks should just pass None.
     """
+    from mpi4py import MPI
+
     import bodo.libs.distributed_impl
     from bodo.libs.distributed_impl import scatterv_impl
-    from bodo.mpi4py import MPI
 
     rank = bodo.libs.distributed_api.get_rank()
     if rank != DEFAULT_ROOT and data is not None:  # pragma: no cover
@@ -1280,6 +1335,7 @@ def scatterv(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=
     return scatterv_impl(data, send_counts, warn_if_dist, root, comm_ptr)
 
 
+@overload(bodo.scatterv)
 @overload(scatterv)
 def scatterv_overload(
     data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1357,6 +1413,7 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
     ) or data in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.types.timedelta_array_type,
     ):
 
         def bcast_impl_int_arr(data, root=DEFAULT_ROOT):  # pragma: no cover
@@ -2323,6 +2380,16 @@ def parallel_print(*args):  # pragma: no cover
     print(*args)
 
 
+@overload(bodo.parallel_print)
+def overload_parallel_print(*args):
+    """print input arguments on all ranks in parallel"""
+
+    def impl(*args):  # pragma: no cover
+        parallel_print(*args)
+
+    return impl
+
+
 @numba.njit(cache=True)
 def single_print(*args):  # pragma: no cover
     if bodo.libs.distributed_api.get_rank() == 0:
@@ -2510,7 +2577,7 @@ def dist_permutation_array_index(
 
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     rank = bodo.libs.distributed_api.get_rank()
     # make sure all ranks receive proper data type as input
@@ -2896,16 +2963,3 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
-
-
-# Replace top export wrappers to help function matching inside JIT compilation
-bodo.allgatherv = allgatherv
-bodo.barrier = barrier
-bodo.gatherv = gatherv
-bodo.get_rank = get_rank
-bodo.get_size = get_size
-bodo.get_nodes_first_ranks = get_nodes_first_ranks
-bodo.parallel_print = parallel_print
-bodo.rebalance = rebalance
-bodo.random_shuffle = random_shuffle
-bodo.scatterv = scatterv

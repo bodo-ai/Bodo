@@ -6,10 +6,10 @@ Also tests that arithmatic and logical operators work with NULL values
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 from pyspark.sql.functions import lit
 
 import bodo
-from bodo.mpi4py import MPI
 from bodosql.tests.utils import check_query
 
 
@@ -71,13 +71,16 @@ def bodosql_null_bool_df(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        pd.Timestamp(2021, 5, 19),
-                        pd.Timestamp(1999, 12, 31),
-                        pd.Timestamp(2020, 10, 11),
-                        pd.Timestamp(2025, 1, 1),
-                    ]
-                    * 3,
+                    "A": pd.Series(
+                        [
+                            pd.Timestamp(2021, 5, 19),
+                            pd.Timestamp(1999, 12, 31),
+                            pd.Timestamp(2020, 10, 11),
+                            pd.Timestamp(2025, 1, 1),
+                        ]
+                        * 3,
+                        dtype="datetime64[ns]",
+                    ),
                     "B": pd.Series(
                         [
                             np.datetime64("nat"),
@@ -85,6 +88,7 @@ def bodosql_null_bool_df(request):
                             np.datetime64("nat"),
                         ]
                         * 4,
+                        dtype="datetime64[ns]",
                     ),
                 }
             )

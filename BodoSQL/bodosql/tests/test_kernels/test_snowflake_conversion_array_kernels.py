@@ -23,7 +23,7 @@ false_vals = {"n", "no", "f", "false", "off", "0"}
 
 
 def str_to_bool(s):
-    s = s.strip().lower() if s else s
+    s = s.strip().lower() if not pd.isna(s) else s
     if s in true_vals or s in false_vals:
         return s in true_vals
     else:
@@ -226,10 +226,13 @@ def test_to_boolean_opt(to_boolean_test_arrs_null):
     )
 
 
-_dates = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D")).apply(
-    lambda x: x.date()
+_dates = pd.Series(
+    pd.date_range("2010-1-1", periods=10, freq="841D", unit="ns"),
+    dtype="datetime64[ns]",
+).apply(lambda x: x.date())
+_timestamps = pd.Series(
+    pd.date_range("20130101", periods=10, freq="h", unit="ns"), dtype="datetime64[ns]"
 )
-_timestamps = pd.Series(pd.date_range("20130101", periods=10, freq="h"))
 _dates_nans = _dates.copy()
 _timestamps_nans = _timestamps.copy()
 _dates_nans[4] = _dates_nans[7] = np.nan
@@ -632,7 +635,8 @@ def test_to_double(input, expected):
                     pd.Timestamp(2023, 10, 19, 0, 30, 30),
                     pd.Timestamp(2024, 11, 20, 10, 40, 40),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns]",
             ),
             "MM/DD/YYYY HH24:MI:SS",
             False,
@@ -657,7 +661,8 @@ def test_to_double(input, expected):
                     None,
                     pd.Timestamp(2024, 11, 20, 10, 40, 40),
                 ]
-                * 2
+                * 2,
+                dtype="datetime64[ns]",
             ),
             pd.array(
                 [

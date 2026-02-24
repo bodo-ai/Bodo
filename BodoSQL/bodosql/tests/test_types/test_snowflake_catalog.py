@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import types
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -664,7 +664,7 @@ def test_current_timestamp_case(
     normalize_val = current_timestamp.normalize()
     S = pd.Series(normalize_val, index=np.arange(len(df)))
     S[~df.A] = None
-    V = pd.Series(True, index=np.arange(len(df)))
+    V = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     V[~df.A] = None
     py_output = pd.DataFrame(
         {
@@ -904,7 +904,8 @@ def test_snowflake_catalog_week_policy_parameters(params, answers, memory_leak_c
                     pd.Timestamp("1980-01-02"),
                     pd.Timestamp("1971-02-02"),
                     pd.Timestamp("2000-12-31"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             )
         }
     )
@@ -2101,9 +2102,9 @@ def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    [pd.NA, 12.4, -0.57],
+                    [None, 12.4, -0.57],
                     [-1235.0, 0.01234567890123456789],
-                    [10.0, 10.0, pd.NA],
+                    [10.0, 10.0, None],
                     [12345678901234567890.0],
                     [np.nan, np.inf, -np.inf],
                     None,
@@ -2168,10 +2169,10 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
             "A": pd.Series(
                 [
                     None,
-                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
-                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"int": 10.0, "null": None, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": None},
                     {"/\\\\/\\\\": np.nan, "\\u2912": -np.inf, 'inf\\"ity': np.inf},
-                    {"int20": 12345678901234567890.0, "null3": np.nan},
+                    {"int20": 12345678901234567890.0, "null3": None},
                     {"dec": 0.01234567890123456789, "neg_int": -1235.0},
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.float64())),
@@ -2199,32 +2200,45 @@ def test_struct_read(test_db_snowflake_catalog, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "IDX": [1, 2, 3, 4, 5, 6],
-            "A": [
-                np.nan,
-                {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": np.nan,
-                    "b": 10.0,
-                    "c": np.nan,
-                    "d": True,
-                    "e": datetime.date(2023, 11, 1),
-                },
-                {
-                    "a": "test",
-                    "b": -0.853,
-                    "c": np.nan,
-                    "d": False,
-                    "e": datetime.date(1980, 10, 1),
-                },
-                {"a": "once", "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": "none",
-                    "b": 1635.0,
-                    "c": np.nan,
-                    "d": np.nan,
-                    "e": datetime.date(1970, 1, 1),
-                },
-            ],
+            "A": pd.array(
+                [
+                    None,
+                    {"a": None, "b": None, "c": None, "d": None, "e": None},
+                    {
+                        "a": None,
+                        "b": 10.0,
+                        "c": None,
+                        "d": True,
+                        "e": datetime.date(2023, 11, 1),
+                    },
+                    {
+                        "a": "test",
+                        "b": -0.853,
+                        "c": None,
+                        "d": False,
+                        "e": datetime.date(1980, 10, 1),
+                    },
+                    {"a": "once", "b": np.nan, "c": None, "d": None, "e": None},
+                    {
+                        "a": "none",
+                        "b": 1635.0,
+                        "c": None,
+                        "d": None,
+                        "e": datetime.date(1970, 1, 1),
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("a", pa.string()),
+                            pa.field("b", pa.float64()),
+                            pa.field("c", pa.string()),
+                            pa.field("d", pa.bool_()),
+                            pa.field("e", pa.date32()),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 
@@ -2254,11 +2268,14 @@ def test_read_nested_array_in_array_col(test_db_snowflake_catalog, memory_leak_c
 
     py_output = pd.DataFrame(
         {
-            "A": [
-                np.nan,
-                [[10.0, 10.0], np.nan],
-                [[pd.NA], [12.4, -0.57]],
-            ],
+            "A": pd.array(
+                [
+                    None,
+                    [[10.0, 10.0], None],
+                    [[None], [12.4, -0.57]],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.float64()))),
+            ),
         }
     )
     queryA = "SELECT A FROM NESTED_ARRAY_TEST ORDER BY idx"
@@ -2279,15 +2296,15 @@ def test_read_nested_map_in_array_col(test_db_snowflake_catalog, memory_leak_che
         {
             "B": pd.array(
                 [
-                    np.nan,
-                    [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+                    None,
+                    [None, {"m": datetime.date(2023, 11, 11), "mm": None}],
                     [
                         {
                             "a": datetime.date(2023, 11, 12),
                             "b": datetime.date(1980, 1, 5),
-                            "c": np.nan,
+                            "c": None,
                         },
-                        {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                        {"ten": datetime.date(2023, 11, 11), "ton": None},
                     ],
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.date32()))),
@@ -2312,9 +2329,9 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
         {
             "C": pd.array(
                 [
-                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [None, {"name": "uno", "stat": False, "cnt": None}],
                     [
-                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "dos", "stat": None, "cnt": None},
                         {"name": "tres", "stat": False, "cnt": -2},
                     ],
                     [],
@@ -2365,8 +2382,8 @@ def test_read_nested_array_in_map_col(test_db_snowflake_catalog, memory_leak_che
             "A": pd.Series(
                 [
                     {},
-                    {"bodo": [10.0, 10.0], "databricks": np.nan},
-                    {"a": [np.nan], "b": [12.4, -0.57]},
+                    {"bodo": [10.0, 10.0], "databricks": None},
+                    {"a": [None], "b": [12.4, -0.57]},
                 ],
                 dtype=pd.ArrowDtype(
                     pa.map_(pa.large_string(), pa.large_list(pa.float64()))
@@ -2392,15 +2409,15 @@ def test_read_nested_map_in_map_col(test_db_snowflake_catalog):
         {
             "B": pd.array(
                 [
-                    np.nan,
-                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
+                    None,
+                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": None}},
                     {
                         "bodo": {
                             "a": datetime.date(2023, 11, 12),
                             "b": datetime.date(1980, 1, 5),
-                            "c": np.nan,
+                            "c": None,
                         },
-                        "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                        "google": {"ten": datetime.date(2023, 11, 11), "ton": None},
                     },
                 ],
                 dtype=pd.ArrowDtype(
@@ -2481,43 +2498,63 @@ def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check)
 
     py_output = pd.DataFrame(
         {
-            "INFO": [
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": np.nan,
-                },
-                {
-                    "group": "gravel",
-                    # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
-                    "values": [10.0, 10.1],
-                    "created": {
-                        "creator": np.nan,
-                        "at": datetime.date(1990, 5, 5),
-                        "atnew": np.nan,
+            "INFO": pd.array(
+                [
+                    {
+                        "group": None,
+                        # Sentinel NaN for Timestamp
+                        # 'updated': datetime.datetime(1970, 1, 1),
+                        "values": None,
+                        "created": None,
                     },
-                },
-                {
-                    "group": "dirt",
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": [-1.15e3, -164, 100056],
-                    "created": {
-                        "creator": np.nan,
-                        "at": np.nan,
-                        "atnew": [2010, 10, 10],
+                    {
+                        "group": "gravel",
+                        # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
+                        "values": [10.0, 10.1],
+                        "created": {
+                            "creator": None,
+                            "at": datetime.date(1990, 5, 5),
+                            "atnew": None,
+                        },
                     },
-                },
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": {"creator": "mark", "at": np.nan, "atnew": np.nan},
-                },
-            ],
+                    {
+                        "group": "dirt",
+                        # Sentinel NaN for Timestamp
+                        # 'updated': datetime.datetime(1970, 1, 1),
+                        "values": [-1.15e3, -164, 100056],
+                        "created": {
+                            "creator": None,
+                            "at": None,
+                            "atnew": [2010, 10, 10],
+                        },
+                    },
+                    {
+                        "group": None,
+                        # Sentinel NaN for Timestamp
+                        # 'updated': datetime.datetime(1970, 1, 1),
+                        "values": None,
+                        "created": {"creator": "mark", "at": None, "atnew": None},
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("group", pa.string()),
+                            pa.field("values", pa.large_list(pa.float64())),
+                            pa.field(
+                                "created",
+                                pa.struct(
+                                    [
+                                        pa.field("creator", pa.large_string()),
+                                        pa.field("at", pa.date32()),
+                                        pa.field("atnew", pa.large_list(pa.int64())),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 

@@ -563,10 +563,15 @@ def test_nvl2(args, memory_leak_check):
         pytest.param(
             (
                 pd.Series(
-                    (list(pd.date_range("2018", "2019", periods=3).date) + [None]) * 4
+                    (
+                        list(pd.date_range("2018", "2019", periods=3, unit="ns").date)
+                        + [None]
+                    )
+                    * 4
                 ),
                 pd.Series(
-                    list(pd.date_range("2018", "2019", periods=3).date) + [None]
+                    list(pd.date_range("2018", "2019", periods=3, unit="ns").date)
+                    + [None]
                 ).repeat(4),
             ),
             False,
@@ -952,7 +957,8 @@ def test_bool_equal_null(args, is_scalar_a, is_scalar_b, answer, memory_leak_che
                             pd.Timestamp("2022-11-02 00:00:00"),
                         ]
                         * 2
-                    )
+                    ),
+                    dtype="datetime64[ns]",
                 ),
                 pd.Timestamp("2022"),
                 None,
@@ -1596,7 +1602,7 @@ def test_option_is_functions(memory_leak_check):
                         None,
                     ]
                 ]
-                * 7
+                * 7,
             ),
             pd.Series([-1, 0, 1, 2, 3, 4, 5]),
             False,
@@ -1609,7 +1615,8 @@ def test_option_is_functions(memory_leak_check):
                     pd.Timestamp("1999-09-09 09:09:09", tz="UTC"),
                     None,
                     None,
-                ]
+                ],
+                dtype="datetime64[ns, UTC]",
             ),
             marks=pytest.mark.slow,
             id="timestamp_tz_array-vector-vector",
@@ -1623,7 +1630,7 @@ def test_option_is_functions(memory_leak_check):
                         pd.Timestamp("2022-01-01 13:01:59"),
                     ]
                 ]
-                * 5
+                * 5,
             ),
             pd.Series([-1, 0, 1, 2, -1]),
             False,
@@ -1634,7 +1641,8 @@ def test_option_is_functions(memory_leak_check):
                     pd.Timestamp("2023-11-27 21:11:54.764555"),
                     pd.Timestamp("2022-01-01 13:01:59"),
                     None,
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             marks=pytest.mark.slow,
             id="timestamp_ntz_array-vector-vector",
@@ -1663,44 +1671,41 @@ def test_option_is_functions(memory_leak_check):
             pd.array(
                 [
                     {
+                        "W": {"A": 1, "B": "A"},
                         "X": "AB",
                         "Y": [1.1, 2.2],
                         "Z": [[1], None, [3, None]],
-                        "W": {"A": 1, "B": "A"},
                     },
                     {
+                        "W": {"A": 1, "B": "ABC"},
                         "X": "C",
                         "Y": [1.1],
                         "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
                     },
                     None,
                     {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     {
+                        "W": {"A": 1, "B": "AA"},
                         "X": "VFD",
                         "Y": [1.2],
                         "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
                     },
                     {
+                        "W": {"A": 1, "B": "DFG"},
                         "X": "LMMM",
                         "Y": [9.0, 1.2, 3.1],
                         "Z": [[10, 11], [11, 0, -3, -5]],
-                        "W": {"A": 1, "B": "DFG"},
                     },
                 ]
                 * 2,
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1715,6 +1720,9 @@ def test_option_is_functions(memory_leak_check):
                                     )
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -1722,10 +1730,10 @@ def test_option_is_functions(memory_leak_check):
             0,
             True,
             {
+                "W": {"A": 1, "B": "A"},
                 "X": "AB",
                 "Y": [1.1, 2.2],
                 "Z": [[1], None, [3, None]],
-                "W": {"A": 1, "B": "A"},
             },
             id="struct_array-scalar-scalar",
         ),
@@ -1733,44 +1741,41 @@ def test_option_is_functions(memory_leak_check):
             pd.array(
                 [
                     {
+                        "W": {"A": 1, "B": "A"},
                         "X": "AB",
                         "Y": [1.1, 2.2],
                         "Z": [[1], None, [3, None]],
-                        "W": {"A": 1, "B": "A"},
                     },
                     {
+                        "W": {"A": 1, "B": "ABC"},
                         "X": "C",
                         "Y": [1.1],
                         "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
                     },
                     None,
                     {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     {
+                        "W": {"A": 1, "B": "AA"},
                         "X": "VFD",
                         "Y": [1.2],
                         "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
                     },
                     {
+                        "W": {"A": 1, "B": "DFG"},
                         "X": "LMMM",
                         "Y": [9.0, 1.2, 3.1],
                         "Z": [[10, 11], [11, 0, -3, -5]],
-                        "W": {"A": 1, "B": "DFG"},
                     },
                 ]
                 * 2,
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1781,6 +1786,9 @@ def test_option_is_functions(memory_leak_check):
                                     ]
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -1791,37 +1799,34 @@ def test_option_is_functions(memory_leak_check):
                 [
                     None,
                     {
+                        "W": {"A": 1, "B": "A"},
                         "X": "AB",
                         "Y": [1.1, 2.2],
                         "Z": [[1], None, [3, None]],
-                        "W": {"A": 1, "B": "A"},
                     },
                     {
+                        "W": {"A": 1, "B": "ABC"},
                         "X": "C",
                         "Y": [1.1],
                         "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
                     },
                     None,
                     {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     {
+                        "W": {"A": 1, "B": "AA"},
                         "X": "VFD",
                         "Y": [1.2],
                         "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
                     },
                 ],
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("X", pa.string()),
-                            pa.field("Y", pa.large_list(pa.float32())),
-                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                             pa.field(
                                 "W",
                                 pa.struct(
@@ -1832,6 +1837,9 @@ def test_option_is_functions(memory_leak_check):
                                     ]
                                 ),
                             ),
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
                         ]
                     )
                 ),
@@ -1989,7 +1997,8 @@ def test_option_arr_get(memory_leak_check):
                     pd.Timestamp("2023-11-27 21:11:54.764555+0000", tz="UTC"),
                     pd.Timestamp("2001-01-01", tz="UTC"),
                 ]
-                * 6
+                * 6,
+                dtype="datetime64[ns, UTC]",
             ),
             False,
             False,
@@ -2049,9 +2058,6 @@ def test_arr_get_invalid(
 # Used in the test below
 internal_struct_type = pa.struct(
     [
-        pa.field("X", pa.string()),
-        pa.field("Y", pa.large_list(pa.float32())),
-        pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
         pa.field(
             "W",
             pa.struct(
@@ -2066,6 +2072,9 @@ internal_struct_type = pa.struct(
                 )
             ),
         ),
+        pa.field("X", pa.string()),
+        pa.field("Y", pa.large_list(pa.float32())),
+        pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
     ]
 )
 
@@ -2363,7 +2372,8 @@ internal_struct_type = pa.struct(
                         pd.Timestamp("2000-01-01"),
                         pd.Timestamp("2111-11-11"),
                     ]
-                    * 9
+                    * 9,
+                    dtype="datetime64[ns]",
                 ),
             ),
             marks=pytest.mark.slow,
@@ -2373,43 +2383,43 @@ internal_struct_type = pa.struct(
             (
                 {
                     "A": {
+                        "W": {"A": 1, "B": "A"},
                         "X": "AB",
                         "Y": [1.1, 2.2],
                         "Z": [[1], None, [3, None]],
-                        "W": {"A": 1, "B": "A"},
                     },
                     "B": {
+                        "W": {"A": 1, "B": "ABC"},
                         "X": "C",
                         "Y": [1.1],
                         "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
                     },
                     "C": {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     "D": {
+                        "W": {"A": 1, "B": "AA"},
                         "X": "VFD",
                         "Y": [1.2],
                         "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
                     },
                     "E": {
+                        "W": {"A": 1, "B": "DFG"},
                         "X": "LMMM",
                         "Y": [9.0, 1.2, 3.1],
                         "Z": [[10, 11], [11, 0, -3, -5]],
-                        "W": {"A": 1, "B": "DFG"},
                     },
                 },
                 "D",
                 True,
                 {
+                    "W": {"A": 1, "B": "AA"},
                     "X": "VFD",
                     "Y": [1.2],
                     "Z": [[], [3, 1]],
-                    "W": {"A": 1, "B": "AA"},
                 },
             ),
             id="nested_map-scalar-scalar",
@@ -2422,30 +2432,30 @@ internal_struct_type = pa.struct(
                 {
                     "A": {
                         "A": {
+                            "W": {"A": 1, "B": "A"},
                             "X": "AB",
                             "Y": [1.1, 2.2],
                             "Z": [[1], None, [3, None]],
-                            "W": {"A": 1, "B": "A"},
                         },
                         "B": {
+                            "W": {"A": 1, "B": "ABC"},
                             "X": "C",
                             "Y": [1.1],
                             "Z": [[11], None],
-                            "W": {"A": 1, "B": "ABC"},
                         },
                     },
                     "C": {
                         "C": {
+                            "W": {"A": 1, "B": ""},
                             "X": "D",
                             "Y": [4.0, np.nan],
                             "Z": [[1], None],
-                            "W": {"A": 1, "B": ""},
                         },
                         "D": {
+                            "W": {"A": 1, "B": "AA"},
                             "X": "VFD",
                             "Y": [1.2],
                             "Z": [[], [3, 1]],
-                            "W": {"A": 1, "B": "AA"},
                         },
                     },
                 },
@@ -2453,16 +2463,16 @@ internal_struct_type = pa.struct(
                 True,
                 {
                     "C": {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     "D": {
+                        "W": {"A": 1, "B": "AA"},
                         "X": "VFD",
                         "Y": [1.2],
                         "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
                     },
                 },
             ),
@@ -2477,30 +2487,30 @@ internal_struct_type = pa.struct(
                     [
                         {
                             "A": {
+                                "W": {"A": 1, "B": "A"},
                                 "X": "AB",
                                 "Y": [1.1, 2.2],
                                 "Z": [[1], None, [3, None]],
-                                "W": {"A": 1, "B": "A"},
                             },
                             "B": {
+                                "W": {"A": 1, "B": "ABC"},
                                 "X": "C",
                                 "Y": [1.1],
                                 "Z": [[11], None],
-                                "W": {"A": 1, "B": "ABC"},
                             },
                         },
                         {
                             "A": {
+                                "W": {"A": 1, "B": ""},
                                 "X": "D",
                                 "Y": [4.0, np.nan],
                                 "Z": [[1], None],
-                                "W": {"A": 1, "B": ""},
                             },
                             "B": {
+                                "W": {"A": 1, "B": "AA"},
                                 "X": "VFD",
                                 "Y": [1.2],
                                 "Z": [[], [3, 1]],
-                                "W": {"A": 1, "B": "AA"},
                             },
                         },
                         None,
@@ -2521,16 +2531,16 @@ internal_struct_type = pa.struct(
                     pd.array(
                         [
                             {
+                                "W": {"A": 1, "B": "ABC"},
                                 "X": "C",
                                 "Y": [1.1],
                                 "Z": [[11], None],
-                                "W": {"A": 1, "B": "ABC"},
                             },
                             {
+                                "W": {"A": 1, "B": "AA"},
                                 "X": "VFD",
                                 "Y": [1.2],
                                 "Z": [[], [3, 1]],
-                                "W": {"A": 1, "B": "AA"},
                             },
                             None,
                         ]
@@ -2548,30 +2558,30 @@ internal_struct_type = pa.struct(
                     [
                         {
                             "A": {
+                                "W": {"A": 1, "B": "A"},
                                 "X": "AB",
                                 "Y": [1.1, 2.2],
                                 "Z": [[1], None, [3, None]],
-                                "W": {"A": 1, "B": "A"},
                             },
                             "B": {
+                                "W": {"A": 1, "B": "ABC"},
                                 "X": "C",
                                 "Y": [1.1],
                                 "Z": [[11], None],
-                                "W": {"A": 1, "B": "ABC"},
                             },
                         },
                         {
                             "A": {
+                                "W": {"A": 1, "B": ""},
                                 "X": "D",
                                 "Y": [4.0, np.nan],
                                 "Z": [[1], None],
-                                "W": {"A": 1, "B": ""},
                             },
                             "B": {
+                                "W": {"A": 1, "B": "AA"},
                                 "X": "VFD",
                                 "Y": [1.2],
                                 "Z": [[], [3, 1]],
-                                "W": {"A": 1, "B": "AA"},
                             },
                         },
                         None,
@@ -2593,16 +2603,16 @@ internal_struct_type = pa.struct(
                 False,
                 [
                     {
+                        "W": {"A": 1, "B": "ABC"},
                         "X": "C",
                         "Y": [1.1],
                         "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
                     },
                     {
+                        "W": {"A": 1, "B": ""},
                         "X": "D",
                         "Y": [4.0, np.nan],
                         "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
                     },
                     None,
                 ]

@@ -5,6 +5,7 @@ import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 from numba.extending import intrinsic
@@ -29,7 +30,6 @@ from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.mpi4py import MPI
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
@@ -982,7 +982,8 @@ def _gen_read_csv_objmode(
     else:
         func_text += "    arrs = []\n"
         func_text += "    for i in range(df.shape[1]):\n"
-        func_text += "      arrs.append(df.iloc[:, i].values)\n"
+        func_text += "      arr = df.iloc[:, i].values\n"
+        func_text += "      arrs.append(arr.astype('datetime64[ns]') if arr.dtype == 'datetime64[us]' else arr)\n"
         # Bodo preserves all of the original types needed at typing in col_typs
         func_text += f"    T = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
     return func_text

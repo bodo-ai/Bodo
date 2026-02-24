@@ -17,8 +17,10 @@ from bodo.tests.series_common import series_val  # noqa
         pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
+        pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
@@ -40,7 +42,11 @@ def test_metadata_typemaps():
     )
 
     for key, val in _one_to_one_type_to_enum_map.items():
-        assert _one_to_one_enum_to_type_map[val] == key
+        assert (
+            _one_to_one_enum_to_type_map[val] == bodo.types.timedelta64ns
+            if key == bodo.types.pd_timedelta_type
+            else key
+        )
 
     for key, val in _one_to_one_enum_to_type_map.items():
         assert _one_to_one_type_to_enum_map[val] == key
@@ -74,8 +80,10 @@ def test_metadata_typemaps():
         pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3, name="A", unit="ns"
+        ),
+        pd.timedelta_range(start="1D", end="3D", name="A", unit="ns"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
@@ -221,6 +229,11 @@ def check_series_typing_metadata(orig_series, output_series):
         bodo.libs.int_arr_ext.IntDtype(orig_arr_type.dtype)
         if isinstance(orig_arr_type, bodo.types.IntegerArrayType)
         else orig_arr_type.dtype
+    )
+    orig_dtype = (
+        numba.core.types.NPTimedelta("ns")
+        if orig_dtype == bodo.types.pd_timedelta_type
+        else orig_dtype
     )
     return (
         hasattr(output_series, "_bodo_meta")

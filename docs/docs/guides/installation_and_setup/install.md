@@ -18,7 +18,7 @@ For production environments, we recommend creating a `conda` environment and ins
 Bodo and its dependencies in it as shown below:
 
 ```console
-conda create -n Bodo python=3.13 -c conda-forge
+conda create -n Bodo python=3.14 -c conda-forge
 conda activate Bodo
 conda install bodo -c conda-forge
 ```

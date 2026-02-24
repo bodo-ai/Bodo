@@ -22,11 +22,11 @@ import cloudpickle
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+from mpi4py import MPI
 from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.spawn.utils import (
     ArgMetadata,
@@ -732,6 +732,23 @@ def worker_loop(
             handle_stop_process(worker_process, logger)
             if bodo.get_rank() == 0:
                 spawner_intercomm.send(None, dest=0)
+        elif command == CommandType.SCATTER_JIT.value:
+            data = bodo.libs.distributed_api.scatterv(
+                None, root=0, comm=spawner_intercomm
+            )
+            res_id = str(
+                comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
+            )
+            RESULT_REGISTRY[res_id] = data
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(res_id, dest=0)
+            debug_worker_msg(logger, "Scatter jit done")
+        elif command == CommandType.GATHER_JIT.value:
+            res_id = spawner_intercomm.bcast(None, 0)
+            bodo.libs.distributed_api.gatherv(
+                RESULT_REGISTRY.pop(res_id, None), root=0, comm=spawner_intercomm
+            )
+            debug_worker_msg(logger, f"Gather jit done for result {res_id}")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 

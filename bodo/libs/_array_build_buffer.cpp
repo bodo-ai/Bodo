@@ -469,6 +469,25 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
     this->data_array->length += addln_size;
 }
 
+/**
+ * @brief Make sure data types are compatible for ArrayBuildBuffer while
+ * allowing int64/uint64 interchangeably (necessary since typing and execution
+ * are separate in some code paths such as Arrow expression compute of df
+ * library leading to mismatches)
+ */
+bool is_dtype_compatible(Bodo_CTypes::CTypeEnum dtype1,
+                         Bodo_CTypes::CTypeEnum dtype2) {
+    if (dtype1 == dtype2) {
+        return true;
+    }
+
+    if ((dtype1 == Bodo_CTypes::UINT64 && dtype2 == Bodo_CTypes::INT64) ||
+        (dtype1 == Bodo_CTypes::INT64 && dtype2 == Bodo_CTypes::UINT64)) {
+        return true;
+    }
+    return false;
+}
+
 void ArrayBuildBuffer::ReserveArrayTypeCheck(
     const std::shared_ptr<array_info>& in_arr) {
     if (in_arr->arr_type != this->data_array->arr_type) {
@@ -477,7 +496,7 @@ void ArrayBuildBuffer::ReserveArrayTypeCheck(
             GetArrType_as_string(data_array->arr_type) + ", but input is " +
             GetArrType_as_string(in_arr->arr_type));
     }
-    if (in_arr->dtype != this->data_array->dtype) {
+    if (!is_dtype_compatible(in_arr->dtype, this->data_array->dtype)) {
         throw std::runtime_error(
             "Array dtypes don't match in ReserveArray, buffer is " +
             GetDtype_as_string(data_array->dtype) + ", but input is " +

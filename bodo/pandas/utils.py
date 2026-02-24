@@ -9,6 +9,7 @@ import types as pytypes
 import typing as pt
 import warnings
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 
@@ -62,6 +63,25 @@ def get_lazy_single_manager_class() -> type[
     raise Exception(
         f"Got unexpected value of pandas option mode.manager: {data_manager}"
     )
+
+
+def normalize_slice_indices_for_lazy_md(
+    slobj: slice, nrows: int
+) -> tuple[int, int | None, int]:
+    """Normalize negative/None start/stop/step for slicing lazy metadata.
+
+    Args:
+        slobj (slice): The slice object
+        nrows (int): Total number of rows in the DataFrame/Series
+
+    Returns:
+        tuple[int, int | None, int]: A tuple of normalized (start, stop, step)
+            without negative start/stop indices. stop is None implies the slice
+            goes from start to the beginning in reverse order.
+    """
+    start, stop, step = slobj.indices(nrows)
+    stop = None if stop < 0 and step < 0 else stop
+    return start, stop, step
 
 
 def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
@@ -277,6 +297,12 @@ def report_times():
 
 if bodo.dataframe_library_profile:
     atexit.register(report_times)
+
+if bodo.gpu_enabled:
+    from bodo.ext import plan_optimizer
+    from bodo.numba_compat import BodoCacheLocator
+
+    plan_optimizer.c_set_use_cudf(True, BodoCacheLocator.cache_dir)
 
 
 def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):
@@ -504,6 +530,8 @@ def check_args_fallback(
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
+                        # Workaround Pandas 3 bugs for concat with nulls for Arrow dtype
+                        self = pd.Series(self._series).astype(object).str
                     elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
                         base_class = self._series.__class__.__bases__[0].dt
                     else:
@@ -628,26 +656,27 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """
     from bodo.ext import plan_optimizer
 
-    func, is_series, is_attr, args, kwargs = in_args
+    func, is_series, is_attr, args, kwargs, use_arrow_dtypes = in_args
 
-    # Arrow dtypes can be very slow for UDFs in Pandas:
-    # https://github.com/pandas-dev/pandas/issues/61747
-    # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
-    # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
-    # Arrow does not support element-wise binary operations
-    # across most scalar types. Instead, fallback logic using Pandas semantics
-    # is used to ensure consistent behavior.
-    use_arrow_dtypes = not (
-        is_attr
-        and func
-        in (
-            "apply",
-            "add",
-            "sub",
-            "radd",
-            "rsub",
+    if use_arrow_dtypes is None:
+        # Arrow dtypes can be very slow for UDFs in Pandas:
+        # https://github.com/pandas-dev/pandas/issues/61747
+        # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
+        # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
+        # Arrow does not support element-wise binary operations
+        # across most scalar types. Instead, fallback logic using Pandas semantics
+        # is used to ensure consistent behavior.
+        use_arrow_dtypes = not (
+            is_attr
+            and func
+            in (
+                "apply",
+                "add",
+                "sub",
+                "radd",
+                "rsub",
+            )
         )
-    )
 
     cpp_to_py_start = time.perf_counter_ns()
     if is_series:
@@ -967,6 +996,18 @@ def _fix_struct_arr_names(arr, pa_type):
     struct arrays.
     """
 
+    # Handle list recursively
+    if pa.types.is_list(arr.type) or pa.types.is_large_list(arr.type):
+        if isinstance(arr, pa.ChunkedArray):
+            arr = arr.combine_chunks()
+        new_arr = pa.LargeListArray.from_arrays(
+            arr.offsets, _fix_struct_arr_names(arr.values, pa_type.value_type)
+        )
+        # Arrow's from_arrays ignores nulls (bug as of Arrow 13) so we add them back manually
+        return pa.Array.from_buffers(
+            new_arr.type, len(new_arr), arr.buffers()[:2], children=[new_arr.values]
+        )
+
     if not pa.types.is_struct(arr.type):
         return arr
 
@@ -998,8 +1039,7 @@ def _arrow_array_to_pd(arrow_array, pa_type, use_arrow_dtypes=True, name=None):
 
     # Our C++ code may not preserve the field names in struct arrays
     # so we fix them here to match the Arrow schema.
-    if pa.types.is_struct(arrow_array.type):
-        arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
+    arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
 
     # Cast to expected type to match Pandas (as determined by the frontend)
     if pa_type != arrow_array.type:
@@ -1070,8 +1110,9 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
     Args:
         obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
-        method_name ({"apply", "map", "map_parititons"}): The name of the method
-            applying the UDF.
+        method_name ({"apply", "map", "map_parititons", None}): The name of the method
+            applying the UDF. None means it's a function being called directly and not
+            a method.
         func (Any): The UDF argument to pass to apply/map.
         kwargs (dict): Optional keyword arguments to pass to apply/map.
 
@@ -1088,8 +1129,9 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
         "map_partitions",
         "map_with_state",
         "map_partitions_with_state",
+        None,
     }, (
-        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state'}"
+        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state', None}"
     )
 
     base_class = obj.__class__.__bases__[0]
@@ -1593,3 +1635,19 @@ def wrap_module_functions_and_methods(module):
                         elif isinstance(attr, staticmethod):
                             wrapped = staticmethod(wrapped)
                         setattr(obj, attr_name, wrapped)
+
+
+def scalarOutputNACheck(out, dtype):
+    """Pandas will convert some types to float and return NaN
+    if there is no data.
+    """
+    if isinstance(out, pd._libs.missing.NAType):
+        if isinstance(dtype, pd.ArrowDtype):
+            dtype = dtype.numpy_dtype
+
+        if np.issubdtype(dtype, np.floating):
+            return np.nan
+        elif np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
+            # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
+            return np.nan
+    return out

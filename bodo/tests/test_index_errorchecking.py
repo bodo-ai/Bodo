@@ -240,7 +240,9 @@ def test_period_idx_unsupported_methods():
     for unsupported_method in period_index_unsupported_methods:
         check_unsupported_method(
             "pandas.PeriodIndex.{}",
-            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            pd.PeriodIndex.from_fields(
+                year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+            ),
             unsupported_method,
         )
 
@@ -341,7 +343,9 @@ def test_period_idx_unsupported_atrs():
     for unsupported_atr in period_index_unsupported_atrs:
         check_unsupported_atr(
             "pandas.PeriodIndex.{}",
-            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            pd.PeriodIndex.from_fields(
+                year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+            ),
             unsupported_atr,
         )
 
@@ -877,7 +881,7 @@ def test_set_operations_unsupported():
 
     with pytest.raises(BodoError, match=err_msg4):
         bodo.jit(impl4)(
-            pd.date_range("2018-01-01", "2018-12-01", freq="M"),
+            pd.date_range("2018-01-01", "2018-12-01", freq="ME"),
             pd.TimedeltaIndex(
                 ["1 days", "2 days", "3 days", "4 days", "5 days", "6 days"]
             ),
@@ -1070,27 +1074,6 @@ def test_dti_init_kwd_err():
         ".*"
         + re.escape(
             "pandas.DatetimeIndex(): normalize parameter only supports default value False"
-        )
-        + ".*"
-    )
-
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
-def test_tdi_init_kwd_err():
-    from bodo.utils.typing import BodoError
-
-    def impl():
-        pd.TimedeltaIndex(np.arange(100), unit="s")
-
-    err_msg = (
-        ".*"
-        + re.escape(
-            "pandas.TimedeltaIndex(): unit parameter only supports default value None"
         )
         + ".*"
     )

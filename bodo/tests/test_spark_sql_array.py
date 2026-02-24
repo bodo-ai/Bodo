@@ -135,7 +135,9 @@ def test_array_distinct(dataframe_val, memory_leak_check):
 @pytest.mark.skip("Issue with our string array #1925")
 def test_array_except(dataframe_val, memory_leak_check):
     def test_impl(df):
-        return df[["A", "B"]].apply(lambda x: np.setdiff1d(x[0], x[1]), axis=1)
+        return df[["A", "B"]].apply(
+            lambda x: np.setdiff1d(x.iloc[0], x.iloc[1]), axis=1
+        )
 
     df = dataframe_val
     check_func(test_impl, (df,), dist_test=False)
@@ -144,7 +146,9 @@ def test_array_except(dataframe_val, memory_leak_check):
 @pytest.mark.skip("Issue with our string array #1925")
 def test_array_intersect(dataframe_val, memory_leak_check):
     def test_impl(df):
-        return df[["A", "B"]].apply(lambda x: np.intersect1d(x[0], x[1]), axis=1)
+        return df[["A", "B"]].apply(
+            lambda x: np.intersect1d(x.iloc[0], x.iloc[1]), axis=1
+        )
 
     df = dataframe_val
     check_func(test_impl, (df,), dist_test=False)
@@ -264,7 +268,7 @@ def test_array_sort(dataframe_val, memory_leak_check):
 @pytest.mark.slow
 def test_array_union(dataframe_val, memory_leak_check):
     def test_impl(df):
-        return df[["A", "B"]].apply(lambda x: np.union1d(x[0], x[1]), axis=1)
+        return df[["A", "B"]].apply(lambda x: np.union1d(x.iloc[0], x.iloc[1]), axis=1)
 
     df = dataframe_val
     check_func(test_impl, (df,))
@@ -274,7 +278,7 @@ def test_array_union(dataframe_val, memory_leak_check):
 def test_arrays_overlap(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(
-            lambda x: len(np.intersect1d(x[0], x[1])) > 0, axis=1
+            lambda x: len(np.intersect1d(x.iloc[0], x.iloc[1])) > 0, axis=1
         )
 
     df = dataframe_val

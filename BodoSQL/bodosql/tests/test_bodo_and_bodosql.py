@@ -26,7 +26,7 @@ def test_count_head(datapath, memory_leak_check):
         return df.head()
 
     filename = datapath("sample-parquet-data/no_index.pq")
-    read_df = pd.read_parquet(filename)
+    read_df = pd.read_parquet(filename, dtype_backend="pyarrow")
     count = read_df.B.count()
     expected_output = pd.DataFrame({"CNT": count}, index=pd.Index([0]))
     check_func(impl, (filename,), py_output=expected_output, is_out_distributed=False)

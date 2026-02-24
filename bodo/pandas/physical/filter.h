@@ -22,10 +22,12 @@ struct PhysicalFilterMetrics {
  */
 class PhysicalFilter : public PhysicalProcessBatch {
    public:
-    explicit PhysicalFilter(duckdb::LogicalFilter& logical_filter,
-                            std::shared_ptr<PhysicalExpression> expr,
-                            std::shared_ptr<bodo::Schema> input_schema)
-        : expression(expr) {
+    explicit PhysicalFilter(
+        duckdb::LogicalFilter& logical_filter,
+        duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
+        std::shared_ptr<bodo::Schema> input_schema,
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+            col_ref_map) {
         this->output_schema = std::make_shared<bodo::Schema>();
         if (logical_filter.projection_map.empty()) {
             for (size_t i = 0; i < input_schema->ncols(); i++) {
@@ -49,8 +51,18 @@ class PhysicalFilter : public PhysicalProcessBatch {
                 "Filter output schema has different number of columns than "
                 "LogicalFilter");
         }
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+
+        expression = buildPhysicalExprTree(exprs[0], col_ref_map);
+        for (size_t i = 1; i < exprs.size(); ++i) {
+            std::shared_ptr<PhysicalExpression> subExprTree =
+                buildPhysicalExprTree(exprs[i], col_ref_map);
+            expression = std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalConjunctionExpression>(
+                    expression, subExprTree,
+                    duckdb::ExpressionType::CONJUNCTION_AND));
+        }
     }
 
     virtual ~PhysicalFilter() = default;

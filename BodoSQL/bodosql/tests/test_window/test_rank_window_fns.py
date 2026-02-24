@@ -41,7 +41,7 @@ def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_column
     parquet_path = datapath("sample-parquet-data/rphd_sample.pq")
 
     ctx = {
-        "TABLE1": pd.read_parquet(parquet_path)[
+        "TABLE1": pd.read_parquet(parquet_path, dtype_backend="pyarrow")[
             ["uuid", "store_id", "ret_product_id", "in_stock", "last_seen"]
         ]
     }
@@ -559,6 +559,7 @@ def test_mrnf_all_ties(memory_leak_check):
                         None,
                         None,
                     ],
+                    dtype="datetime64[ns]",
                 ).values,
                 pd.array(
                     # Resolved by A or B or C
@@ -812,7 +813,8 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
     )
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     comm = MPI.COMM_WORLD
@@ -939,8 +941,9 @@ def test_rank_fns_sort_path_taken(
 ):
     """verifies sort path is taken in row_number()"""
 
+    from mpi4py import MPI
+
     import bodosql
-    from bodo.mpi4py import MPI
     from bodo.tests.utils import temp_env_override
 
     comm = MPI.COMM_WORLD
@@ -1107,7 +1110,8 @@ def ntile_df():
     ],
 )
 def test_ntile(ntile_df, capfd, spark_info, n_bins):
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     comm = MPI.COMM_WORLD
@@ -1143,7 +1147,8 @@ def test_multiple_rank_fns(spark_info, capfd, memory_leak_check):
     """
     Tests that multiple rank functions can be computed together in the sort based impl
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     comm = MPI.COMM_WORLD

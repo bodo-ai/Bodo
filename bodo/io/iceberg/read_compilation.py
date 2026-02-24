@@ -12,6 +12,7 @@ import typing as pt
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+from mpi4py import MPI
 from numba.core import types
 
 import bodo
@@ -23,7 +24,6 @@ from bodo.io.iceberg.common import (
     verify_pyiceberg_installed,
 )
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.utils import BodoError

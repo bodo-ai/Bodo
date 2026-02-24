@@ -273,13 +273,13 @@ BASE_MAP: dict[str, tuple[dict, list]] = {
     ),
     "TZ_AWARE_TABLE": (
         {
-            "A": pd.arrays.DatetimeArray(
+            "A": pd.array(
                 pd.Series(
                     [datetime(2019, 8, 21, 15, 23, 45, 0, pytz.timezone("US/Eastern"))]
                     * 10
                 )
             ),
-            "B": pd.arrays.DatetimeArray(
+            "B": pd.array(
                 pd.Series(
                     [
                         datetime(

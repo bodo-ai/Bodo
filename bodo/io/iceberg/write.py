@@ -14,6 +14,7 @@ import llvmlite.binding as ll
 import numba
 import pyarrow as pa
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.extending import intrinsic
 
@@ -30,7 +31,6 @@ from bodo.io.iceberg.write_utils import (
 )
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_opaque_class, install_py_obj_class
 from bodo.utils.typing import CreateTableMetaType

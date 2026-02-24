@@ -106,3 +106,24 @@ uint64_t get_physically_installed_memory() {
     return memory * 1024;
 #endif
 }
+
+std::shared_ptr<arrow::Buffer> SerializeTableToIPC(
+    const std::shared_ptr<arrow::Table>& table) {
+    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer =
+        arrow::ipc::MakeStreamWriter(sink, table->schema()).ValueOrDie();
+    CHECK_ARROW_BASE(writer->WriteTable(*table),
+                     "Failed to write Arrow Table to IPC stream");
+    CHECK_ARROW_BASE(writer->Close(),
+                     "Failed to close Arrow IPC stream writer");
+    return sink->Finish().ValueOrDie();
+}
+
+// Deserialize an IPC buffer back to an Arrow Table
+std::shared_ptr<arrow::Table> DeserializeIPC(
+    std::shared_ptr<arrow::Buffer> buffer) {
+    auto reader = arrow::ipc::RecordBatchStreamReader::Open(
+                      std::make_shared<arrow::io::BufferReader>(buffer))
+                      .ValueOrDie();
+    return reader->ToTable().ValueOrDie();
+}

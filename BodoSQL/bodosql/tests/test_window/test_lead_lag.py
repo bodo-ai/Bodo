@@ -78,7 +78,8 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
     Test different values for lead/lag with a pass through column,
     not keeping the input
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
+
     from bodo.tests.utils import temp_env_override
 
     df = pd.DataFrame(
@@ -148,11 +149,13 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
                         f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
                     )
                     for i in range(1000)
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             pd.Timestamp("2000-01-01 00:00:00"),
             "'2000-01-01 00:00:00' :: TIMESTAMP_NTZ",
             id="timestamp_ntz",
+            marks=pytest.mark.skip("Fix for Pandas 3"),
         ),
         pytest.param(
             pd.array(
@@ -178,7 +181,8 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
                         tz="US/Pacific",
                     )
                     for i in range(1000)
-                ]
+                ],
+                dtype="datetime64[ns, US/Pacific]",
             ),
             pd.Timestamp("2000-01-01 00:00:00", tz="US/Pacific"),
             "'2000-01-01 00:00:00' :: TIMESTAMP_LTZ",

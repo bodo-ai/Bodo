@@ -212,16 +212,18 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         If we don't have the data yet, and the slice is within the head, we slice the head,
         otherwise we collect and slice the full data. A slice along axis 1 will always lead to a full collection.
         """
+        from bodo.pandas.utils import normalize_slice_indices_for_lazy_md
+
         axis = self._normalize_axis(axis)
 
-        # Normalize negative and None start/stop/step values
-        start, stop, step = slobj.indices(len(self))
+        start, stop, step = normalize_slice_indices_for_lazy_md(slobj, len(self))
 
         # TODO Check if this condition is correct.
         if (
             self._md_head is not None
             and start <= self._md_head.shape[1]
-            and stop <= self._md_head.shape[1]
+            and stop is not None
+            and (stop <= self._md_head.shape[1])
             and axis == 0
         ):
             slobj = slice(start, stop, step)
@@ -549,16 +551,18 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         If we don't have the data yet, and the slice is within the head, we slice the head,
         otherwise we collect and slice the full data. A slice along axis 1 will always lead to a full collection.
         """
+        from bodo.pandas.utils import normalize_slice_indices_for_lazy_md
+
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        # Normalize negative and None start/stop/step values
-        start, stop, step = slobj.indices(len(self))
+        start, stop, step = normalize_slice_indices_for_lazy_md(slobj, len(self))
 
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
-            and stop <= len(self._md_head)
+            and stop is not None
+            and (stop <= len(self._md_head))
             and axis == 0
         ):
             slobj = slice(start, stop, step)

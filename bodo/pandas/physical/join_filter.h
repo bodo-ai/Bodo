@@ -1,10 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <utility>
 #include "../../libs/_query_profile_collector.h"
 #include "../libs/_array_utils.h"
 #include "../libs/streaming/_join.h"
 #include "_plan.h"
+#include "_util.h"
 #include "operator.h"
 
 struct PhysicalJoinFilterMetrics {
@@ -25,7 +27,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     explicit PhysicalJoinFilter(
         bodo::LogicalJoinFilter& logical_filter,
         std::shared_ptr<bodo::Schema>& input_schema,
-        std::shared_ptr<std::unordered_map<int, JoinState*>>&
+        std::shared_ptr<std::unordered_map<int, join_state_t>>&
             join_filter_states)
         : filter_ids(std::move(logical_filter.filter_ids)),
           filter_columns(std::move(logical_filter.filter_columns)),
@@ -58,7 +60,7 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 input_schema->column_names[i]);
         }
 
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
         this->can_apply_bloom_filters.reserve(this->filter_columns.size());
@@ -79,6 +81,8 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
     void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
@@ -99,9 +103,9 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         this->metrics.input_row_count += input_batch->nrows();
 
         // No filters can be applied, just pass through
-        if (std::all_of(this->can_apply_bloom_filters.begin(),
-                        this->can_apply_bloom_filters.end(),
-                        [](bool v) { return !v; })) {
+        if (std::ranges::all_of(this->can_apply_bloom_filters,
+                                [](bool v) { return !v; }) ||
+            input_batch->nrows() == 0) {
             return {input_batch, prev_op_result == OperatorResult::FINISHED
                                      ? OperatorResult::FINISHED
                                      : OperatorResult::NEED_MORE_INPUT};
@@ -110,11 +114,15 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         time_pt start_filtering = start_timer();
 
         // Allocate bitmask initialized to all true
-        std::shared_ptr<array_info> row_bitmask = alloc_nullable_array_no_nulls(
-            input_batch->nrows(), Bodo_CTypes::_BOOL);
-        memset(
-            row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
-            0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
+        if (!row_bitmask || row_bitmask->length < input_batch->nrows()) {
+            row_bitmask = alloc_nullable_array_no_nulls(input_batch->nrows(),
+                                                        Bodo_CTypes::_BOOL);
+            // Initialize all bits to true
+            memset(row_bitmask
+                       ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
+                   0xff, arrow::bit_util::BytesForBits(input_batch->nrows()));
+        }
+
         bool applied_any_filter = false;
 
         // Apply filters
@@ -124,35 +132,58 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 continue;
             }
 
-            JoinState* join_state_ = (*join_filter_states)[filter_id];
-            if (join_state_->IsNestedLoopJoin()) {
-                continue;
-            }
-            HashJoinState* join_state = (HashJoinState*)join_state_;
+            join_state_t join_state_ = (*join_filter_states)[filter_id];
+            // GPU Joins don't create bloom filters so only run against
+            // CPU JoinStates
+            std::visit(
+                [&](const auto& join_state) {
+                    if constexpr (std::is_same_v<
+                                      std::decay_t<decltype(join_state)>,
+                                      JoinState*>) {
+                        if (join_state->IsNestedLoopJoin()) {
+                            return;
+                        }
+                        HashJoinState* hash_join_state =
+                            (HashJoinState*)join_state;
 
-            applied_any_filter =
-                applied_any_filter ||
-                join_state->RuntimeFilter(input_batch, row_bitmask,
-                                          this->filter_columns[i],
-                                          this->is_first_locations[i]);
+                        applied_any_filter = applied_any_filter ||
+                                             hash_join_state->RuntimeFilter(
+                                                 input_batch, row_bitmask,
+                                                 this->filter_columns[i],
+                                                 this->is_first_locations[i]);
 
-            if (this->materialize_after_each_filter && applied_any_filter) {
-                input_batch = RetrieveTable(input_batch, row_bitmask);
-                // Reset row_bitmask for next filter if not last iteration
-                if (i < this->filter_ids.size() - 1) {
-                    memset(
-                        row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL,
-                                           uint8_t*>(),
-                        0xff,
-                        arrow::bit_util::BytesForBits(input_batch->nrows()));
-                }
+                        if (this->materialize_after_each_filter &&
+                            applied_any_filter) {
+                            input_batch =
+                                RetrieveTable(input_batch, row_bitmask);
+                            // Reset the bitmask for the next filter
+                            // we could potentially do something smarter here if
+                            // row_bitmask's length is way bigger than input
+                            // batch by only resetting the first
+                            // input_batch->nrows() bits and then resetting the
+                            // whole thing at the end but this should be good
+                            // enough for now, we don't always want to do that
+                            // because it's an extra reset
+                            memset(
+                                row_bitmask
+                                    ->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                            uint8_t*>(),
+                                0xff,
+                                arrow::bit_util::BytesForBits(
+                                    row_bitmask->length));
 
-                applied_any_filter = false;
-            }
+                            applied_any_filter = false;
+                        }
+                    }
+                },
+                join_state_);
         }
-
         if (applied_any_filter) {
             input_batch = RetrieveTable(input_batch, row_bitmask);
+            // Reset the bitmask for the next batch
+            memset(row_bitmask
+                       ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t*>(),
+                   0xff, arrow::bit_util::BytesForBits(row_bitmask->length));
         }
 
         this->metrics.filtering_time += end_timer(start_filtering);
@@ -189,10 +220,12 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
 
     bool materialize_after_each_filter;
 
+    std::shared_ptr<array_info> row_bitmask;
+
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
     // PhysicalJoinFilter only needs to access the JoinState during execution
-    std::shared_ptr<std::unordered_map<int, JoinState*>> join_filter_states;
+    std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states;
 
     PhysicalJoinFilterMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {

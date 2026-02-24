@@ -285,7 +285,8 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
                     pd.Timestamp("2023-10-28 00:00:00", tz="US/Pacific"),
                     pd.Timestamp("2023-11-05 05:15:17", tz="US/Pacific"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns, US/Pacific]",
             ),
             "B": pd.array(
                 [
@@ -293,7 +294,8 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
                     pd.Timestamp("2023-10-28 00:00:00"),
                     pd.Timestamp("2022-07-15 14:23:51"),
                 ]
-                * 5
+                * 5,
+                dtype="datetime64[ns]",
             ),
         }
     )
@@ -410,6 +412,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                             pd.Timestamp("2023-11-05 03:00:00.432423244"),
                             None,
                         ],
+                        dtype="datetime64[ns]",
                     )
                 }
             ),
@@ -492,6 +495,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                                 "2023-11-05 03:00:00.432423244", tz="US/Pacific"
                             ),
                         ],
+                        dtype="datetime64[ns, US/Pacific]",
                     ),
                 }
             ),
@@ -583,6 +587,7 @@ def test_date_part_epoch_case(memory_leak_check):
                     pd.Timestamp("2023-11-05 03:00:00.432423244"),
                     None,
                 ],
+                dtype="datetime64[ns]",
             ),
             "B": pd.array([True, True, True, False, False, True, False, True, True]),
         }
@@ -624,7 +629,8 @@ def test_date_part_epoch_case(memory_leak_check):
                             pd.Timestamp("2023-11-05"),
                             pd.Timestamp("2023-11-06"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                 }
             ),
@@ -647,7 +653,8 @@ def test_date_part_epoch_case(memory_leak_check):
                             pd.Timestamp("2023-11-05", tz="Pacific/Marquesas"),
                             pd.Timestamp("2023-11-06", tz="Pacific/Marquesas"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns, Pacific/Marquesas]",
                     )
                 }
             ),
@@ -681,7 +688,8 @@ def test_date_part_timezone_unit_case(memory_leak_check):
                     pd.Timestamp("2023-11-05", tz="US/Pacific"),
                     pd.Timestamp("2023-11-06", tz="US/Pacific"),
                 ]
-                * 3
+                * 3,
+                dtype="datetime64[ns, US/Pacific]",
             ),
             "B": pd.array([True, False, True, True, False] * 3),
         }

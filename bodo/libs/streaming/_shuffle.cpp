@@ -651,6 +651,39 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
     }
 }
 
+int get_max_allowed_tag_value() {
+    int flag = 0;
+    void* tag_ub;
+    CHECK_MPI(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
+              "[get_max_allowed_tag_value] MPI Error in MPI_Comm_get_attr:");
+    if (flag) {
+        // This value is typically in the 10s or 100s of millions.
+        return *(int*)tag_ub;
+    } else {
+        // If we cannot get it from MPI, use the value guaranteed by the MPI
+        // standard.
+        return 32767;
+    }
+}
+
+int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
+    // 10000 should be more than enough tags for a single send.
+    // TODO Use std::max(10000, req_tags) based on the table schema for full
+    // robustness.
+    constexpr int TAG_OFFSET = 10000;
+    // Even the MPI standard guaranteed value (32767) is sufficient for posting
+    // 2 messages at once with our 10000 offset.
+    const int MAX_TAG = get_max_allowed_tag_value();
+
+    for (int tag = SHUFFLE_METADATA_MSG_TAG + 1; tag < (MAX_TAG - TAG_OFFSET);
+         tag += TAG_OFFSET) {
+        if (!inflight_tags.contains(tag)) {
+            return tag;
+        }
+    }
+    return -1;
+}
+
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     // Reduce MPI call overheads by communicating only every 10 iterations
@@ -689,8 +722,13 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 
     start = start_timer();
     // Remove send state if recv done
-    std::erase_if(this->send_states,
-                  [](AsyncShuffleSendState& s) { return s.sendDone(); });
+    std::erase_if(this->send_states, [&](AsyncShuffleSendState& s) {
+        bool done = s.sendDone();
+        if (done) {
+            inflight_tags.erase(s.get_starting_msg_tag());
+        }
+        return done;
+    });
     this->metrics.shuffle_send_finalization_time += end_timer(start);
 
     bool shuffle_now = this->ShouldShuffleAfterProcessing(is_last);
@@ -744,9 +782,16 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
             table_local_dictionary_memory_size(shuffle_table) * this->n_pes;
     }
 
+    int start_tag = get_next_available_tag(this->inflight_tags);
+    if (start_tag == -1) {
+        throw std::runtime_error(
+            "[IncrementalShuffleState::ShuffleIfRequired] Unable to get "
+            "available MPI tag for shuffle send. All tags are inflight.");
+    }
     this->send_states.push_back(
         shuffle_issend(std::move(shuffle_table), shuffle_hashes,
-                       keep_row_bitmask.get(), this->shuffle_comm));
+                       keep_row_bitmask.get(), this->shuffle_comm, start_tag));
+    this->inflight_tags.insert(start_tag);
 
     this->metrics.shuffle_send_time += end_timer(start);
     this->metrics.n_shuffle_send++;

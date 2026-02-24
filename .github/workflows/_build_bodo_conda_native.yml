@@ -42,14 +42,22 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') }}
         run: ./buildscripts/setup_osx_sdk.sh
         env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-13' && '10.15' || '11.0' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ '11.0' }}
 
       # Regular Setup
       - name: Create Micromamba Environment
         uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: bodo_build
-          create-args: python=3.11 conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          create-args: >-
+            python=3.11 
+            conda==25.9.1
+            conda-libmamba-solver==25.4.0
+            conda-build==25.9.0 
+            anaconda-client 
+            python-libarchive-c 
+            setuptools_scm 
+            -c conda-forge
           cache-environment: true
           generate-run-shell: true
           init-shell: bash

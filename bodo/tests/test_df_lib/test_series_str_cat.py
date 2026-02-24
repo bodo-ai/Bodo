@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo.pandas as bd
@@ -11,20 +12,42 @@ from bodo.tests.utils import _test_equal
 def base_df():
     df_noidx = pd.DataFrame(
         {
-            "B": [None, "A    ", "B ", "  C", "D", "E"],
-            "D": [None, "1", "1", "2", "2", "3"],
-            "A": [None, 1, 1, 2, 2, 3],
-            "E": [None, "  a", "b  ", "c", "d", "e"],
-            "C": [None, " 1", "     1     ", "h", "2", "3"],
+            "B": pd.array(
+                [None, "A    ", "B ", "  C", "D", "E"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            "D": pd.array(
+                [None, "1", "1", "2", "2", "3"], dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            "A": pd.array([None, 1, 1, 2, 2, 3], dtype=pd.ArrowDtype(pa.int64())),
+            "E": pd.array(
+                [None, "  a", "b  ", "c", "d", "e"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            "C": pd.array(
+                [None, " 1", "     1     ", "h", "2", "3"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
         },
     )
     df_idx = pd.DataFrame(
         {
-            "B": [None, "A    ", "B ", "  C", "D", "E"],
-            "D": [None, "1", "1", "2", "2", "3"],
-            "A": [None, 1, 1, 2, 2, 3],
-            "E": [None, "  a", "b  ", "c", "d", "e"],
-            "C": [None, " 1", "     1     ", "h", "2", "3"],
+            "B": pd.array(
+                [None, "A    ", "B ", "  C", "D", "E"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            "D": pd.array(
+                [None, "1", "1", "2", "2", "3"], dtype=pd.ArrowDtype(pa.large_string())
+            ),
+            "A": pd.array([None, 1, 1, 2, 2, 3], dtype=pd.ArrowDtype(pa.int64())),
+            "E": pd.array(
+                [None, "  a", "b  ", "c", "d", "e"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
+            "C": pd.array(
+                [None, " 1", "     1     ", "h", "2", "3"],
+                dtype=pd.ArrowDtype(pa.large_string()),
+            ),
         },
         index=["a", "b", "c", "d", "e", "f"],
     )
@@ -111,11 +134,18 @@ def test_str_cat_exprs(base_df, lhs_expr, rhs_expr, kwargs):
             lhs_bd = lhs_expr(bdf)
             rhs_bd = rhs_expr(bdf)
 
-            out_pd = lhs_pd.str.cat(others=rhs_pd, sep="-", **kwargs)
+            out_pd = lhs_pd.astype(object).str.cat(
+                others=rhs_pd.astype(object), sep="-", **kwargs
+            )
             out_bd = lhs_bd.str.cat(others=rhs_bd, sep="-", **kwargs)
         with assert_executed_plan_count(1):
             out_bd = out_bd.execute_plan()
-        _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
+        _test_equal(
+            out_bd,
+            out_pd.astype("str").astype(pd.ArrowDtype(pa.large_string())),
+            check_pandas_types=False,
+            check_names=False,
+        )
 
 
 def test_str_cat_fallback_no_others(fallback_df):

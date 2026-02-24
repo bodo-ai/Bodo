@@ -6,4 +6,9 @@ export NUMBA_DISABLE_ERROR_MESSAGE_HIGHLIGHTING=1
 export PYTHONFAULTHANDLER=1
 export BODO_NUM_WORKERS=3
 
-python -u examples/Misc/misc_pi.py
+if [[ "$(uname)" == "Darwin" ]]; then
+    # OpenMPI requires mpiexec on macOS CI.
+    mpiexec -n 1 python -u examples/Misc/misc_pi.py
+else
+    python -u examples/Misc/misc_pi.py
+fi

@@ -98,6 +98,10 @@ class BodoDataFrameLocIndexer(_LocIndexer):
         if isinstance(key, tuple) and len(key) == 2:
             row_sel, col_sel = key
             if row_sel == slice(None, None, None):
+                # Handle tuple columns like df.loc[:, ("B", "C")] which are not
+                # supported in regular getitem
+                if isinstance(col_sel, tuple):
+                    col_sel = list(col_sel)
                 return self.df.__getitem__(col_sel)
             else:
                 fallback_warn("Selected variant of BodoDataFrame.loc[] not supported.")
@@ -305,6 +309,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 assert self._head_df is not None
                 return self._head_df.head(0).copy()
+
+        # Negative n like -1 is equivalent to df.iloc[:-1]
+        if n < 0:
+            n = max(0, len(self) + n)
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             if bodo.dataframe_library_enabled and isinstance(
@@ -1557,8 +1565,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.drop_duplicates() keep argument: only 'first' and 'last' are supported."
             )
 
+        zero_size_self = _empty_like(self)
+
+        # If Index columns exist, it's as if a subset of columns are keys and groupby
+        # should be used.
+        if subset is None and get_n_index_arrays(zero_size_self.index) > 0:
+            subset = zero_size_self.columns.tolist()
+
         if subset is not None:
-            subset_group = self.groupby(subset, as_index=False, sort=False)
+            subset_group = self.groupby(
+                subset, as_index=False, sort=False, dropna=False
+            )
             if keep == "first":
                 drop_dups = subset_group.first()
             else:
@@ -1567,7 +1584,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Preserve original ordering of columns
             return drop_dups[self.columns.tolist()]
 
-        zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
         return wrap_plan(
             plan=LogicalDistinct(

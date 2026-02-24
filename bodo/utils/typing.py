@@ -1523,7 +1523,12 @@ def is_literal_type(t):
         or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
         or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
         or t
-        in (bodo.libs.bool_arr_ext.boolean_dtype, bodo.libs.str_arr_ext.string_dtype)
+        in (
+            bodo.libs.bool_arr_ext.boolean_dtype,
+            bodo.libs.str_arr_ext.string_dtype,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
+        )
         # values like np.sum could be passed as UDFs and are technically literals
         # See test_groupby_agg_func_udf
         or isinstance(t, types.Function)

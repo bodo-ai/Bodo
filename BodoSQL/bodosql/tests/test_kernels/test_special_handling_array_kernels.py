@@ -240,7 +240,7 @@ def test_is_in_dict_enc_string(memory_leak_check, args):
         return bodosql.kernels.is_in(arr, search_vals)
 
     def is_in_equiv_fn(arr, search_vals):
-        tmp = pd.Series(arr).isin(search_vals)
+        tmp = pd.Series(arr).isin(search_vals).astype("boolean")
         tmp[pd.Series(arr).isna()] = None
         out = pd.array(tmp).astype("boolean")
         return out

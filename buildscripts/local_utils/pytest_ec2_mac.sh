@@ -1,15 +1,15 @@
 #!/bin/bash
 
 set -ex
-# Install python3.13
-brew install python@3.13 git
+# Install python3.14
+brew install python@3.14 git
 
 # Clone the repo
 export GITHUB_PAT=
 git clone https://"$GITHUB_PAT"@github.com/bodo-ai/Bodo.git
 
 # Create a virtual environment
-python3.13 -m venv venv
+python3.14 -m venv venv
 
 # Activate it
 source venv/bin/activate

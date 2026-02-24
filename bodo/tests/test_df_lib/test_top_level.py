@@ -45,14 +45,13 @@ def test_top_level_redirects(nulls_df, top_func, method_name):
         _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
 
 
-@pytest.mark.jit_dependency
 def test_top_level_to_datetime():
     with assert_executed_plan_count(0):
         # Single column string case
         pdf1 = pd.DataFrame({"dates": ["2021-01-01", "2022-02-15", None, "2023-03-30"]})
         bdf1 = bd.from_pandas(pdf1)
-        pd_obj1 = pd.to_datetime(pdf1["dates"])
-        bd_obj1 = bd.to_datetime(bdf1["dates"])
+        pd_obj1 = pd.to_datetime(pdf1["dates"], utc=True)
+        bd_obj1 = bd.to_datetime(bdf1["dates"], utc=True)
     with assert_executed_plan_count(1):
         _ = bd_obj1.execute_plan()
     _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)
@@ -88,3 +87,42 @@ def test_top_level_to_datetime():
     _test_equal(
         bd_obj3.execute_plan(), pd_obj3, check_pandas_types=False, check_names=False
     )
+
+    # Format not specified
+    with assert_executed_plan_count(1):
+        pdf1 = pd.DataFrame({"dates": ["2021-01-01", "2022-02-15", None, "2023-03-30"]})
+        bdf1 = bd.from_pandas(pdf1)
+        pd_obj1 = pd.to_datetime(pdf1["dates"])
+        bd_obj1 = bd.to_datetime(bdf1["dates"])
+    with assert_executed_plan_count(1):
+        _ = bd_obj1.execute_plan()
+    _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)
+
+    # Format has timezone info
+    with assert_executed_plan_count(1):
+        pdf1 = pd.DataFrame(
+            {
+                "dates": [
+                    "2021-01-01+01:00",
+                    "2022-02-15+01:00",
+                    None,
+                    "2023-03-30+01:00",
+                ]
+            }
+        )
+        bdf1 = bd.from_pandas(pdf1)
+        pd_obj1 = pd.to_datetime(pdf1["dates"], format="%Y-%m-%d%z")
+        bd_obj1 = bd.to_datetime(bdf1["dates"], format="%Y-%m-%d%z")
+    with assert_executed_plan_count(1):
+        _ = bd_obj1.execute_plan()
+    _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)
+
+    # Format doesn't have timezone info
+    with assert_executed_plan_count(0):
+        pdf1 = pd.DataFrame({"dates": ["2021-01-01", "2022-02-15", None, "2023-03-30"]})
+        bdf1 = bd.from_pandas(pdf1)
+        pd_obj1 = pd.to_datetime(pdf1["dates"], format="%Y-%m-%d")
+        bd_obj1 = bd.to_datetime(bdf1["dates"], format="%Y-%m-%d")
+    with assert_executed_plan_count(1):
+        _ = bd_obj1.execute_plan()
+    _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)

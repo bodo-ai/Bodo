@@ -1472,11 +1472,16 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::DurationArray>(arrow_arr);
             std::shared_ptr<arrow::DurationType> type =
                 std::static_pointer_cast<arrow::DurationType>(dur_arr->type());
+            // Ensure we are always working with nanosecond precision.
             if (type->unit() != arrow::TimeUnit::NANO) {
-                throw std::runtime_error(
-                    "arrow_array_to_bodo(): Duration type must be in "
-                    "nanoseconds, but found " +
-                    type->ToString());
+                auto res = arrow::compute::Cast(
+                    *dur_arr, arrow::duration(arrow::TimeUnit::NANO),
+                    arrow::compute::CastOptions::Safe(),
+                    bodo::default_buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                dur_arr =
+                    std::static_pointer_cast<arrow::DurationArray>(casted_arr);
             }
             return arrow_numeric_array_to_bodo<arrow::DurationArray>(
                 dur_arr, Bodo_CTypes::TIMEDELTA, src_pool);
@@ -1569,9 +1574,9 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<table_info> out_table =
         std::make_shared<table_info>(out_arrs);
     out_table->column_names = table->ColumnNames();
-    out_table->metadata =
-        std::make_shared<TableMetadata>(table->schema()->metadata()->keys(),
-                                        table->schema()->metadata()->values());
+    out_table->metadata = std::make_shared<bodo::TableMetadata>(
+        table->schema()->metadata()->keys(),
+        table->schema()->metadata()->values());
     return out_table;
 }
 

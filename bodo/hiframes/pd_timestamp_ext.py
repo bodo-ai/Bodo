@@ -1556,7 +1556,7 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
 
 @numba.njit(cache=True, no_cpython_wrapper=True)
 def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    """Converts numpy.timedelta64 to datetime.timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
     n_day = n_int64 // (86400 * 1000000000)
     res1 = n_int64 - n_day * 86400 * 1000000000
@@ -1566,11 +1566,22 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     return datetime.timedelta(n_day, n_sec, n_microsec)
 
 
-@numba.njit(cache=True, no_cpython_wrapper=True)
-def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to pd.Timedelta"""
-    n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
-    return pd.Timedelta(n_int64)
+def convert_numpy_timedelta64_to_pd_timedelta(td64):  # pragma: no cover
+    return td64
+
+
+@overload(convert_numpy_timedelta64_to_pd_timedelta, jit_options={"cache": True})
+def overload_convert_numpy_timedelta64_to_pd_timedelta(td64):
+    """Converts numpy.timedelta64 to pd.Timedelta"""
+
+    if td64 == bodo.types.pd_timedelta_type:
+        return lambda td64: td64  # pragma: no cover
+
+    def impl(td64):  # pragma: no cover
+        n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(td64)
+        return pd.Timedelta(n_int64)
+
+    return impl
 
 
 @intrinsic
@@ -1597,8 +1608,17 @@ def integer_to_dt64(typingctx, val=None):
 def dt64_to_integer(typingctx, val=None):
     """Cast a datetime64 value to integer"""
 
-    def codegen(context, builder, sig, args):
-        return args[0]
+    if val == bodo.types.pd_timestamp_tz_naive_type:
+
+        def codegen(context, builder, sig, args):
+            timestamp = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return timestamp.value
+    else:
+
+        def codegen(context, builder, sig, args):
+            return args[0]
 
     return types.int64(val), codegen
 
@@ -1629,8 +1649,17 @@ def td64_hash(val):
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer"""
 
-    def codegen(context, builder, sig, args):
-        return args[0]
+    if val == pd_timedelta_type:
+
+        def codegen(context, builder, sig, args):
+            timedelta = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return timedelta.value
+    else:
+
+        def codegen(context, builder, sig, args):
+            return args[0]
 
     return types.int64(val), codegen
 
@@ -1670,7 +1699,9 @@ def series_str_dt64_astype(data):  # pragma: no cover
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
         # formats, see test_dt64_str_astype
-        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values
+        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values.astype(
+            np.dtype("datetime64[ns]")
+        )
     return res
 
 
@@ -1958,7 +1989,9 @@ def overload_to_datetime(
         return impl_date_arr
 
     # return DatetimeIndex if input is array(dt64)
-    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
+    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C") or isinstance(
+        arg_a, bodo.types.DatetimeArrayType
+    ):
         return (
             lambda arg_a,
             errors="raise",
@@ -2519,12 +2552,12 @@ def overload_freq_methods(method):
         )
         freq_conditions = [
             "freq == 'D'",
-            "freq == 'H'",
-            "freq == 'min' or freq == 'T'",
-            "freq == 'S'",
-            "freq == 'ms' or freq == 'L'",
-            "freq == 'U' or freq == 'us'",
-            "freq == 'N'",
+            "freq == 'h'",
+            "freq == 'min'",
+            "freq == 's'",
+            "freq == 'ms'",
+            "freq == 'us'",
+            "freq == 'ns'",
         ]
         unit_values = [
             24 * 60 * 60 * 1000000 * 1000,
@@ -2815,7 +2848,7 @@ def timestamp_min(lhs, rhs):
     elif (
         isinstance(lhs, IndexValueType)
         and isinstance(rhs, IndexValueType)
-        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(lhs.val_typ, PandasTimestampType)
         and isinstance(rhs.val_typ, PandasTimestampType)
     ):
 
@@ -2823,14 +2856,14 @@ def timestamp_min(lhs, rhs):
             # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
             #
             # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
-            if pd.isna(lhs) and pd.isna(rhs):
+            if pd.isna(lhs.value) and pd.isna(rhs.value):
                 if lhs.index < rhs.index:
                     return lhs
                 else:
                     return rhs
-            elif pd.isna(lhs):
+            elif pd.isna(lhs.value):
                 return rhs
-            elif pd.isna(rhs):
+            elif pd.isna(rhs.value):
                 return lhs
             elif lhs.value < rhs.value:
                 return lhs
@@ -2867,7 +2900,7 @@ def timestamp_max(lhs, rhs):
     elif (
         isinstance(lhs, IndexValueType)
         and isinstance(rhs, IndexValueType)
-        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(lhs.val_typ, PandasTimestampType)
         and isinstance(rhs.val_typ, PandasTimestampType)
     ):  # pragma: no cover
 
@@ -2875,14 +2908,14 @@ def timestamp_max(lhs, rhs):
             # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
             #
             # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
-            if pd.isna(lhs) and pd.isna(rhs):
+            if pd.isna(lhs.value) and pd.isna(rhs.value):
                 if lhs.index < rhs.index:
                     return lhs
                 else:
                     return rhs
-            elif pd.isna(lhs):
+            elif pd.isna(lhs.value):
                 return rhs
-            elif pd.isna(rhs):
+            elif pd.isna(rhs.value):
                 return lhs
             elif lhs.value < rhs.value:
                 return rhs
@@ -3088,3 +3121,21 @@ def datetime64_constructor(context, builder, sig, args):
         return integer_to_dt64(a.value)
 
     return context.compile_internal(builder, datetime64_constructor_impl, sig, args)
+
+
+@overload(operator.setitem, no_unliteral=True)
+def dt_timedelta_arr_setitem(A, ind, val):
+    """Handle A[i] = pd.Timestamp(...) where A is a datetime64 array"""
+    if (
+        not isinstance(A, types.Array)
+        or A.dtype != bodo.types.datetime64ns
+        or not isinstance(ind, types.Integer)
+        or not val == pd_timestamp_tz_naive_type
+    ):
+        return
+
+    def impl(A, ind, val):  # pragma: no cover
+        dt64 = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+        A[ind] = dt64
+
+    return impl

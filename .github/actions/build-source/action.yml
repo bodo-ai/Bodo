@@ -11,9 +11,8 @@ runs:
   using: "composite"
   steps:
     # -------------------------- Environment Setup -------------------------- #
-      - uses: prefix-dev/setup-pixi@v0.8.8
+      - uses: prefix-dev/setup-pixi@v0.9.3
         with:
-          pixi-version: v0.40.2
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: 'default'
@@ -30,7 +29,7 @@ runs:
 
       - name: Build Bodo
         run: |
-          pixi run build-bodo -Cbuild.verbose=true
+          pixi run build-bodo
         shell: bash
         env:
           # We should just use sccache directly on CI

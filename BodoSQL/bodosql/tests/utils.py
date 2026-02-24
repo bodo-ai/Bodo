@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pyspark
 import sqlglot
+from mpi4py import MPI
 from pyspark.sql.types import (
     ByteType,
     DayTimeIntervalType,
@@ -32,10 +33,10 @@ from pyspark.sql.types import (
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
+    _test_equal,
     gen_unique_table_id,
 )
 from bodo.tests.utils_jit import reduce_sum
@@ -72,7 +73,6 @@ def check_query(
     convert_columns_decimal: list[str] | None = None,
     convert_input_to_nullable_float: bool = True,
     convert_expected_output_to_nullable_float: bool = True,
-    convert_float_nan: bool = False,
     convert_columns_bool: list[str] | None = None,
     convert_columns_tz_naive: list[str] | None = None,
     return_codegen: bool = False,
@@ -163,10 +163,6 @@ def check_query(
 
         convert_expected_output_to_nullable_float: Convert float columns in expected
             output to nullable float if the nullable float global flag is enabled.
-
-        convert_float_nan: Convert NaN values in float columns to None.
-            This is used when Spark and Bodo will have different output
-            types.
 
         convert_columns_bool: Convert NaN values to None by setting datatype
             to boolean.
@@ -422,8 +418,6 @@ def check_query(
             }
         if convert_expected_output_to_nullable_float:
             expected_output = _convert_float_to_nullable_float(expected_output)
-        if convert_float_nan:
-            expected_output = convert_spark_nan_none(expected_output)
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
 
@@ -446,7 +440,7 @@ def check_query(
 
             # Compute the expected output
             # We need to convert to arrow and then Pandas to maintain some types (decimal, timestamp)
-            expected_output = conn.sql(q).arrow().to_pandas()
+            expected_output = conn.sql(q).arrow().read_pandas()
 
         # Distribute the expected output and handle errors
         comm = MPI.COMM_WORLD
@@ -971,7 +965,7 @@ def check_query_jit_1D(
     )
     if is_out_distributed:
         try:
-            bodosql_output = bodo.gatherv(bodosql_output)
+            bodosql_output = bodo.libs.distributed_api.gatherv(bodosql_output)
         except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)
@@ -1065,7 +1059,7 @@ def check_query_jit_1DVar(
     )
     if is_out_distributed:
         try:
-            bodosql_output = bodo.gatherv(bodosql_output)
+            bodosql_output = bodo.libs.distributed_api.gatherv(bodosql_output)
         except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)
@@ -1251,19 +1245,37 @@ def _check_query_equal(
 
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
+    new_cols = []
+    new_expected_cols = []
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
+        new_cols.append(bodosql_output.iloc[:, i])
+        new_expected_cols.append(expected_output.iloc[:, i])
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
             try:
                 # Cast to regular string array to avoid dictionary issues.
                 result = pa.compute.cast(arr._pa_array, pa.string()).to_pandas()
-                # Workaround Pandas 2 Arrow setitem error by setting to an int first
-                bodosql_output.iloc[:, i] = 3
-                bodosql_output.iloc[:, i] = result
+                new_cols[-1] = result.astype(object).fillna(None)
+                new_expected_cols[-1] = (
+                    expected_output.iloc[:, i].astype(object).fillna(None)
+                )
             except Exception:
                 pass
 
+    bodosql_output = (
+        pd.concat(new_cols, axis=1)
+        .set_axis(bodosql_output.columns, axis=1)
+        .set_index(bodosql_output.index)
+    )
+    expected_output = (
+        pd.concat(new_expected_cols, axis=1)
+        .set_axis(expected_output.columns, axis=1)
+        .set_index(expected_output.index)
+    )
+
+    # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
+    bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
@@ -1315,17 +1327,41 @@ def _test_equal_guard(
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
+    # Handle binary ArrowDtype comparison
+    for i, (bodo_dtype, py_dtype) in enumerate(
+        zip(bodosql_output.dtypes, expected_output.dtypes)
+    ):
+        if isinstance(bodo_dtype, pd.ArrowDtype) and (
+            pa.types.is_binary(bodo_dtype.pyarrow_dtype)
+            or pa.types.is_large_binary(bodo_dtype.pyarrow_dtype)
+        ):
+            expected_output[expected_output.columns[i]] = pd.array(
+                expected_output[expected_output.columns[i]], dtype=bodo_dtype
+            )
+
+        # Convert object columns created by Spark usually
+        if py_dtype == np.object_ and bodo_dtype != np.object_:
+            expected_output[expected_output.columns[i]] = expected_output[
+                expected_output.columns[i]
+            ].astype(bodo_dtype)
+
+    # Convert datetime64[us] to datetime64[ns] for comparison
+    for i, dtype in enumerate(expected_output.dtypes):
+        if dtype == np.dtype("datetime64[us]"):
+            expected_output[expected_output.columns[i]] = expected_output[
+                expected_output.columns[i]
+            ].astype("datetime64[ns]")
+
     # No need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
     if bodo.get_size() == 1:
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
@@ -1335,11 +1371,10 @@ def _test_equal_guard(
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(
+        _test_equal(
             bodosql_output,
             expected_output,
-            check_dtype,
-            check_column_type=False,
+            check_dtype=check_dtype,
             rtol=rtol,
             atol=atol,
         )
@@ -1373,8 +1408,17 @@ def convert_spark_string(df, columns):
     """
     Converts Spark String columns to bytes to match BodoSQL.
     """
+
+    def convert(x):
+        if isinstance(x, str):
+            return x.encode("utf-8")
+        elif isinstance(x, float) and np.isnan(x):
+            return None
+        else:
+            return x
+
     df[columns] = df[columns].apply(
-        lambda x: [y.encode("utf-8") if isinstance(y, str) else y for y in x],
+        lambda x: [convert(y) for y in x],
         axis=1,
         result_type="expand",
     )
@@ -1409,15 +1453,6 @@ def convert_spark_timedelta(df, columns):
     return df
 
 
-def convert_spark_nan_none(df):
-    """
-    Function the converts Float NaN values to None. This is used because Spark
-    may convert nullable integers to floats.
-    """
-    df = df.astype(object).where(pd.notnull(df), None)
-    return df
-
-
 def convert_nullable_object(df):
     """
     Function the converts a DataFrame with a nullable column to an
@@ -1430,7 +1465,6 @@ def convert_nullable_object(df):
             (
                 pd.core.arrays.integer.IntegerDtype,
                 pd.core.arrays.boolean.BooleanDtype,
-                pd.StringDtype,
             ),
         )
         for x in df.dtypes
@@ -1442,11 +1476,35 @@ def convert_nullable_object(df):
                 (
                     pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
-                    pd.StringDtype,
                 ),
             ):
                 S = df.iloc[:, i]
                 df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
+    return df
+
+
+def convert_arrow_time_to_bodo_time(df):
+    """Convert a DataFrame with potentially Arrow Time64[ns] columns to bodo.types.Time objects.
+    Imports the compiler for bodo.types.Time"""
+    import bodo.decorators  # noqa
+
+    if not isinstance(df, pd.DataFrame):
+        return df
+
+    for col in df.columns:
+        if df[col].dtype == pd.ArrowDtype(pa.time64("ns")):
+            col_as_int = pd.array(
+                df[col].array._pa_array.cast(pa.int64()),
+                dtype=pd.ArrowDtype(pa.int64()),
+            )
+            bodo_times = []
+            for x in col_as_int:
+                if pd.isna(x):
+                    bodo_times.append(None)
+                else:
+                    bodo_times.append(bodo.types.Time(nanosecond=x, precision=9))
+            df[col] = pd.Series(bodo_times, dtype=object)
+
     return df
 
 
@@ -1724,5 +1782,5 @@ def replace_type_varchar(output: pd.DataFrame):
     res = output.copy()
     # replace VARCHAR(precision) with VARCHAR
     type_is_varchar = res["TYPE"].map(lambda x: x.startswith("VARCHAR"))
-    res["TYPE"][type_is_varchar] = "VARCHAR"
+    res["TYPE"] = res["TYPE"].where(~type_is_varchar, "VARCHAR")
     return res

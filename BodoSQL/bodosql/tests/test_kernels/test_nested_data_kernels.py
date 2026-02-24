@@ -3231,9 +3231,9 @@ def test_to_object_valid(data, memory_leak_check):
         arg = None if flag else data[0]
         return pd.DataFrame({"res": [bodosql.kernels.to_object(arg)]})
 
-    vector_res = pd.DataFrame({"res": data})
-    scalar_res = pd.DataFrame({"res": [data[0]]})
-    null_res = pd.DataFrame({"res": [None]})
+    vector_res = pd.DataFrame({"res": pd.array(data, data.dtype)})
+    scalar_res = pd.DataFrame({"res": pd.array([data[0]], data.dtype)})
+    null_res = pd.DataFrame({"res": pd.array([None], data.dtype)})
     check_func(
         impl_vector,
         (data,),

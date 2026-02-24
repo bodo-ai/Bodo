@@ -48,12 +48,14 @@ pytestmark = pytest_slow_unless_codegen
         ("2201-12-01T12:12:02.21",),
         (
             pd.Series(
-                pd.date_range(start="1/2/2013", end="3/13/2021", periods=12)
+                pd.date_range(start="1/2/2013", end="3/13/2021", periods=12, unit="ns"),
+                dtype="datetime64[ns]",
             ).astype(str),
         ),
         (
             pd.Series(
-                pd.date_range(start="1/2/2013", end="1/3/2013", periods=113)
+                pd.date_range(start="1/2/2013", end="1/3/2013", periods=113, unit="ns"),
+                dtype="datetime64[ns]",
             ).astype(str),
         ),
     ]
@@ -290,15 +292,19 @@ def invalid_to_date_strings_with_format_str(request):
         pytest.param(
             (
                 pd.Series(
-                    pd.date_range(start="1/2/2013", end="1/3/2013", periods=113)
-                ).astype("datetime64[ns]"),
+                    pd.date_range(
+                        start="1/2/2013", end="1/3/2013", periods=113, unit="ns"
+                    )
+                ),
             ),
             id="non_null_dt_series",
         ),
         pytest.param(
             (
                 pd.Series(
-                    pd.date_range(start="1/2/2023", end="1/3/2025", freq="5D")
+                    pd.date_range(
+                        start="1/2/2023", end="1/3/2025", freq="5D", unit="ns"
+                    )
                 ).dt.date,
             ),
             id="date",
@@ -313,13 +319,21 @@ def invalid_to_date_strings_with_format_str(request):
                         pd.Timestamp("4/2/2003"),
                         None,
                     ]
-                    * 4
-                ).astype("datetime64[ns]"),
+                    * 4,
+                    dtype="datetime64[ns]",
+                ),
             ),
             id="nullable_dt_series",
         ),
         pytest.param(
-            (pd.Series(pd.date_range("2018", "2025", periods=13, tz="US/Pacific")),),
+            (
+                pd.Series(
+                    pd.date_range(
+                        "2018", "2025", periods=13, tz="US/Pacific", unit="ns"
+                    ),
+                    dtype="datetime64[ns, US/Pacific]",
+                ),
+            ),
             id="tz_series",
         ),
     ]
@@ -513,9 +527,6 @@ def test_to_date_valid_datetime_types(
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
 
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
-
     if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
@@ -677,7 +688,8 @@ def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
                     pd.Timestamp(2022, 11, 10, 21, 30, 25),
                     pd.Timestamp(2023, 5, 2, 12, 55, 5),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             id="series-1",
         ),
@@ -701,7 +713,8 @@ def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
                     pd.Timestamp(2022, 11, 10, 21, 30, 25),
                     pd.Timestamp(2023, 5, 2, 0, 55, 5),
                 ]
-                * 4
+                * 4,
+                dtype="datetime64[ns]",
             ),
             id="series-2",
         ),
@@ -756,7 +769,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-05 01:30:00"),
                     pd.Timestamp("2024-04-04 22:30:00"),
                     pd.Timestamp("2024-04-04 23:30:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ).to_numpy(),
             id="no_tz",
         ),
@@ -772,7 +786,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-04 17:30:00", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ).to_numpy(),
             id="with_tz_LA",
         ),
@@ -788,7 +803,8 @@ def test_to_timestamp_valid_strings_with_format(
                     pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
                     pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
                     pd.Timestamp("2024-04-05 6:15:00", tz="Asia/Kathmandu"),
-                ]
+                ],
+                dtype="datetime64[ns, Asia/Kathmandu]",
             ).to_numpy(),
             id="with_tz_KTM",
         ),
@@ -992,7 +1008,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07"),
                     pd.Timestamp("2024-04-05 06:07:08"),
                     pd.Timestamp("2025-05-06 07:08:09"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             False,
             None,
@@ -1016,7 +1033,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07"),
                     pd.Timestamp("2024-04-05 06:07:08"),
                     pd.Timestamp("2025-05-06 07:08:09"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             False,
             "America/Los_Angeles",
@@ -1040,7 +1058,8 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     pd.Timestamp("2023-03-04 05:06:07", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-04-05 06:07:08", tz="America/Los_Angeles"),
                     pd.Timestamp("2025-05-06 07:08:09", tz="America/Los_Angeles"),
-                ]
+                ],
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             False,
             "Asia/Kathmandu",
@@ -1227,9 +1246,9 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456789", 0),
-            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123000", 60),
-            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000123", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000", -60),
             None,
             bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
             bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
@@ -1237,9 +1256,9 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     )
     answer = np.array(
         [
-            bodo.types.Time(3, 4, 5, 123, 456, 789, precision=9),
-            bodo.types.Time(5, 5, 6, 0, 123, 0, precision=9),
-            bodo.types.Time(4, 6, 7, 0, 0, 123, precision=9),
+            bodo.types.Time(3, 4, 5, 123, 456, precision=9),
+            bodo.types.Time(5, 5, 6, 0, 123, precision=9),
+            bodo.types.Time(4, 6, 7, 0, 000, precision=9),
             None,
             bodo.types.Time(1, 30, 0, precision=9),
             bodo.types.Time(22, 30, 0, precision=9),
@@ -1382,7 +1401,8 @@ def test_convert_timezone_ntz_scalar(
                     pd.Timestamp("2023-05-09 12:00:00"),
                     pd.Timestamp("2023-07-16 12:00:00"),
                     pd.Timestamp("2023-11-25 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="same_tz",
         ),
@@ -1397,7 +1417,8 @@ def test_convert_timezone_ntz_scalar(
                     pd.Timestamp("2023-05-09 11:00:00"),
                     pd.Timestamp("2023-07-16 11:00:00"),
                     pd.Timestamp("2023-11-25 12:00:00"),
-                ]
+                ],
+                dtype="datetime64[ns]",
             ),
             id="berlin-casablanca",
             marks=pytest.mark.slow,
@@ -1413,7 +1434,8 @@ def test_convert_timezone_ntz_vector(source_tz, target_tz, answer, memory_leak_c
             pd.Timestamp("2023-05-09 12:00:00"),
             pd.Timestamp("2023-07-16 12:00:00"),
             pd.Timestamp("2023-11-25 12:00:00"),
-        ]
+        ],
+        dtype="datetime64[ns]",
     )
 
     def impl(data):

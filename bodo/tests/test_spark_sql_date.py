@@ -14,10 +14,18 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         pd.DataFrame(
-            {"A": pd.date_range(start="2018-04-24", end="2020-04-29", periods=5)}
+            {
+                "A": pd.date_range(
+                    start="2018-04-24", end="2020-04-29", periods=5, unit="ns"
+                )
+            }
         ),
         pd.DataFrame(
-            {"A": pd.date_range(start="2018-04-24", end="2020-04-29", periods=5).date}
+            {
+                "A": pd.date_range(
+                    start="2018-04-24", end="2020-04-29", periods=5, unit="ns"
+                ).date
+            }
         ),
     ]
 )
@@ -70,7 +78,7 @@ def test_from_unixtime(memory_leak_check):
         return S.map(lambda x: pd.Timestamp(x, "s")).dt.strftime(format_str)
 
     S = (
-        pd.date_range(start="1/1/2018", end="1/08/2018", freq="h")
+        pd.date_range(start="1/1/2018", end="1/08/2018", freq="h", unit="ns")
         .to_series()
         .map(lambda x: int(x.value / (1000 * 1000 * 1000)))
     )

@@ -392,7 +392,7 @@ def overload_dataframe_astype(
     dtype,
     copy=True,
     errors="raise",
-    _bodo_nan_to_str=True,
+    _bodo_nan_to_str=False,
     _bodo_object_typeref=None,
 ):
     # _bodo_nan_to_str is a bodo specific argument that indicate is string should be converted
@@ -428,7 +428,7 @@ def overload_dataframe_astype(
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
     extra_globals = None
-    header = "def bodo_dataframe_astype(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True, _bodo_object_typeref=None):\n"
+    header = "def bodo_dataframe_astype(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=False, _bodo_object_typeref=None):\n"
     if df.is_table_format:
         # Table format must always pass the final table as its output.
         extra_globals = {}
@@ -1290,6 +1290,7 @@ def overload_dataframe_abs(df):
         if not (
             isinstance(arr_typ.dtype, types.Number)
             or arr_typ.dtype == bodo.types.timedelta64ns
+            or arr_typ == bodo.types.timedelta_array_type
         ):
             raise_bodo_error(
                 f"DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype {arr_typ.dtype}"
@@ -1671,6 +1672,8 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, bodo.types.DatetimeArrayType)
+            or coltype == bodo.types.timedelta_array_type
             or isinstance(
                 coltype,
                 (
@@ -1719,6 +1722,8 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, bodo.types.DatetimeArrayType)
+            or coltype == bodo.types.timedelta_array_type
             or isinstance(
                 coltype,
                 (
@@ -2037,7 +2042,9 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 def _is_describe_type(data):
     """Check if df.data has supported datatype for describe"""
     return (
-        isinstance(data, (IntegerArrayType, FloatingArrayType))
+        isinstance(
+            data, (IntegerArrayType, FloatingArrayType, bodo.types.DatetimeArrayType)
+        )
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
         or data.dtype == bodo.types.datetime64ns
     )
@@ -2079,6 +2086,7 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
     # number of datetime columns
     num_dt = sum(
         df.data[df.column_index[c]].dtype == bodo.types.datetime64ns
+        or isinstance(df.data[df.column_index[c]], bodo.types.DatetimeArrayType)
         for c in numeric_cols
     )
 
@@ -2087,7 +2095,9 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
         columns to match Pandas.
         https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L179
         """
-        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns
+        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns or isinstance(
+            df.data[col_ind], bodo.types.DatetimeArrayType
+        )
         if num_dt and num_dt != len(numeric_cols):
             if is_dt:
                 return f"des_{col_ind} + (np.nan,)"
@@ -2219,7 +2229,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
                 isinstance(column_type.dtype, (types.Number))
                 or column_type.dtype == bodo.types.datetime64ns
             )
-        ):
+        ) and not isinstance(column_type, bodo.types.DatetimeArrayType):
             # TODO: Link to supported Column input types.
             raise BodoError(
                 f"DataFrame.diff() column input type {column_type} not supported."
@@ -2238,6 +2248,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
         # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
         f"bodo.hiframes.series_impl.dt64_arr_sub(data_{i}, bodo.hiframes.rolling.shift(data_{i}, periods, False))"
         if df.data[i] == types.Array(bodo.types.datetime64ns, 1, "C")
+        or isinstance(df.data[i], bodo.types.DatetimeArrayType)
         else f"data_{i} - bodo.hiframes.rolling.shift(data_{i}, periods, False)"
         for i in range(len(df.columns))
     )
@@ -3173,7 +3184,7 @@ def _get_pd_dtype_str(t):
     it's not fully consistent for read_csv(), since datetime64 requires 'datetime64[ns]'
     instead of 'str'
     """
-    if t.dtype == types.NPDatetime("ns"):
+    if t.dtype == types.NPDatetime("ns") or isinstance(t, bodo.types.DatetimeArrayType):
         return "'datetime64[ns]'"
 
     return bodo.ir.csv_ext._get_pd_dtype_str(t)
@@ -5791,7 +5802,6 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
 
 
 @overload(pd.read_excel, no_unliteral=True)
-@overload(bd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,
     sheet_name=0,
@@ -5811,7 +5821,6 @@ def overload_read_excel(
     na_filter=True,
     verbose=False,
     parse_dates=False,
-    date_parser=None,
     date_format=None,
     thousands=None,
     decimal=".",
@@ -5861,7 +5870,6 @@ def impl(
     na_filter=True,
     verbose=False,
     parse_dates=False,
-    date_parser=None,
     date_format=None,
     thousands=None,
     decimal='.',
@@ -5890,7 +5898,6 @@ def impl(
             na_filter=na_filter,
             verbose=verbose,
             parse_dates={parse_dates_const},
-            date_parser=pd._libs.lib.no_default,
             date_format=date_format,
             thousands=thousands,
             decimal=decimal,

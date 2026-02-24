@@ -58,7 +58,7 @@ def test_series_where(index_val):
     _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
 
     # "other" not provided, defaults to NA
-    py_out = df["B"].where(df["A"] > 1)
+    py_out = df["B"].where(df["A"] > 1).astype("Int64")
 
     with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)

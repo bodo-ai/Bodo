@@ -863,6 +863,26 @@ def test_invalid_runtime_conversion(impl):
         bodo.jit(impl)(str_val)
 
 
+def test_removeprefix(memory_leak_check):
+    """test string.removeprefix() method"""
+
+    def test_impl(s, prefix):
+        return s.removeprefix(prefix)
+
+    check_func(test_impl, ("hello world", "hello"), only_seq=True)
+    check_func(test_impl, ("hello world", "world"), only_seq=True)
+
+
+def test_removesuffix(memory_leak_check):
+    """test string.removesuffix() method"""
+
+    def test_impl(s, suffix):
+        return s.removesuffix(suffix)
+
+    check_func(test_impl, ("hello world", "world"), only_seq=True)
+    check_func(test_impl, ("hello world", "hello"), only_seq=True)
+
+
 @pytest.mark.slow
 class TestString(unittest.TestCase):
     def test_pass_return(self):
@@ -1113,7 +1133,7 @@ class TestString(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
-            df = pd.read_parquet(fname)
+            df = pd.read_parquet(fname, dtype_backend="pyarrow")
             return df.five
 
         bodo_func = bodo.jit(distributed=False)(test_impl)

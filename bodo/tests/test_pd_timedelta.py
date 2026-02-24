@@ -381,8 +381,17 @@ def test_pd_timedelta_floordiv_int(timedelta_value, memory_leak_check):
     def test_impl(a, b):
         return a // b
 
-    check_func(test_impl, (timedelta_value, 3))
-    check_func(test_impl, (timedelta_value, -4))
+    # NOTE: pandas 3 floor division loses accuracy for some cases looks like
+    check_func(
+        test_impl,
+        (timedelta_value, 3),
+        py_output=pd.Timedelta(timedelta_value.value // 3),
+    )
+    check_func(
+        test_impl,
+        (timedelta_value, -4),
+        py_output=pd.Timedelta(timedelta_value.value // -4),
+    )
 
 
 @pytest.mark.slow
@@ -393,8 +402,16 @@ def test_pd_timedelta_floordiv_int_literal(timedelta_value, memory_leak_check):
     def test_impl2(val):
         return val // -4
 
-    check_func(test_impl1, (timedelta_value,))
-    check_func(test_impl2, (timedelta_value,))
+    check_func(
+        test_impl1,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value // 3),
+    )
+    check_func(
+        test_impl2,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value // -4),
+    )
 
 
 def test_pd_timedelta_floordiv_tds(memory_leak_check):
@@ -425,8 +442,16 @@ def test_pd_timedelta_truediv_int(timedelta_value, memory_leak_check):
     def test_impl(a, b):
         return a / b
 
-    check_func(test_impl, (timedelta_value, 3))
-    check_func(test_impl, (timedelta_value, -4))
+    check_func(
+        test_impl,
+        (timedelta_value, 3),
+        py_output=pd.Timedelta(timedelta_value.value / 3),
+    )
+    check_func(
+        test_impl,
+        (timedelta_value, -4),
+        py_output=pd.Timedelta(timedelta_value.value / -4),
+    )
 
 
 @pytest.mark.slow
@@ -437,8 +462,16 @@ def test_pd_timedelta_truediv_int_literal(timedelta_value, memory_leak_check):
     def test_impl2(val):
         return val / -4
 
-    check_func(test_impl1, (timedelta_value,))
-    check_func(test_impl2, (timedelta_value,))
+    check_func(
+        test_impl1,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value / 3),
+    )
+    check_func(
+        test_impl2,
+        (timedelta_value,),
+        py_output=pd.Timedelta(timedelta_value.value / -4),
+    )
 
 
 def test_pd_timedelta_truediv_tds(memory_leak_check):
@@ -657,22 +690,22 @@ def test_pd_timedelta_abs(timedelta_value, memory_leak_check):
 
 def test_pd_timedelta_range():
     def test1():
-        return pd.timedelta_range(start="1 day", periods=4)
+        return pd.timedelta_range(start="1 day", periods=4, unit="ns")
 
     def test2():
-        return pd.timedelta_range(start="1 day", periods=4, closed="right")
+        return pd.timedelta_range(start="1 day", periods=4, closed="right", unit="ns")
 
     def test3():
-        return pd.timedelta_range(start="1 day", end="2 days", freq="6H")
+        return pd.timedelta_range(start="1 day", end="2 days", freq="6h", unit="ns")
 
     def test4():
-        return pd.timedelta_range(start="1 day", end="5 days", periods=4)
+        return pd.timedelta_range(start="1 day", end="5 days", periods=4, unit="ns")
 
     tests = [test1, test2, test3, test4]
     for test in tests:
         actual = bodo.jit(test)()
         expected = test()
-        pd.testing.assert_index_equal(actual, expected)
+        pd.testing.assert_index_equal(actual, expected.astype("timedelta64[ns]"))
 
 
 def test_pd_timedelta_mult_int_series(

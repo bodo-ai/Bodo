@@ -707,6 +707,10 @@ class DistributedAnalysis:
             # categorical array and its underlying codes array have same distributions
             arr = rhs.value.name
             _meet_array_dists(self.typemap, lhs, arr, array_dists)
+        elif isinstance(rhs_typ, bodo.types.DatetimeArrayType) and attr == "_data":
+            # datetime array and its underlying data array have same distributions
+            arr = rhs.value.name
+            _meet_array_dists(self.typemap, lhs, arr, array_dists)
         # jitclass getattr (e.g. df1 = self.df)
         elif (
             isinstance(rhs_typ, types.ClassInstanceType)
@@ -3158,7 +3162,7 @@ class DistributedAnalysis:
             # array.all() is supported for all distributions
             return
 
-        if func_name in ("astype", "copy", "view", "tz_convert", "to_numpy"):
+        if func_name in ("astype", "copy", "view", "tz_convert", "to_numpy", "view"):
             in_arr_name = arr.name
             _meet_array_dists(self.typemap, lhs, in_arr_name, array_dists)
             return

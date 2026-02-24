@@ -117,8 +117,9 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
         }
 
     slow_mark_opt = pytest.mark.slow if is_slow else ()
+    dtype = pd.ArrowDtype(pa.time64("ns")) if name == "time" else None
     return pytest.param(
-        create_data_dict, create_answer_dict, None, False, id=name, marks=slow_mark_opt
+        create_data_dict, create_answer_dict, dtype, False, id=name, marks=slow_mark_opt
     )
 
 
@@ -280,7 +281,7 @@ def make_string_mode_test_params(name, alphabet, is_dict, is_slow):
             "date", "datetime.date.fromordinal(710000+{})", False
         ),
         make_date_time_mode_test_params(
-            "time", "bodo.types.Time(nanosecond={}**2)", False
+            "time", "bodo.types.Time(microsecond={}**2)", False
         ),
         make_bool_mode_test_params("bool_nullable", pd.BooleanDtype(), True, False),
         make_bool_mode_test_params("bool_numpy", None, False, False),

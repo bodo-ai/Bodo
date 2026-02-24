@@ -9,7 +9,7 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import check_func, no_default, pytest_pandas
+from bodo.tests.utils import check_func, pytest_pandas
 
 pytestmark = pytest_pandas
 
@@ -682,9 +682,10 @@ def test_series_categorical_astype_str(memory_leak_check):
     def impl(S):
         return S.astype(str, _bodo_nan_to_str=False)
 
-    S = pd.Series(pd.Categorical([1, 2, 4, None, 5] * 5))
+    S = pd.Series(
+        pd.Categorical(pd.array([1, 2, 4, None, 5] * 5, dtype=pd.Int64Dtype()))
+    )
     py_output = S.astype(str)
-    py_output[py_output == "nan"] = None
     check_func(impl, (S,), py_output=py_output)
 
 
@@ -758,63 +759,9 @@ def test_constant_lowering(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
-@pytest.mark.parametrize("offset", ("15D", pd.DateOffset(days=15), "0D"))
-def test_series_first_last(offset):
-    """
-    Test Series.first() and Series.last() with string and DateOffset offsets (for Series with DateTimeIndex)
-    """
-
-    def impl_first(S):
-        return S.first(offset)
-
-    def impl_last(S):
-        return S.last(offset)
-
-    n = 30
-    i = pd.date_range("2018-04-09", periods=n, freq="2D")
-    ts = pd.Series(np.arange(n), index=i)
-
-    # Pandas functionality is ostensibly incorrect, see:
-    # https://github.com/pandas-dev/pandas/blob/v1.4.0/pandas/core/generic.py#L8401-L8463
-    if isinstance(offset, pd.DateOffset):
-        end_date = end = ts.index[0] + offset
-        # Tick-like, e.g. 3 weeks
-        if isinstance(offset, pd._libs.tslibs.Tick) and end_date in ts.index:
-            end = ts.index.searchsorted(end_date, side="left")
-            py_output = ts.iloc[:end]
-        else:
-            py_output = ts.loc[:end]
-    else:
-        py_output = no_default
-
-    check_func(impl_first, (ts,), py_output=py_output)
-    check_func(impl_last, (ts,))
-
-
-def test_empty_series_first_last():
-    """
-    Test Series.first() and Series.last() with an empty series.
-    """
-
-    def impl_first(S):
-        return S.first("5D")
-
-    def impl_last(S):
-        return S.last("5D")
-
-    n = 10
-    ts = pd.Series(
-        np.arange(n), index=pd.date_range("2018-04-09", periods=n, freq="1D")
-    )
-    empty_ts = ts[ts > n]
-
-    check_func(impl_first, (empty_ts,))
-    check_func(impl_last, (empty_ts,))
-
-
 def _convert_helper(df, typ):
     # NOTE: first value in each column must not be NA
-    res = df.fillna(method="ffill").apply(lambda r: r.astype(typ), axis=1)
+    res = df.ffill().apply(lambda r: r.astype(typ), axis=1)
     res[pd.isna(df)] = np.nan
     res.replace(np.nan, pd.NA)
     return res
@@ -890,7 +837,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
             "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
-            "C": pd.date_range("01-01-2022", periods=6),
+            "C": pd.date_range("01-01-2022", periods=6, unit="ns"),
             "D": ["01-01-2021", "01-02-2021", "01-03-2022"] * 2,
         }
     )
@@ -898,7 +845,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
             "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
-            "C": pd.timedelta_range("1 second", periods=6),
+            "C": pd.timedelta_range("1 second", periods=6, unit="ns"),
             # String columns don't work properly in Pandas
         }
     )
@@ -1052,7 +999,7 @@ def test_series_duplicated(S_val, memory_leak_check):
     [
         pd.Index(list(ascii_lowercase[:15])),
         pd.Index(np.arange(100, 115)),
-        pd.date_range("01-01-2022", periods=15, freq="D"),
+        pd.date_range("01-01-2022", periods=15, freq="D", unit="ns"),
     ],
 )
 def test_series_first_last_valid_index(arr, idx):
@@ -1133,7 +1080,7 @@ def test_unique(memory_leak_check):
     "S",
     [
         pd.Series(np.arange(100)),
-        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30)),
+        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30, unit="ns")),
     ],
 )
 def test_dist_iat(S, memory_leak_check):
@@ -1204,7 +1151,17 @@ def test_series_rank(S, method, na_option, ascending, pct, memory_leak_check):
         ):
             bodo.jit(impl)(S)
     else:
-        check_func(impl, (S,), dist_test=False)
+        py_out = S.rank(
+            method=method, na_option=na_option, ascending=ascending, pct=pct
+        )
+        py_output = py_out.astype(np.float64)
+        check_func(
+            impl,
+            (S,),
+            dist_test=False,
+            py_output=py_output,
+            convert_to_nullable_float=False,
+        )
 
 
 @pytest.mark.slow()

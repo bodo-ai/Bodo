@@ -23,11 +23,11 @@ import adlfs
 import pandas as pd
 import psutil
 import pytest
+from mpi4py import MPI
 from numba.core.runtime import rtsys  # noqa TID253
 
 import bodo
 import bodo.user_logging
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
 
@@ -227,16 +227,22 @@ def pytest_collection_modifyitems(items):
 
     # DataFrame library NP=2
     azure_df_2p_markers = [
-        pytest.mark.bodo_df_1of3,
-        pytest.mark.bodo_df_2of3,
-        pytest.mark.bodo_df_3of3,
+        pytest.mark.bodo_df_1of5,
+        pytest.mark.bodo_df_2of5,
+        pytest.mark.bodo_df_3of5,
+        pytest.mark.bodo_df_4of5,
+        pytest.mark.bodo_df_5of5,
     ]
+
+    # Spawn NP=2
+    azure_spawn_2p_markers = [pytest.mark.bodo_spawn_1of2, pytest.mark.bodo_spawn_2of2]
 
     test_splits = [
         azure_1p_markers,
         azure_2p_markers,
         azure_df_1p_markers,
         azure_df_2p_markers,
+        azure_spawn_2p_markers,
     ]
 
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
@@ -686,9 +692,9 @@ def time_df():
             {
                 "A": pd.Series(
                     [
-                        bodo.types.Time(17, 33, 26, 91, 8, 79),
-                        bodo.types.Time(0, 24, 43, 365, 18, 74),
-                        bodo.types.Time(3, 59, 6, 25, 757, 3),
+                        bodo.types.Time(17, 33, 26, 91, 8),
+                        bodo.types.Time(0, 24, 43, 365, 18),
+                        bodo.types.Time(3, 59, 6, 25, 757),
                         bodo.types.Time(),
                         bodo.types.Time(4),
                         bodo.types.Time(6, 41),
@@ -700,8 +706,8 @@ def time_df():
                 ),
                 "B": pd.Series(
                     [
-                        bodo.types.Time(20, 6, 26, 324, 4, 79),
-                        bodo.types.Time(3, 59, 6, 25, 57, 3),
+                        bodo.types.Time(20, 6, 26, 324, 4),
+                        bodo.types.Time(3, 59, 6, 25, 57),
                         bodo.types.Time(7, 3, 45, 876, 234),
                         bodo.types.Time(17, 34, 29, 90),
                         bodo.types.Time(22, 13, 57),
@@ -709,7 +715,7 @@ def time_df():
                         bodo.types.Time(4),
                         bodo.types.Time(),
                         None,
-                        bodo.types.Time(0, 24, 4, 512, 18, 74),
+                        bodo.types.Time(0, 24, 4, 512, 18),
                     ]
                 ),
             }

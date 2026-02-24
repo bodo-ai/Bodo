@@ -12,6 +12,7 @@ import random
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 """In this file, to create test cases, we manually generate the rows that are
@@ -54,7 +55,12 @@ target_one_source_one_condition_one_matched_rows[ROW_ID_COL_NAME] = (
     target_one_source_one_condition_one_matched_rows["A"]
 )
 target_one_source_one_condition_one_not_matched_rows = pd.DataFrame(
-    {"X": [20], "Y": [-4], "Z": [-8], ROW_ID_COL_NAME: [None]}
+    {
+        "X": [20],
+        "Y": [-4],
+        "Z": [-8],
+        ROW_ID_COL_NAME: pd.array([None], dtype=pd.ArrowDtype(pa.int64())),
+    }
 )
 
 join_condition_two = "(SOURCE_TABLE.X - 9) = DEST_TABLE.A AND SOURCE_TABLE.Y in (-5, -4) AND DEST_TABLE.A IN (11, 20, 100)"
@@ -71,7 +77,12 @@ target_one_source_one_condition_two_matched_rows = pd.DataFrame(
     }
 )
 target_one_source_one_condition_two_not_matched_rows = pd.DataFrame(
-    {"X": [1, 3, 10], "Y": [-1, -2, -3], "Z": [-5, -6, -7], ROW_ID_COL_NAME: [None] * 3}
+    {
+        "X": [1, 3, 10],
+        "Y": [-1, -2, -3],
+        "Z": [-5, -6, -7],
+        ROW_ID_COL_NAME: pd.array([None] * 3, dtype=pd.ArrowDtype(pa.int64())),
+    }
 )
 
 not_matched_condition0 = "X = 1"

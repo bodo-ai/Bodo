@@ -44,7 +44,7 @@ def generate_series_accessor_test(name, df, accessor):
                         check_names=False,
                     )
                     continue
-            _test_equal(pd_accessor, bodo_accessor, check_pandas_types=False)
+            _test_equal(bodo_accessor, pd_accessor, check_pandas_types=False)
 
     return test_func
 

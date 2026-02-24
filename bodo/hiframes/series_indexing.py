@@ -36,10 +36,12 @@ from bodo.hiframes.pd_timestamp_ext import (
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
+    get_overload_const_int,
     get_overload_const_tuple,
     is_immutable_array,
     is_list_like_index_type,
     is_literal_type,
+    is_overload_constant_int,
     is_overload_constant_str,
     is_overload_constant_tuple,
     is_scalar_type,
@@ -851,3 +853,67 @@ def cast_series_iat(context, builder, fromty, toty, val):
     new_iat_val = cgutils.create_struct_proxy(toty)(context, builder)
     new_iat_val.obj = new_series
     return new_iat_val._getvalue()
+
+
+class HeterogeneousSeriesIlocType(types.Type):
+    def __init__(self, stype):
+        self.stype = stype
+        name = f"HeterogeneousSeriesIlocType({stype})"
+        super().__init__(name)
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
+    ndim = 1
+
+
+@register_model(HeterogeneousSeriesIlocType)
+class HeterogeneousSeriesIlocModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.stype)]
+        super().__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(HeterogeneousSeriesIlocType, "obj", "_obj")
+
+
+@intrinsic
+def init_heter_series_iloc(typingctx, obj):
+    def codegen(context, builder, signature, args):
+        (obj_val,) = args
+        iloc_type = signature.return_type
+
+        iloc_val = cgutils.create_struct_proxy(iloc_type)(context, builder)
+        iloc_val.obj = obj_val
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return iloc_val._getvalue()
+
+    return HeterogeneousSeriesIlocType(obj)(obj), codegen
+
+
+@overload_attribute(HeterogeneousSeriesType, "iloc")
+def overload_heter_series_iloc(s):
+    return lambda s: bodo.hiframes.series_indexing.init_heter_series_iloc(
+        s
+    )  # pragma: no cover
+
+
+@overload(operator.getitem, no_unliteral=True)
+def overload_heter_series_iloc_getitem(I, idx):
+    if isinstance(I, HeterogeneousSeriesIlocType) and is_overload_constant_int(idx):
+        arr_ind = get_overload_const_int(idx)
+
+        # TODO: box timedelta64, datetime.datetime/timedelta
+        return lambda I, idx: bodo.utils.conversion.box_if_dt64(
+            bodo.hiframes.pd_series_ext.get_series_data(I._obj)[arr_ind]
+        )  # pragma: no cover

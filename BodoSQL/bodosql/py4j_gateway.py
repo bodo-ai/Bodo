@@ -7,10 +7,10 @@ import sys
 import warnings
 from typing import cast
 
+from mpi4py import MPI
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
 import bodo
-from bodo.mpi4py import MPI
 
 # This gateway is always None on every rank but rank 0,
 # it is initialized by the get_gateway call.

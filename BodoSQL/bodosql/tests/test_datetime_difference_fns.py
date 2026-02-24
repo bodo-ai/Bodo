@@ -594,13 +594,15 @@ def test_timestampdiff_cols(
                 [
                     None if s is None else pd.Timestamp(s, tz=time_zone)
                     for s in subtract_strings
-                ]
+                ],
+                dtype=f"datetime64[ns, {time_zone}]" if time_zone else "datetime64[ns]",
             ),
             "B": pd.Series(
                 [
                     None if s is None else pd.Timestamp(s, tz=time_zone)
                     for s in subtract_from_strings
-                ]
+                ],
+                dtype=f"datetime64[ns, {time_zone}]" if time_zone else "datetime64[ns]",
             ),
             "C": [i in (1, 10, 100) for i in range(len(subtract_strings))],
         }
@@ -609,7 +611,7 @@ def test_timestampdiff_cols(
         {"A": table1.A, "B": table1.B, "RES": pd.Series(answers, dtype=pd.Int64Dtype())}
     )
     if has_case:
-        expected_output["RES"][table1.C] = None
+        expected_output["RES"] = expected_output["RES"].where(~table1.C, None)
     check_query(
         query,
         {"TABLE1": table1},

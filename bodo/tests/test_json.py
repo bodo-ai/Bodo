@@ -39,7 +39,9 @@ def test_read_json_list(datapath, memory_leak_check):
     fname_file = datapath("json_list_str.json")
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, (fname_file,))
 
@@ -55,7 +57,9 @@ def test_json_read_df(datapath, memory_leak_check):
     fname_dir_multi = datapath("example_multi.json")
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def test_impl_with_dtype(fname):
         return pd.read_json(
@@ -63,12 +67,13 @@ def test_json_read_df(datapath, memory_leak_check):
             orient="records",
             lines=True,
             dtype={
-                "one": np.float32,
+                "one": "Float64",
                 "two": str,
                 "three": "bool",
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = test_impl(fname_file)
@@ -111,7 +116,9 @@ def test_json_read_int_nulls(datapath, memory_leak_check):
     fname_dir_multi = datapath("int_nulls_multi.json")
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     py_out = test_impl(fname_file)
     check_func(test_impl, (fname_file,), py_output=py_out)
@@ -143,6 +150,7 @@ def test_json_read_str_arr(datapath, memory_leak_check):
             orient="records",
             lines=True,
             dtype={"A": str, "B": str},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, (fname_file,))
@@ -172,6 +180,7 @@ def test_json_read_multiline_object(datapath, memory_leak_check):
                 "City": str,
                 "State": str,
             },
+            dtype_backend="pyarrow",
         )
 
     check_func(
@@ -185,7 +194,7 @@ def test_json_invalid_path_const(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        return pd.read_json("in_data_invalid.json")
+        return pd.read_json("in_data_invalid.json", dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="pyarrow FileSystem: FileNotFoundError"):
         bodo.jit(test_impl)()
@@ -195,7 +204,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     """
     A helper function used to test json write correctness
     """
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -268,7 +277,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     params=[
         pd.DataFrame(
             {
-                "A": pd.date_range(start="2018-04-24", periods=12),
+                "A": pd.date_range(start="2018-04-24", periods=12, unit="ns"),
                 "B": [
                     "¡Y tú quién te crees?",
                     "🐍⚡",
@@ -300,7 +309,7 @@ def test_json_write_simple_df(memory_leak_check):
         df.to_json(fname, orient="columns", lines=False)
 
     def read_impl(fname):
-        return pd.read_json(fname)
+        return pd.read_json(fname, dtype_backend="pyarrow")
 
     n = 10
     df = pd.DataFrame(
@@ -326,7 +335,11 @@ def test_json_write_simple_df_records(test_df):
         # Supply D has a boolean dtype because there are null values.
         # Pandas by default will convert boolean with null values to float.
         return pd.read_json(
-            fname, orient="records", lines=False, dtype={"D": "boolean"}
+            fname,
+            orient="records",
+            lines=False,
+            dtype={"D": "boolean"},
+            dtype_backend="pyarrow",
         )
 
     json_write_test(test_impl, read_impl, test_df, "C", reset_index=True)
@@ -341,7 +354,9 @@ def test_json_write_simple_df_records_lines(memory_leak_check):
         df.to_json(fname, orient="records", lines=True)
 
     def read_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     n = 100
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) % 15})
@@ -392,7 +407,7 @@ def test_json_write_read_simple_df(memory_leak_check):
         df.to_json(fname)
 
     def read_impl(fname):
-        return pd.read_json(fname)
+        return pd.read_json(fname, dtype_backend="pyarrow")
 
     n = 10
     fname_file = "json_data.json"

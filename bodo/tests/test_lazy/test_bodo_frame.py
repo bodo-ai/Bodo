@@ -2,7 +2,14 @@ import os
 
 import pandas as pd
 import pytest
-from pandas.core.internals.array_manager import ArrayManager
+
+try:
+    from pandas.core.internals.array_manager import ArrayManager
+except ModuleNotFoundError:
+    # Pandas >= 3 does not have an array_manager module (uses BlockManager/SinglBlockManager).
+    class ArrayManager:
+        pass
+
 
 import bodo
 from bodo.pandas.frame import BodoDataFrame
@@ -72,7 +79,7 @@ def test_pandas_df_lazy_manager_metadata_data(
 
     assert lam_df.shape == (40, 2)
     assert lam_df.dtypes.equals(
-        pd.Series(["Int64", "string[python]"], index=["A0", "B5"])
+        pd.Series(["Int64", "string"], index=["A0", "B5"], dtype=object)
     )
 
     # With block managers head operations cause data pull when not using a BodoDataFrame
@@ -155,7 +162,7 @@ def test_pandas_df_lazy_manager_data_metadata(
     # Metadata still works after fetch
     assert lam_df.shape == (40, 2)
     assert lam_df.dtypes.equals(
-        pd.Series(["Int64", "string[python]"], index=["A0", "B5"])
+        pd.Series(["Int64", "string"], index=["A0", "B5"], dtype=object)
     )
 
 
@@ -195,7 +202,7 @@ def test_bodo_df_lazy_managers_metadata_data(
 
     assert lam_df.shape == (40, 2)
     assert lam_df.dtypes.equals(
-        pd.Series(["Int64", "string[python]"], index=["A0", "B5"])
+        pd.Series(["Int64", "string"], index=["A0", "B5"], dtype=object)
     )
 
     assert head_df.equals(lam_df.head(5))
@@ -279,7 +286,7 @@ def test_bodo_df_lazy_managers_data_metadata(
     # Metadata still works after fetch
     assert lam_df.shape == (40, 2)
     assert lam_df.dtypes.equals(
-        pd.Series(["Int64", "string[python]"], index=["A0", "B5"])
+        pd.Series(["Int64", "string"], index=["A0", "B5"], dtype=object)
     )
 
 
@@ -302,7 +309,9 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
 
     df = BodoDataFrame._from_mgr(base_df._mgr, [])
     assert df.shape == (40, 2)
-    assert df.dtypes.equals(pd.Series(["Int64", "string[python]"], index=["A0", "B5"]))
+    assert df.dtypes.equals(
+        pd.Series(["Int64", "string"], index=["A0", "B5"], dtype=object)
+    )
 
     assert base_df.head(5).equals(df.head(5))
 
@@ -440,6 +449,17 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_df._lazy
     pd.testing.assert_frame_equal(lam_sliced_head_df, head_df[2:3])
 
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
+
     # Trigger a fetch
     lam_sliced_head_df = lam_df.iloc[-3:]
     assert not lam_df._lazy
@@ -497,7 +517,7 @@ def test_csv(collect_func):
     with ensure_clean2(fname):
         bodo_df.to_csv(fname, index=False)
         assert bodo_df._lazy
-        read_df = pd.read_csv(fname)
+        read_df = pd.read_csv(fname, dtype_backend="pyarrow")
 
     pd.testing.assert_frame_equal(
         read_df,
@@ -562,7 +582,9 @@ def test_json(collect_func):
 
     @bodo.jit(spawn=True)
     def _read_bodo_df(fname):
-        read_df = pd.read_json(path_or_buf=fname, orient="records", lines=True)
+        read_df = pd.read_json(
+            path_or_buf=fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
         return read_df
 
     df = collect_func(0)

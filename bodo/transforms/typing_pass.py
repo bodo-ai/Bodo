@@ -1385,7 +1385,10 @@ class TypingTransforms:
             # In the case that an immutable filter var is used in the stmt
             # we don't need to move the stmt. The definition will be moved up
             # but that should be safe
-            if all(v.name in filter_vars for v in stmt.list_vars()):
+            if len(stmt.list_vars()) > 0 and all(
+                v.name in filter_vars for v in stmt.list_vars()
+            ):
+                # NOTE: length check is for Jump nodes which don't have any variables
                 new_body.append(stmt)
             else:
                 non_filter_nodes.append(stmt)
@@ -1493,7 +1496,20 @@ class TypingTransforms:
             cfg = compute_cfg_from_blocks(self.func_ir.blocks)
             new_target_block = []
             new_target_label = -1
-            for pred, _ in cfg.predecessors(label):
+            preds = self._get_reorder_filter_predecessor_labels(
+                label,
+                cfg,
+                func_ir,
+                read_node,
+                filter_nodes,
+                filter_vars,
+                non_filter_vars,
+                related_vars,
+                skipped_vars,
+                df_names,
+                used_dfs,
+            )
+            for pred in preds:
                 body = func_ir.blocks[pred].body
                 # NOTE: Numba as of 0.59 may generate an indirect self-loop with an
                 # extra empty block
@@ -1540,6 +1556,60 @@ class TypingTransforms:
             func_ir.blocks[new_target_label].body = new_target_block
 
         return new_working_body, changed
+
+    def _get_reorder_filter_predecessor_labels(
+        self,
+        label,
+        cfg,
+        func_ir,
+        read_node,
+        filter_nodes,
+        filter_vars,
+        non_filter_vars,
+        related_vars,
+        skipped_vars,
+        df_names,
+        used_dfs,
+    ):
+        """Get predecessor basic block labels for reordering filter nodes in streaming
+        read case.
+        Handles the Python 3.14 case where there is an extra basic block inserted
+        before the loop that contains initialization code.
+        """
+        preds = [l for l, _ in cfg.predecessors(label)]
+
+        # Handle Python 3.14 case with extra basic block before loop basic block
+        # that handles variable initialization.
+        # See test_batched_read_agg for example.
+        if len(preds) == 1:
+            # Match Python 3.14 pattern of basic header block dominating the loop body
+            # E.g. 0->1, 1->2,3, 2->1 (1 is header block, 2 is loop block)
+            dom_label = preds[0]
+            label_successors = [l for l, _ in cfg.successors(label)]
+            dom_preds = [l for l, _ in cfg.predecessors(dom_label)]
+
+            if (
+                len(label_successors) == 1
+                and label_successors[0] == dom_label
+                and len(dom_preds) == 2
+                and self._find_target_node_location_for_filtering(
+                    func_ir.blocks[dom_label].body,
+                    read_node,
+                    filter_nodes,
+                    filter_vars,
+                    non_filter_vars,
+                    related_vars,
+                    skipped_vars,
+                    df_names,
+                    used_dfs,
+                )
+                == 0
+            ):
+                # NOTE: _find_target_node_location_for_filtering() has side effects of
+                # updating data structures with the passed block body
+                return dom_preds
+
+        return preds
 
     def _get_filter_nodes(self, index_def, func_ir):
         """find ir.Expr nodes used in filtering output dataframe directly so they can

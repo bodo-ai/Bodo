@@ -117,7 +117,7 @@ def test_astype_check(memory_leak_check):
         return S.astype(np.dtype("datetime64[ns]"))
 
     n = 10
-    py_output = pd.array([None] * n, dtype=pd.ArrowDtype(pa.null()))
+    py_output = pd.Series([None] * n, dtype=pd.ArrowDtype(pa.timestamp("ns")))
     check_func(test_impl, (n,), py_output=py_output)
 
 

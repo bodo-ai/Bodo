@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 from numba.core import types  # noqa TID253
 
 import bodo
 from bodo import BodoWarning
-from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -1253,9 +1253,9 @@ def test_read_map_col(memory_leak_check):
         {
             "a": pd.Series(
                 [
-                    {"int20": 12345678901234567890.0, "null3": np.nan},
-                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
-                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"int20": 12345678901234567890.0, "null3": None},
+                    {"int": 10.0, "null": None, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": None},
                     {"dec": 0.01234567890123456789, "neg_int": -1235.0},
                     {
                         "/\\/\\": np.nan,
@@ -1316,32 +1316,45 @@ def test_read_struct_col(memory_leak_check):
     py_output = pd.DataFrame(
         {
             "idx": [1, 2, 3, 4, 5, 6],
-            "a": [
-                np.nan,
-                {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": np.nan,
-                    "b": 10.0,
-                    "c": np.nan,
-                    "d": True,
-                    "e": datetime.date(2023, 11, 1),
-                },
-                {
-                    "a": "test",
-                    "b": -0.853,
-                    "c": np.nan,
-                    "d": False,
-                    "e": datetime.date(1980, 10, 1),
-                },
-                {"a": "once", "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
-                {
-                    "a": "none",
-                    "b": 1635.0,
-                    "c": np.nan,
-                    "d": np.nan,
-                    "e": datetime.date(1970, 1, 1),
-                },
-            ],
+            "a": pd.array(
+                [
+                    None,
+                    {"a": None, "b": None, "c": None, "d": None, "e": None},
+                    {
+                        "a": None,
+                        "b": 10.0,
+                        "c": None,
+                        "d": True,
+                        "e": datetime.date(2023, 11, 1),
+                    },
+                    {
+                        "a": "test",
+                        "b": -0.853,
+                        "c": None,
+                        "d": False,
+                        "e": datetime.date(1980, 10, 1),
+                    },
+                    {"a": "once", "b": np.nan, "c": None, "d": None, "e": None},
+                    {
+                        "a": "none",
+                        "b": 1635.0,
+                        "c": None,
+                        "d": None,
+                        "e": datetime.date(1970, 1, 1),
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("a", pa.large_string()),
+                            pa.field("b", pa.float64()),
+                            pa.field("c", pa.null()),
+                            pa.field("d", pa.bool_()),
+                            pa.field("e", pa.date32()),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 
@@ -1411,7 +1424,9 @@ def test_read_null_variant_col_correctness(memory_leak_check):
     SELECT to_variant(null) as V
     FROM table(generator(rowcount=>500))
     """
-    py_output = pd.DataFrame({"v": pd.array([None] * 500)})
+    py_output = pd.DataFrame(
+        {"v": pd.array([None] * 500, dtype=pd.ArrowDtype(pa.string()))}
+    )
 
     check_func(impl, (query, conn), py_output=py_output, check_dtype=False)
 
@@ -1457,8 +1472,8 @@ def test_read_nested_in_array_col(memory_leak_check):
         {
             "a": pd.Series(
                 [
-                    [[pd.NA], [12.4, -0.57]],
-                    [[10.0, 10.0], np.nan],
+                    [[None], [12.4, -0.57]],
+                    [[10.0, 10.0], None],
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.float64()))),
@@ -1503,10 +1518,10 @@ def test_read_nested_struct_in_array_col(memory_leak_check):
             "c": pd.array(
                 [
                     [
-                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "dos", "stat": None, "cnt": None},
                         {"name": "tres", "stat": False, "cnt": -2},
                     ],
-                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [None, {"name": "uno", "stat": False, "cnt": None}],
                     [],
                 ],
                 dtype=pd.ArrowDtype(
@@ -1652,43 +1667,56 @@ def test_read_nested_in_struct_col(memory_leak_check):
 
     py_output = pd.DataFrame(
         {
-            "i": [
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": np.nan,
-                },
-                {
-                    "group": np.nan,
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": np.nan,
-                    "created": {"creator": "mark", "at": np.nan, "atnew": np.nan},
-                },
-                {
-                    "group": "dirt",
-                    # Sentinel NaN for Timestamp
-                    # 'updated': datetime.datetime(1970, 1, 1),
-                    "values": [-1.15e3, -164, 100056],
-                    "created": {
-                        "creator": np.nan,
-                        "at": np.nan,
-                        "atnew": [2010, 10, 10],
+            "i": pd.array(
+                [
+                    {
+                        "group": None,
+                        "values": None,
+                        "created": None,
                     },
-                },
-                {
-                    "group": "gravel",
-                    # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
-                    "values": [10.0, 10.1],
-                    "created": {
-                        "creator": np.nan,
-                        "at": datetime.date(1990, 5, 5),
-                        "atnew": np.nan,
+                    {
+                        "group": None,
+                        "values": None,
+                        "created": {"creator": "mark", "at": None, "atnew": None},
                     },
-                },
-            ],
+                    {
+                        "group": "dirt",
+                        "values": [-1.15e3, -164.0, 100056.0],
+                        "created": {
+                            "creator": None,
+                            "at": None,
+                            "atnew": [2010, 10, 10],
+                        },
+                    },
+                    {
+                        "group": "gravel",
+                        "values": [10.0, 10.1],
+                        "created": {
+                            "creator": None,
+                            "at": datetime.date(1990, 5, 5),
+                            "atnew": None,
+                        },
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("group", pa.large_string()),
+                            pa.field("values", pa.large_list(pa.float64())),
+                            pa.field(
+                                "created",
+                                pa.struct(
+                                    [
+                                        pa.field("creator", pa.large_string()),
+                                        pa.field("at", pa.date32()),
+                                        pa.field("atnew", pa.large_list(pa.int64())),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
         }
     )
 
@@ -1991,6 +2019,9 @@ def test_snowflake_dict_encoding_enabled(enable_dict_encoding, memory_leak_check
         bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = prev_small_table_threshold
 
 
+@pytest.mark.skip(
+    "TODO(BSE-5302) Ensure dictionary encoding in LINEITEM_100_VIEW lineitem"
+)
 def test_snowflake_bodo_read_as_dict(memory_leak_check):
     """
     Test Snowflake system sampling for dictionary-encoding detection

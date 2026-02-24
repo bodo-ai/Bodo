@@ -5,8 +5,9 @@ can be imported in multiple locations.
 
 from typing import Any
 
+from mpi4py import MPI
+
 import bodo
-from bodo.mpi4py import MPI
 from bodosql.py4j_gateway import configure_java_logging, get_gateway
 
 error = None

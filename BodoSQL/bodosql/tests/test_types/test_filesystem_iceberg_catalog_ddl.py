@@ -13,11 +13,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.spawn.utils import run_rank0
 from bodo.tests.conftest import iceberg_database  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
@@ -385,14 +386,16 @@ def test_describe_table(
                 "TYPE": ["BIGINT"],
                 "KIND": ["COLUMN"],
                 "NULL?": ["Y"],
-                "DEFAULT": [None],
+                "DEFAULT": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
                 "PRIMARY_KEY": ["N"],
                 "UNIQUE_KEY": ["N"],
-                "CHECK": [None],
-                "EXPRESSION": [None],
-                "COMMENT": [None],
-                "POLICY NAME": [None],
-                "PRIVACY DOMAIN": [None],
+                "CHECK": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "EXPRESSION": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "COMMENT": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "POLICY NAME": pd.array([None], dtype=pd.ArrowDtype(pa.large_string())),
+                "PRIVACY DOMAIN": pd.array(
+                    [None], dtype=pd.ArrowDtype(pa.large_string())
+                ),
             }
         )
         assert_equal_par(bodo_output, expected_output)
@@ -639,7 +642,7 @@ def test_iceberg_drop_table_purge_sql(
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")
 
 
 @pytest_mark_one_rank
@@ -676,7 +679,7 @@ def test_iceberg_drop_table_purge_execute_dll(
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")
 
 
 @pytest_mark_one_rank
@@ -716,4 +719,4 @@ def test_iceberg_drop_table_purge(purge, iceberg_filesystem_catalog, memory_leak
 
     for path in files_path:
         with pytest.raises(FileNotFoundError):
-            pd.read_parquet(path)
+            pd.read_parquet(path, dtype_backend="pyarrow")

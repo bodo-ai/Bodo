@@ -54,8 +54,6 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
-ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
-ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
 ll.add_symbol("get_isocalendar", hdatetime_ext.get_isocalendar)
 ll.add_symbol("get_days_from_date", hdatetime_ext.get_days_from_date)
 
@@ -763,38 +761,7 @@ def overload_datetime_date_arr_dtype(A):
 
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
-    n = bodo.utils.utils.object_length(c, val)
-    arr_typ = types.Array(types.int32, 1, "C")
-    data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_typ, [n])
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
-
-    # function signature of unbox_datetime_date_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="unbox_datetime_date_array"
-    )
-    c.builder.call(fn, [val, n, data_arr.data, bitmap_arr.data])
-
-    out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    out_dt_date_arr.data = data_arr._getvalue()
-    out_dt_date_arr.null_bitmap = bitmap_arr._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(out_dt_date_arr._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 def int_to_datetime_date_python(ia):
@@ -808,28 +775,7 @@ def int_array_to_datetime_date(ia):
 
 @box(DatetimeDateArrayType)
 def box_datetime_date_array(typ, val, c):
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-
-    data_arr = c.context.make_array(types.Array(types.int32, 1, "C"))(
-        c.context, c.builder, in_arr.data
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
-
-    n = c.builder.extract_value(data_arr.shape, 0)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [lir.IntType(64), lir.IntType(32).as_pointer(), lir.IntType(8).as_pointer()],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_datetime_date_array"
-    )
-    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data])
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic

@@ -224,7 +224,9 @@ def array_op_describe_dt_impl(arr):  # pragma: no cover
 def overload_array_op_describe(arr):
     # Pandas doesn't return std for describe of datetime64 data
     # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
-    if arr.dtype == bodo.types.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns or isinstance(
+        arr, bodo.types.DatetimeArrayType
+    ):
         return array_op_describe_dt_impl
 
     return array_op_describe_impl
@@ -246,7 +248,7 @@ def array_op_min(arr):  # pragma: no cover
 
 @overload(array_op_min)
 def overload_array_op_min(arr):
-    if arr.dtype == bodo.types.timedelta64ns:
+    if arr.dtype in (bodo.types.timedelta64ns, bodo.types.pd_timedelta_type):
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -275,6 +277,24 @@ def overload_array_op_min(arr):
                 count_val = 0
                 if not bodo.libs.array_kernels.isna(arr, i):
                     val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    count_val = 1
+                s = min(s, val)
+                count += count_val
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        return impl_dt64
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_dt64(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = numba.cpython.builtins.get_type_max_value(np.int64)
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i].value)
                     count_val = 1
                 s = min(s, val)
                 count += count_val
@@ -374,7 +394,7 @@ def array_op_max(arr):  # pragma: no cover
 
 @overload(array_op_max, jit_options={"cache": True})
 def overload_array_op_max(arr):
-    if arr.dtype == bodo.types.timedelta64ns:
+    if arr.dtype in (bodo.types.timedelta64ns, bodo.types.pd_timedelta_type):
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -403,6 +423,24 @@ def overload_array_op_max(arr):
                 count_val = 0
                 if not bodo.libs.array_kernels.isna(arr, i):
                     val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
+                    count_val = 1
+                s = max(s, val)
+                count += count_val
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        return impl_dt64
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl_dt64(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = numba.cpython.builtins.get_type_min_value(np.int64)
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i].value)
                     count_val = 1
                 s = max(s, val)
                 count += count_val
@@ -508,6 +546,16 @@ def overload_array_op_mean(arr):
             )
 
         return impl
+
+    if isinstance(arr, bodo.types.DatetimeArrayType):
+
+        def impl(arr):  # pragma: no cover
+            return pd.Timestamp(
+                types.int64(bodo.libs.array_ops.array_op_mean(arr._data.view(np.int64)))
+            )
+
+        return impl
+
     # see core/nanops.py/nanmean() for output types
     # TODO: more accurate port of dtypes from pandas
     sum_dtype = types.float64

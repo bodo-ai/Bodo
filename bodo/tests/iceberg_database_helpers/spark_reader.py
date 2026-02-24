@@ -26,8 +26,9 @@ def read_iceberg_table(table_name, database_name, spark=None):
 
 
 def read_iceberg_table_single_rank(table_name, database_name, spark=None):
+    from mpi4py import MPI
+
     import bodo
-    from bodo.mpi4py import MPI
 
     if bodo.get_rank() == 0:
         py_out, _, _ = read_iceberg_table(table_name, database_name)

@@ -54,7 +54,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                 "Sort output schema has different number of columns than "
                 "LogicalOrder or LogicalTopN");
         }
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
         std::vector<int64_t> ascending;

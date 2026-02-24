@@ -1,0 +1,398 @@
+#pragma once
+
+#include <Python.h>
+#include <object.h>
+#include <cudf/column/column_factories.hpp>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <utility>
+#include "../_util.h"
+#include "../io/arrow_reader.h"
+#include "../libs/_array_utils.h"
+#include "../libs/_query_profile_collector.h"
+#include "../libs/_utils.h"
+#include "../libs/groupby/_groupby_common.h"
+#include "../libs/streaming/cuda_groupby.h"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/operator/logical_aggregate.hpp"
+#include "duckdb/planner/operator/logical_distinct.hpp"
+#include "expression.h"
+#include "operator.h"
+
+struct PhysicalGPUAggregateMetrics {
+    using time_t = MetricBase::TimerValue;
+
+    time_t init_time = 0;     // stage_0
+    time_t consume_time = 0;  // stage_1
+    time_t produce_time = 0;  // stage_2
+};
+
+inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
+    // Temporarily don't support count_start and quantile on GPU.
+    if (logical_aggregate.groups.empty()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < logical_aggregate.expressions.size(); i++) {
+        const auto& expr = logical_aggregate.expressions[i];
+
+        if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
+            throw std::runtime_error(
+                "Aggregate expression is not a bound aggregate: " +
+                expr->ToString());
+        }
+        auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+
+        // Check if the aggregate function is supported
+        bool is_udf = agg_expr.function.name.starts_with("udf");
+        if (is_udf) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool gpu_capable(duckdb::LogicalDistinct& logical_distinct) {
+    return true;
+}
+
+/**
+ * @brief Physical node for groupby aggregation
+ *
+ */
+class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
+   public:
+    explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
+                                  duckdb::LogicalAggregate& op) {
+        time_pt start_init = start_timer();
+        batch_size = get_gpu_streaming_batch_size();
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
+
+        std::vector<uint64_t> keys;
+        std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
+
+        this->initKeysAndSchema(col_ref_map, op.groups, in_table_schema, keys);
+
+        std::optional<bool> dropna = std::nullopt;
+        for (size_t i = 0; i < op.expressions.size(); i++) {
+            const auto& expr = op.expressions[i];
+
+            if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
+                throw std::runtime_error(
+                    "Aggregate expression is not a bound aggregate: " +
+                    expr->ToString());
+            }
+            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+
+            // Check if the aggregate function is supported
+            if (function_to_ftype.find(agg_expr.function.name) ==
+                function_to_ftype.end()) {
+                throw std::runtime_error("Unsupported aggregate function: " +
+                                         agg_expr.function.name);
+            }
+
+            if (agg_expr.children.size() != 1) {
+                throw std::runtime_error(
+                    "Aggregate expression for builtin funcs must have exactly "
+                    "one child expression" +
+                    expr->ToString());
+            }
+
+            auto& child_expr = agg_expr.children[0];
+            if (child_expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Aggregate expression must have only col ref "
+                    "expression children" +
+                    expr->ToString());
+            }
+            auto& colref = child_expr->Cast<duckdb::BoundColumnRefExpression>();
+            // Extract bind_info
+            BodoAggFunctionData& bind_info =
+                agg_expr.bind_info->Cast<BodoAggFunctionData>();
+            std::unique_ptr<bodo::DataType> out_arr_type;
+
+            uint64_t col_idx = col_ref_map.at(
+                {colref.binding.table_index, colref.binding.column_index});
+
+            auto ftype = function_to_ftype.at(agg_expr.function.name);
+            column_agg_funcs.push_back({col_idx, ftype});
+            std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
+                output_dtype = get_groupby_output_dtype(
+                    ftype, in_table_schema->column_types[col_idx]->array_type,
+                    in_table_schema->column_types[col_idx]->c_type);
+            std::string timezone =
+                in_table_schema->column_types[col_idx]->timezone;
+            out_arr_type = std::make_unique<bodo::DataType>(
+                std::get<0>(output_dtype), std::get<1>(output_dtype), -1, -1,
+                timezone);
+
+            this->output_schema->append_column(std::move(out_arr_type));
+            this->output_schema->column_names.push_back(agg_expr.function.name);
+
+            // NOTE: drop_na must be consistent accross all expressions
+            // This is a little awkward but AFAICT there is no bind_info for
+            // the LogicalAggregate.
+            if (!dropna.has_value()) {
+                dropna = bind_info.dropna;
+            }
+            if (dropna.value() != bind_info.dropna) {
+                throw std::runtime_error(
+                    "PhysicalGPUAggregate: All aggregate expressions must have "
+                    "the same "
+                    "value for the dropna parameter.");
+            }
+        }
+
+        // TODO: propagate dropna value when agg columns are pruned out.
+        if (!dropna.has_value()) {
+            dropna = true;
+        }
+        arrow_output_schema = this->output_schema->ToArrowSchema();
+        this->groupby_state = std::make_unique<CudaGroupbyState>(
+            keys, column_agg_funcs, arrow_output_schema);
+
+        this->metrics.init_time += end_timer(start_init);
+    }
+
+    explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
+                                  duckdb::LogicalDistinct& op) {
+        time_pt start_init = start_timer();
+        batch_size = get_gpu_streaming_batch_size();
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
+
+        std::vector<uint64_t> cols_to_keep_vec;
+        this->initKeysAndSchema(col_ref_map, op.distinct_targets,
+                                in_table_schema, cols_to_keep_vec);
+
+        std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
+        this->output_schema = in_table_schema;
+        arrow_output_schema = this->output_schema->ToArrowSchema();
+        this->groupby_state = std::make_unique<CudaGroupbyState>(
+            cols_to_keep_vec, column_agg_funcs, arrow_output_schema);
+
+        this->metrics.init_time += end_timer(start_init);
+    }
+
+    virtual ~PhysicalGPUAggregate() = default;
+
+    void FinalizeSink() override {}
+
+    void FinalizeSource() override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            metrics.consume_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            metrics.produce_time);
+    }
+
+    /**
+     * @brief process input tables to groupby build (populate the build
+     * table)
+     *
+     * @return OperatorResult
+     */
+    OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
+        time_pt start_consume = start_timer();
+        bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+        groupby_state->build_consume_batch(input_batch.table, local_is_last,
+                                           se->stream,
+                                           input_batch.stream_event);
+
+        if (local_is_last) {
+            // Tell groupby state that all data from the local pipeline has
+            // been processed.
+            groupby_state->all_local_data_processed();
+        }
+        this->metrics.consume_time += end_timer(start_consume);
+        return (local_is_last && groupby_state->all_complete())
+                   ? OperatorResult::FINISHED
+                   : (local_is_last ? OperatorResult::HAVE_MORE_OUTPUT
+                                    : OperatorResult::NEED_MORE_INPUT);
+    }
+
+    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) override {
+        time_pt start_produce = start_timer();
+        std::unique_ptr<cudf::table> next_batch;
+
+        if (!leftover_tbl) {
+            leftover_tbl = std::move(groupby_state->produce_output_batch(
+                out_is_last /* output */, true, se->stream));
+        }
+
+        std::size_t n = leftover_tbl->num_rows();
+        if (n <= batch_size) {
+            next_batch = std::move(leftover_tbl);
+        } else {
+            cudf::table_view tv = leftover_tbl->view();
+            next_batch = std::make_unique<cudf::table>(
+                cudf::slice(tv, {0, (int)batch_size})[0]);
+            leftover_tbl = std::make_unique<cudf::table>(
+                cudf::slice(tv, {(int)batch_size, (int)n})[0]);
+        }
+
+        this->metrics.produce_time += end_timer(start_produce);
+        GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
+        return {out_table_info, (out_is_last && leftover_tbl == nullptr)
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::HAVE_MORE_OUTPUT};
+    }
+
+    /**
+     * @brief GetResult - just for API compatability but should never be called
+     */
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+        throw std::runtime_error("GetResult called on an aggregate node.");
+    }
+
+    /**
+     * @brief Get the output schema of groupby aggregation
+     *
+     * @return std::shared_ptr<bodo::Schema>
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return output_schema;
+    }
+
+    std::string ToString() override { return PhysicalGPUSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
+
+   private:
+    /**
+     * @brief Initialize the key column indices for the groupby operation
+     *        and the output schema.
+     *
+     * @param col_ref_map Mapping of column references to indices.
+     * @param groups List of group expressions.
+     */
+    void initKeysAndSchema(
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+            col_ref_map,
+        const duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& groups,
+        const std::shared_ptr<bodo::Schema>& in_table_schema,
+        std::vector<uint64_t>& keys) {
+        for (const auto& expr : groups) {
+            if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Groupby key expression is not a column reference: " +
+                    expr->ToString());
+            }
+            auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
+            keys.push_back(col_ref_map.at(
+                {colref.binding.table_index, colref.binding.column_index}));
+        }
+
+        uint64_t ncols = in_table_schema->ncols();
+        initInputColumnMapping(this->input_col_inds, keys, ncols);
+
+        // Add keys to output schema
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (size_t i = 0; i < keys.size(); i++) {
+            this->output_schema->append_column(
+                in_table_schema->column_types[keys[i]]->copy());
+            if (in_table_schema->column_names.size() > 0) {
+                this->output_schema->column_names.push_back(
+                    in_table_schema->column_names[keys[i]]);
+            } else {
+                this->output_schema->column_names.push_back("key_" +
+                                                            std::to_string(i));
+            }
+        }
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+    }
+
+    std::shared_ptr<CudaGroupbyState> groupby_state;
+    std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<arrow::Schema> arrow_output_schema;
+    PhysicalGPUAggregateMetrics metrics;
+    // Mapping of input table column indices to move keys to the front.
+    std::vector<int64_t> input_col_inds;
+
+    // Map from function name to Bodo_FTypes
+    static const std::map<std::string, int32_t> function_to_ftype;
+    // For batching the output of groupby_state.
+    std::unique_ptr<cudf::table> leftover_tbl;
+    bool out_is_last = false;
+    size_t batch_size;
+};
+
+/**
+ * @brief Physical node for count_star().
+ *
+ */
+class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
+   public:
+    explicit PhysicalGPUCountStar() : local_count(0), global_count(0) {
+        std::vector<std::unique_ptr<bodo::DataType>> types;
+        types.emplace_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,
+            Bodo_CTypes::CTypeEnum::UINT64));
+        std::vector<std::string> names = {std::string("count_star()")};
+        out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
+        out_schema->metadata = std::make_shared<bodo::TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+    }
+
+    virtual ~PhysicalGPUCountStar() = default;
+
+    void FinalizeSink() override {
+        int result =
+            MPI_Allreduce(&local_count, &global_count, 1,
+                          MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+        if (result != MPI_SUCCESS) {
+            throw std::runtime_error(
+                "PhysicalGPUCountStar::Finalize MPI_Allreduce failed.");
+        }
+    }
+
+    void FinalizeSource() override {}
+
+    OperatorResult ConsumeBatchGPU(
+        GPU_DATA input_batch, OperatorResult prev_op_result,
+        std::shared_ptr<StreamAndEvent> se) override {
+        local_count += input_batch.table->num_rows();
+        return prev_op_result == OperatorResult::FINISHED
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
+    }
+
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+        throw std::runtime_error(
+            "GetResult called on a PhysicalGPUCountStar node.");
+    }
+
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return out_schema;
+    }
+
+    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) override {
+        cudf::numeric_scalar<uint64_t> s(global_count, true);
+        auto col = cudf::make_column_from_scalar(s, 1, se->stream);
+        std::vector<std::unique_ptr<cudf::column>> cols;
+        cols.push_back(std::move(col));
+        auto scalar_table = std::make_unique<cudf::table>(std::move(cols));
+        std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
+            GPU_DATA(std::move(scalar_table), out_schema->ToArrowSchema(), se),
+            OperatorResult::FINISHED);
+        return ret;
+    }
+
+   private:
+    uint64_t local_count, global_count;
+    std::shared_ptr<bodo::Schema> out_schema;
+};

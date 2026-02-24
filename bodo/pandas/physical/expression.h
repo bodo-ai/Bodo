@@ -151,7 +151,8 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
  */
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
-    const std::string &comparator);
+    const std::string &comparator,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Convert ExprResult to arrow and cast to the requested type.
@@ -732,9 +733,11 @@ void EnsureModRegistered();
  */
 class PhysicalBinaryExpression : public PhysicalExpression {
    public:
-    PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
-                             std::shared_ptr<PhysicalExpression> right,
-                             duckdb::ExpressionType etype) {
+    PhysicalBinaryExpression(
+        std::shared_ptr<PhysicalExpression> left,
+        std::shared_ptr<PhysicalExpression> right, duckdb::ExpressionType etype,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : result_type(_result_type) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -745,9 +748,11 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         }
     }
 
-    PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
-                             std::shared_ptr<PhysicalExpression> right,
-                             std::string &opstr) {
+    PhysicalBinaryExpression(
+        std::shared_ptr<PhysicalExpression> left,
+        std::shared_ptr<PhysicalExpression> right, std::string &opstr,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : result_type(_result_type) {
         children.push_back(left);
         children.push_back(right);
         if (opstr == "+") {
@@ -757,6 +762,10 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "*") {
             comparator = "multiply";
         } else if (opstr == "/") {
+            comparator = "divide";
+        } else if (opstr == "//") {
+            // "//" is integer division in DuckDB which is handled by divide
+            // function of Arrow
             comparator = "divide";
         } else if (opstr == "floor") {
             comparator = "floor";
@@ -783,7 +792,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> right_res =
             children[1]->ProcessBatch(input_batch);
 
-        auto result = do_arrow_compute_binary(left_res, right_res, comparator);
+        std::shared_ptr<array_info> result = do_arrow_compute_binary(
+            left_res, right_res, comparator, result_type);
         return std::make_shared<ArrayExprResult>(result, "Binary" + comparator);
     }
 
@@ -802,6 +812,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
 
    protected:
     std::string comparator;
+    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 /**

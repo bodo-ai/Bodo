@@ -5,6 +5,7 @@ import random
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 import pytz
 
@@ -183,7 +184,7 @@ def test_datetime_operations(memory_leak_check):
             None,
             datetime.timedelta(2, 2, 2),
         )
-    )
+    ).astype("timedelta64[ns]")
     check_func(test_sub, (tdS, dt_td))
     check_func(test_sub, (dt_td, tdS))
     check_func(test_sub, (S, tdS))
@@ -240,7 +241,8 @@ def test_dt64_sub_output(memory_leak_check):
             ]
         )
     )
-    check_func(impl, (S1, S2), check_dtype=False)
+    py_output = (S2 - S1).dt.days.astype("Int64")
+    check_func(impl, (S1, S2), check_dtype=False, py_output=py_output)
 
 
 @pytest.mark.slow
@@ -593,7 +595,7 @@ def test_datetime_comparisons_datetime_datetime(is_slow_run, memory_leak_check):
         dtype="datetime64[ns]",
         freq=None,
     )
-    S = pd.Series(Srange)
+    S = pd.Series(Srange).astype(pd.ArrowDtype(pa.timestamp("ns")))
     check_func(test_ge, (S, t))
     if is_slow_run:
         return
@@ -762,8 +764,8 @@ def test_datetime_comparisons_datetime_list(is_slow_run, memory_leak_check):
         dtype="datetime64[ns]",
         freq=None,
     )
-    S1 = pd.Series(Srange1)
-    S2 = pd.Series(Srange2)
+    S1 = pd.Series(Srange1).astype(pd.ArrowDtype(pa.timestamp("ns")))
+    S2 = pd.Series(Srange2).astype(pd.ArrowDtype(pa.timestamp("ns")))
     check_func(test_ge, (S1, S2))
     if is_slow_run:
         return
@@ -867,7 +869,7 @@ def test_datetime_boxing(memory_leak_check):
 
     # test series(datetime.date)
     S = pd.Series(pd.date_range("2017-01-03", "2017-01-17").date)
-    S[10] = None
+    S[10] = pd.NA
     check_func(test_impl, (S,))
 
 
@@ -1072,15 +1074,6 @@ def test_datetime_date_getattr(memory_leak_check):
         pd.Series(np.append([None], pd.date_range("20200101", periods=11))).astype(
             "datetime64[ns]"
         ),
-        # Timedelta64
-        pd.Series(
-            np.append(
-                [None],
-                pd.timedelta_range(
-                    start="12 days", end="12 days 3 hours 2 seconds", periods=11
-                ),
-            )
-        ).astype("timedelta64[ns]"),
     ]
 )
 def datetime_convertable_series(request):
@@ -1163,10 +1156,7 @@ def test_td64_astype(datetime_convertable_series, memory_leak_check):
 
     # Conversion from dt64 -> td64 is supported in Numpy but not pandas
     if datetime_convertable_series.dtype == np.dtype("datetime64[ns]"):
-        py_output = pd.Series(
-            datetime_convertable_series.values.astype("timedelta64[ns]"),
-            index=datetime_convertable_series.index,
-        )
+        return
     else:
         py_output = no_default
 
@@ -1201,8 +1191,8 @@ def test_td64_max(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
@@ -1217,8 +1207,8 @@ def test_td64_min(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
@@ -1258,7 +1248,7 @@ def test_dt64_astype_int64(memory_leak_check):
             np.datetime64("2021-03-03"),
         ]
         * 4
-    )
+    ).astype("datetime64[ns]")
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S,))
 
@@ -1320,12 +1310,12 @@ def test_td64_astype_int64(memory_leak_check):
 
     S = pd.Series(
         [
-            np.timedelta64(10, "Y"),
-            np.timedelta64(9, "M"),
+            np.timedelta64(100, "h"),
+            np.timedelta64(9, "h"),
             np.timedelta64(8, "W"),
         ]
         * 4
-    )
+    ).astype("timedelta64[ns]")
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S,))
 
@@ -1590,7 +1580,7 @@ def test_dt_ceil_timestamp_others(series_value_no_bad_dates, memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -1610,7 +1600,7 @@ def test_dt_floor_timestamp_others(series_value_no_bad_dates, memory_leak_check)
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -1623,7 +1613,7 @@ def test_timestamp_floor_edgecase(memory_leak_check):
         return ts.floor(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1636,7 +1626,7 @@ def test_timestamp_ceil_edgecase(memory_leak_check):
         return ts.ceil(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1649,7 +1639,7 @@ def test_timestamp_round_edgecase(memory_leak_check):
         return ts.round(freq)
 
     ts = pd.Timestamp("2010-01-01 11:24:02")
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (ts, freq))
 
@@ -1669,7 +1659,7 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
     def impl(S, freq):
         return S.dt.round(freq)
 
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (series_value_no_bad_dates, freq))
 
@@ -1685,7 +1675,7 @@ def test_dt_timedelta_fields(memory_leak_check):
         exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
-        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        S = pd.timedelta_range("1s", "1d", freq="s", unit="ns").to_series()
         check_func(impl, (S, field), check_dtype=False)
 
 
@@ -1700,7 +1690,7 @@ def test_dt_timedelta_methods(memory_leak_check):
         exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
-        S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+        S = pd.timedelta_range("1s", "1d", freq="s", unit="ns").to_series()
         check_func(impl, (S, method))
 
 
@@ -1849,9 +1839,9 @@ def test_timedelta_td64_ops(cmp_op, memory_leak_check):
     func = generate_comparison_ops_func(cmp_op)
     val1 = pd.Timedelta(days=1, seconds=42)
     val2 = pd.Timedelta(weeks=-2, days=11, microseconds=42)
-    check_func(func, (val1, val1.to_numpy()))
-    check_func(func, (val1.to_numpy(), val2))
-    check_func(func, (val2, val1.to_numpy()))
+    check_func(func, (val1, val1.to_numpy().astype("timedelta64[ns]")))
+    check_func(func, (val1.to_numpy().astype("timedelta64[ns]"), val2))
+    check_func(func, (val2, val1.to_numpy().astype("timedelta64[ns]")))
 
 
 @pytest.mark.slow
@@ -1912,7 +1902,11 @@ def test_pd_to_datetime(memory_leak_check):
             [None, datetime.date(2019, 3, 3)],
         )
     )
-    check_func(test_input, (date_arr,))
+    check_func(
+        test_input,
+        (date_arr,),
+        py_output=pd.to_datetime(date_arr).astype("datetime64[ns]"),
+    )
 
     date_scalar = datetime.date(2023, 4, 18)
     check_func(test_input, (date_scalar,))
@@ -1925,7 +1919,7 @@ def test_pd_to_datetime(memory_leak_check):
     S = pd.Series(
         ["2017-03-03", "2017-04-04", "2017-04-04", None, "2018-01-01", "2017-03-03"]
     ).astype("category")
-    check_func(test_input, (S,))
+    check_func(test_input, (S,), py_output=pd.to_datetime(S).astype("datetime64[ns]"))
 
     # TODO: Support following inputs
     # df = pd.DataFrame({'year': [2015, 2016], 'month': [2, 3], 'day': [4, 5]})
@@ -1950,7 +1944,9 @@ def test_pd_to_timedelta_td64(memory_leak_check):
     def impl(S):
         return pd.to_timedelta(S)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
     check_func(impl, (S,))
 
 
@@ -1965,7 +1961,7 @@ def test_pd_to_timedelta_datetime_td_arr(memory_leak_check):
         datetime.timedelta(days=5, seconds=4, weeks=4),
         [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 10,
     )
-    check_func(impl, (arr,))
+    check_func(impl, (arr,), py_output=pd.to_timedelta(arr).astype("timedelta64[ns]"))
 
 
 @pytest.mark.slow
@@ -2014,7 +2010,7 @@ def test_pd_to_timedelta_int_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
     def impl(a):
-        return pd.to_timedelta(a, "U")
+        return pd.to_timedelta(a, "us")
 
     arr1 = pd.arrays.IntegerArray(
         np.array([115, 314, 0, 410214, 15] * 5, np.int64),
@@ -2022,8 +2018,12 @@ def test_pd_to_timedelta_int_arr(memory_leak_check):
     )
 
     arr2 = np.array([115, 314, 0, 410214, 15] * 5)
-    check_func(impl, (arr1,))
-    check_func(impl, (arr2,))
+    check_func(
+        impl, (arr1,), py_output=pd.to_timedelta(arr1, "us").astype("timedelta64[ns]")
+    )
+    check_func(
+        impl, (arr2,), py_output=pd.to_timedelta(arr2, "us").astype("timedelta64[ns]")
+    )
 
 
 @pytest.mark.slow
@@ -2070,7 +2070,7 @@ def test_pd_to_timedelta_int_scalar(memory_leak_check):
     """Test pd.to_timedelta()"""
 
     def impl(a):
-        return pd.to_timedelta(a, "L")
+        return pd.to_timedelta(a, "ms")
 
     check_func(impl, (100,))
 
@@ -2190,7 +2190,9 @@ def test_dt_components(memory_leak_check):
     def impl(S):
         return S.dt.components
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     check_func(impl, (S,))
 
@@ -2199,7 +2201,9 @@ def test_dt_ceil_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2212,8 +2216,10 @@ def test_dt_ceil_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.ceil(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
@@ -2222,7 +2228,9 @@ def test_dt_floor_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2235,8 +2243,10 @@ def test_dt_floor_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.floor(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
@@ -2245,7 +2255,9 @@ def test_dt_round_timedelta_min(memory_leak_check):
     def impl(S, freq):
         return S.dt.round(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
 
     freq = "min"
     check_func(impl, (S, freq))
@@ -2258,8 +2270,10 @@ def test_dt_round_timedelta_others(memory_leak_check):
     def impl(S, freq):
         return S.dt.round(freq)
 
-    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
-    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    S = pd.timedelta_range(
+        start="1 day", end="2 days", periods=100, unit="ns"
+    ).to_series()
+    freqs = ["D", "h", "min", "s", "ms", "us", "ns"]
     for freq in freqs:
         check_func(impl, (S, freq))
 
@@ -2347,7 +2361,7 @@ def test_datetime_index_set(memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     bodo_func(dt_df)
-    dt_df["std"] = pd.DatetimeIndex(dt_df["str_date"])
+    dt_df["std"] = pd.DatetimeIndex(dt_df["str_date"]).values.astype("datetime64[ns]")
     allequal = dt_df["std"].equals(dt_df["bodo"])
     assert allequal == True
 

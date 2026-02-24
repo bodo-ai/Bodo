@@ -155,27 +155,27 @@ def get_format_str(request):
 @pytest.fixture
 def tz_aware_df():
     # Transition to Daylight Savings
-    # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds
+    # "1D2h37min48s" --> 1 day, 2 hours, 37 minutes, 48 seconds
     to_dst_series = pd.date_range(
-        start="11/3/2021", freq="1D2H37T48S", periods=30, tz="US/Pacific"
+        start="11/3/2021", freq="1D2h37min48s", periods=30, tz="US/Pacific", unit="ns"
     ).to_series()
 
     # Transition back from Daylight Savings
     from_dst_series = pd.date_range(
-        start="03/1/2022", freq="0D12H30T1S", periods=60, tz="US/Pacific"
+        start="03/1/2022", freq="0D12h30min1s", periods=60, tz="US/Pacific", unit="ns"
     ).to_series()
 
     # February is weird with leap years
     feb_leap_year_series = pd.date_range(
-        start="02/20/2020", freq="1D0H30T0S", periods=20, tz="US/Pacific"
+        start="02/20/2020", freq="1D0h30min0s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     second_quarter_series = pd.date_range(
-        start="05/01/2015", freq="2D0H1T59S", periods=20, tz="US/Pacific"
+        start="05/01/2015", freq="2D0h1min59s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     third_quarter_series = pd.date_range(
-        start="08/17/2000", freq="10D1H1T10S", periods=20, tz="US/Pacific"
+        start="08/17/2000", freq="10D1h1min10s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     df = pd.DataFrame(
@@ -646,9 +646,11 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"TABLE1": df}
-    D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
+    D = pd.Series(
+        current_time.normalize(), index=np.arange(len(df)), dtype="datetime64[ns, UTC]"
+    )
     D[~df.A] = None
-    S = pd.Series(True, index=np.arange(len(df)))
+    S = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     S[~df.A] = None
     py_output = pd.DataFrame(
         {
@@ -732,7 +734,7 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"TABLE1": df}
-    S = pd.Series(True, index=np.arange(len(df)))
+    S = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     S[~df.A] = None
     py_output = pd.DataFrame(
         {
@@ -821,9 +823,11 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"TABLE1": df}
-    D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
+    D = pd.Series(
+        current_time.normalize(), index=np.arange(len(df)), dtype="datetime64[ns]"
+    )
     D[~df.A] = None
-    S = pd.Series(True, index=np.arange(len(df)))
+    S = pd.Series(True, index=np.arange(len(df)), dtype="boolean")
     S[~df.A] = None
     py_output = pd.DataFrame(
         {
@@ -1436,7 +1440,8 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
                         pd.Timestamp("2011-02-26 03:36:01"),
                         pd.Timestamp("2012-05-09 16:43:16.123456"),
                         pd.Timestamp("2013-10-22 05:32:21.987654321"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -1520,7 +1525,8 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
                         pd.Timestamp("2011-02-26 03:36:01"),
                         pd.Timestamp("2012-05-09 16:43:16.123456"),
                         pd.Timestamp("2013-10-22 05:32:21.987654321"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 )
             }
         )
@@ -1586,7 +1592,8 @@ def dateadd_df():
                         pd.Timestamp("2015-4-1 12:00:15"),
                         pd.Timestamp("2020-2-3 05:15:12.501"),
                         pd.Timestamp("2021-12-13 23:15:06.025999500"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             }
         )
@@ -1609,7 +1616,8 @@ def dateadd_fractional_df():
                         pd.Timestamp("2015-4-1 12:00:15"),
                         pd.Timestamp("2020-2-3 05:15:12.501"),
                         pd.Timestamp("2021-12-13 23:15:06.025999500"),
-                    ]
+                    ],
+                    dtype="datetime64[ns]",
                 ),
             }
         )
@@ -2285,7 +2293,8 @@ def tz_dateadd_data(request, tz_dateadd_args):
                 "DT_COL": pd.Series(
                     [pd.Timestamp("2022-3-12 20:30:00", tz=request.param)] * 3
                     + [None]
-                    + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3
+                    + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3,
+                    dtype=f"datetime64[ns, {request.param}]",
                 ),
                 "BOOL_COL": pd.Series([True] * 7),
             }
@@ -2297,7 +2306,8 @@ def tz_dateadd_data(request, tz_dateadd_args):
             0: pd.Series(
                 [pd.Timestamp(springRes, tz=request.param)] * 3
                 + [None]
-                + [pd.Timestamp(fallRes, tz=request.param)] * 3
+                + [pd.Timestamp(fallRes, tz=request.param)] * 3,
+                dtype=f"datetime64[ns, {request.param}]",
             )
         }
     )
@@ -2341,27 +2351,45 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
         ),
         pytest.param(
             "SELECT DATEADD('MONTH', 10, '2022-06-30')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2023-04-30")], dtype="datetime64[ns]")}
+            ),
             id="dateadd-string",
         ),
         pytest.param(
             "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23'::TIMESTAMP)",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [pd.Timestamp("2022-06-30 12:23:53")], dtype="datetime64[ns]"
+                    )
+                }
+            ),
             id="timeadd-timestamp",
         ),
         pytest.param(
             "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [pd.Timestamp("2022-06-30 12:23:53")], dtype="datetime64[ns]"
+                    )
+                }
+            ),
             id="dateadd-string",
         ),
         pytest.param(
             "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30'::TIMESTAMP)",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2022-07-05")], dtype="datetime64[ns]")}
+            ),
             id="timeadd-timestamp",
         ),
         pytest.param(
             "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30')",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            pd.DataFrame(
+                {"A": pd.Series([pd.Timestamp("2022-07-05")], dtype="datetime64[ns]")}
+            ),
             id="dateadd-string",
         ),
     ],
@@ -2566,13 +2594,15 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
         [
             None if s is None else pd.Timestamp(s, tz="US/Pacific")
             for s in timestamp_strings
-        ]
+        ],
+        dtype="datetime64[ns, US/Pacific]",
     )
     res = pd.Series(
         [
             None if s is None else pd.Timestamp(s, tz="US/Pacific")
             for s in adjusted_timestamp_strings
-        ]
+        ],
+        dtype="datetime64[ns, US/Pacific]",
     )
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -2921,8 +2951,8 @@ def test_subdate_cols_td_arg1(
     # other tests
     in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
     in_dfs["TABLE1"]["INTERVALS"] = [
-        np.timedelta64(10, "Y"),
-        np.timedelta64(9, "M"),
+        np.timedelta64(100, "h"),
+        np.timedelta64(9, "h"),
         np.timedelta64(8, "W"),
         np.timedelta64(6, "h"),
         np.timedelta64(5, "m"),
@@ -2964,8 +2994,8 @@ def test_subdate_td_scalars(
     # other tests
     in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
     in_dfs["TABLE1"]["INTERVALS"] = [
-        np.timedelta64(10, "Y"),
-        np.timedelta64(9, "M"),
+        np.timedelta64(100, "h"),
+        np.timedelta64(9, "h"),
         np.timedelta64(8, "W"),
         np.timedelta64(6, "h"),
         np.timedelta64(5, "m"),
@@ -3562,7 +3592,11 @@ def test_tz_aware_day_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="145D27H37T48S", periods=30, tz="Poland"
+                start="1/1/2022",
+                freq="145D27h37min48s",
+                periods=30,
+                tz="Poland",
+                unit="ns",
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3623,7 +3657,7 @@ def test_tz_aware_month_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3637,7 +3671,7 @@ def test_tz_aware_month_case(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pytest.param(("US/Pacific", "1/1/2023", "H"), id="pacific-by_hour"),
+        pytest.param(("US/Pacific", "1/1/2023", "h"), id="pacific-by_hour"),
         pytest.param(("GMT", "1/1/2021", "49MIN"), id="gmt-by_49_minutes"),
         pytest.param(
             ("Australia/Sydney", "1/1/2027", "W"),
@@ -3653,7 +3687,7 @@ def test_tz_aware_month_case(memory_leak_check):
 )
 def large_tz_df(request):
     tz, end, freq = request.param
-    D = pd.date_range(start="1/1/2020", tz=tz, end=end, freq=freq)
+    D = pd.date_range(start="1/1/2020", tz=tz, end=end, freq=freq, unit="ns")
     return pd.DataFrame(
         {
             "A": D.to_series(index=pd.RangeIndex(len(D))),
@@ -3703,12 +3737,11 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
         }
     )
     if case:
-        py_output["w"][~large_tz_df["B"]] = None
-        py_output["q"][~large_tz_df["B"]] = None
-        py_output["d"][~large_tz_df["B"]] = None
-        py_output["m"][~large_tz_df["B"]] = None
-        py_output["m2"][~large_tz_df["B"]] = None
-
+        py_output["w"] = py_output["w"].where(large_tz_df["B"], None)
+        py_output["q"] = py_output["q"].where(large_tz_df["B"], None)
+        py_output["d"] = py_output["d"].where(large_tz_df["B"], None)
+        py_output["m"] = py_output["m"].where(large_tz_df["B"], None)
+        py_output["m2"] = py_output["m2"].where(large_tz_df["B"], None)
     check_query(
         query,
         ctx,
@@ -3764,10 +3797,10 @@ def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
         }
     )
     if case:
-        py_output["dow"][~large_tz_df["B"]] = None
-        py_output["dowiso"][~large_tz_df["B"]] = None
-        py_output["dom"][~large_tz_df["B"]] = None
-        py_output["doy"][~large_tz_df["B"]] = None
+        py_output["dow"] = py_output["dow"].where(large_tz_df["B"], None)
+        py_output["dowiso"] = py_output["dowiso"].where(large_tz_df["B"], None)
+        py_output["dom"] = py_output["dom"].where(large_tz_df["B"], None)
+        py_output["doy"] = py_output["doy"].where(large_tz_df["B"], None)
 
     check_query(
         query,
@@ -3785,7 +3818,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
             ).to_series()
         }
     )
@@ -3800,7 +3833,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3819,7 +3852,11 @@ def test_tz_aware_next_day(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Africa/Casablanca"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Africa/Casablanca",
+                unit="ns",
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -3844,7 +3881,11 @@ def test_tz_aware_next_day_case(
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Europe/Berlin"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Berlin",
+                unit="ns",
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,
@@ -3870,7 +3911,7 @@ def test_tz_aware_previous_day(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -3895,7 +3936,11 @@ def test_tz_aware_previous_day_case(
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Pacific/Honolulu"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Pacific/Honolulu",
+                unit="ns",
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,
@@ -3921,7 +3966,11 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None] * 2,
@@ -3942,7 +3991,11 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None] * 2,
@@ -3967,7 +4020,11 @@ def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -3991,7 +4048,11 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4024,7 +4085,11 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4053,7 +4118,11 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4086,7 +4155,11 @@ def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4118,7 +4191,11 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz=representative_tz,
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4156,7 +4233,11 @@ def test_tz_aware_subdate_integer(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4182,7 +4263,11 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4211,7 +4296,11 @@ def test_tz_aware_subdate_interval_day(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4238,7 +4327,11 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4271,7 +4364,11 @@ def test_tz_aware_subdate_interval_month(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4295,7 +4392,11 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
         {
             "A": list(
                 pd.date_range(
-                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                    start="1/1/2022",
+                    freq="16D5h",
+                    periods=30,
+                    tz="US/Pacific",
+                    unit="ns",
                 )
             )
             + [None, None],
@@ -4573,7 +4674,14 @@ def test_timestamp_from_parts(
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({0: pd.Series([pd.Timestamp(s, tz=tz) for s in answer])})
+    py_output = pd.DataFrame(
+        {
+            0: pd.Series(
+                [pd.Timestamp(s, tz=tz) for s in answer],
+                dtype="datetime64[ns, UTC]" if tz else "datetime64[ns]",
+            )
+        }
+    )
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
@@ -4789,19 +4897,25 @@ def test_add_months(spark_info, date_df, memory_leak_check):
 
 def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
-    df = pd.DataFrame({"A": pd.Series([ts] * 12)})
+    df = pd.DataFrame({"A": pd.Series([ts] * 12, dtype="datetime64[ns]")})
     ctx = {"TABLE1": df}
 
     answer = pd.DataFrame(
         {
-            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12),
-            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
-            "t6": pd.Series([pd.Timestamp(2012, 1, 1, 12)] * 12),
-            "t7": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59)] * 12),
-            "t8": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12),
+            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12, dtype="datetime64[ns]"),
+            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
+            "t6": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12)] * 12, dtype="datetime64[ns]"
+            ),
+            "t7": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12, 59)] * 12, dtype="datetime64[ns]"
+            ),
+            "t8": pd.Series(
+                [pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12, dtype="datetime64[ns]"
+            ),
         }
     )
 

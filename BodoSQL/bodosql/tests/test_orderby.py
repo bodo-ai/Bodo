@@ -484,7 +484,6 @@ def test_orderby_nulls_first(null_ordering_table, spark_info, memory_leak_check)
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 
@@ -507,7 +506,6 @@ def test_orderby_nulls_last(null_ordering_table, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 
@@ -529,7 +527,6 @@ def test_orderby_nulls_first_last(null_ordering_table, spark_info, memory_leak_c
         spark_info,
         check_dtype=False,
         sort_output=False,
-        convert_float_nan=True,
     )
 
 
@@ -561,7 +558,7 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
             ],
             # This is just a Data Column
             "C": pd.date_range(
-                "2022/1/1", freq="13T", periods=10, tz=representative_tz
+                "2022/1/1", freq="13min", periods=10, tz=representative_tz, unit="ns"
             ),
         }
     )
@@ -583,8 +580,8 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
     # Reset small_timestamp to None
     col_a_nas = py_output["A"] == small_timestamp
     col_b_nas = py_output["B"] == small_timestamp
-    py_output["A"][col_a_nas] = None
-    py_output["B"][col_b_nas] = None
+    py_output["A"] = py_output["A"].where(~col_a_nas, None)
+    py_output["B"] = py_output["B"].where(~col_b_nas, None)
     check_query(
         query1,
         ctx,
@@ -606,8 +603,8 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
     # Reset small_timestamp to None
     col_a_nas = py_output["A"] == large_timestamp
     col_b_nas = py_output["B"] == large_timestamp
-    py_output["A"][col_a_nas] = None
-    py_output["B"][col_b_nas] = None
+    py_output["A"] = py_output["A"].where(~col_a_nas, None)
+    py_output["B"] = py_output["B"].where(~col_b_nas, None)
     check_query(
         query2,
         ctx,

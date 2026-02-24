@@ -378,6 +378,7 @@ _one_to_one_type_to_enum_map: dict[types.Type, int] = {
     types.float64: SeriesDtypeEnum.Float64.value,
     types.NPDatetime("ns"): SeriesDtypeEnum.NP_Datetime64ns.value,
     types.NPTimedelta("ns"): SeriesDtypeEnum.NP_Timedelta64ns.value,
+    bodo.types.pd_timedelta_type: SeriesDtypeEnum.NP_Timedelta64ns.value,
     types.bool_: SeriesDtypeEnum.Bool.value,
     types.int16: SeriesDtypeEnum.Int16.value,
     types.uint16: SeriesDtypeEnum.UInt16.value,
@@ -960,16 +961,26 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
     try:
         arr_type = bodo.typeof(_fix_series_arr_type(S.array))
 
-        # always unbox boolean Series using nullable boolean array instead of Numpy
-        # because some processes may have nulls, leading to inconsistent data types
-        if arr_type == types.Array(types.bool_, 1, "C"):
-            arr_type = bodo.types.boolean_array_type
-
-        # We make all Series data arrays contiguous during unboxing to avoid type errors
-        # see test_df_query_stringliteral_expr
         if isinstance(arr_type, types.Array):
-            assert arr_type.ndim == 1, "invalid numpy array type in Series"
-            arr_type = types.Array(arr_type.dtype, 1, "C")
+            dtype = arr_type.dtype
+
+            # always unbox boolean Series using nullable boolean array instead of Numpy
+            # because some processes may have nulls, leading to inconsistent data types
+            if dtype == types.bool_:
+                arr_type = bodo.types.boolean_array_type
+
+            # Make sure datetime64 arrays are ns
+            elif isinstance(dtype, types.NPDatetime):
+                arr_type = bodo.types.DatetimeArrayType(None)
+
+            # Make sure timedelta64 arrays are ns
+            elif isinstance(dtype, types.NPTimedelta):
+                arr_type = bodo.types.timedelta_array_type
+            else:
+                # We make all Series data arrays contiguous during unboxing to avoid type errors
+                # see test_df_query_stringliteral_expr
+                assert arr_type.ndim == 1, "invalid numpy array type in Series"
+                arr_type = types.Array(arr_type.dtype, 1, "C")
 
         return arr_type
     except pa.lib.ArrowMemoryError:  # pragma: no cover
@@ -1170,6 +1181,11 @@ def box_dataframe(typ, val, c):
             builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)
         ]
         arr_typs = typ.data
+
+        none_obj = pyapi.borrow_none()
+        slice_class_obj = pyapi.unserialize(pyapi.serialize_object(slice))
+        slice_obj = pyapi.call_function_objargs(slice_class_obj, [none_obj])
+
         for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
             # box array if df doesn't have a parent, or column was unboxed in function,
             # since changes in arrays like strings don't reflect back to parent object
@@ -1186,7 +1202,7 @@ def box_dataframe(typ, val, c):
             )
 
             with builder.if_then(box_array):
-                # df[i] = boxed_arr
+                # df.loc[:, i] = boxed_arr
                 c_ind_obj = pyapi.long_from_longlong(
                     context.get_constant(types.int64, i)
                 )
@@ -1194,9 +1210,16 @@ def box_dataframe(typ, val, c):
                 context.nrt.incref(builder, arr_typ, arr)
                 arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
                 df_obj = builder.load(res)
-                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
+                df_loc_obj = pyapi.object_getattr_string(df_obj, "loc")
+                slice_ind_tup_obj = pyapi.tuple_pack([slice_obj, c_ind_obj])
+                pyapi.object_setitem(df_loc_obj, slice_ind_tup_obj, arr_obj)
+                pyapi.decref(slice_ind_tup_obj)
+                pyapi.decref(df_loc_obj)
                 pyapi.decref(arr_obj)
                 pyapi.decref(c_ind_obj)
+
+        pyapi.decref(slice_obj)
+        pyapi.decref(slice_class_obj)
 
     df_obj = builder.load(res)
     columns_obj = _get_df_columns_obj(
@@ -1756,6 +1779,8 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.types.timedelta_array_type
     if isinstance(first_val, bodo.types.Time):
         return TimeArrayType(first_val.precision)
+    if isinstance(first_val, datetime.time):
+        return TimeArrayType(9)
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)

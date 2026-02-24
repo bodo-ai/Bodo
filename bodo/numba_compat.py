@@ -1195,6 +1195,9 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         if isinstance(a, numba.core.dispatcher.OmittedArg):
             argtypes.append(types.Omitted(a.value))
         else:
+            # Bodo Change: import bodosql.compiler for BodoSQLContextType
+            if type(a).__name__ == "BodoSQLContext":
+                import bodosql.compiler # isort:skip # noqa
             argtypes.append(self.typeof_pyval(a))
     return_val = None
     try:
@@ -1272,7 +1275,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             )
             try:
                 tp = typeof(val, Purpose.argument)
-            except ValueError as typeof_exc:
+            except (errors.NumbaValueError, ValueError) as typeof_exc:
                 failed_args.append((i, str(typeof_exc)))
             else:
                 if tp is None:
@@ -1368,7 +1371,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "574ef31a488694f419a02dff4e313c1714e3dd2368d990a78fbe5e72c3bfb23f"
+        != "6fe2b0f0f701524e778ba60d8c5e08277ce2c6d0b490cd077b56accde54a7c9e"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
@@ -1921,9 +1924,36 @@ def CacheImpl__init__(self, py_func):
         qualname = py_func.__qualname__
     except AttributeError:  # pragma: no cover
         qualname = py_func.__name__
+
+    # Is there an override for locators list?
+    if hasattr(numba.config, "CACHE_LOCATOR_CLASSES") and numba.config.CACHE_LOCATOR_CLASSES:
+        import importlib
+
+        locator_classes = []
+        for locator_class_path in numba.config.CACHE_LOCATOR_CLASSES.split(","):
+            locator_class_path = locator_class_path.strip()
+            if "." in locator_class_path:
+                # assume full module path: package.module.Klass
+                module_path, class_name = locator_class_path.rsplit(".", 1)
+                try:
+                    module = importlib.import_module(module_path)
+                    cls = getattr(module, class_name)
+                except (ImportError, AttributeError) as e:
+                    raise RuntimeError(f"Failed to import '{locator_class_path}' specified via "
+                                        "NUMBA_CACHE_LOCATOR_CLASSES env variable") from e
+            else:
+                # fallback to local globals
+                cls = globals().get(locator_class_path)
+                if cls is None:
+                    raise RuntimeError(f"Unknown cache locator class: '{locator_class_path}' specified via "
+                                        "NUMBA_CACHE_LOCATOR_CLASSES env variable")
+            locator_classes.append(cls)
+    else:
+        locator_classes = self._locator_classes
+
     # Find a locator
     source_path = inspect.getfile(py_func)
-    for cls in self._locator_classes:
+    for cls in locator_classes:
         locator = cls.from_function(py_func, source_path)
         if locator is not None:
             break
@@ -1971,9 +2001,9 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.caching.CacheImpl.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
+        != "4d692ab2c1a932a36a9f3232f9c9d30311f3d72a7bb67ca946c6fa9d23445706"
     ):  # pragma: no cover
-        warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
+        warnings.warn("numba.core.caching.CacheImpl.__init__ has changed")
 
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
@@ -2592,9 +2622,12 @@ def add_context(self, msg):
     contextual information.
     Bodo: avoid adding During resolve call message.
     """
+    if msg in self.contexts:
+        # avoid duplicating contexts
+        return self
+    self.contexts.append(msg)
     # TODO:  [BE-486] development_mode environment variable?
     if numba.core.config.DEVELOPER_MODE:
-        self.contexts.append(msg)
         f = _termcolor.errmsg("{0}") + _termcolor.filename("During: {1}")
         newmsg = f.format(self, msg)
         self.args = (newmsg,)
@@ -2610,7 +2643,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.errors.NumbaError.add_context)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "6a388d87788f8432c2152ac55ca9acaa94dbc3b55be973b2cf22dd4ee7179ab8"
+        != "9e1a2546642bdd13e2e0bdc790edaab8bbf3329afe9554a16c400dc6dd5a16ba"
     ):  # pragma: no cover
         warnings.warn("numba.core.errors.NumbaError.add_context has changed")
 
@@ -3319,7 +3352,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "867c9ba7f1bcf438be56c38e26906bb551f59a99f853a9f68b71208b107c880e"
+        != "059737f7d673ac48d9d3bc8d57e66d86224aa34fb3491f68a2dc0244e38c900b"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.withcontexts._ObjModeContextType._legalize_args has changed"
@@ -3709,7 +3742,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.canonicalize_array_math)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b2200e9100613631cc554f4b640bc1181ba7cea0ece83630122d15b86941be2e"
+        != "559a6c7f0034c5aea7601fde9ef7df57eb49209d1fc7597f9e611903da9ed7b2"
     ):  # pragma: no cover
         warnings.warn("canonicalize_array_math has changed")
 
@@ -4874,7 +4907,7 @@ def BaseNativeLowering_run_pass(self, state):
     calltypes = state.calltypes
     flags = state.flags
     metadata = state.metadata
-    pre_stats = llvm.passmanagers.dump_refprune_stats()
+    pre_stats = llvm.newpassmanagers.dump_refprune_stats()
 
     msg = "Function %s failed at nopython " "mode lowering" % (state.func_id.func_name,)
     with fallback_context(state, msg):
@@ -4934,7 +4967,7 @@ def BaseNativeLowering_run_pass(self, state):
         metadata["global_arrs"] = targetctx.global_arrays
         targetctx.global_arrays = []
         # capture pruning stats
-        post_stats = llvm.passmanagers.dump_refprune_stats()
+        post_stats = llvm.newpassmanagers.dump_refprune_stats()
         metadata["prune_stats"] = post_stats - pre_stats
 
         # Save the LLVM pass timings
@@ -4947,7 +4980,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typed_passes.BaseNativeLowering.run_pass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "d783ca2977135107fb4f095f21854c6e63930673f90d933e3ac37421537d4550"
+        != "49a9d0f4a8aa592f7304a14f960452274af3ff8aa911e1eb48c9fd5e1e05f29c"
     ):  # pragma: no cover
         warnings.warn("numba.core.typed_passes.BaseNativeLowering.run_pass has changed")
 
@@ -5475,6 +5508,60 @@ numba.core.typing.context.BaseContext.unify_pairs = unify_pairs
 
 #### END MONKEY PATCH SUPPORT FOR unifying unknown types ####
 
+
+# Bodo change: add in_partial_typing to resolution cache key introduced in Numba 0.62
+# to support partial typing properly.
+# See https://github.com/numba/numba/pull/9259
+# See test_func_nested_jit_error
+
+def lookup_resolve_cache(self, func, args, kws) -> "_ResolveCache":
+    """Lookup resolution cache for the given function type and argument
+    types.
+    """
+    from numba.core.typing.context import _ResolveCache
+    import bodo
+
+    if not self._stack or numba.config.DISABLE_TYPEINFER_FAIL_CACHE:
+        # if callstack is empty, bypass fail_cache
+        return _ResolveCache()
+
+    def normalize_dict(obj):
+        if isinstance(obj, dict):
+            return tuple(sorted(kws.items()))
+        return kws
+
+    def hashable(obj):
+        try:
+            hash(obj)
+        except TypeError:
+            return False
+        else:
+            return True
+
+    # Bodo change: add in_partial_typing to resolution cache key
+    key = func, args, normalize_dict(kws), bodo.transforms.typing_pass.in_partial_typing
+    if not hashable(key):
+        return _ResolveCache()
+    return self._fail_cache.setdefault(key, _ResolveCache())
+
+
+# lookup_resolve_cache introduced in Numba 0.62
+if hasattr(numba.core.typing.context.CallStack, "lookup_resolve_cache"):
+    if _check_numba_change:  # pragma: no cover
+        lines = inspect.getsource(
+            numba.core.typing.context.CallStack.lookup_resolve_cache
+        )
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "7504f3d617b85491f6574ed3ce779db539dfafefc98958790a3bd2d24086d829"
+        ):
+            warnings.warn(
+                "numba.core.typing.context.CallStack.lookup_resolve_cache has changed"
+            )
+
+    numba.core.typing.context.CallStack.lookup_resolve_cache = lookup_resolve_cache
+
+
 #### BEGIN MONKEY PATCH FOR METADATA CACHING SUPPORT ####
 
 
@@ -5653,14 +5740,19 @@ numba.core.dispatcher.Dispatcher._rebuild = _rebuild_dispatcher
 
 #### BEGIN MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
+# This attribute was renamed in numba 0.62
+numba_get_cache_path = numba.core.caching._IPythonCacheLocator if hasattr(
+    numba.core.caching, "_IPythonCacheLocator"
+) else numba.core.caching.IPythonCacheLocator
+
 if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.caching._IPythonCacheLocator.get_cache_path)
+    lines = inspect.getsource(numba_get_cache_path)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "eb33b7198697b8ef78edddcf69e58973c44744ff2cb2f54d4015611ad43baed0"
+        != "c386ead0952afc5d6d6d710a93596c79abbe81a9d71715ee9c57267cd363a6d1"
     ):
         warnings.warn(
-            "numba.core.caching._IPythonCacheLocator.get_cache_path has changed"
+            "numba.core.caching.IPythonCacheLocator.get_cache_path has changed"
         )
 
 if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
@@ -5670,7 +5762,7 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
         # is derived from the python file being cached
         return numba.config.CACHE_DIR
 
-    numba.core.caching._IPythonCacheLocator.get_cache_path = _get_cache_path
+    numba_get_cache_path.get_cache_path = _get_cache_path
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
@@ -5807,7 +5899,7 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
     import tempfile
 
     def _ensure_cache_path(self):
-        from bodo.mpi4py import MPI
+        from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
         if comm.Get_rank() == 0:
@@ -6430,7 +6522,7 @@ def _sanitize_cell_contents(c):
 
 
 # Bodo change: avoid errors for global arrays
-def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=True):
+def compile_subroutine(self, builder, impl, sig, locals=None, flags=None, caching=True):
     """
     Compile the function *impl* for the given *sig* (in nopython mode).
     Return an instance of CompileResult.
@@ -6438,6 +6530,8 @@ def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=
     If *caching* evaluates True, the function keeps the compiled function
     for reuse in *.cached_internal_func*.
     """
+    if locals is None:
+        locals = {}
     cache_key = (impl.__code__, sig, type(self.error_model))
     if not caching:
         cached = None
@@ -6467,7 +6561,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.base.BaseContext.compile_subroutine)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "232faaf0f405cab5622a7d0222e1567e78799d19ea446f0db5948a5cf899128c"
+        != "26956c62fc3dee11d7c0d802cea4a9ad40e8ce80e619457fe948a0b3e7a6fb12"
     ):  # pragma: no cover
         warnings.warn("numba.core.base.BaseContext.compile_subroutine has changed")
 
@@ -6483,7 +6577,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "f8156e35de7a847fe24659297d6eb20bb9ba02bd16b6e91a1626e506063cba0f"
+        != "3a52b41d6aebc421ef1d3120bee5085ff66aa9f24fca314a45b73867ea095a23"
     ):
         warnings.warn(
             "numba.core.withcontexts._ObjModeContextType.mutate_with_body has changed"
@@ -6492,7 +6586,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.withcontexts._mutate_with_block_callee)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "7205965480743283b02bdf06f4ab397bd5d0e585f5587d51333ab87e43522bbe"
+        != "8bb47c3f61fee58463994d8afebfa227f863d57123f265d519b2fee0c6573ff7"
     ):
         warnings.warn("numba.core.withcontexts._mutate_with_block_callee has changed")
 
@@ -6887,12 +6981,11 @@ class BodoCacheLocator(numba.core.caching._CacheLocator):
     """
     __slots__ = ('_py_file', '_cache_path', '_bytes_source')
     registered_funcs = {}   # Holds mapping of generated function name to its source.
-    cache_path = os.environ.get("BODO_PLATFORM_CACHE_LOCATION")
-    if cache_path is None:
+    cache_dir = os.environ.get("BODO_PLATFORM_CACHE_LOCATION")
+    if cache_dir is None:
         appdirs = AppDirs(appname="bodo", appauthor=False)
-        cache_path = os.path.join(appdirs.user_cache_dir, ".strfunc_cache")
-    else:
-        cache_path = os.path.join(cache_path, ".strfunc_cache")
+        cache_dir = appdirs.user_cache_dir
+    cache_path = os.path.join(cache_dir, ".strfunc_cache")
 
     def __init__(self, py_func, py_file):
         source = BodoCacheLocator.registered_funcs[py_func.__qualname__]

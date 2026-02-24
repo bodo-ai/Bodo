@@ -46,15 +46,18 @@ struct PhysicalJoinMetrics {
  */
 class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
-    explicit PhysicalJoin(
-        duckdb::LogicalComparisonJoin& logical_join,
-        duckdb::vector<duckdb::JoinCondition>& conditions,
-        const std::shared_ptr<bodo::Schema> build_table_schema,
-        const std::shared_ptr<bodo::Schema> probe_table_schema)
+    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join)
         : has_non_equi_cond(false),
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
+    }
+
+    void buildProbeSchemas(
+        duckdb::LogicalComparisonJoin& logical_join,
+        duckdb::vector<duckdb::JoinCondition>& conditions,
+        const std::shared_ptr<bodo::Schema> build_table_schema,
+        const std::shared_ptr<bodo::Schema> probe_table_schema) {
         time_pt start_init = start_timer();
         // Probe side
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
@@ -310,7 +313,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         // We designate empty metadata to indicate generating a trivial
         // RangeIndex.
         // TODO[BSE-4820]: support joining on Indexes
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
+        this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
         if (this->output_schema->column_names.size() != n_op_out_cols) {
             throw std::runtime_error(

@@ -151,10 +151,12 @@ void open_file_appendstream(
  * @param path_name path to dir to create (exclude prefix, include path)
  * @param orig_path: name of file to open (include prefix & path)
  * @param file_type: type of file, 'csv', 'json', or 'parquet'
+ * @param recreate_if_present: delete the directory and recreate if it exists.
  */
 void create_dir_parallel(Bodo_Fs::FsEnum fs_option, int myrank,
                          std::string &dirname, std::string &path_name,
-                         std::string &orig_path, const std::string &file_type);
+                         std::string &orig_path, const std::string &file_type,
+                         bool recreate_if_present = false);
 
 /*
  * Open arrow::io::OutputStream for csv/json/parquet write

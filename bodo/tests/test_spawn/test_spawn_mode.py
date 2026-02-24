@@ -144,7 +144,7 @@ def test_compute_return_df(datapath):
     CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
-        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH, dtype_backend="pyarrow")
         max_acctbal = (
             df[df["C_ACCTBAL"] > 1000.0]
             .groupby(["C_MKTSEGMENT", "C_NATIONKEY"])
@@ -168,7 +168,7 @@ def test_compute_return_scalar(datapath):
     CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
-        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH, dtype_backend="pyarrow")
         max_acctbal = (
             df[df["C_ACCTBAL"] > 1000.0]
             .groupby(["C_MKTSEGMENT", "C_NATIONKEY"])
@@ -331,7 +331,7 @@ def test_results_deleted_after_collection(datapath):
 
     @bodo.jit(spawn=True)
     def impl():
-        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH, dtype_backend="pyarrow")
         return df
 
     df = impl()

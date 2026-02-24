@@ -12,6 +12,7 @@ from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -85,6 +86,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_scalar_udf_result_type,
     insert_bodo_scalar,
+    scalarOutputNACheck,
     wrap_module_functions_and_methods,
     wrap_plan,
 )
@@ -497,6 +499,29 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             plan=LogicalFilter(empty_data, self._plan, key_plan),
         )
 
+    @check_args_fallback(unsupported="none")
+    def __array_ufunc__(
+        self, ufunc: np.ufunc, method: str, *inputs: pt.Any, **kwargs: pt.Any
+    ):
+        """Adds support for simple numpy ufuncs on BodoSeries like np.func(Series)."""
+        from bodo.pandas.base import _empty_like
+
+        if method != "__call__" or len(inputs) != 1 or inputs[0] is not self or kwargs:
+            raise BodoLibNotImplementedException(
+                "ufunc not implemented for BodoSeries yet"
+            )
+
+        new_metadata = _get_empty_series_arrow(ufunc(_empty_like(self)))
+
+        return _get_series_func_plan(
+            self._plan,
+            new_metadata,
+            ufunc,
+            (),
+            {},
+            is_method=False,
+        )
+
     @staticmethod
     def from_lazy_mgr(
         lazy_mgr: LazySingleArrayManager | LazySingleBlockManager,
@@ -576,6 +601,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the first n rows of the series. If head_s is present and n < len(head_s) we call head on head_s.
         Otherwise we use the data fetched from the workers.
         """
+        if n < 0:
+            # Convert the negative number of the number not to include to a positive number so the rest of the
+            # code can run normally.  Unfortunately, this will likely require a plan execution here.
+            n = max(0, len(self) + n)
+
         if n == 0 and self._head_s is not None:
             if self._exec_state == ExecState.COLLECTED:
                 return self.iloc[:0].copy()
@@ -935,7 +965,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = _compute_series_reduce(self, ["min"])
         if df.is_lazy_plan():
             return BodoScalar(df["0"])
-        return df["0"][0]
+        ser = df["0"]
+        return scalarOutputNACheck(ser[0], ser.dtype)
 
     @check_args_fallback(unsupported="all")
     def max(
@@ -946,7 +977,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         df = _compute_series_reduce(self, ["max"])
         if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
-        return df["0"][0]
+        ser = df["0"]
+        return scalarOutputNACheck(ser[0], ser.dtype)
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -1203,7 +1235,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # Mark column is after the left columns in DuckDB, see:
             # https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/operator/logical_join.cpp#L20
             empty_join_out = pd.concat(
-                [empty_left, pd.Series([], dtype=pd.ArrowDtype(pa.bool_()))], axis=1
+                [
+                    empty_left,
+                    pd.Series(
+                        [], dtype=pd.ArrowDtype(pa.bool_()), index=empty_left.index
+                    ),
+                ],
+                axis=1,
             )
             empty_join_out.index = empty_left.index
             planComparisonJoin = LogicalComparisonJoin(
@@ -1419,6 +1457,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if bodo.pandas.utils.FallbackContext.is_top_level():
             return bodo.pandas.utils.convert_to_bodo(py_res)
         return py_res
+
+    @check_args_fallback(supported=["dtype_backend"])
+    def convert_dtypes(
+        self,
+        infer_objects: bool = True,
+        convert_string: bool = True,
+        convert_integer: bool = True,
+        convert_boolean: bool = True,
+        convert_floating: bool = True,
+        dtype_backend: str = "numpy_nullable",
+    ):
+        if dtype_backend == "pyarrow":
+            # Pandas is buggy for this case and drops timezone info from timestamps
+            return self
+
+        raise BodoLibNotImplementedException(
+            "convert_dtypes() only supports dtype_backend='pyarrow' in Bodo Series."
+        )
 
 
 class BodoStringMethods:
@@ -2198,7 +2254,11 @@ class BodoDatetimeProperties:
             )
 
         series = self._series
-        dtype = pd.ArrowDtype(pa.timestamp("ns", tz))
+        if _is_pd_pa_timestamp(series.dtype):
+            unit = series.dtype.pyarrow_dtype.unit
+        else:
+            unit = "ns"
+        dtype = pd.ArrowDtype(pa.timestamp(unit, tz))
 
         index = series.head(0).index
         new_metadata = pd.Series(
@@ -2486,7 +2546,9 @@ def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     lhs_col = df.iloc[:, left_idx]
     rhs_col = df.iloc[:, right_idx]
 
-    return lhs_col.str.cat(rhs_col, sep, na_rep)
+    # Work around Pandas 3 bugs with ArrowDtype str.cat()
+    out = lhs_col.astype(object).str.cat(rhs_col.astype(object), sep, na_rep)
+    return out.astype("str").astype(pd.ArrowDtype(pa.large_string()))
 
 
 def _get_col_as_series(s, col):
@@ -2515,17 +2577,20 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
     extracted = string_s.str.extract(pat, flags=flags, expand=expand)
 
     if is_series_output:
-        return extracted
+        return extracted.astype(pd.ArrowDtype(pa.large_string()))
 
     def to_extended_list(s):
         """Extends list in each row to match length to n_cols"""
-        list_s = s.tolist()
-        list_s.extend([pd.NA] * (n_cols - len(s)))
+        list_s = s.astype(object).replace(np.nan, None).tolist()
+        list_s.extend([None] * (n_cols - len(s)))
         return list_s
 
     # Map tolist() to convert DataFrame to Series of lists
+    if len(extracted) == 0:
+        return pd.Series([], dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
+
     extended_s = extracted.apply(to_extended_list, axis=1)
-    return extended_s
+    return extended_s.astype(pd.ArrowDtype(pa.large_list(pa.large_string())))
 
 
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
@@ -2754,6 +2819,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             False,  # is_method
             (idx,),  # args
             {},  # kwargs
+            True,  # use_arrow_dtypes
         ),
         (0,) + index_cols,
         False,  # is_cfunc
@@ -2762,7 +2828,14 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
 
 
 def _get_series_func_plan(
-    series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
+    series_proj,
+    empty_data,
+    func,
+    args,
+    kwargs,
+    is_method=True,
+    cfunc_decorator=None,
+    use_arrow_dtypes=None,
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     ScalarFuncExpression with the correct arguments and a LogicalProjection.
@@ -2856,6 +2929,7 @@ def _get_series_func_plan(
                 is_method,  # is_method
                 args,  # args
                 kwargs,  # kwargs
+                use_arrow_dtypes,
             )
             is_cfunc = False
 
@@ -3056,8 +3130,8 @@ def sig_bind(name, accessor_type, *args, **kwargs):
             func = getattr(sample_series, name)
             signature = inspect.signature(func)
 
-        signature.bind(*args, **kwargs)
-        return
+        bound_sig = signature.bind(*args, **kwargs)
+        return bound_sig
     # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
@@ -3152,6 +3226,17 @@ def is_bodo_string_series(self):
     return type(self) is BodoSeries and self.dtype in allowed_types_map["str_default"]
 
 
+def validate_method_args(name, bound_sig):
+    """Validates args and kwargs for Series.<name> methods.
+    TODO: validate other methods as needed.
+    """
+    if name == "str.replace":
+        repl = bound_sig.arguments.get("repl", None)
+        # Same as Pandas validation
+        if not (isinstance(repl, str) or callable(repl)):
+            raise TypeError("repl must be a string or callable")
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -3182,7 +3267,9 @@ def gen_method(
         validate_dtype(accessor_type + name, self)
 
         if is_method:
-            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
+            # Argument validation
+            bound_sig = sig_bind(name, accessor_type, *args, **kwargs)
+            validate_method_args(accessor_type + name, bound_sig)
 
         series = self._series if accessor_type else self
         dtype = series.dtype if not return_type else return_type

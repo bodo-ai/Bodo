@@ -106,11 +106,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                     row_indexes.append(index_data)
                 elif isinstance(ss_axis, pd.TimedeltaIndex):
                     assert index_data is not None
-                    row_indexes.append(
-                        pd.TimedeltaIndex(
-                            index_data, name=ss_axis.name, unit=ss_axis.unit
-                        )
-                    )
+                    row_indexes.append(pd.TimedeltaIndex(index_data, name=ss_axis.name))
                 elif isinstance(ss_axis, pd.Index):
                     assert index_data is not None
                     row_indexes.append(pd.Index(index_data, name=ss_axis.name))
@@ -295,6 +291,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "blocks",
             "get_slice",
             "copy",
+            "take",
             "_rebuild_blknos_and_blklocs",
             "__reduce__",
             "__setstate__",
@@ -398,9 +395,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                 axis_ = index_data
             elif isinstance(head_axis, pd.TimedeltaIndex):
                 assert index_data is not None
-                axis_ = pd.TimedeltaIndex(
-                    index_data, name=head_axis.name, unit=head_axis.unit
-                )
+                axis_ = pd.TimedeltaIndex(index_data, name=head_axis.name)
             elif isinstance(head_axis, pd.Index):
                 assert index_data is not None
                 axis_ = pd.Index(index_data, name=head_axis.name)
@@ -542,7 +537,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        if name in {"blocks", "copy"}:
+        if name in {"blocks", "copy", "take"}:
             self._collect()
         return super().__getattribute__(name)
 
@@ -561,15 +556,17 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         If we don't have the data yet, and the slice is within the head, we slice the head,
         otherwise we collect and slice the full data. A slice along axis 1 will always lead to a full collection.
         """
+        from bodo.pandas.utils import normalize_slice_indices_for_lazy_md
+
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
-        # Normalize negative and None start/stop/step values
-        start, stop, step = slobj.indices(len(self))
+        start, stop, step = normalize_slice_indices_for_lazy_md(slobj, len(self))
 
         if (
             (self._md_head is not None)
             and start <= len(self._md_head)
+            and stop is not None
             and stop <= len(self._md_head)
             and axis == 0
         ):

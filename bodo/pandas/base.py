@@ -61,6 +61,7 @@ from bodo.pandas.utils import (
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
+    get_scalar_udf_result_type,
     wrap_module_functions_and_methods,
     wrap_plan,
 )
@@ -141,7 +142,7 @@ def from_pandas(df):
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
 
-@check_args_fallback("all")
+@check_args_fallback(supported=["dtype_backend"])
 def read_parquet(
     path,
     engine="auto",
@@ -153,6 +154,11 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
+    if dtype_backend is not lib.no_default and dtype_backend != "pyarrow":
+        raise BodoLibNotImplementedException(
+            "read_parquet() only supports dtype_backend='pyarrow' in Bodo."
+        )
+
     if storage_options is None:
         storage_options = {}
 
@@ -203,6 +209,7 @@ def _empty_like(val):
     For Pandas DataFrame or Series, uses Arrow for schema inference of object columns
     and returns typed output.
     """
+    import numpy as np
     import pyarrow as pa
 
     if type(val) not in (
@@ -217,7 +224,7 @@ def _empty_like(val):
     if type(val) is BodoScalar:
         return val.wrapped_series.head(0).dtype.type()
 
-    is_series = isinstance(val, BodoSeries)
+    is_series = isinstance(val, (BodoSeries, pd.Series))
 
     if isinstance(val, (BodoDataFrame, BodoSeries)):
         # Avoid triggering data collection
@@ -227,8 +234,29 @@ def _empty_like(val):
     if is_series:
         val = val.to_frame(name=BODO_NONE_DUMMY if val.name is None else val.name)
 
+    # Work around categorical gaps in Arrow-Pandas conversion
+    original_val = val
+    cat_cols = set()
+    for cname, dtype in val.dtypes.items():
+        if isinstance(dtype, pd.CategoricalDtype):
+            cat_cols.add(cname)
+            val = val.assign(**{cname: np.arange(len(val))})
+
+    is_cat_index = isinstance(val.index, pd.CategoricalIndex)
+    if is_cat_index:
+        val = val.reset_index(drop=True)
+
     # Reuse arrow_to_empty_df to make sure details like Index handling are correct
     out = arrow_to_empty_df(pa.Schema.from_pandas(val))
+
+    for cname in cat_cols:
+        out[cname] = original_val[cname].iloc[:0]
+
+    if is_cat_index:
+        out.index = original_val.index[:0]
+
+    if isinstance(original_val.index, (pd.PeriodIndex, pd.IntervalIndex)):
+        out.index = original_val.index[:0]
 
     if is_series:
         out = out.iloc[:, 0]
@@ -474,6 +502,15 @@ def read_csv(
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
+def _is_not_tz_format(format: str) -> bool:
+    """Check if the given datetime format string does not contain timezone info."""
+    tz_indicators = ["%z", "%Z", "%:z", "%::z", "%:::z"]
+    for indicator in tz_indicators:
+        if indicator in format:
+            return False
+    return True
+
+
 @check_args_fallback("none")
 def to_datetime(
     arg,
@@ -484,7 +521,6 @@ def to_datetime(
     format=None,
     exact=lib.no_default,
     unit=None,
-    infer_datetime_format=lib.no_default,
     origin="unix",
     cache=True,
 ):
@@ -497,13 +533,6 @@ def to_datetime(
             "to_datetime() is not supported for arg that is not an instance of BodoSeries or BodoDataFrame. Falling back to Pandas."
         )
 
-    # Initialize shared metadata
-    dtype = pd.ArrowDtype(pa.timestamp("ns"))
-    index = arg.head(0).index
-    new_metadata = pd.Series(
-        dtype=dtype,
-        index=index,
-    )
     in_kwargs = {
         "errors": errors,
         "dayfirst": dayfirst,
@@ -512,10 +541,42 @@ def to_datetime(
         "format": format,
         "exact": exact,
         "unit": unit,
-        "infer_datetime_format": infer_datetime_format,
         "origin": origin,
         "cache": cache,
     }
+
+    name = arg.name if isinstance(arg, BodoSeries) else None
+
+    if utc:
+        dtype = pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+        index = arg.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            index=index,
+            name=name,
+        )
+    # Format specified without timezone info or DataFrame case (cannot have timezone)
+    elif (format is not None and _is_not_tz_format(format)) or isinstance(
+        arg, BodoDataFrame
+    ):
+        dtype = pd.ArrowDtype(pa.timestamp("ns"))
+        index = arg.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            index=index,
+            name=name,
+        )
+    else:
+        # Need to sample the data for output type inference similar to UDFs since the data
+        # can have different timezones.
+        new_metadata = get_scalar_udf_result_type(
+            arg, None, pd.to_datetime, **in_kwargs
+        )
+
+    # Avoid using Arrow dtypes for non-timestamp inputs for better performance.
+    use_arrow_dtypes = isinstance(arg, BodoSeries) and pa.types.is_timestamp(
+        arg.head(0).dtype.pyarrow_dtype
+    )
 
     # 1. DataFrame Case
     if isinstance(arg, BodoDataFrame):
@@ -527,42 +588,19 @@ def to_datetime(
             (),
             in_kwargs,
             is_method=False,
+            use_arrow_dtypes=use_arrow_dtypes,
         )
 
     # 2. Series Case
-    if (
-        errors == "raise"
-        and dayfirst is False
-        and yearfirst is False
-        and utc is False
-        and unit is None
-        and origin == "unix"
-        and cache is True
-    ):
-        # If only options supported by Bodo JIT then run as cfunc over map.
-        import bodo.decorators  # isort:skip # noqa
-
-        if format is None:
-
-            def bodo_df_lib_to_datetime(x):
-                return pd.to_datetime(x)
-
-            return arg.map(bodo_df_lib_to_datetime, na_action="ignore")
-        else:
-
-            def bodo_df_lib_to_datetime_format(x):
-                return pd.to_datetime(x, format=format)
-
-            return arg.map(bodo_df_lib_to_datetime_format, na_action="ignore")
-    else:
-        return _get_series_func_plan(
-            arg._plan,
-            new_metadata,
-            "pandas.to_datetime",
-            (),
-            in_kwargs,
-            is_method=False,
-        )
+    return _get_series_func_plan(
+        arg._plan,
+        new_metadata,
+        "pandas.to_datetime",
+        (),
+        in_kwargs,
+        is_method=False,
+        use_arrow_dtypes=use_arrow_dtypes,
+    )
 
 
 @check_args_fallback(unsupported="all")
@@ -641,7 +679,9 @@ def concat(
             b_plan = b._plan
 
         # DuckDB Union operator requires schema to already be matching.
-        planUnion = LogicalSetOperation(empty_data, a_plan, b_plan, "union all")
+        # Reverse the order of operands to be more likely to match Pandas output order
+        # in SQL.
+        planUnion = LogicalSetOperation(empty_data, b_plan, a_plan, "union all")
 
         return wrap_plan(planUnion)
 

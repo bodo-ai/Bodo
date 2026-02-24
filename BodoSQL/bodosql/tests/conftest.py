@@ -217,13 +217,16 @@ def bodosql_numeric_types(request):
                 {
                     "A": [3, 1, 2, 4] * 4,
                     "B": pd.array([1.0, 2.0, 4.0, 3.0] * 4, "Float64"),
-                    "D": [
-                        pd.Timestamp(2021, 5, 19),
-                        pd.Timestamp(1999, 12, 31),
-                        pd.Timestamp(2020, 10, 11),
-                        pd.Timestamp(2025, 1, 1),
-                    ]
-                    * 4,
+                    "D": pd.Series(
+                        [
+                            pd.Timestamp(2021, 5, 19),
+                            pd.Timestamp(1999, 12, 31),
+                            pd.Timestamp(2020, 10, 11),
+                            pd.Timestamp(2025, 1, 1),
+                        ]
+                        * 4,
+                        dtype="datetime64[ns]",
+                    ),
                 }
             ),
             "TABLE3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
@@ -419,12 +422,15 @@ def bodosql_large_numeric_types(request):
                         np.datetime64("2020-12-01T13:56:03.172"),
                     ]
                     * 4,
-                    "C": [
-                        pd.Timestamp(2021, 11, 21),
-                        pd.Timestamp(2022, 1, 12),
-                        pd.Timestamp(2021, 3, 3),
-                    ]
-                    * 4,
+                    "C": pd.Series(
+                        [
+                            pd.Timestamp(2021, 11, 21),
+                            pd.Timestamp(2022, 1, 12),
+                            pd.Timestamp(2021, 3, 3),
+                        ]
+                        * 4,
+                        dtype="datetime64[ns]",
+                    ),
                 }
             ),
         },
@@ -442,7 +448,7 @@ def bodosql_datetime_types(request):
                     "A": [
                         bodo.types.Time(19, 53, 6, 15),
                         bodo.types.Time(14, 28, 57),
-                        bodo.types.Time(8, 2, 5, 0, 1, 4),
+                        bodo.types.Time(8, 2, 5, 0, 1),
                         None,
                     ]
                     * 3,
@@ -455,7 +461,7 @@ def bodosql_datetime_types(request):
                     "C": [
                         None,
                         bodo.types.Time(13, 37, 45),
-                        bodo.types.Time(1, 47, 59, 290, 574, 817),
+                        bodo.types.Time(1, 47, 59, 290, 574),
                     ]
                     * 4,
                 }
@@ -475,22 +481,28 @@ def bodosql_time_types(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        pd.NaT,
-                        pd.Timestamp("2020-01-16 22:06:10.378782"),
-                        pd.Timestamp("2000-01-21 02:23:16.009049"),
-                        pd.Timestamp("2010-01-08 12:10:20.097528"),
-                    ]
+                    "A": pd.Series(
+                        [
+                            pd.NaT,
+                            pd.Timestamp("2020-01-16 22:06:10.378782"),
+                            pd.Timestamp("2000-01-21 02:23:16.009049"),
+                            pd.Timestamp("2010-01-08 12:10:20.097528"),
+                        ],
+                        dtype="datetime64[ns]",
+                    )
                 }
             ),
             "TABLE2": pd.DataFrame(
                 {
-                    "B": [
-                        pd.Timestamp("2013-01-16 05:25:32.145547"),
-                        pd.Timestamp("2019-01-17 01:17:56.740445"),
-                        pd.NaT,
-                        pd.Timestamp("2015-01-29 06:35:09.810264"),
-                    ]
+                    "B": pd.Series(
+                        [
+                            pd.Timestamp("2013-01-16 05:25:32.145547"),
+                            pd.Timestamp("2019-01-17 01:17:56.740445"),
+                            pd.NaT,
+                            pd.Timestamp("2015-01-29 06:35:09.810264"),
+                        ],
+                        dtype="datetime64[ns]",
+                    )
                 }
             ),
         },
@@ -539,24 +551,33 @@ def bodosql_date_types(request):
         {
             "TABLE1": pd.DataFrame(
                 {
-                    "A": [
-                        np.timedelta64(10, "Y"),
-                        np.timedelta64(9, "M"),
-                        np.timedelta64(8, "W"),
-                    ]
-                    * 4,
-                    "B": [
-                        np.timedelta64("nat"),
-                        np.timedelta64(6, "h"),
-                        np.timedelta64(5, "m"),
-                    ]
-                    * 4,
-                    "C": [
-                        np.timedelta64(4, "s"),
-                        np.timedelta64(3, "ms"),
-                        np.timedelta64(2000000, "us"),
-                    ]
-                    * 4,
+                    "A": pd.Series(
+                        [
+                            np.timedelta64(100, "h"),
+                            np.timedelta64(9, "h"),
+                            np.timedelta64(8, "W"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
+                    "B": pd.Series(
+                        [
+                            np.timedelta64("nat"),
+                            np.timedelta64(6, "h"),
+                            np.timedelta64(5, "m"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
+                    "C": pd.Series(
+                        [
+                            np.timedelta64(4, "s"),
+                            np.timedelta64(3, "ms"),
+                            np.timedelta64(2000000, "us"),
+                        ]
+                        * 4,
+                        dtype="timedelta64[ns]",
+                    ),
                 }
             )
         },
@@ -853,7 +874,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("2007-01-01T03:30"),
                             np.datetime64("NaT"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                     "B": pd.Series(
                         [
@@ -863,7 +885,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("NaT"),
                             np.datetime64("2020-11-11T13:21:03.172"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                     "C": pd.Series(
                         [
@@ -873,7 +896,8 @@ def bodosql_nullable_numeric_types(request):
                             np.datetime64("2020-12-01T13:56:03.172"),
                             np.datetime64("2020-02-11"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="datetime64[ns]",
                     ),
                 }
             ),
@@ -890,17 +914,19 @@ def bodosql_nullable_numeric_types(request):
                             np.timedelta64(4, "s"),
                             np.timedelta64("NaT"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                     "B": pd.Series(
                         [
-                            np.timedelta64(10, "Y"),
+                            np.timedelta64(100, "h"),
                             np.timedelta64("NaT"),
                             np.timedelta64("NaT"),
                             np.timedelta64("NaT"),
                             np.timedelta64(5, "m"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                     "C": pd.Series(
                         [
@@ -910,7 +936,8 @@ def bodosql_nullable_numeric_types(request):
                             np.timedelta64(8, "W"),
                             np.timedelta64(6, "h"),
                         ]
-                        * 3
+                        * 3,
+                        dtype="timedelta64[ns]",
                     ),
                 }
             ),
@@ -986,7 +1013,7 @@ def major_types_nullable(request):
                     ),
                     "C": np.array([None, b"poiu", b"fewfqqqqq", b"3f3"] * 3, object),
                 }
-            ),
+            )
         ),
     ]
 )
@@ -1125,27 +1152,27 @@ def local_tz():
 @pytest.fixture
 def tz_aware_df():
     # Transition to Daylight Savings
-    # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds
+    # "1D2h37min48s" --> 1 day, 2 hours, 37 minutes, 48 seconds
     to_dst_series = pd.date_range(
-        start="11/3/2021", freq="1D2H37T48S", periods=30, tz="US/Pacific"
+        start="11/3/2021", freq="1D2h37min48s", periods=30, tz="US/Pacific", unit="ns"
     ).to_series()
 
     # Transition back from Daylight Savings
     from_dst_series = pd.date_range(
-        start="03/1/2022", freq="0D12H30T1S", periods=60, tz="US/Pacific"
+        start="03/1/2022", freq="0D12h30min1s", periods=60, tz="US/Pacific", unit="ns"
     ).to_series()
 
     # February is weird with leap years
     feb_leap_year_series = pd.date_range(
-        start="02/20/2020", freq="1D0H30T0S", periods=20, tz="US/Pacific"
+        start="02/20/2020", freq="1D0h30min0s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     second_quarter_series = pd.date_range(
-        start="05/01/2015", freq="2D0H1T59S", periods=20, tz="US/Pacific"
+        start="05/01/2015", freq="2D0h1min59s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     third_quarter_series = pd.date_range(
-        start="08/17/2000", freq="10D1H1T10S", periods=20, tz="US/Pacific"
+        start="08/17/2000", freq="10D1h1min10s", periods=20, tz="US/Pacific", unit="ns"
     ).to_series()
 
     df = pd.DataFrame(
@@ -1219,14 +1246,14 @@ def load_tpch_data(dir_name):
     We use bodo.jit so we can read easily from a directory.
 
     If rows is not None, only fetches that many rows from each table"""
-    customer_df = pd.read_parquet(dir_name + "/customer.pq/")
-    orders_df = pd.read_parquet(dir_name + "/orders.pq/")
-    lineitem_df = pd.read_parquet(dir_name + "/lineitem.pq/")
-    nation_df = pd.read_parquet(dir_name + "/nation.pq/")
-    region_df = pd.read_parquet(dir_name + "/region.pq/")
-    supplier_df = pd.read_parquet(dir_name + "/supplier.pq/")
-    part_df = pd.read_parquet(dir_name + "/part.pq/")
-    partsupp_df = pd.read_parquet(dir_name + "/partsupp.pq/")
+    customer_df = pd.read_parquet(dir_name + "/customer.pq/", dtype_backend="pyarrow")
+    orders_df = pd.read_parquet(dir_name + "/orders.pq/", dtype_backend="pyarrow")
+    lineitem_df = pd.read_parquet(dir_name + "/lineitem.pq/", dtype_backend="pyarrow")
+    nation_df = pd.read_parquet(dir_name + "/nation.pq/", dtype_backend="pyarrow")
+    region_df = pd.read_parquet(dir_name + "/region.pq/", dtype_backend="pyarrow")
+    supplier_df = pd.read_parquet(dir_name + "/supplier.pq/", dtype_backend="pyarrow")
+    part_df = pd.read_parquet(dir_name + "/part.pq/", dtype_backend="pyarrow")
+    partsupp_df = pd.read_parquet(dir_name + "/partsupp.pq/", dtype_backend="pyarrow")
     return (
         customer_df,
         orders_df,
@@ -1690,39 +1717,65 @@ def load_tpcxbb_data(dir_name):
     We use bodo.jit so we can read easily from a directory."""
     # TODO: Update all the data frames selected so every query returns
     # a non-empty DataFrame
-    store_sales_df = pd.read_parquet(dir_name + "/store_sales").head(1000)
+    store_sales_df = pd.read_parquet(
+        dir_name + "/store_sales", dtype_backend="pyarrow"
+    ).head(1000)
     # we need the entire item df, so we don't get empty queries
-    item_df = pd.read_parquet(dir_name + "/item")
-    customer_df = pd.read_parquet(dir_name + "/customer").head(1000)
-    customer_address_df = pd.read_parquet(dir_name + "/customer_address").head(1000)
+    item_df = pd.read_parquet(dir_name + "/item", dtype_backend="pyarrow")
+    customer_df = pd.read_parquet(dir_name + "/customer", dtype_backend="pyarrow").head(
+        1000
+    )
+    customer_address_df = pd.read_parquet(
+        dir_name + "/customer_address", dtype_backend="pyarrow"
+    ).head(1000)
     customer_demographics_df = pd.read_parquet(
-        dir_name + "/customer_demographics"
+        dir_name + "/customer_demographics", dtype_backend="pyarrow"
     ).head(1000)
-    date_dim_df = pd.read_parquet(dir_name + "/date_dim").head(1000)
-    product_reviews_df = pd.read_parquet(dir_name + "/product_reviews").head(1000)
-    store_df = pd.read_parquet(dir_name + "/store").head(1000)
-    web_clickstreams_df = pd.read_parquet(dir_name + "/web_clickstreams").head(1000)
-    web_sales_df = pd.read_parquet(dir_name + "/web_sales").head(1000)
+    date_dim_df = pd.read_parquet(dir_name + "/date_dim", dtype_backend="pyarrow").head(
+        1000
+    )
+    product_reviews_df = pd.read_parquet(
+        dir_name + "/product_reviews", dtype_backend="pyarrow"
+    ).head(1000)
+    store_df = pd.read_parquet(dir_name + "/store", dtype_backend="pyarrow").head(1000)
+    web_clickstreams_df = pd.read_parquet(
+        dir_name + "/web_clickstreams", dtype_backend="pyarrow"
+    ).head(1000)
+    web_sales_df = pd.read_parquet(
+        dir_name + "/web_sales", dtype_backend="pyarrow"
+    ).head(1000)
     household_demographics_df = pd.read_parquet(
-        dir_name + "/household_demographics"
+        dir_name + "/household_demographics", dtype_backend="pyarrow"
     ).head(1000)
-    inventory_df = pd.read_parquet(dir_name + "/inventory").head(1000)
-    item_marketprices_df = pd.read_parquet(dir_name + "/item_marketprices").head(1000)
-    promotion_df = pd.read_parquet(dir_name + "/promotion").head(1000)
-    store_returns_df = pd.read_parquet(dir_name + "/store_returns").head(1000)
-    time_dim_df = pd.read_parquet(dir_name + "/time_dim").head(1000)
+    inventory_df = pd.read_parquet(
+        dir_name + "/inventory", dtype_backend="pyarrow"
+    ).head(1000)
+    item_marketprices_df = pd.read_parquet(
+        dir_name + "/item_marketprices", dtype_backend="pyarrow"
+    ).head(1000)
+    promotion_df = pd.read_parquet(
+        dir_name + "/promotion", dtype_backend="pyarrow"
+    ).head(1000)
+    store_returns_df = pd.read_parquet(
+        dir_name + "/store_returns", dtype_backend="pyarrow"
+    ).head(1000)
+    time_dim_df = pd.read_parquet(dir_name + "/time_dim", dtype_backend="pyarrow").head(
+        1000
+    )
     # the warehouse df and web_page_df currently only contains 3 and 4 values respectivley,
     # which causes issues with distributed tests.
     # For right now, since neither of these dataframes are actually being used in any of the
     # queries, I'm just concatinating it to itself 3 times to make it large enough so
     # we don't get distribution errors.
-    warehouse_df = pd.read_parquet(dir_name + "/warehouse")
+    warehouse_df = pd.read_parquet(dir_name + "/warehouse", dtype_backend="pyarrow")
     warehouse_df = pd.concat(
         [warehouse_df, warehouse_df, warehouse_df], ignore_index=True
     )
-    web_page_df = pd.read_parquet(dir_name + "/web_page")
+    web_page_df = pd.read_parquet(dir_name + "/web_page", dtype_backend="pyarrow")
     web_page_df = pd.concat([web_page_df, web_page_df, web_page_df], ignore_index=True)
-    web_returns_df = pd.read_parquet(dir_name + "/web_returns").head(1000)
+    web_returns_df = pd.read_parquet(
+        dir_name + "/web_returns", dtype_backend="pyarrow"
+    ).head(1000)
     return (
         store_sales_df,
         item_df,

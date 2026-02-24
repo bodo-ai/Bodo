@@ -8,6 +8,7 @@ import pandas as pd
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.series import BodoSeries
+from bodo.pandas.utils import scalarOutputNACheck
 
 
 class BodoScalar(BodoLazyWrapper):
@@ -60,13 +61,12 @@ class BodoScalar(BodoLazyWrapper):
                 assert self.wrapped_series.nunique() in {0, 1}
                 # Avoid getitem warning
                 out = self.wrapped_series[0]
-            return out
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+                out = self.wrapped_series[0]
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-            out = self.wrapped_series[0]
-
-        return out
+        return scalarOutputNACheck(out, self.wrapped_series.dtype)
 
     @property
     def __pandas_priority__(self):

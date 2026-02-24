@@ -6,6 +6,7 @@ import warnings
 import numba
 import numpy as np
 import sklearn.metrics
+from mpi4py import MPI
 from numba.core import types
 from numba.extending import overload
 from sklearn.exceptions import UndefinedMetricWarning
@@ -13,7 +14,6 @@ from sklearn.utils.validation import column_or_1d
 
 import bodo
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -830,6 +830,8 @@ def log_loss_dist_helper(y_true, y_pred, normalize, sample_weight, labels):
     # See test_sklearn_metrics.py::test_log_loss
     if isinstance(labels, pd.arrays.ArrowStringArray):
         labels = labels.to_numpy()
+    if isinstance(sample_weight, pd.arrays.ArrowExtensionArray):
+        sample_weight = sample_weight.to_numpy()
 
     loss = sklearn.metrics.log_loss(
         y_true,

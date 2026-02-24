@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
 
@@ -23,8 +23,8 @@ def test_partition_cols(hdfs_datapath):
         if bodo.get_rank() == 0:
             df.to_parquet(pd_fname, partition_cols=part_cols)
         bodo.barrier()
-        bd_out = pd.read_parquet(bd_fname)
-        pd_out = pd.read_parquet(pd_fname)
+        bd_out = pd.read_parquet(bd_fname, dtype_backend="pyarrow")
+        pd_out = pd.read_parquet(pd_fname, dtype_backend="pyarrow")
     pd.testing.assert_frame_equal(bd_out, pd_out, check_column_type=False)
 
 
@@ -72,10 +72,10 @@ def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("groupby3.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
@@ -89,10 +89,10 @@ def test_hdfs_pq_asof1(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("asof1.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("asof1.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     py_output["time"] = py_output["time"].astype("datetime64[ns, UTC]")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
@@ -107,10 +107,10 @@ def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("int_nulls_multi.pq")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("int_nulls_multi.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
@@ -120,10 +120,10 @@ def test_hdfs_pq_trailing_sep(datapath, hdfs_datapath):
     hdfs_fname = hdfs_datapath("int_nulls_multi.pq/")
 
     def test_impl(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     fname = datapath("int_nulls_multi.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
@@ -139,6 +139,7 @@ def test_csv_data1(datapath, hdfs_datapath):
             hdfs_fname,
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "C": float, "D": int},
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
@@ -146,6 +147,7 @@ def test_csv_data1(datapath, hdfs_datapath):
         fname,
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "C": float, "D": int},
+        dtype_backend="pyarrow",
     )
 
     # Need check_dtype=False because of nullable floats
@@ -165,6 +167,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data_date1.csv")
@@ -173,6 +176,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
+        dtype_backend="pyarrow",
     )
 
     # Need check_dtype=False because of nullable floats
@@ -188,7 +192,9 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
     fname_dir_multi = hdfs_datapath("example_multi.json")
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def test_impl_with_dtype(fname):
         return pd.read_json(
@@ -202,6 +208,7 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = test_impl(datapath("example.json"))
@@ -431,7 +438,7 @@ def test_hdfs_parquet_read_seq(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_seq.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
@@ -445,7 +452,7 @@ def test_hdfs_parquet_read_1D(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
@@ -459,7 +466,7 @@ def test_hdfs_parquet_read_1D_var(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_1D_var.pq")
 
     def test_read(hdfs_fname):
-        return pd.read_parquet(hdfs_fname)
+        return pd.read_parquet(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
@@ -477,6 +484,7 @@ def test_hdfs_csv_read_seq(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -495,6 +503,7 @@ def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -513,6 +522,7 @@ def test_hdfs_csv_read_1D_var(hdfs_datapath, test_df):
             hdfs_fname,
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -527,7 +537,7 @@ def test_hdfs_csv_read_header_seq(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_seq.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -541,7 +551,7 @@ def test_hdfs_csv_read_header_1D(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_1D.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -555,7 +565,7 @@ def test_hdfs_csv_read_1D_header_var(hdfs_datapath, test_df):
     hdfs_fname = hdfs_datapath("test_df_bodo_header_1D_var.csv")
 
     def test_read():
-        return pd.read_csv(hdfs_fname)
+        return pd.read_csv(hdfs_fname, dtype_backend="pyarrow")
 
     check_func(test_read, (), py_output=test_df)
 
@@ -725,6 +735,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -733,6 +744,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_seq.json")
@@ -751,6 +763,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -759,6 +772,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D.json")
@@ -777,6 +791,7 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype(hdfs_fname):
@@ -785,6 +800,7 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D_var.json")

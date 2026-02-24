@@ -1,37 +1,162 @@
-[project]
+[workspace]
 name = "bodo"
-channels = ["bodo.ai", "conda-forge"]
+channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
-conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
+default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
+azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
+platform =     { features = ["py313", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
+default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
 
-# Build Commands
-[tasks.build-bodo]
-cmd = "pip install --no-deps --no-build-isolation -ve ."
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-[tasks.build-bodo.env]  # SCcache Envs
+[tasks.configure-bodo]
+cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/standard/CMakeCache.txt"]
+[tasks.configure-bodo.env]
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
+[tasks.build-bodo]
+cmd = """
+cmake --build build/standard -j && \
+cmake --install build/standard --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/standard/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo"]
+[tasks.build-bodo.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+
+[tasks.configure-bodo-cudf-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf -Ccmake.define.USE_CUDF=ON"
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/cudf/CMakeCache.txt"]
+[tasks.configure-bodo-cudf-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-in-default-cuda]
+cmd = """
+cmake --build build/cudf -j && \
+cmake --install build/cudf --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/cudf/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-cudf-in-default-cuda"]
+[tasks.build-bodo-cudf-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf]
+depends-on = [
+  { task = "build-bodo-cudf-in-default-cuda", environment = "default-cuda" }
+]
+
+[tasks.configure-bodo-cudf-debug-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf-debug -Ccmake.define.USE_CUDF=ON -Ccmake.build-type='Debug' -Cinstall.strip=false"
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/cudf-debug/CMakeCache.txt"]
+[tasks.configure-bodo-cudf-debug-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-debug-in-default-cuda]
+cmd = """
+cmake --build build/cudf-debug -j && \
+cmake --install build/cudf-debug --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/cudf-debug/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-cudf-debug-in-default-cuda"]
+[tasks.build-bodo-cudf-debug-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-debug]
+depends-on = [
+  { task = "build-bodo-cudf-in-default-cuda", environment = "default-cuda" }
+]
+
+
+[tasks.configure-bodo-cudf-san-in-default-cuda]
+cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf-san -Ccmake.define.USE_CUDF=ON -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false"
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/cudf-san/CMakeCache.txt"]
+[tasks.configure-bodo-cudf-san-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-san-in-default-cuda]
+cmd = """
+cmake -S . -B build/cudf-san -DCMAKE_BUILD_TYPE=DebugSanitize -DUSE_CUDF=ON && \
+cmake --install build/cudf-san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/cudf-san/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-cudf-san-in-default-cuda"]
+[tasks.build-bodo-cudf-san-in-default-cuda.env]
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
+[tasks.build-bodo-cudf-san]
+depends-on = [
+  { task = "build-bodo-cudf-san-in-default-cuda", environment = "default-cuda" }
+]
+
+[tasks.configure-bodo-debug]
+cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/debug -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/debug/CMakeCache.txt"]
+
 [tasks.build-bodo-debug]
-cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
+cmd = """
+cmake --build build/debug -j && \
+cmake --install build/debug --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/debug/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-debug"]
+
+
+[tasks.configure-bodo-san]
+cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/san -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/san/CMakeCache.txt"]
+
 [tasks.build-bodo-san]
-cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
+cmd = """
+cmake --build build/san -j && \
+cmake --install build/san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/san/compile_commands.json compile_commands.json
+"""
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-san"]
 
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
@@ -66,16 +191,20 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
+[feature.cpu.pypi-dependencies]
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
+snowflake-connector-python = "*"
+
+[feature.cpu.pypi-options.dependency-overrides]
+pandas = ">=3.0.0"
+
 [dependencies]
-python = "3.13.*"
 pip = "*"
 # Core Python Deps
-# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
-# TODO upgrade to numba 0.62.0
-numba = ">=0.60,<0.62.0"
 numpy = ">=1.24"
-pandas = ">=2.2"
-pyarrow = { version = "==22.0.0", channel = "conda-forge" }
+pytz = "*"
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -87,7 +216,8 @@ py4j = "==0.10.9.9"
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = ">=1.4"
+# sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
+scikit-learn = ">=1.4,<1.8"
 matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
@@ -96,7 +226,6 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.10"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
@@ -104,8 +233,6 @@ zstandard = "*"
 pymysql = "*"
 psycopg2 = "*"
 sqlalchemy = "*"
-# Snowflake
-snowflake-connector-python = "*"
 # Excel
 xlrd = "*"
 xlsxwriter = "*"
@@ -114,8 +241,35 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==22.0.0", channel = "bodo.ai" }
-libarrow = { version = "==22.0.0", channel = "bodo.ai" }
+libutf8proc = "*"
+
+# Features
+[feature.py314.dependencies]
+python = "3.14.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+
+[feature.cpu.dependencies]
+numba = ">=0.62,<0.64.0"
+pyarrow = "23.0.*"
+pandas = ">=3.0.0"
+
+[feature.cudf]
+platforms = ["linux-64"]
+channels = ["rapidsai", "nvidia", "conda-forge"]
+
+[feature.cudf.dependencies]
+cuda-toolkit = "13.*"
+cuda-version = "13.*"
+rmm = ">=25.12"
+librmm = ">=25.12"
+cudf = ">=25.12"
+nccl = ">=2.18"
+numba = ">=0.60,<0.62.0"
+pyarrow = "21.0.*"
+libarrow = "21.0.*"
+pandas = ">=2.2.0"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
@@ -124,11 +278,18 @@ boost-cpp = "*"
 aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 [feature.rcpp.target.linux.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
+hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
-hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
+hdf5 = { version = "*", build = "*mpi_impi_*" }
+
+
+# Added to PyPi to ignore Pandas <3 constraint
+[feature.dev.pypi-dependencies]
+# Snowflake Testing
+snowflake-sqlalchemy = "*"
+
 
 [feature.dev.dependencies]
 # Build Python
@@ -137,7 +298,7 @@ setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
-mpi4py = ">=4.0,<4.1"
+mpi4py = ">=4.0"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -153,7 +314,8 @@ sqlglot = "*"
 # Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
 duckdb = "!=1.2.1"
 
-pyspark = "4.*"
+# Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
+pyspark = "4.0.*"
 matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
@@ -165,16 +327,14 @@ boto3 = "*"
 # Documentation Testing
 beautifulsoup4 = "*"
 
-# Snowflake Testing
-snowflake-sqlalchemy = "*"
-
 # S3 Testing
 minio-server = "*"
 # GCS testing
 gcsfs = ">=2022.1"
 
 # Testing and CI Tools
-pytest = "*"
+# pytest-split 0.10.0 requires pytest <9. Older pytest-split throws errors in our use.
+pytest = "<9"
 pytest-cov = "*"
 pytest-mock = "*"
 pytest-xdist = "*"
@@ -194,7 +354,8 @@ ipython = "*"
 # Generation/Embedding Tests
 openai = "*"
 
-pytorch = ">=2.0"
+# TODO: Enable when PyTorch is available on Python 3.14
+# pytorch = ">=2.0"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
@@ -213,10 +374,12 @@ pytorch = ">=2.0"
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
 gxx_linux-64 = ">=9"
+mold = ">=2.40"
 
 [feature.dev.target.linux-aarch64.dependencies]
 gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
+mold = ">=2.40"
 
 [feature.dev.target.osx-64.dependencies]
 # Adding clang =19 to prevent build errors from upgrading zstd
@@ -244,12 +407,10 @@ fastapi = "*"
 httpie = "*"
 
 # MPI Handling
-# Restricted to match Intel MPI. Upgrade with IMPI.
-# Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*" }
+openmpi = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*" }
+mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
@@ -258,7 +419,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "=4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]

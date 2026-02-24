@@ -2,6 +2,8 @@
 Tests dataframe library frontend (no triggering of execution).
 """
 
+import warnings
+
 import pandas as pd
 import pytest
 from test_end_to_end import index_val  # noqa
@@ -319,6 +321,7 @@ def test_non_nested_cte():
     assert generated_ctes == 1
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "expr, expected_type",
     [
@@ -403,3 +406,14 @@ def test_from_pandas_errorchecking():
     # Duplicate column names
     with pytest.raises(BodoLibNotImplementedException):
         bd.from_pandas(df3)
+
+
+def test_timestamp_now():
+    """Test basic Timestamp features works and doesn't issue performance warnings."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+
+        bd.Timestamp("2025-01-01 00:00:00")
+
+        # Test static methods works
+        bd.Timestamp.now()

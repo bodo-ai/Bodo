@@ -6,10 +6,10 @@ import datetime
 
 import numpy as np
 import pandas as pd
+from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     check_func,
     create_snowflake_table,

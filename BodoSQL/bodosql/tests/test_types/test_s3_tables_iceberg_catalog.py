@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 
 import bodo
 import bodosql
@@ -32,7 +33,9 @@ def test_basic_read(memory_leak_check, s3_tables_catalog):
         {
             "A": ["ally", "bob", "cassie", "david", None],
             "B": [10.5, -124.0, 11.11, 456.2, -8e2],
-            "C": [True, None, False, None, None],
+            "C": pd.array(
+                [True, None, False, None, None], dtype=pd.ArrowDtype(pa.bool_())
+            ),
         }
     )
 

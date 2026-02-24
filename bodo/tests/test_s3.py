@@ -22,9 +22,10 @@ def test_no_use_ssl(datapath, minio_server_with_s3_envs, s3_bucket):
         return pd.read_parquet(
             fpath,
             storage_options={"anon": False, "endpoint_url": address, "use_ssl": False},
+            dtype_backend="pyarrow",
         )
 
-    py_output = pd.read_parquet(datapath("example.parquet"))
+    py_output = pd.read_parquet(datapath("example.parquet"), dtype_backend="pyarrow")
 
     check_func(
         test_impl,
@@ -54,10 +55,10 @@ def test_partition_cols(minio_server_with_s3_envs, s3_bucket):
         with ensure_clean2(bd_fname):
             write_jit(_get_dist_arg(df, False))
             A0_actual = bodo.jit(returns_maybe_distributed=False)(
-                lambda: pd.read_parquet(f"{bd_fname}/A=0")
+                lambda: pd.read_parquet(f"{bd_fname}/A=0", dtype_backend="pyarrow")
             )()
             A1_actual = bodo.jit(returns_maybe_distributed=False)(
-                lambda: pd.read_parquet(f"{bd_fname}/A=1")
+                lambda: pd.read_parquet(f"{bd_fname}/A=1", dtype_backend="pyarrow")
             )()
         A0_expected = pd.DataFrame({"B": pd.Series([0, 1, 2], dtype="Int64")})
         A1_expected = pd.DataFrame({"B": pd.Series([3, 4, 5], dtype="Int64")})
@@ -91,6 +92,7 @@ def test_s3_csv_data1(
             fpath,
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "C": float, "D": int},
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
@@ -98,6 +100,7 @@ def test_s3_csv_data1(
         fname,
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "C": float, "D": int},
+        dtype_backend="pyarrow",
     )
 
     check_func(
@@ -139,9 +142,10 @@ def test_s3_csv_dir(
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
-    py_out = pd.read_csv(datapath("example.csv"))
+    py_out = pd.read_csv(datapath("example.csv"), dtype_backend="pyarrow")
     # specify dtype here because small partition of dataframe causes only
     # int values(x.0) in float columns, and causes type mismatch becasue
     # pandas infer them as int columns
@@ -155,16 +159,24 @@ def test_s3_csv_data1_compressed(minio_server_with_s3_envs, s3_bucket, datapath)
 
     def test_impl_gzip():
         return pd.read_csv(
-            "s3://bodo-test/csv_data1.csv.gz", names=["A", "B", "C", "D"], header=None
+            "s3://bodo-test/csv_data1.csv.gz",
+            names=["A", "B", "C", "D"],
+            header=None,
+            dtype_backend="pyarrow",
         )
 
     def test_impl_bz2():
         return pd.read_csv(
-            "s3://bodo-test/csv_data1.csv.bz2", names=["A", "B", "C", "D"], header=None
+            "s3://bodo-test/csv_data1.csv.bz2",
+            names=["A", "B", "C", "D"],
+            header=None,
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data1.csv")
-    py_output = pd.read_csv(fname, names=["A", "B", "C", "D"], header=None)
+    py_output = pd.read_csv(
+        fname, names=["A", "B", "C", "D"], header=None, dtype_backend="pyarrow"
+    )
 
     check_func(test_impl_gzip, (), py_output=py_output, check_dtype=False)
     check_func(test_impl_bz2, (), py_output=py_output, check_dtype=False)
@@ -181,6 +193,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
             names=["A", "B", "C", "D"],
             dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("csv_data_date1.csv")
@@ -189,6 +202,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
         names=["A", "B", "C", "D"],
         dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
+        dtype_backend="pyarrow",
     )
     check_func(test_impl, (), py_output=py_output, convert_to_nullable_float=False)
 
@@ -226,7 +240,7 @@ def reset_aws_vars(aws_env_vars, orig_env_vars):
 @pytest.mark.skip(reason="BSE-3369: Data link is broken.")
 def test_s3_pq_anon_public_dataset(memory_leak_check):
     """
-    Test pd.read_parquet(..., storage_options={"anon": True})
+    Test pd.read_parquet(..., storage_options={"anon": True}, dtype_backend="pyarrow")
     with a public dataset on S3.
     """
 
@@ -237,6 +251,7 @@ def test_s3_pq_anon_public_dataset(memory_leak_check):
         df = pd.read_parquet(
             "s3://aws-roda-hcls-datalake/opentargets_1911/19_11_target_list/part-00000-af4c14ab-5cfb-47d9-afc0-58db3bf07129-c000.snappy.parquet",
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         return df
 
@@ -261,10 +276,10 @@ def test_s3_pq_asof1(
     request.getfixturevalue(bucket_fixture)
 
     def test_impl(fpath):
-        return pd.read_parquet(fpath)
+        return pd.read_parquet(fpath, dtype_backend="pyarrow")
 
     fname = datapath("asof1.pq")
-    py_output = cast_dt64_to_ns(pd.read_parquet(fname))
+    py_output = cast_dt64_to_ns(pd.read_parquet(fname, dtype_backend="pyarrow"))
     check_func(test_impl, (f"s3://{bucket_name}/asof1.pq",), py_output=py_output)
 
 
@@ -274,10 +289,10 @@ def test_s3_pq_groupby3(minio_server_with_s3_envs, s3_bucket, datapath):
     """
 
     def test_impl():
-        return pd.read_parquet("s3://bodo-test/groupby3.pq")
+        return pd.read_parquet("s3://bodo-test/groupby3.pq", dtype_backend="pyarrow")
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     check_func(test_impl, (), py_output=py_output)
 
 
@@ -292,11 +307,13 @@ def test_s3_pq_input_file_name_col(
 
     def test_impl():
         return pd.read_parquet(
-            "s3://bodo-test/groupby3.pq", _bodo_input_file_name_col="filename"
+            "s3://bodo-test/groupby3.pq",
+            _bodo_input_file_name_col="filename",
+            dtype_backend="pyarrow",
         )
 
     fname = datapath("groupby3.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     py_output["filename"] = "s3://bodo-test/groupby3.pq"
     check_func(test_impl, (), py_output=py_output)
 
@@ -310,14 +327,19 @@ def test_s3_pq_list_files(
 
     def test_impl():
         return pd.read_parquet(
-            ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
+            ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"],
+            dtype_backend="pyarrow",
         )
 
     def test_impl2(fpaths):
-        return pd.read_parquet(fpaths)
+        return pd.read_parquet(fpaths, dtype_backend="pyarrow")
 
-    py_output_part1 = pd.read_parquet(datapath("example.parquet"))
-    py_output_part2 = pd.read_parquet(datapath("example2.parquet"))
+    py_output_part1 = pd.read_parquet(
+        datapath("example.parquet"), dtype_backend="pyarrow"
+    )
+    py_output_part2 = pd.read_parquet(
+        datapath("example2.parquet"), dtype_backend="pyarrow"
+    )
     py_output = pd.concat([py_output_part1, py_output_part2])
     check_func(test_impl, (), py_output=py_output)
     fpaths = ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
@@ -342,7 +364,9 @@ def test_s3_read_json(
     fname_dir_multi = f"s3://{bucket_name}/example_multi.json"
 
     def test_impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
+        return pd.read_json(
+            fname, orient="records", lines=True, dtype_backend="pyarrow"
+        )
 
     def test_impl_with_dtype(fname):
         return pd.read_json(
@@ -356,6 +380,7 @@ def test_s3_read_json(
                 "four": np.float32,
                 "five": str,
             },
+            dtype_backend="pyarrow",
         )
 
     py_out = test_impl(datapath("example.json"))
@@ -891,9 +916,11 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     write_table()
 
     def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_read.pq")
+        return pd.read_parquet(
+            "s3://bodo-test/test_df_bodo_read.pq", dtype_backend="pyarrow"
+        )
 
-    check_func(test_read, (), py_output=test_df)
+    check_func(test_read, (), py_output=test_df.convert_dtypes(dtype_backend="pyarrow"))
 
 
 def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -924,9 +951,10 @@ def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
             "s3://bodo-test/test_df_bodo_read.csv",
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
+            dtype_backend="pyarrow",
         )
 
-    check_func(test_read, (), py_output=test_df)
+    check_func(test_read, (), py_output=test_df.convert_dtypes(dtype_backend="pyarrow"))
 
 
 def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -953,6 +981,7 @@ def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
     def test_read():
         return pd.read_csv(
             "s3://bodo-test/test_df_bodo_read_header.csv",
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -1122,6 +1151,7 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
+            dtype_backend="pyarrow",
         )
 
     def test_read_infer_dtype():
@@ -1130,10 +1160,15 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},  # type: ignore
+            dtype_backend="pyarrow",
         )
 
     check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
+    check_func(
+        test_read_infer_dtype,
+        (),
+        py_output=test_df.convert_dtypes(dtype_backend="pyarrow"),
+    )
 
 
 @pytest.mark.slow
@@ -1146,9 +1181,13 @@ def test_s3_json_data_has_path(
     """
 
     def test_impl():
-        return pd.read_json("s3://bodo-test/path_example.json", lines=True)
+        return pd.read_json(
+            "s3://bodo-test/path_example.json", lines=True, dtype_backend="pyarrow"
+        )
 
-    py_output = pd.read_json(datapath("path_example.json"), lines=True)
+    py_output = pd.read_json(
+        datapath("path_example.json"), lines=True, dtype_backend="pyarrow"
+    )
     check_func(test_impl, (), py_output=py_output)
 
 
@@ -1168,7 +1207,7 @@ def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     os.environ["AWS_SECRET_ACCESS_KEY"] = "OOibMP..."
 
     def read_data(f):
-        df = pd.read_parquet(f)
+        df = pd.read_parquet(f, dtype_backend="pyarrow")
         return df
 
     bodo_read_data = bodo.jit(distributed=["df"])(read_data)
@@ -1192,7 +1231,9 @@ def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     """
 
     def impl():
-        df = pd.read_parquet("s3://bodo-test/example_deltalake")
+        df = pd.read_parquet(
+            "s3://bodo-test/example_deltalake", dtype_backend="pyarrow"
+        )
         return df
 
     py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
@@ -1204,11 +1245,11 @@ def test_read_parquet_glob_s3(
     minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     filename = "s3://bodo-test/int_nulls_multi.pq"
-    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"), dtype_backend="pyarrow")
     # add glob patterns (only for Bodo, pandas doesn't support it)
     glob_pattern_1 = filename + "/part*.parquet"
     check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
@@ -1221,10 +1262,12 @@ def test_read_parquet_trailing_sep_s3(
     minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl():
-        df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/")
+        df = pd.read_parquet(
+            "s3://bodo-test/int_nulls_multi.pq/", dtype_backend="pyarrow"
+        )
         return df
 
-    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"), dtype_backend="pyarrow")
     check_func(test_impl, (), py_output=pyout, check_dtype=False)
 
 
@@ -1242,6 +1285,7 @@ def test_s3_csv_anon_public_dataset(memory_leak_check):
         df = pd.read_csv(
             "s3://databrew-public-datasets-us-east-1/resolution.csv",
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         return df
 
@@ -1266,6 +1310,7 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
             "s3://awsglue-datasets/examples/us-legislators/all/memberships.json",
             lines=True,
             storage_options={"anon": True},
+            dtype_backend="pyarrow",
         )
         # returning subset of column only (there's 'nan' vs. nan issue)
         return df[["area_id", "on_behalf_of_id", "organization_id", "role"]]
@@ -1283,7 +1328,7 @@ def test_read_parquet_invalid_list_of_files(
     from bodo.utils.typing import BodoError
 
     def test_impl(fnames):
-        df = pd.read_parquet(fnames)
+        df = pd.read_parquet(fnames, dtype_backend="pyarrow")
         return df
 
     with pytest.raises(

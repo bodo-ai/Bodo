@@ -832,8 +832,9 @@ def test_str_find(test_unicode_dict_str_arr, memory_leak_check, method):
     from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     func_dict = {
-        "find": pd.Series(test_unicode_dict_str_arr).str.find,
-        "rfind": pd.Series(test_unicode_dict_str_arr).str.rfind,
+        # NOTE: convert to object to avoid Pandas PyArrow string bugs
+        "find": pd.Series(test_unicode_dict_str_arr).astype(object).str.find,
+        "rfind": pd.Series(test_unicode_dict_str_arr).astype(object).str.rfind,
     }
     func_text = (
         "def impl1(A):\n"
@@ -1121,32 +1122,44 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     check_func(
         impl1,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("AB", case=case),
     )
     check_func(
         impl2,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("피츠버", case=case),
     )
     check_func(
         impl3,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("ab", case=case),
     )
     check_func(
         impl4,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("AB*", case=case),
     )
     check_func(
         impl5,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("피츠버*", case=case),
     )
     check_func(
         impl6,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab*", case=case),
+        py_output=pd.Series(test_unicode_dict_str_arr)
+        .astype(object)
+        .str.match("ab*", case=case),
     )
     # Test flags (and hence `str_match` in dict_arr_ext.py)
     import re
@@ -1156,13 +1169,14 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     def impl7(A):
         return pd.Series(A).str.match(r"ab*", case=case, flags=flag)
 
-    check_func(
-        impl7,
-        (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.match(
-            r"ab*", case=case, flags=flag
-        ),
-    )
+    # Skip due to Pandas 3.0.0 bug with passing flag with regex pattern
+    # check_func(
+    #     impl7,
+    #     (test_unicode_dict_str_arr,),
+    #     py_output=pd.Series(test_unicode_dict_str_arr).astype(object).str.match(
+    #         r"ab*", case=case, flags=flag
+    #     ),
+    # )
 
     # make sure IR has the optimized function
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl7)
@@ -1516,8 +1530,12 @@ def test_concat(memory_leak_check):
         return pd.concat((S1, pd.Series(A1)), ignore_index=True)
 
     def impl3(file1, file2):
-        df1 = pd.read_parquet(file1, _bodo_read_as_dict=["A", "B"])
-        df2 = pd.read_parquet(file2, _bodo_read_as_dict=["A", "B"])
+        df1 = pd.read_parquet(
+            file1, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow"
+        )
+        df2 = pd.read_parquet(
+            file2, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow"
+        )
         return pd.concat([df1, df2], ignore_index=True)
 
     check_func(
@@ -1647,7 +1665,7 @@ def test_gatherv_dict_enc_and_normal_str_array_table(
         table_format_df_scattered = make_df_impl(A, B, C, D)
         bodo.hiframes.boxing._use_dict_str_type = False
         # Gatherv will cause the dict encoded
-        bodo_output = bodo.gatherv(table_format_df_scattered)
+        bodo_output = bodo.libs.distributed_api.gatherv(table_format_df_scattered)
         passed = 1
         if bodo.get_rank() == 0:
             passed = _test_equal_guard(

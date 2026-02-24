@@ -63,6 +63,7 @@ def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
     )
 
 
+@pytest.mark.skip("Not supported in Pandas 3")
 def test_agg_single_builtin(test_groupby_agg_df, memory_leak_check):
     """
     Check that groupby.agg works with a single

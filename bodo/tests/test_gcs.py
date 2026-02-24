@@ -9,7 +9,7 @@ from bodo.tests.utils import check_func
 @pytest.mark.parquet
 def test_read_parquet_gcs():
     def impl(pq_file):
-        df = pd.read_parquet(pq_file)
+        df = pd.read_parquet(pq_file, dtype_backend="pyarrow")
         return len(df)
 
     # We use len and expected_length here because this speeds up
@@ -30,7 +30,7 @@ def test_read_parquet_gcs_filters():
     """
 
     def impl(pq_file):
-        df = pd.read_parquet(pq_file)
+        df = pd.read_parquet(pq_file, dtype_backend="pyarrow")
         df = df[df.VendorID == 1]
         return len(df)
 
@@ -49,6 +49,8 @@ def test_read_csv_gcs(datapath, memory_leak_check):
     """Test read_csv from public GCS bucket"""
 
     def test_impl():
-        return pd.read_csv("gs://anaconda-public-data/iris/iris.csv")
+        return pd.read_csv(
+            "gs://anaconda-public-data/iris/iris.csv", dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, ())

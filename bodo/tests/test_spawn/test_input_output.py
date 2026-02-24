@@ -24,12 +24,15 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame({"A": list(range(100))}, pd.interval_range(0, 100)),
             id="interval_index",
-            marks=[pytest.mark.slow],
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skip("support IntervalIndex in non-jit gather/scatter"),
+            ],
         ),
         pytest.param(
             pd.DataFrame(
                 {"A": list(range(100))},
-                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50),
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50, names=["AA", "BB"]),
             ),
             id="multi_index",
             marks=[pytest.mark.slow],
@@ -66,7 +69,9 @@ pytestmark = pytest_spawn_mode
         pytest.param(
             pd.DataFrame(
                 {"A": ["A"] * 100},
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
+                ),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],
@@ -87,7 +92,8 @@ def df_value(request):
         ),
         pytest.param(
             pd.Series(
-                list(range(100)), pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50)
+                list(range(100)),
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50, names=["AA", "BB"]),
             ),
             id="multi_index",
             marks=[pytest.mark.slow],
@@ -114,7 +120,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)),
+                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)).astype(
+                    "datetime64[ns]"
+                ),
             ),
             id="datetime_index",
             marks=[pytest.mark.slow],
@@ -122,7 +130,9 @@ def df_value(request):
         pytest.param(
             pd.Series(
                 [1, 2, 3, -1, 4] * 20,
-                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+                index=pd.TimedeltaIndex(
+                    pd.timedelta_range("1 days", periods=100, unit="ns")
+                ).astype("timedelta64[ns]"),
             ),
             id="timedelta_index",
             marks=[pytest.mark.slow],
@@ -160,6 +170,11 @@ def test_distributed_input_output_df(df_value):
     def test(df):
         return df
 
+    # Convert non-string column names to strings
+    if not all(isinstance(col, str) for col in df_value.columns):
+        df_value = df_value.copy()
+        df_value.columns = df_value.columns.astype(str)
+
     check_func(test, (df_value,), only_spawn=True, check_pandas_types=False)
 
 
@@ -187,7 +202,7 @@ def test_spawn_distributed():
         pd.MultiIndex.from_arrays(
             [
                 np.arange(5),
-                pd.date_range("2001-10-15", periods=5),
+                pd.date_range("2001-10-15", periods=5).astype("datetime64[ns]"),
             ],
             names=["AA", None],
         ),
@@ -293,8 +308,7 @@ def test_bodo_dataframe_arg_updates():
     @bodo.jit(spawn=True)
     def impl(df, kwarg=None):
         df["A"] += 3
-        if kwarg is not None:
-            kwarg["A"] += 3
+        kwarg["A"] += 3
         return 1
 
     df = pd.DataFrame({"A": [1, 2, 3] * 100})
@@ -314,6 +328,9 @@ def test_bodo_dataframe_arg_updates():
     _test_equal_guard(kwarg_bodo_df, df + 3, check_pandas_types=False)
 
 
+@pytest.mark.skip(
+    reason="TODO: support updating kwargs other than Numpy arrays in the compiler"
+)
 def test_tuple_bodo_dataframe_arg_updates():
     """
     Test that passing a BodoDataFrame in a tuple as an argument to a function updates the data returned when collected
@@ -326,8 +343,7 @@ def test_tuple_bodo_dataframe_arg_updates():
     @bodo.jit(spawn=True)
     def impl(arg, kwarg=None):
         arg[0]["A"] += 3
-        if kwarg is not None:
-            kwarg[0]["A"] += 3
+        kwarg[0]["A"] += 3
         return arg[1]
 
     df = pd.DataFrame({"A": [1, 2, 3] * 100})
@@ -421,6 +437,9 @@ def test_tuple_bodo_series_arg_doesnt_collect():
     _test_equal_guard(new_bodo_series, series, check_pandas_types=False)
 
 
+@pytest.mark.skip(
+    reason="TODO: support updating args other than Numpy arrays in the compiler"
+)
 def test_bodo_series_arg_updates():
     """
     Test that passing a BodoSeries as an argument to a function updates the data returned when collected

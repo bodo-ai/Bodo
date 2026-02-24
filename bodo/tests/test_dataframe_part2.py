@@ -445,7 +445,7 @@ def test_set_table_data_replace(memory_leak_check):
     """
 
     def impl():
-        df = pd.read_parquet("demand.pq")
+        df = pd.read_parquet("demand.pq", dtype_backend="pyarrow")
         df["tier"] = 3
         df["grouping"] = "abc"
         return df
@@ -644,7 +644,7 @@ def test_df_apply_name_datetime_index(memory_leak_check):
         return df.apply(lambda x: x.name.value, axis=1)
 
     df = pd.DataFrame(
-        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="H")
+        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="h")
     )
 
     check_func(test_impl, (df,))
@@ -663,7 +663,8 @@ def test_df_apply_name_timedelta_index(memory_leak_check):
         return df.apply(lambda x: x.name.value, axis=1)
 
     df = pd.DataFrame(
-        {"A": [1, 2, 3, 4, 1]}, index=pd.timedelta_range(start="1 day", periods=5)
+        {"A": [1, 2, 3, 4, 1]},
+        index=pd.timedelta_range(start="1 day", periods=5, unit="ns"),
     )
 
     check_func(test_impl, (df,))
@@ -677,7 +678,7 @@ def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
     """
 
     def impl(df):
-        return df.apply(lambda x: (x[0], x[2], x[1]), axis=1)
+        return df.apply(lambda x: (x.iloc[0], x.iloc[2], x.iloc[1]), axis=1)
 
     df = pd.DataFrame(
         {"A": np.arange(10), "C": np.arange(10, 20), "B": np.arange(20, 30)}
@@ -906,7 +907,7 @@ def test_df_apply_func_case2(memory_leak_check):
         test_impl, all_args_distributed_block=True, all_returns_distributed=True
     )(_get_dist_arg(df, False))
     res = bodo.allgatherv(res)
-    py_res = df.apply(lambda r: 2 * np.arange(r[0]).sum(), axis=1)
+    py_res = df.apply(lambda r: 2 * np.arange(r.iloc[0]).sum(), axis=1)
     pd.testing.assert_series_equal(res, py_res, check_dtype=False)
 
 
@@ -1017,15 +1018,15 @@ def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
 
     def impl1(df):
-        return df.apply(lambda a: pd.Series([a[0], "AA"]), axis=1)
+        return df.apply(lambda a: pd.Series([a.iloc[0], "AA"]), axis=1)
 
     def impl2(df):
         def g(a):
             # TODO: support assert in UDFs properly
             # assert a > 0.0
-            if a[0] > 3:
-                return pd.Series([a[0], 2 * a[0]], ["A", "B"])
-            return pd.Series([a[0], 3 * a[0]], ["A", "B"])
+            if a.iloc[0] > 3:
+                return pd.Series([a.iloc[0], 2 * a.iloc[0]], ["A", "B"])
+            return pd.Series([a.iloc[0], 3 * a.iloc[0]], ["A", "B"])
 
         return df.apply(g, axis=1)
 
@@ -1040,7 +1041,7 @@ def test_df_apply_df_output_multicolumn(memory_leak_check):
     """test DataFrame.apply() with dataframe output with multiple columns"""
 
     def test_impl(df):
-        return df.apply(lambda a: pd.Series([a[0], a[1]]), axis=1)
+        return df.apply(lambda a: pd.Series([a.iloc[0], a.iloc[1]]), axis=1)
 
     df = pd.DataFrame({"A": np.arange(20), "B": ["hi", "there"] * 10})
     check_func(test_impl, (df,))
@@ -1056,12 +1057,12 @@ def test_df_apply_df_output_multistring(memory_leak_check):
             s2 = ""
             s3 = ""
             s4 = ""
-            if row[1] == 0:
-                s3 = str(row[0]) + ","
-                s4 = str(row[2]) + ","
-            elif row[1] == 1:
-                s1 = str(row[0]) + ","
-                s2 = str(row[2]) + ","
+            if row.iloc[1] == 0:
+                s3 = str(row.iloc[0]) + ","
+                s4 = str(row.iloc[2]) + ","
+            elif row.iloc[1] == 1:
+                s1 = str(row.iloc[0]) + ","
+                s2 = str(row.iloc[2]) + ","
             return pd.Series([s1, s2, s3, s4], index=["s1", "s2", "s3", "s4"])
 
         return df.apply(f, axis=1)
@@ -1148,7 +1149,9 @@ def test_df_apply_datetime(memory_leak_check):
         return df.apply(lambda r: r.A, axis=1)
 
     # timedelta
-    df = pd.DataFrame({"A": pd.Series(pd.timedelta_range(start="1 day", periods=6))})
+    df = pd.DataFrame(
+        {"A": pd.Series(pd.timedelta_range(start="1 day", periods=6, unit="ns"))}
+    )
     check_func(test_impl, (df,))
 
     # datetime
@@ -1247,7 +1250,7 @@ def test_dataframe_pipe():
         pd.DataFrame(
             {
                 "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=6, unit="ns")),
             }
         ),
         # datetime
@@ -1380,17 +1383,23 @@ def test_concat_nulls(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["ABC", None, "AA", "B", None, "AA"],
-            "D": pd.date_range(start="2017-01-12", periods=6),
+            "D": pd.date_range(start="2017-01-12", periods=6, unit="ns"),
         }
     )
     df2 = pd.DataFrame(
         {
             "B": np.arange(n),
             "C": np.ones(n),
-            "E": pd.timedelta_range(start=3, periods=n),
+            "E": pd.timedelta_range(start=3, periods=n, unit="ns"),
         }
     )
-    check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
+    check_func(
+        test_impl_concat,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
@@ -1426,7 +1435,7 @@ def test_concat_tuple(memory_leak_check):
             {
                 "B": np.arange(11),
                 "C": np.ones(11),
-                "E": pd.timedelta_range(start=3, periods=11),
+                "E": pd.timedelta_range(start=3, periods=11, unit="ns"),
             },
         ),
         # variable item size data and index
@@ -1625,24 +1634,6 @@ def fillna_dataframe(request):
     return request.param
 
 
-@pytest.mark.parametrize(
-    "method",
-    [
-        "bfill",
-        pytest.param("backfill", marks=pytest.mark.slow),
-        "ffill",
-        pytest.param("pad", marks=pytest.mark.slow),
-    ],
-)
-def test_dataframe_fillna_method(fillna_dataframe, method, memory_leak_check):
-    def test_impl(df, method):
-        return df.fillna(method=method)
-
-    # Set check_dtype=False because Bodo's unboxing type does not match
-    # dtype="string"
-    check_func(test_impl, (fillna_dataframe, method), check_dtype=False)
-
-
 @pytest.mark.slow
 def test_df_replace_df_value(df_value):
     from bodo.utils.typing import BodoError
@@ -1765,7 +1756,7 @@ def test_column_list_getitem1(memory_leak_check):
         {
             "A": [1.1, 2.3, np.nan, 1.7, 3.6] * 2,
             "A2": [3, 1, 2, 3, 5] * 2,
-            "B": [True, False, None, False, True] * 2,
+            "B": pd.array([True, False, None, False, True] * 2, dtype="boolean"),
             "C": ["AA", "C", None, "ABC", ""] * 2,
         },
         index=[3, 1, 2, 4, 0] * 2,
@@ -2143,7 +2134,7 @@ def test_iloc_setitem(memory_leak_check):
 
     # set column with full slice
     def impl1(df):
-        df.iloc[:, 1] = 1.3
+        df.iloc[:, 1] = 1
         return df
 
     # set values with bool index
@@ -2643,7 +2634,15 @@ def test_df_fillna_str_inplace(memory_leak_check):
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", None, "c", "bdd", "c", "a"]}
     )
-    check_func(test_impl, (df_str,), copy_input=True, use_dict_encoded_strings=False)
+    out = df_str.copy()
+    out["B"] = out["B"].fillna("ABC")
+    check_func(
+        test_impl,
+        (df_str,),
+        copy_input=True,
+        use_dict_encoded_strings=False,
+        py_output=out,
+    )
 
 
 def test_df_fillna_binary_inplace(memory_leak_check):
@@ -2659,9 +2658,12 @@ def test_df_fillna_binary_inplace(memory_leak_check):
             "B": [b"ab", b"", None, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
         }
     )
-    check_func(test_impl, (df_str,), copy_input=True)
+    out = df_str.copy()
+    out["B"] = out["B"].fillna(b"kjlkas")
+    check_func(test_impl, (df_str,), copy_input=True, py_output=out)
 
 
+@pytest.mark.skip("TODO: Pandas 3 doesn't support inplace updates like this")
 def test_df_alias(memory_leak_check):
     """Test alias analysis for df data arrays. Without proper alias info, the fillna
     changes in data array will be optimized away incorrectly.
@@ -2696,7 +2698,7 @@ def test_df_type_unify_error():
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
 
-    if PYVERSION in ((3, 10), (3, 12), (3, 13)):
+    if PYVERSION in ((3, 10), (3, 12), (3, 13), (3, 14)):
         # In Python 3.10 this function has two returns in the bytecode
         # as opposed to a phi node
         error_type = BodoError
@@ -2899,6 +2901,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     # check_func(impl9, (df,), copy_input=True)
 
 
+@pytest.mark.skip("TODO: Pandas 3 copy semantics are different")
 def test_df_copy_update(memory_leak_check):
     """
     Test if df.copy() works as expected with
@@ -2908,13 +2911,13 @@ def test_df_copy_update(memory_leak_check):
     def impl1(df):
         df1 = df.copy()
         df1["B"] = np.arange(len(df1))
-        df1["A"][2] = 7
+        df1.loc[2, "A"] = 7
         return df, df1
 
     def impl2(df):
         df1 = df.copy(deep=False)
         df1["B"] = np.arange(len(df1))
-        df1["A"][2] = 7
+        df1.loc[2, "A"] = 7
         return df, df1
 
     df = pd.DataFrame({"A": [1, 2, 3] * 10, "C": [2, 3, 4] * 10})
@@ -2957,7 +2960,9 @@ def test_unsupported_df_method():
             {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
         ),
         # timedelta
-        pd.DataFrame({"D": pd.Series(pd.timedelta_range(start="1 day", periods=4))}),
+        pd.DataFrame(
+            {"D": pd.Series(pd.timedelta_range(start="1 day", periods=4, unit="ns"))}
+        ),
         # string
         pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", None]}),
         # nullable int

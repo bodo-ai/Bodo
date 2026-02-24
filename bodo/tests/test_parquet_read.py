@@ -25,6 +25,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     _check_for_io_reader_filters,
     _get_dist_arg,
+    _test_equal,
     cast_dt64_to_ns,
     check_func,
     count_array_REPs,
@@ -53,7 +54,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
     fname = datapath(fname)
 
     def test_impl():
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (), check_dtype=False)
 
@@ -81,7 +82,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (datapath(fname),))
 
@@ -101,10 +102,10 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
     fpath = datapath(fname)
 
     def impl():
-        df = pd.read_parquet(fpath)
+        df = pd.read_parquet(fpath, dtype_backend="pyarrow")
         return pd.DataFrame({"DT64": df.DT64, "col2": df.DATE})
 
-    df = pd.read_parquet(fpath)
+    df = pd.read_parquet(fpath, dtype_backend="pyarrow")
     output = cast_dt64_to_ns(pd.DataFrame({"DT64": df.DT64, "col2": df.DATE}))
     check_func(impl, (), only_seq=True, py_output=output)
 
@@ -133,7 +134,9 @@ def test_read_partitions_datetime(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, s_d, e_d):
-            df = pd.read_parquet(path, columns=["c", "part", "a"])
+            df = pd.read_parquet(
+                path, columns=["c", "part", "a"], dtype_backend="pyarrow"
+            )
             return df[
                 (pd.to_datetime(df["part"]) >= pd.to_datetime(s_d))
                 & (pd.to_datetime(df["part"]) <= pd.to_datetime(e_d))
@@ -165,10 +168,10 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         df = pd.DataFrame(
             {
                 "A": pd.date_range(
-                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+                    "2018-04-09", periods=50, freq="2D1h", tz="America/Los_Angeles"
                 ),
-                "B": pd.date_range("2018-04-09", periods=50, freq="2D1H"),
-                "C": pd.date_range("2018-04-09", periods=50, freq="2D1H", tz="Poland"),
+                "B": pd.date_range("2018-04-09", periods=50, freq="2D1h"),
+                "C": pd.date_range("2018-04-09", periods=50, freq="2D1h", tz="Poland"),
                 "D": pd.date_range(
                     "2018-04-09", periods=50, freq="5001ns"
                 ),  # Force timestamp64 as NS
@@ -182,7 +185,7 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         Read parquet that should succeed
         because there are no tz columns.
         """
-        df = pd.read_parquet("test_tz.pq")
+        df = pd.read_parquet("test_tz.pq", dtype_backend="pyarrow")
         return df
 
     def test_impl2():
@@ -190,7 +193,7 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         Read parquet that should succeed
         because there are no tz columns.
         """
-        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
+        df = pd.read_parquet("test_tz.pq", columns=["B", "C"], dtype_backend="pyarrow")
         return df
 
     bodo.barrier()
@@ -213,10 +216,10 @@ def test_read_parquet_all_null_col(fname, memory_leak_check, datapath):
     fname_ = datapath(fname)
 
     def test_impl(_fname_):
-        df = pd.read_parquet(_fname_)
+        df = pd.read_parquet(_fname_, dtype_backend="pyarrow")
         return df
 
-    py_output = pd.read_parquet(fname_)
+    py_output = pd.read_parquet(fname_, dtype_backend="pyarrow")
 
     check_func(test_impl, (fname_,), py_output=py_output)
 
@@ -243,7 +246,7 @@ def test_read_parquet_large_string_array(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             return df
 
         check_func(impl, (fname,))
@@ -315,7 +318,7 @@ def test_read_parquet_vv_large_string_array(memory_leak_check):
         else:
 
             def impl(path):
-                df = pd.read_parquet(path)
+                df = pd.read_parquet(path, dtype_backend="pyarrow")
                 return df
 
             # Verify that it runs without error
@@ -326,7 +329,7 @@ def test_read_parquet_vv_large_string_array(memory_leak_check):
 @pytest.mark.jit_dependency
 def test_pq_arrow_array_random():
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     def gen_random_arrow_array_struct_single_int(span, n):
         e_list = []
@@ -377,7 +380,12 @@ def test_pq_arrow_array_random():
 
                 write_file(df)
             bodo.barrier()
-            check_func(test_impl, (fname,), check_dtype=False)
+            check_func(
+                test_impl,
+                (fname,),
+                check_dtype=False,
+                py_output=pd.read_parquet(fname, dtype_backend="pyarrow"),
+            )
 
     for df in [df_work1, df_work2, df_work3, df_work4, df_work5, df_work6, df_work7]:
         process_df(df)
@@ -387,7 +395,7 @@ def test_pq_categorical_read(memory_leak_check):
     """test reading categorical data from Parquet files"""
 
     def impl():
-        df = pd.read_parquet("test_cat.pq")
+        df = pd.read_parquet("test_cat.pq", dtype_backend="pyarrow")
         return df
 
     try:
@@ -409,7 +417,7 @@ def test_pq_array_item(datapath):
     # TODO: [BE-581] Handle cases where the number of processes are
     # greater than the number of rows for nested arrays and other types.
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl, (datapath("list_int.pq"),))
 
@@ -444,7 +452,7 @@ def test_pq_unsupported_types(datapath, memory_leak_check):
     """test unsupported data types in unselected columns"""
 
     def test_impl(fname):
-        return pd.read_parquet(fname, columns=["B"])
+        return pd.read_parquet(fname, columns=["B"], dtype_backend="pyarrow")
 
     # FIXME I think we do suport everything in nested_struct_example.pq
     check_func(test_impl, (datapath("nested_struct_example.pq"),))
@@ -482,7 +490,7 @@ def test_RangeIndex_input(request, memory_leak_check):
 @pytest.mark.parametrize("pq_write_idx", [True, None, False])
 def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
     def impl():
-        df = pd.read_parquet("test.pq")
+        df = pd.read_parquet("test.pq", dtype_backend="pyarrow")
         return df
 
     try:
@@ -503,7 +511,7 @@ def test_pq_select_column(
     test_RangeIndex_input, index_name, pq_write_idx, memory_leak_check
 ):
     def impl():
-        df = pd.read_parquet("test.pq", columns=["A", "C"])
+        df = pd.read_parquet("test.pq", columns=["A", "C"], dtype_backend="pyarrow")
         return df
 
     try:
@@ -521,7 +529,7 @@ def test_pq_select_column(
 
 def test_pq_index(datapath, memory_leak_check):
     def test_impl(fname):
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     # passing function name as value to test value-based dispatch
     fname = datapath("index_test1.pq")
@@ -531,7 +539,7 @@ def test_pq_index(datapath, memory_leak_check):
     fname = datapath("index_test2.pq")
 
     def test_impl2():
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     check_func(test_impl2, (), only_seq=True, check_dtype=False)
 
@@ -541,7 +549,7 @@ def test_pq_multi_idx(memory_leak_check):
     np.random.seed(0)
 
     def impl():
-        return pd.read_parquet("multi_idx_parquet.pq")
+        return pd.read_parquet("multi_idx_parquet.pq", dtype_backend="pyarrow")
 
     try:
         if bodo.get_rank() == 0:
@@ -584,28 +592,28 @@ def test_read_partitions(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            return pd.read_parquet(path)
+            return pd.read_parquet(path, dtype_backend="pyarrow")
 
         def impl2(path, val):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             return df[df["part"] == val]
 
         # make sure filtering doesn't happen if df is used before filtering
         def impl3(path, val):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             n = len(df)
             n2 = len(df[df["part"] == val])
             return n, n2
 
         # make sure filtering doesn't happen if df is used after filtering
         def impl4(path, val):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             n2 = len(df[df["part"] == val])
             return len(df), n2
 
         # make sure filtering happens if df name is reused
         def impl5(path, val):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             n = len(df[df["part"] == val])
             df = pd.DataFrame({"A": np.arange(11)})
             n += df.A.sum()
@@ -613,12 +621,12 @@ def test_read_partitions(memory_leak_check):
 
         # make sure filtering works when there are no matching files
         def impl6(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             return df[df["part"] == "z"]
 
         # TODO(ehsan): make sure filtering happens if df name is reused in control flow
         # def impl7(path, val):
-        #     df = pd.read_parquet(path)
+        #     df = pd.read_parquet(path, dtype_backend="pyarrow")
         #     n = len(df[df["part"] == val])
         #     if val == "b":
         #         df = pd.DataFrame({"A": np.arange(11)})
@@ -754,7 +762,7 @@ def test_read_partitions_implicit_and_simple(memory_leak_check):
             return df
 
         def impl2(path, val):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             df = df[df["part"] == "a"]
             # This function call should prevent lowering the second filter.
             sum1 = df["a"].sum()
@@ -798,7 +806,7 @@ def test_read_partitions_string_int(memory_leak_check):
         bodo.barrier()
 
         def impl1(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             return df[(df["c"] == "abc") | (df["c"] == "4")]
 
         # TODO(ehsan): match Index
@@ -870,7 +878,7 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
         bodo.barrier()
 
         def impl1(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             return df[(df["a"] > 5) & (df["c"] == 2)].b
 
         # TODO(ehsan): match Index
@@ -939,7 +947,7 @@ def test_read_partitions_cat_ordering(memory_leak_check):
 @pytest_mark_not_df_lib
 @pytest.mark.parametrize("test_tz", [True, False])
 def test_partition_cols(test_tz: bool, memory_leak_check):
-    from bodo.mpi4py import MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -1004,7 +1012,9 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
                     ds = pq.ParquetDataset(TEST_DIR)
                     assert ds.partitioning.schema.names == part_cols
                     # read bodo output with pandas
-                    df_test = cast_dt64_to_ns(pd.read_parquet(TEST_DIR))
+                    df_test = cast_dt64_to_ns(
+                        pd.read_parquet(TEST_DIR, dtype_backend="pyarrow")
+                    )
                     # pandas reads the partition columns as categorical, but they
                     # are not categorical in input dataframe, so we do some dtype
                     # conversions to be able to compare the dataframes
@@ -1012,7 +1022,7 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
                         if part_col == "E":
                             # convert categorical back to date
                             df_test[part_col] = (
-                                df_test[part_col].astype("datetime64").dt.date
+                                df_test[part_col].astype("datetime64[ns]").dt.date
                             )
                         elif part_col == "C":
                             # convert the bool input column to categorical of strings
@@ -1029,7 +1039,11 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
                     # use check_like=True because the order of columns has changed
                     # (partition columns appear at the end after reading)
                     pd.testing.assert_frame_equal(
-                        df_test, df_in, check_like=True, check_column_type=False
+                        df_test,
+                        df_in,
+                        check_like=True,
+                        check_column_type=False,
+                        check_dtype=False,
                     )
                     shutil.rmtree(TEST_DIR)
             except Exception as e:
@@ -1069,7 +1083,9 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, s_d, e_d):
-            df = pd.read_parquet(path, columns=["c", "part", "a"])
+            df = pd.read_parquet(
+                path, columns=["c", "part", "a"], dtype_backend="pyarrow"
+            )
             return df[
                 (pd.to_datetime(df["part"], format="%Y-%d-%m") >= pd.to_datetime(s_d))
                 & (pd.to_datetime(df["part"], format="%Y-%d-%m") <= pd.to_datetime(e_d))
@@ -1125,7 +1141,7 @@ def test_read_partitions_large(memory_leak_check):
         bodo.barrier()
 
         def impl1(path, s_d, e_d):
-            df = pd.read_parquet(path, columns=["A", "B"])
+            df = pd.read_parquet(path, columns=["A", "B"], dtype_backend="pyarrow")
             return df[
                 (pd.to_datetime(df["A"].astype(str)) >= pd.to_datetime(s_d))
                 & (pd.to_datetime(df["A"].astype(str)) <= pd.to_datetime(e_d))
@@ -1162,7 +1178,7 @@ def test_from_parquet_partition_bitsize(datapath):
     # For some reason, when the number of rows was small enough, the output was correct, despite the differing bitwidth.
     # However, checking the actual categories still exposes the error.
     def impl2(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         return (
             get_series_data(df["parent_wom"]).dtype.categories[0],
             get_series_data(df["parent_wom"]).dtype.categories[1],
@@ -1184,13 +1200,13 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             df = df[(df["A"] != 2)]
             return df
 
         # test for predicate pushdown removing all rows
         def impl2(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             df = df[(df["A"] == 100)]
             return df
 
@@ -1224,7 +1240,7 @@ def test_read_predicates_isnull(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[(df["B"] == 2) & (df["A"].notna())]
             return df
 
@@ -1272,7 +1288,7 @@ def test_read_predicates_timestamp_date(memory_leak_check):
     with ensure_clean(filepath):
 
         def impl(path):
-            df = pd.read_parquet(filepath)
+            df = pd.read_parquet(filepath, dtype_backend="pyarrow")
             df = df[df.A > datetime.date(2021, 3, 30)]
             return df
 
@@ -1305,7 +1321,7 @@ def test_read_predicates_isnull_alone(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, dtype_backend="pyarrow")
             df = df[df["A"].notna()]
             return df
 
@@ -1340,22 +1356,22 @@ def test_read_predicates_isin(memory_leak_check):
         bodo.barrier()
 
         def impl1(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df.A.isin([1, 2])]
             return df.B
 
         def impl2(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df.A.isin({1, 2})]
             return df.B
 
         def impl3(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df["A"].isin([1, 2]) & df["C"].isin(["B"])]
             return df.B
 
         def impl4(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df["A"].isin({1, 2}) | df["C"].isin(["B"])]
             return df.B
 
@@ -1428,17 +1444,17 @@ def test_read_partitions_isin(memory_leak_check):
         bodo.barrier()
 
         def impl1(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df.A.isin([1, 2])]
             return df.B
 
         def impl2(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df["A"].isin([1, 2]) & df["C"].isin(["B"])]
             return df.B
 
         def impl3(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[df["A"].isin([1, 2]) | df["C"].isin(["B"])]
             return df.B
 
@@ -1492,7 +1508,7 @@ def test_read_predicates_and_or(memory_leak_check):
     bodo.barrier()
 
     def impl(path):
-        df = pd.read_parquet("pq_data")
+        df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
         df = df[
             (((df["A"] == 2) | (df["B"] == 1)) & (df["B"] != 4))
             & (((df["A"] == 3) | (df["B"] == 5)) & (df["B"] != 2))
@@ -1523,7 +1539,7 @@ def test_bodosql_pushdown_codegen(datapath):
     from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl1(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df = df[
             pd.Series(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)).values
             > 1
@@ -1566,19 +1582,19 @@ def test_filter_pushdown_past_column_filters():
                 df.to_parquet("pq_data", partition_cols="A")  # type: ignore
 
             def impl1():
-                df = pd.read_parquet("pq_data")
+                df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
                 df = df[["A", "C"]]
                 df = df[df["C"] > 5]
                 return df
 
             def impl2():
-                df = pd.read_parquet("pq_data")
+                df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
                 df = df.loc[:, ["B", "A", "D"]]
                 df = df[df["D"] < 4]
                 return df
 
             def impl3():
-                df = pd.read_parquet("pq_data")
+                df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
                 df = df.loc[:, ["C", "B", "A", "D"]]
                 df = df.loc[:, ["B", "A", "D"]]
                 df = df.loc[:, ["B", "D"]]
@@ -1632,22 +1648,22 @@ def test_read_pq_head_only(datapath, memory_leak_check):
 
     # read both shape and head()
     def impl1(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         return df.shape, df.head(4)
 
     # shape only
     def impl2(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         return len(df)
 
     # head only
     def impl3(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         return df.head()
 
     # head and shape without table format
     def impl4(path):
-        df = pd.read_parquet(path).loc[:, ["A"]]
+        df = pd.read_parquet(path, dtype_backend="pyarrow").loc[:, ["A"]]
         return df.shape, df.head(4)
 
     # large file
@@ -1707,15 +1723,21 @@ def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
     """
 
     def impl(path1, path2):
-        df1 = pd.read_parquet(path1)
-        df2 = pd.read_parquet(path2)
+        df1 = pd.read_parquet(path1, dtype_backend="pyarrow")
+        df2 = pd.read_parquet(path2, dtype_backend="pyarrow")
         return df1.head(4), df2.head(5)
 
     fname = datapath("int_nulls_multi.pq")
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        check_func(impl, (fname, fname), check_dtype=False)
+        out = pd.read_parquet(fname, dtype_backend="pyarrow")
+        check_func(
+            impl,
+            (fname, fname),
+            check_dtype=False,
+            py_output=(out.head(4), out.head(5)),
+        )
 
         if not bodo.test_dataframe_library_enabled:
             check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
@@ -1734,18 +1756,18 @@ def test_read_pq_trailing_sep(datapath, memory_leak_check):
     folder_name = datapath("list_int.pq/")
 
     def impl():
-        return pd.read_parquet(folder_name)
+        return pd.read_parquet(folder_name, dtype_backend="pyarrow")
 
     check_func(impl, ())
 
 
 def test_read_parquet_glob(datapath, memory_leak_check):
     def test_impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     filename = datapath("int_nulls_multi.pq")
-    pyout = pd.read_parquet(filename)
+    pyout = pd.read_parquet(filename, dtype_backend="pyarrow")
     # add glob patterns (only for Bodo, pandas doesn't support it)
     glob_pattern_1 = filename + "/part*.parquet"
     check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
@@ -1761,7 +1783,7 @@ def test_read_parquet_list_of_globs(memory_leak_check):
     """test reading when passing a list of globstrings"""
 
     def test_impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     globstrings = [
@@ -1784,7 +1806,7 @@ def test_read_parquet_list_of_globs(memory_leak_check):
     regex_str = r"\/A=(\d+)\/" if sys.platform != "win32" else r"\\A=(\d+)\\"
     regexp = re.compile(regex_str)
     for f in files:
-        df = pd.read_parquet(f)
+        df = pd.read_parquet(f, dtype_backend="pyarrow")
         df["A"] = int(regexp.search(f).group(1))
         chunks.append(df)
     pyout = pd.concat(chunks).reset_index(drop=True)
@@ -1799,14 +1821,19 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_parquet(
-            ["bodo/tests/data/example.parquet", "bodo/tests/data/example2.parquet"]  # type: ignore
+            ["bodo/tests/data/example.parquet", "bodo/tests/data/example2.parquet"],  # type: ignore
+            dtype_backend="pyarrow",
         )
 
     def test_impl2(fpaths):
-        return pd.read_parquet(fpaths)
+        return pd.read_parquet(fpaths, dtype_backend="pyarrow")
 
-    py_output_part1 = pd.read_parquet(datapath("example.parquet"))
-    py_output_part2 = pd.read_parquet(datapath("example2.parquet"))
+    py_output_part1 = pd.read_parquet(
+        datapath("example.parquet"), dtype_backend="pyarrow"
+    )
+    py_output_part2 = pd.read_parquet(
+        datapath("example2.parquet"), dtype_backend="pyarrow"
+    )
     py_output = pd.concat([py_output_part1, py_output_part2])
     check_func(test_impl, (), py_output=py_output)
     fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
@@ -1823,7 +1850,7 @@ def test_pq_non_constant_filepath_error(datapath):
     @bodo.jit
     def impl():
         for filepath in [f1]:
-            pd.read_parquet(filepath)
+            pd.read_parquet(filepath, dtype_backend="pyarrow")
 
     @bodo.jit(
         locals={
@@ -1839,7 +1866,7 @@ def test_pq_non_constant_filepath_error(datapath):
     )
     def impl2():
         for filepath in [f1]:
-            df = pd.read_parquet(filepath)
+            df = pd.read_parquet(filepath, dtype_backend="pyarrow")
         return df  # type: ignore
 
     msg = (
@@ -1862,7 +1889,7 @@ def test_read_parquet_invalid_path():
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        df = pd.read_parquet("I_dont_exist.pq")
+        df = pd.read_parquet("I_dont_exist.pq", dtype_backend="pyarrow")
         return df
 
     with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
@@ -1874,7 +1901,7 @@ def test_read_parquet_invalid_path_glob():
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        df = pd.read_parquet("I*dont*exist")
+        df = pd.read_parquet("I*dont*exist", dtype_backend="pyarrow")
         return df
 
     with pytest.raises(BodoError, match="No files found matching glob pattern"):
@@ -1886,7 +1913,7 @@ def test_read_parquet_invalid_list_of_files(datapath):
     from bodo.utils.typing import BodoError
 
     def test_impl(fnames):
-        df = pd.read_parquet(fnames)
+        df = pd.read_parquet(fnames, dtype_backend="pyarrow")
         return df
 
     with pytest.raises(
@@ -1919,7 +1946,7 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        return pd.read_parquet("I_dont_exist.pq")
+        return pd.read_parquet("I_dont_exist.pq", dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
         bodo.jit(test_impl)()
@@ -1952,44 +1979,58 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
 
     @bodo.jit
     def test_impl1(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A"], dtype_backend="pyarrow")
 
     @bodo.jit
     def test_impl2(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["B"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["B"], dtype_backend="pyarrow")
 
     @bodo.jit
     def test_impl3(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["CC2"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["CC2"], dtype_backend="pyarrow"
+        )
 
     @bodo.jit
     def test_impl4(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "CC2"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["A", "CC2"], dtype_backend="pyarrow"
+        )
 
     @bodo.jit
     def test_impl5(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["B", "CC2"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["B", "CC2"], dtype_backend="pyarrow"
+        )
 
     @bodo.jit
     def test_impl6(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["A", "B"], dtype_backend="pyarrow"
+        )
 
     @bodo.jit
     def test_impl7(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "CC2"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["A", "B", "CC2"], dtype_backend="pyarrow"
+        )
 
     # 'D' shouldn't be read as dictionary encoded since it's not a string column
     @bodo.jit
     def test_impl8(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "CC2", "D"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["A", "B", "CC2", "D"], dtype_backend="pyarrow"
+        )
 
     @bodo.jit
     def test_impl9(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["D"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["D"], dtype_backend="pyarrow")
 
     @bodo.jit
     def test_impl10(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "D"])
+        return pd.read_parquet(
+            fname, _bodo_read_as_dict=["A", "D"], dtype_backend="pyarrow"
+        )
 
     try:
         stream = io.StringIO()
@@ -2105,7 +2146,7 @@ def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
         bodo.barrier()
 
         def test_impl1(fname):
-            return pd.read_parquet(fname)
+            return pd.read_parquet(fname, dtype_backend="pyarrow")
 
         check_func(test_impl1, (fname,))
 
@@ -2139,10 +2180,10 @@ def test_read_parquet_all_null_col_subsets(
     fname = datapath("all_null_col_eg2.pq")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, columns=col_subset)
+        df = pd.read_parquet(fname, columns=col_subset, dtype_backend="pyarrow")
         return df
 
-    py_output = pd.read_parquet(fname, columns=col_subset)
+    py_output = pd.read_parquet(fname, columns=col_subset, dtype_backend="pyarrow")
 
     check_func(test_impl, (fname,), py_output=py_output)
 
@@ -2156,7 +2197,9 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     fname = datapath("decimal1.pq")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = pd.read_parquet(
+            fname, _bodo_input_file_name_col="fname", dtype_backend="pyarrow"
+        )
         # pyspark adds prefix `file://` for local files, but we follow PyArrow
         # XXX Should we do this by default?
         return df
@@ -2165,6 +2208,7 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     # __filename column
     df: pd.DataFrame = pq.read_table(fname, columns=["A", "__filename"]).to_pandas()
     py_output = df.rename({"__filename": "fname"}, axis=1)
+    py_output["A"] = py_output["A"].astype(pd.ArrowDtype(pa.decimal128(38, 18)))
 
     check_func(
         test_impl,
@@ -2190,7 +2234,9 @@ def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_
     fname = datapath("test_partitioned.pq")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = pd.read_parquet(
+            fname, _bodo_input_file_name_col="fname", dtype_backend="pyarrow"
+        )
         # pyspark adds prefix `file://` for local files, but we follow PyArrow
         # XXX Should we do this by default?
         return df
@@ -2225,12 +2271,14 @@ def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check
     fname = datapath("example.parquet")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = pd.read_parquet(
+            fname, _bodo_input_file_name_col="fname", dtype_backend="pyarrow"
+        )
         return df
 
     # Unlike the other tests, we're only checking for a specific code path,
     # so we don't need to check against PySpark directly.
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     # PyArrow replaces "\" with "/" in file paths on Windows for some reason
     py_output["fname"] = fname.replace("\\", "/")
 
@@ -2259,7 +2307,9 @@ def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check
     fname = datapath("example.parquet")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = pd.read_parquet(
+            fname, _bodo_input_file_name_col="fname", dtype_backend="pyarrow"
+        )
         df = df[["one", "two", "three"]]
         return df
 
@@ -2273,7 +2323,7 @@ def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check
     # Check that output is correct
     # Unlike the other tests, we're only checking for a specific optimization,
     # so we don't need to check against PySpark directly.
-    py_output = pd.read_parquet(fname)
+    py_output = pd.read_parquet(fname, dtype_backend="pyarrow")
     py_output = py_output[["one", "two", "three"]]
 
     check_func(
@@ -2299,7 +2349,9 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     fname = datapath("decimal1.pq")
 
     def test_impl(fname):
-        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = pd.read_parquet(
+            fname, _bodo_input_file_name_col="fname", dtype_backend="pyarrow"
+        )
         # pyspark adds prefix `file://` for local files, but we follow PyArrow
         # XXX Should we do this by default?
         return df[["fname"]]
@@ -2335,7 +2387,9 @@ def test_read_parquet_unsupported_arg(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl():
-        df = pd.read_parquet("some_file.pq", invalid_arg="invalid")
+        df = pd.read_parquet(
+            "some_file.pq", invalid_arg="invalid", dtype_backend="pyarrow"
+        )
         return df
 
     with pytest.raises(
@@ -2352,17 +2406,25 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl1():
-        df = pd.read_parquet("some_file.pq", storage_options={"invalid_arg": "invalid"})
+        df = pd.read_parquet(
+            "some_file.pq",
+            storage_options={"invalid_arg": "invalid"},
+            dtype_backend="pyarrow",
+        )
         return df
 
     def test_impl2():
         df = pd.read_parquet(
-            "some_file.pq", storage_options={"invalid_arg": "invalid", "anon": True}
+            "some_file.pq",
+            storage_options={"invalid_arg": "invalid", "anon": True},
+            dtype_backend="pyarrow",
         )
         return df
 
     def test_impl3():
-        df = pd.read_parquet("some_file.pq", storage_options="invalid")  # type: ignore
+        df = pd.read_parquet(
+            "some_file.pq", storage_options="invalid", dtype_backend="pyarrow"
+        )  # type: ignore
         return df
 
     with pytest.raises(
@@ -2393,7 +2455,9 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
     """
 
     def test_impl():
-        df = pd.read_parquet("some_file.pq", storage_options={"anon": "True"})
+        df = pd.read_parquet(
+            "some_file.pq", storage_options={"anon": "True"}, dtype_backend="pyarrow"
+        )
         return df
 
     with pytest.raises(
@@ -2414,7 +2478,9 @@ def test_read_path_hive_partitions(datapath, memory_leak_check):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
     def test_impl():
-        return pd.read_parquet(filepath, _bodo_use_hive=False).count()
+        return pd.read_parquet(
+            filepath, _bodo_use_hive=False, dtype_backend="pyarrow"
+        ).count()
 
     exp_output = pd.Series(
         {
@@ -2451,7 +2517,7 @@ def test_read_parquet_hive_partitions_type_clash(datapath):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
     def test_impl():
-        return pd.read_parquet(filepath, _bodo_use_hive=True)
+        return pd.read_parquet(filepath, _bodo_use_hive=True, dtype_backend="pyarrow")
 
     with pytest.raises(
         BodoError,
@@ -2467,7 +2533,7 @@ def test_read_parquet_read_sanitize_colnames(datapath, memory_leak_check):
     that must be sanitized when generating the func_text"""
 
     def read_impl(path):
-        return pd.read_parquet(path)
+        return pd.read_parquet(path, dtype_backend="pyarrow")
 
     check_func(read_impl, (datapath("sanitization_test.pq"),))
 
@@ -2476,7 +2542,9 @@ def test_pq_columns(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        return pd.read_parquet(fname, columns=["three", "five"])
+        return pd.read_parquet(
+            fname, columns=["three", "five"], dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, (), only_seq=True, check_dtype=False)
 
@@ -2485,7 +2553,7 @@ def test_pq_str_with_nan_seq(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         A = df.five == "foo"
         return A.sum()
 
@@ -2498,7 +2566,7 @@ def test_series_str_upper_lower_dce(datapath):
     filename = datapath("example.parquet")
 
     def impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         df["two"] = df["two"].str.upper()
         df["five"] = df["five"].str.upper()
         return df.three
@@ -2519,7 +2587,7 @@ def test_pq_read(datapath):
     fname = datapath("kde.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         X = df["points"]
         return X.sum()
 
@@ -2534,7 +2602,7 @@ def test_pq_read_global_str1(datapath):
     kde_file = datapath("kde.parquet")
 
     def test_impl():
-        df = pd.read_parquet(kde_file)
+        df = pd.read_parquet(kde_file, dtype_backend="pyarrow")
         X = df["points"]
         return X.sum()
 
@@ -2549,7 +2617,7 @@ def test_pq_read_freevar_str1(datapath):
     kde_file2 = datapath("kde.parquet")
 
     def test_impl():
-        df = pd.read_parquet(kde_file2)
+        df = pd.read_parquet(kde_file2, dtype_backend="pyarrow")
         X = df["points"]
         return X.sum()
 
@@ -2564,7 +2632,7 @@ def test_pd_read_parquet(datapath):
     fname = datapath("kde.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         X = df["points"]
         return X.sum()
 
@@ -2579,7 +2647,7 @@ def test_pq_str(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         A = df.two == "foo"
         return A.sum()
 
@@ -2594,7 +2662,7 @@ def test_pq_str_with_nan_par(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         A = df.five == "foo"
         return A.sum()
 
@@ -2609,7 +2677,7 @@ def test_pq_str_with_nan_par_multigroup(datapath):
     fname = datapath("example2.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         A = df.five == "foo"
         return A.sum()
 
@@ -2624,7 +2692,7 @@ def test_pq_bool(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df.three.sum()
 
     bodo_func = bodo.jit(test_impl)
@@ -2638,7 +2706,7 @@ def test_pq_nan(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df.one.sum()
 
     bodo_func = bodo.jit(test_impl)
@@ -2652,7 +2720,7 @@ def test_pq_float_no_nan(datapath):
     fname = datapath("example.parquet")
 
     def test_impl():
-        df = pd.read_parquet(fname)
+        df = pd.read_parquet(fname, dtype_backend="pyarrow")
         return df.four.sum()
 
     bodo_func = bodo.jit(test_impl)
@@ -2664,7 +2732,7 @@ def test_pq_float_no_nan(datapath):
 @pytest.mark.slow
 def test_read_dask_parquet(datapath, memory_leak_check):
     def test_impl(filename):
-        df = pd.read_parquet(filename)
+        df = pd.read_parquet(filename, dtype_backend="pyarrow")
         return df
 
     filename = datapath("dask_data.parquet")
@@ -2676,7 +2744,7 @@ def test_pq_schema(datapath, memory_leak_check):
     fname = datapath("example.parquet")
 
     def impl(f):
-        df = pd.read_parquet(f)
+        df = pd.read_parquet(f, dtype_backend="pyarrow")
         return df
 
     bodo_func = bodo.jit(
@@ -2692,9 +2760,7 @@ def test_pq_schema(datapath, memory_leak_check):
             }
         },
     )(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(fname), impl(fname), check_dtype=False, check_column_type=False
-    )
+    _test_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
 
 def test_unify_null_column(memory_leak_check):
@@ -2712,7 +2778,7 @@ def test_unify_null_column(memory_leak_check):
         bodo.barrier()
 
         def impl():
-            return pd.read_parquet("temp_parquet_test")
+            return pd.read_parquet("temp_parquet_test", dtype_backend="pyarrow")
 
         # Pandas doesn't seem to be able to unify data.
         # TODO: Open a Pandas issue?
@@ -2733,7 +2799,7 @@ def test_pq_cache_print(datapath, capsys, memory_leak_check):
     @bodo.jit(cache=True)
     def f(fname):
         bodo.parallel_print(fname)
-        return pd.read_parquet(fname)
+        return pd.read_parquet(fname, dtype_backend="pyarrow")
 
     fname1 = datapath("example.parquet")
     fname2 = datapath("example2.parquet")
@@ -2765,7 +2831,7 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
 
         @bodo.jit
         def read(filename):
-            df = pd.read_parquet(filename)
+            df = pd.read_parquet(filename, dtype_backend="pyarrow")
             return df
 
         # Test CallConstraint error
@@ -2777,7 +2843,7 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
 
         # Test ForceLiteralArg error
         def test_impl2(filename):
-            df = pd.read_parquet(filename)
+            df = pd.read_parquet(filename, dtype_backend="pyarrow")
             return df
 
         with pytest.raises(BodoError, match="No response body"):
@@ -2793,7 +2859,7 @@ def test_pq_invalid_column_selection(datapath, memory_leak_check):
     from bodo.utils.typing import BodoError
 
     def test_impl(fname):
-        return pd.read_parquet(fname, columns=["C"])
+        return pd.read_parquet(fname, columns=["C"], dtype_backend="pyarrow")
 
     with pytest.raises(BodoError, match="C not in Parquet file schema"):
         bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
@@ -2814,7 +2880,7 @@ def test_python_not_filter_pushdown(memory_leak_check):
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet("pq_data", dtype_backend="pyarrow")
             df = df[~(df.B == 2)]
             return df["A"]
 
@@ -2835,7 +2901,7 @@ def test_python_not_filter_pushdown(memory_leak_check):
 @pytest.mark.jit_dependency
 def test_filter_pushdown_string(datapath, memory_leak_check):
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         val = "f"
         val += "Oo"
         val = val.lower()
@@ -2859,7 +2925,7 @@ def test_filter_pushdown_string(datapath, memory_leak_check):
 @pytest.mark.jit_dependency
 def test_filter_pushdown_timestamp(datapath, memory_leak_check):
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         d = datetime.date(2015, 1, 1)
         d2 = d.replace(year=1992)
         return df[df["DT64"].dt.tz_convert(None) < pd.Timestamp(d2)]
@@ -2878,7 +2944,7 @@ def test_filter_pushdown_timestamp(datapath, memory_leak_check):
 @pytest.mark.jit_dependency
 def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         lst = [0]
         tup = (lst, 1)
         new_lst, val = tup
@@ -2903,7 +2969,7 @@ def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
 )
 def test_filter_pushdown_tuple(datapath, memory_leak_check):
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         x = 1 + 1
         y = x * 5
         tup = (3, 4)
@@ -2931,7 +2997,7 @@ def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
         return val[0] + val[1][0]
 
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         tup = (3 * 4, (7, "hello"))
         comp(tup)
         return df[~(df["A"] == tup[1][1])]
@@ -2959,7 +3025,7 @@ def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
         return x - 1
 
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         c = None
         unused(20, c)
         y = used(10, c)
@@ -2984,7 +3050,7 @@ def test_filter_pushdown_dictionary(datapath, memory_leak_check):
         d["test"] = v
 
     def impl(path):
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, dtype_backend="pyarrow")
         c = {"a": 1, "b": 2, "c": 3}
         comp(c, c["c"] + c["a"])
         return df[(df["A"] == c["test"] + c["a"]) | (df["A"] == c["c"])]
@@ -3014,7 +3080,9 @@ def test_batched_read_agg(datapath, memory_leak_check):
     def impl(path):
         total_max = 0
         is_last_global = False
-        reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
+        reader = pd.read_parquet(
+            path, _bodo_use_index=False, _bodo_chunksize=4096, dtype_backend="pyarrow"
+        )  # type: ignore
 
         while not is_last_global:
             T1, is_last = read_arrow_next(reader, True)
@@ -3051,7 +3119,9 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     def impl(path):
         total_len = 0
         is_last_global = False
-        reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
+        reader = pd.read_parquet(
+            path, _bodo_use_index=False, _bodo_chunksize=4096, dtype_backend="pyarrow"
+        )  # type: ignore
         while not is_last_global:
             T1, is_last = read_arrow_next(reader, True)
             total_len += len(T1)

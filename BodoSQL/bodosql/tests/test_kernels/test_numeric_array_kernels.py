@@ -853,6 +853,7 @@ def test_negate(numbers):
         py_output=negate_answer,
         check_dtype=False,
         reset_index=True,
+        convert_to_nullable_float=False,
     )
 
 

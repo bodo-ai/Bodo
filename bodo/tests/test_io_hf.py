@@ -11,7 +11,9 @@ def test_read_csv_hf(datapath, memory_leak_check):
     """Test read_csv from Hugging Face"""
 
     def test_impl():
-        return pd.read_csv("hf://datasets/domenicrosati/TruthfulQA/train.csv")
+        return pd.read_csv(
+            "hf://datasets/domenicrosati/TruthfulQA/train.csv", dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, ())
 
@@ -22,7 +24,8 @@ def test_read_json_hf(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_json(
-            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl", lines=True
+            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl",
+            lines=True,
         )
 
     check_func(test_impl, ())
@@ -34,7 +37,8 @@ def test_read_parquet_hf(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_parquet(
-            "hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet"
+            "hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet",
+            dtype_backend="pyarrow",
         )
 
     check_func(test_impl, ())
@@ -50,6 +54,8 @@ def test_read_parquet_hf_split(datapath, memory_leak_check):
             "train": "main/train-00000-of-00001.parquet",
             "test": "main/test-00000-of-00001.parquet",
         }
-        return pd.read_parquet("hf://datasets/openai/gsm8k/" + splits["train"])
+        return pd.read_parquet(
+            "hf://datasets/openai/gsm8k/" + splits["train"], dtype_backend="pyarrow"
+        )
 
     check_func(test_impl, ())

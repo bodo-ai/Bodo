@@ -431,6 +431,90 @@ def pd_td_total_seconds(td):
     return impl
 
 
+@overload(min, no_unliteral=True, jit_options={"cache": True})
+def timedelta_min(lhs, rhs):
+    if rhs == pd_timedelta_type and lhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # prama: no cover
+            return lhs if lhs.value < rhs.value else rhs
+
+        return impl
+
+    elif (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == pd_timedelta_type
+        and rhs.val_typ == pd_timedelta_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return lhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True, jit_options={"cache": True})
+def timedelta_max(lhs, rhs):
+    if rhs == pd_timedelta_type and lhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # prama: no cover
+            return lhs if lhs.value > rhs.value else rhs
+
+        return impl
+
+    elif (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == pd_timedelta_type
+        and rhs.val_typ == pd_timedelta_type
+    ):  # pragma: no cover
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return rhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return lhs
+
+        return impl
+
+
 def overload_add_operator_datetime_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
@@ -607,7 +691,27 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
             n = len(in_arr)
             A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                    continue
                 A[i] = in_arr[i] - rhs
+            return A
+
+        return impl
+
+    # timedelta - datetime_timedelta_array
+    if lhs == datetime_timedelta_type and rhs == timedelta_array_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            in_arr = rhs
+            numba.parfors.parfor.init_prange()
+            n = len(in_arr)
+            A = alloc_timedelta_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                    continue
+                A[i] = lhs - in_arr[i]
             return A
 
         return impl
@@ -1112,10 +1216,20 @@ def timedelta_abs(lhs):
 @intrinsic
 def cast_numpy_timedelta_to_int(typingctx, val=None):
     """Cast timedelta64 value to int"""
-    assert val in (types.NPTimedelta("ns"), types.int64)
+    assert val in (types.NPTimedelta("ns"), types.int64, bodo.types.pd_timedelta_type)
 
-    def codegen(context, builder, signature, args):
-        return args[0]
+    if val == bodo.types.pd_timedelta_type:
+
+        def codegen(context, builder, signature, args):
+            time_delta = cgutils.create_struct_proxy(val)(
+                context, builder, value=args[0]
+            )
+            return time_delta.value
+
+    else:
+
+        def codegen(context, builder, signature, args):
+            return args[0]
 
     return types.int64(val), codegen
 
@@ -1388,6 +1502,15 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 )
 
             return impl
+        elif types.unliteral(val) == bodo.types.timedelta64ns:
+
+            def impl(A, ind, val):  # pragma: no cover
+                A._data[ind] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(val) else 1
+                )
+
+            return impl
         else:
             raise BodoError(typ_err_msg)
 
@@ -1396,7 +1519,8 @@ def dt_timedelta_arr_setitem(A, ind, val):
             is_iterable_type(val)
             and val.dtype in (datetime_timedelta_type, pd_timedelta_type)
         )
-        or types.unliteral(val) in (datetime_timedelta_type, pd_timedelta_type)
+        or types.unliteral(val)
+        in (datetime_timedelta_type, pd_timedelta_type, bodo.types.timedelta64ns)
     ):
         raise BodoError(typ_err_msg)
 
@@ -1516,6 +1640,15 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                     A._data[i] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
+        elif types.unliteral(val) == bodo.types.timedelta64ns:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = val
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_slice_scalar
@@ -1640,6 +1773,17 @@ def create_cmp_op_overload_arr(op):
             return impl
 
     return overload_date_arr_cmp
+
+
+@overload(operator.setitem, no_unliteral=True)
+def dt_timedelta_arr_setitem(A, ind, val):
+    if A != types.Array(bodo.types.timedelta64ns, 1, "C") or val != pd_timedelta_type:
+        return
+
+    def impl(A, ind, val):  # pragma: no cover
+        A[ind] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+
+    return impl
 
 
 timedelta_unsupported_attrs = [

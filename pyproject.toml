@@ -6,8 +6,8 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=22.0,<22.1",
-    "mpi4py>=4.0,<4.1",
+    "pyarrow>=23.0,<23.1",
+    "mpi4py>=4.1",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -31,21 +31,25 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Compilers",
     "Topic :: System :: Distributed Computing",
 ]
 
 dependencies = [
-    "pyarrow>=22.0,<22.1",
-    # TODO upgrade to numba 0.62.0
-    "numba>=0.60,<0.62",
+    "pyarrow>=23.0,<23.1",
+    "numba>=0.62,<0.64",
     "pandas>=2.2",
+    "pytz",
     "numpy>=1.24",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",
     "requests",
     "cloudpickle>=3.0",
     "psutil",
+    "mpi4py>=4.1",
+    # Linux uses MPICH, which is vendored as part of the bodo package
+    "openmpi; sys_platform == 'darwin'",
     "impi-rt; sys_platform == 'win32'",
 ]
 
@@ -83,7 +87,6 @@ build.verbose = true
 logging.level = "INFO"
 
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
-build-dir = "build/type_{build_type}"
 wheel.exclude = [
     "bodo/**/*.h",
     "bodo/**/*.cpp",
@@ -95,9 +98,6 @@ wheel.exclude = [
     "bodo/transforms/**/*.pyc",
     "bodo/tests/*",
 ]
-
-[tool.scikit-build.cmake.define]
-MPICH_VERSION = "4.1.3"
 
 # When building for Conda, set different
 # arguments for CMake
@@ -249,9 +249,6 @@ banned-module-level-imports = [
 "**/test_streaming/*" = ["TID253"]
 "**/caching_tests/*" = ["TID253"]
 
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"
-
 [tool.ruff.lint.isort]
 known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]
 
@@ -264,8 +261,6 @@ exclude = [
 # ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
 # Disable building wheels for musllinux, i686 and power pc
-# Don't publish linux arm until we can get nightly fixed
-#skip = ["pp*", "*musllinux*", "*i686*"]
 skip = ["pp*", "*musllinux*", "*i686*", "*-win32*"]
 # Increase pip debugging output
 build-verbosity = 1
@@ -279,7 +274,7 @@ set -exo pipefail
 BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
-LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
+LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libibverbs|libpsm2|libefa|libmlx5|libnl-3|libnl-route|libnuma|librdmacm|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
 LIBS_DIR="$(pip show bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo.libs" && \
 for file in "$LIBS_DIR"/*; do
     if [[ ! $(basename "$file") =~ $LIB_WHITELIST ]]; then
@@ -293,7 +288,9 @@ done
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
 set -exo pipefail
-BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
+
+# OpenMPI requires mpiexec on macOS CI.
+BODO_NUM_WORKERS=2 mpiexec -n 1 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
 LIB_WHITELIST="^(libc\\+\\+|libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkrb5support|libkrb5|libnghttp2|libssh2|libssl|libsz|libzstd|libz|libaws-.*)(\\.[0-9]+)*\\.dylib$"
@@ -309,7 +306,7 @@ done
 [tool.cibuildwheel.windows]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
-set BODO_NUM_WORKERS=2 && python {project}\\buildscripts\\bodo\\pip\\test.py
+set BODO_NUM_WORKERS=2 && python "{project}\\buildscripts\\bodo\\pip\\test.py"
 """
 
 # ---------------------------------------- PR CI ---------------------------------------- #

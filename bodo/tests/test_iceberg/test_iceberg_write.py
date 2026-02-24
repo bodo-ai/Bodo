@@ -15,12 +15,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import pytz
+from mpi4py import MPI
 from pyiceberg import types
 from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
 from pyiceberg.schema import Schema, assign_fresh_schema_ids
 
 import bodo
-from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import schema_evolution_eg_table, spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,
@@ -162,7 +162,17 @@ def test_basic_write_replace(
     comm = MPI.COMM_WORLD
     passed = None
     if comm.Get_rank() == 0:
-        passed = _test_equal_guard(df, py_out, sort_output=False, check_dtype=False)
+        # Make sure the first df is the one with more Arrow dtypes so the testing
+        # function handles it better
+        df1, df2 = df.convert_dtypes(dtype_backend="pyarrow"), py_out
+        if read_behavior == "bodo":
+            df1, df2 = df2, df1
+        passed = _test_equal_guard(
+            df1,
+            df2,
+            sort_output=False,
+            check_dtype=False,
+        )
         table_cmt = (
             get_spark()
             .sql(f"DESCRIBE TABLE EXTENDED hadoop_prod.{db_schema}.{table_name}")
@@ -320,8 +330,8 @@ def test_basic_write_new_append(
         )
 
         passed = _test_equal_guard(
-            bodo_out,
-            expected_df,
+            bodo_out.convert_dtypes(dtype_backend="pyarrow"),
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -370,7 +380,7 @@ def test_basic_write_new_append(
             spark_out = convert_non_pandas_columns(spark_out)
 
         spark_passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -839,7 +849,7 @@ def test_basic_write_upcasting(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
             sort_output=True,
             check_dtype=False,
@@ -856,7 +866,7 @@ def test_basic_write_upcasting(
         spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
         spark_passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -1026,7 +1036,7 @@ def test_basic_write_downcasting(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             bodo_out,
             sort_output=True,
             check_dtype=False,
@@ -1043,7 +1053,7 @@ def test_basic_write_downcasting(
         spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
         spark_passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -1095,7 +1105,9 @@ def test_basic_write_downcasting_copy(
     # Append using Bodo and Get Output
     new_df = impl(_get_dist_arg(df_write), table_name, conn, db_schema)
     comm = MPI.COMM_WORLD
-    passed = _test_equal_guard(_get_dist_arg(df_write), new_df)
+    passed = _test_equal_guard(
+        _get_dist_arg(df_write).convert_dtypes(dtype_backend="pyarrow"), new_df
+    )
     assert reduce_sum(passed) == comm.Get_size()
 
 
@@ -1158,7 +1170,7 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(pq_fname, table_name, conn, db_schema):
-        df = pd.read_parquet(pq_fname)
+        df = pd.read_parquet(pq_fname, dtype_backend="pyarrow")
         df.to_sql(
             table_name,
             conn,
@@ -1217,7 +1229,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             write_table_name, db_schema
         )
 
-        assert list(spark_out["B"]).count(None) == 100, (
+        assert spark_out["B"].isna().sum() == 100, (
             "Missing column not filled with nulls on spark read"
         )
 
@@ -1412,7 +1424,10 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
             bodo_out = convert_non_pandas_columns(bodo_out)
             spark_out = convert_non_pandas_columns(spark_out)
             assert _test_equal_guard(
-                bodo_out, spark_out, reset_index=True, sort_output=True
+                bodo_out.convert_dtypes(dtype_backend="pyarrow"),
+                spark_out,
+                reset_index=True,
+                sort_output=True,
             ), "Bodo and Spark outputs do not match"
 
         validate_output(bodo_out)
@@ -1437,7 +1452,7 @@ def truncate_impl(x: pd.Series, W: int):
     Returns:
         Truncated array
     """
-    if x.dtype in ["str", "object", "string[python]"]:
+    if x.dtype in ["str", "object", "string[python]", "string[pyarrow]"]:
         return x.str.slice(stop=W)
     elif x.dtype in ["int32", "Int32", "int64", "Int64"]:
         return x - (((x % W) + W) % W)
@@ -1586,7 +1601,7 @@ def _test_file_part(file_name: str, part_spec: list[PartitionField]):
     ]
 
     # Check if data adheres to partitioning
-    df = pd.read_parquet(file_name)
+    df = pd.read_parquet(file_name, dtype_backend="pyarrow")
 
     for (col, trans, tval), expected_val in zip(part_spec, expected_vals):
         trans_col = ARRAY_TRANSFORM_FUNC[trans](df[col], tval)
@@ -1629,7 +1644,7 @@ def _test_file_sorted(file_name: str, sort_order: list[SortField]):
         return res.reset_index(drop=True)
 
     sorted_vals = bodo_sort(df_vals)
-    _test_equal(df_vals, sorted_vals, check_dtype=False)
+    _test_equal(sorted_vals, df_vals, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1729,8 +1744,8 @@ def test_write_partitioned(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -1755,7 +1770,7 @@ def test_write_partitioned(
         if base_name == "DT_TSZ_TABLE":
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -1856,8 +1871,8 @@ def test_write_sorted(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -1881,7 +1896,7 @@ def test_write_sorted(
         if base_name == "DT_TSZ_TABLE":
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -1970,7 +1985,7 @@ def test_write_part_sort(
 
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
         passed = _test_equal_guard(
-            expected_df,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             spark_out,
             sort_output=True,
             check_dtype=False,
@@ -1988,8 +2003,8 @@ def test_write_part_sort(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df.convert_dtypes(dtype_backend="pyarrow"),
             sort_output=True,
             check_dtype=False,
             reset_index=True,
@@ -2058,8 +2073,8 @@ def test_write_part_sort_return_orig(
     passed = None
     if bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            df,
             out,
+            df.convert_dtypes(dtype_backend="pyarrow"),
             # Do not sort since that defeats the purpose
             sort_output=False,
             check_dtype=False,
@@ -2133,8 +2148,8 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         passed = 1
         if bodo.get_rank() == 0:
             passed = _test_equal_guard(
-                exp_df,
                 bodo_read_out,
+                exp_df.convert_dtypes(dtype_backend="pyarrow"),
                 sort_output=True,
                 reset_index=True,
                 check_dtype=False,
