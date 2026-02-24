@@ -1305,7 +1305,7 @@ def _to_pa_array(py_out, pa_type: pa.DataType) -> pa.Array:
 
 
 def _pd_fillna_value(series: pd.Series, value) -> pd.Series:
-    """Call pd.Series.fillna in a way that's compatible with older Pandas versions."""
+    """Fill NA values in a Pandas Series, avoiding breaking Pandas 3 changes."""
     pandas_version = int(pd.__version__.split(".")[0])
     if pandas_version == 2 and value is None:
         return series

@@ -8,6 +8,7 @@ from bodo.tests.utils import _test_equal
 
 
 def test_gpu_join(datapath):
+    """Test end-to-end Read-Join-Write workflow on GPU."""
     cust_path = datapath("tpch-test_data/parquet/customer.pq")
     orders_path = datapath("tpch-test_data/parquet/orders.pq")
 

@@ -224,7 +224,7 @@ jobs:
 
   gpu-ci:
     needs: [validate, get_version]
-    name: Test Multi-GPU
+    name: Test DF Library Multi-GPU
     if: |
       needs.validate.outputs.run_tests == 'true' && 
       needs.validate.outputs.run_gpu == 'true'

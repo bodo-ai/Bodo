@@ -113,23 +113,6 @@ module "runners" {
       })
     }
 
-    "single-gpu" = {
-      matcherConfig : {
-        labelMatchers = [["self-hosted", "single-gpu"], ["self-hosted-single-gpu"]]
-        exactMatch    = true
-      }
-
-      # Recommended disabled for ephemeral runners
-      fifo = false
-
-      runner_config = merge(local.base_gpu_runner_config, {
-        # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge"]
-        # Prefix runners with the environment name
-        runner_name_prefix = "${local.prefix}_single_gpu_"
-      })
-    }
-
     "multi-gpu" = {
       matcherConfig : {
         labelMatchers = [["self-hosted", "multi-gpu"], ["self-hosted-multi-gpu"]]
