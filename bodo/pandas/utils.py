@@ -302,7 +302,7 @@ if bodo.gpu_enabled:
     from bodo.ext import plan_optimizer
     from bodo.numba_compat import BodoCacheLocator
 
-    plan_optimizer.c_set_use_cudf(
+    plan_optimizer.c_set_cudf_vars(
         True, BodoCacheLocator.cache_dir, bodo.dataframe_library_dump_plans
     )
 

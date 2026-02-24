@@ -1872,7 +1872,7 @@ bool g_use_cudf;
 std::string g_cache_dir;
 bool g_dump_plans = false;
 
-void set_use_cudf(bool use_cudf, std::string cache_dir, bool dump_plans) {
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans) {
     g_use_cudf = use_cudf;
     g_cache_dir = cache_dir;
     g_dump_plans = dump_plans;

@@ -717,7 +717,7 @@ void cpp_table_delete(int64_t cpp_table);
  *
  * @param use_cudf bool that if true enables use of cudf in backend
  */
-void set_use_cudf(bool use_cudf, std::string cache_dir, bool dump_plans);
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans);
 
 /**
  * @brief Gets the use cudf flag.
