@@ -51,8 +51,8 @@ jobs:
         - name: Build from Source
           uses: ./.github/actions/build-source
           with:
-            build-all: ${{ inputs.test-type != 'GPU' }}
-            environment: ${{ inputs.test-type == 'GPU' && 'default-cuda' || 'default' }}
+            build-all: ${{ inputs.test-type != 'DF_LIB_GPU' }}
+            environment: ${{ inputs.test-type == 'DF_LIB_GPU' && 'default-cuda' || 'default' }}
           env:
             SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.bodo-version }}
         - name: Load Hadoop from Cache
