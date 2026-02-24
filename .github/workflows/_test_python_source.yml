@@ -107,11 +107,11 @@ jobs:
               )
 
               # Ignore iceberg tests since PyIceberg is not compatible with GPU environment
-              PYTEST_IGNORE_ICEBERG_ARGS=(
+              PYTEST_IGNORE_ICEBERG_FLAGS=(
                   --ignore bodo/tests/test_iceberg
                   --ignore bodo/tests/test_df_lib/test_iceberg.py
               )
-              PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_ARGS[*]} $PYTEST_IGNORE"
+              PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_FLAGS[*]} $PYTEST_IGNORE"
 
               # CPP tests (Single GPU)
               pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
