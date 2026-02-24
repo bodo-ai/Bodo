@@ -465,11 +465,10 @@ void SingleFileBlockManager::CreateNewDatabase(QueryContext context) {
 
 	// Bodo Change: disable storage encryption
 	//auto encryption_enabled = options.encryption_options.encryption_enabled;
-	bool encryption_enabled = false;
-	if (encryption_enabled) {
-		// Check if we can read/write the encrypted database
-		db.GetDatabase().GetEncryptionUtil(options.read_only);
-	}
+	//if (encryption_enabled) {
+	//	// Check if we can read/write the encrypted database
+	//	db.GetDatabase().GetEncryptionUtil(options.read_only);
+	//}
 
 	// open the RDBMS handle
 	auto &fs = FileSystem::Get(db);

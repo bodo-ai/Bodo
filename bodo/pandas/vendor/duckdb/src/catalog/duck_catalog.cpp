@@ -161,7 +161,7 @@ string DuckCatalog::GetDBPath() {
 }
 
 bool DuckCatalog::IsEncrypted() const {
-	return IsSystemCatalog() ? false : db.GetStorageManager().IsEncrypted();
+	return IsSystemCatalog() ? false : false;// Bodo Change: remove encryption db.GetStorageManager().IsEncrypted();
 }
 
 string DuckCatalog::GetEncryptionCipher() const {

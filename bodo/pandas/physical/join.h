@@ -109,24 +109,26 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.GetComparisonType() !=
+                duckdb::ExpressionType::COMPARE_EQUAL) {
                 has_non_equi_cond = true;
             }
-            if (cond.left->GetExpressionClass() !=
+            if (cond.GetLHS().GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
                     "Join condition left side is not a column reference.");
             }
-            if (cond.right->GetExpressionClass() !=
+            if (cond.GetRHS().GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
                     "Join condition right side is not a column reference.");
             }
-            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.GetComparisonType() ==
+                duckdb::ExpressionType::COMPARE_EQUAL) {
                 auto& left_bce =
-                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
                 auto& right_bce =
-                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
+                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
                 this->left_keys.push_back(
                     left_col_ref_map[{left_bce.binding.table_index,
                                       left_bce.binding.column_index}]);
@@ -159,15 +161,16 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::set<uint64_t> right_non_equi_keys;
 
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.GetComparisonType() ==
+                duckdb::ExpressionType::COMPARE_EQUAL) {
                 // These cases are handled by the left_keys and right_keys
                 // above.  Only the non-equi tests are handled here.
                 continue;
             }
             auto& left_bce =
-                cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
             auto& right_bce =
-                cond.right->Cast<duckdb::BoundColumnRefExpression>();
+                cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
 
             uint64_t left_cond_col_ind = left_col_ref_map[{
                 left_bce.binding.table_index, left_bce.binding.column_index}];
@@ -185,7 +188,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                         std::make_shared<PhysicalColumnRefExpression>(
                             this->build_col_inds_rev[right_cond_col_ind],
                             right_bce.GetName(), false),
-                        cond.comparison));
+                        cond.GetComparisonType()));
             // If we have more than one non-equi join condition then 'and'
             // them together.
             if (physExprTree) {

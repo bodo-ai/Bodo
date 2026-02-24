@@ -15,7 +15,8 @@
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/main/query_result.hpp"
-#include "duckdb/main/relation.hpp"
+// Bodo Change: Remove parser
+//#include "duckdb/main/relation.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
 #include "duckdb/optimizer/rule.hpp"
@@ -142,7 +143,8 @@ template class unique_ptr<Binder>;
 template class unique_ptr<PrivateAllocatorData>;
 template class unique_ptr<BaseStatistics>;
 
-template class shared_ptr<Relation>;
+// BOdo Change: remove parser
+//template class shared_ptr<Relation>;
 template class shared_ptr<Event>;
 template class shared_ptr<Pipeline>;
 template class shared_ptr<MetaPipeline>;

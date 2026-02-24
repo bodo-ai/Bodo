@@ -729,11 +729,12 @@ unique_ptr<ColumnCheckpointState> VariantColumnData::Checkpoint(const RowGroup &
 
 	LogicalType shredded_type;
 	if (should_shred) {
-		if (config.options.force_variant_shredding.id() != LogicalTypeId::INVALID) {
-			shredded_type = config.options.force_variant_shredding;
-		} else {
+		// Bodo Change: Disable force variant shredding
+		//if (config.options.force_variant_shredding.id() != LogicalTypeId::INVALID) {
+		//	shredded_type = config.options.force_variant_shredding;
+		//} else {
 			shredded_type = GetShreddedType();
-		}
+		//}
 		D_ASSERT(shredded_type.id() == LogicalTypeId::STRUCT);
 		auto &type_entries = StructType::GetChildTypes(shredded_type);
 		if (type_entries.size() != 2) {

@@ -1151,8 +1151,7 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
     auto new_table_index = get_duckdb_binder().get()->GenerateTableIndex();
     return duckdb::make_uniq<duckdb::LogicalCTERef>(
-        new_table_index, table_index, return_types, return_names,
-        duckdb::CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
+        new_table_index, table_index, return_types, return_names);
 }
 
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
@@ -1171,14 +1170,14 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 
     // Create join condition.
     for (std::pair<int, int> cond_pair : cond_vec) {
-        duckdb::JoinCondition cond;
-        cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
-        cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            lhs_duck->types[cond_pair.first],
-            lhs_duck->GetColumnBindings()[cond_pair.first]);
-        cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            rhs_duck->types[cond_pair.second],
-            rhs_duck->GetColumnBindings()[cond_pair.second]);
+        duckdb::JoinCondition cond(
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                lhs_duck->types[cond_pair.first],
+                lhs_duck->GetColumnBindings()[cond_pair.first]),
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                rhs_duck->types[cond_pair.second],
+                rhs_duck->GetColumnBindings()[cond_pair.second]),
+            duckdb::ExpressionType::COMPARE_EQUAL);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }

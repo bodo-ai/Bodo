@@ -7,6 +7,7 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/optimizer/late_materialization_helper.hpp"
+#include "duckdb/optimizer/remove_unused_columns.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -142,10 +143,11 @@ TopNWindowElimination::TopNWindowElimination(ClientContext &context_p, Optimizer
 }
 
 unique_ptr<LogicalOperator> TopNWindowElimination::Optimize(unique_ptr<LogicalOperator> op) {
-	auto &extension_manager = context.db->GetExtensionManager();
-	if (!extension_manager.ExtensionIsLoaded("core_functions")) {
-		return op;
-	}
+	// Bodo Change: remove extensions
+	//auto &extension_manager = context.db->GetExtensionManager();
+	//if (!extension_manager.ExtensionIsLoaded("core_functions")) {
+	//	return op;
+	//}
 
 	ColumnBindingReplacer replacer;
 	op = OptimizeInternal(std::move(op), replacer);
@@ -223,7 +225,10 @@ unique_ptr<LogicalOperator> TopNWindowElimination::OptimizeInternal(unique_ptr<L
 	UpdateTopmostBindings(window_idx, op, group_projection_idxs, topmost_bindings, new_bindings, replacer);
 	replacer.stop_operator = op.get();
 
-	RemoveUnusedColumns unused_optimizer(optimizer.binder, optimizer.context, true);
+	// Bodo Change: pass RemoveUnusedColumnsPass into RemoveUnusedColumns
+	RemoveUnusedColumnsPass ruc_pass(optimizer.binder, optimizer.context);
+	RemoveUnusedColumns unused_optimizer(optimizer.binder, optimizer.context, ruc_pass, true);
+	// Bodo Change end
 	unused_optimizer.VisitOperator(*op);
 
 	return unique_ptr<LogicalOperator>(std::move(op));

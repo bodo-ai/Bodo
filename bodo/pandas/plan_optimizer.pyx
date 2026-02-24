@@ -29,7 +29,6 @@ cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
         SQLNULL "duckdb::LogicalTypeId::SQLNULL"
         UNKNOWN "duckdb::LogicalTypeId::UNKNOWN"
         ANY "duckdb::LogicalTypeId::ANY"
-        USER "duckdb::LogicalTypeId::USER"
         BOOLEAN "duckdb::LogicalTypeId::BOOLEAN"
         TINYINT "duckdb::LogicalTypeId::TINYINT"
         SMALLINT "duckdb::LogicalTypeId::SMALLINT"

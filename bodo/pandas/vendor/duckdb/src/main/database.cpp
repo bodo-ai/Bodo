@@ -10,7 +10,8 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/main/attached_database.hpp"
-#include "duckdb/main/capi/extension_api.hpp"
+// Bodo Change: remove extesnion code
+//#include "duckdb/main/capi/extension_api.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection_manager.hpp"
 #include "duckdb/main/database_file_opener.hpp"
@@ -29,7 +30,8 @@
 #include "duckdb/planner/extension_callback.hpp"
 #include "duckdb/storage/block_allocator.hpp"
 #include "duckdb/storage/buffer/buffer_pool.hpp"
-#include "duckdb/storage/compression/empty_validity.hpp"
+// Bodo Change: Remove compression code
+//#include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/storage/external_file_cache.hpp"
 #include "duckdb/storage/object_cache.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"

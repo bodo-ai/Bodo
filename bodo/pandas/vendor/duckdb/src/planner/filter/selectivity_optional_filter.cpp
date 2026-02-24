@@ -11,7 +11,8 @@
 
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
-#include "duckdb/function/compression/compression.hpp"
+// Bodo Change: remove compression
+//#include "duckdb/function/compression/compression.hpp"
 
 namespace duckdb {
 
@@ -80,8 +81,9 @@ unique_ptr<TableFilter> SelectivityOptionalFilter::Deserialize(Deserializer &des
 void SelectivityOptionalFilter::FiltersNullValues(const LogicalType &type, bool &filters_nulls,
                                                   bool &filters_valid_values, TableFilterState &filter_state) const {
 	const auto &state = filter_state.Cast<SelectivityOptionalFilterState>();
-	return ConstantFun::FiltersNullValues(type, *this->child_filter, filters_nulls, filters_valid_values,
-	                                      *state.child_state);
+	// Bodo Change: remove compression
+	//return ConstantFun::FiltersNullValues(type, *this->child_filter, filters_nulls, filters_valid_values,
+	//                                      *state.child_state);
 }
 unique_ptr<TableFilterState> SelectivityOptionalFilter::InitializeState(ClientContext &context) const {
 	D_ASSERT(child_filter);

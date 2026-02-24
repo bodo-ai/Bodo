@@ -802,16 +802,17 @@ endif()
 
 add_third_party(fastpforlib)
 add_third_party(fmt)
-add_third_party(fsst)
+# Bodo Change: Remove some vendored code
+#add_third_party(fsst)
 add_third_party(hyperloglog)
-add_third_party(libpg_query)
-add_third_party(mbedtls)
-add_third_party(miniz)
+#add_third_party(libpg_query)
+#add_third_party(mbedtls)
+#add_third_party(miniz)
 add_third_party(re2)
-add_third_party(skiplist)
+#add_third_party(skiplist)
 add_third_party(utf8proc)
 add_third_party(yyjson)
-add_third_party(zstd)
+#add_third_party(zstd)
 
 # Bodo change: avoid building duckdb_platform_binary
 set(DUCKDB_EXPLICIT_PLATFORM TRUE)

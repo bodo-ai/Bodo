@@ -146,14 +146,14 @@ public:
 	//! Appends a ColumnDataCollection to the described table.
 	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection);
 
-	//! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
-	//! list with the set of returned columns
-	DUCKDB_API void TryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
-
-	//! Internal function for try bind relation. It does not require a client-context lock.
-	DUCKDB_API void InternalTryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
-
 	// Bodo Change: Remove parser
+	////! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
+	////! list with the set of returned columns
+	//DUCKDB_API void TryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
+
+	////! Internal function for try bind relation. It does not require a client-context lock.
+	//DUCKDB_API void InternalTryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
+
 	////! Execute a relation
 	//DUCKDB_API unique_ptr<PendingQueryResult> PendingQuery(const shared_ptr<Relation> &relation,
 	//                                                       QueryParameters query_parameters);

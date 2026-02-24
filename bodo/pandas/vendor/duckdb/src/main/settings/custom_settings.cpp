@@ -22,7 +22,8 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/database_manager.hpp"
-#include "duckdb/main/extension_helper.hpp"
+// Bodo Change: Remove extension files
+//#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
@@ -38,7 +39,8 @@
 #include "duckdb/function/variant/variant_shredding.hpp"
 #include "duckdb/storage/block_allocator.hpp"
 
-#include "mbedtls_wrapper.hpp"
+// Bodo Change: Remove compression code
+//#include "mbedtls_wrapper.hpp"
 
 namespace duckdb {
 
@@ -745,111 +747,112 @@ void EnableLogging::ResetGlobal(DatabaseInstance *db_p, DBConfig &config) {
 //===----------------------------------------------------------------------===//
 // Force VARIANT Shredding
 //===----------------------------------------------------------------------===//
-
-void ForceVariantShredding::SetGlobal(DatabaseInstance *_, DBConfig &config, const Value &value) {
-	auto &force_variant_shredding = config.options.force_variant_shredding;
-
-	if (value.type().id() != LogicalTypeId::VARCHAR) {
-		throw InvalidInputException("The argument to 'force_variant_shredding' should be of type VARCHAR, not %s",
-		                            value.type().ToString());
-	}
-
-	auto logical_type = UnboundType::TryParseAndDefaultBind(value.GetValue<string>());
-	if (logical_type.id() == LogicalTypeId::INVALID) {
-		throw InvalidInputException("Could not parse the argument '%s' to 'force_variant_shredding' as a built in type",
-		                            value.GetValue<string>());
-	}
-
-	TypeVisitor::Contains(logical_type, [](const LogicalType &type) {
-		if (type.IsNested()) {
-			if (type.id() != LogicalTypeId::STRUCT && type.id() != LogicalTypeId::LIST) {
-				throw InvalidInputException("Shredding can consist of the nested types LIST (for ARRAY Variant values) "
-				                            "or STRUCT (for OBJECT Variant values), not %s",
-				                            type.ToString());
-			}
-			if (type.id() == LogicalTypeId::STRUCT && StructType::IsUnnamed(type)) {
-				throw InvalidInputException("STRUCT types in the shredding can not be empty");
-			}
-			return false;
-		}
-		switch (type.id()) {
-		case LogicalTypeId::BOOLEAN:
-		case LogicalTypeId::TINYINT:
-		case LogicalTypeId::SMALLINT:
-		case LogicalTypeId::INTEGER:
-		case LogicalTypeId::BIGINT:
-		case LogicalTypeId::HUGEINT:
-		case LogicalTypeId::UTINYINT:
-		case LogicalTypeId::USMALLINT:
-		case LogicalTypeId::UINTEGER:
-		case LogicalTypeId::UBIGINT:
-		case LogicalTypeId::UHUGEINT:
-		case LogicalTypeId::FLOAT:
-		case LogicalTypeId::DOUBLE:
-		case LogicalTypeId::DECIMAL:
-		case LogicalTypeId::DATE:
-		case LogicalTypeId::TIME:
-		case LogicalTypeId::TIME_TZ:
-		case LogicalTypeId::TIMESTAMP_TZ:
-		case LogicalTypeId::TIMESTAMP:
-		case LogicalTypeId::TIMESTAMP_SEC:
-		case LogicalTypeId::TIMESTAMP_MS:
-		case LogicalTypeId::TIMESTAMP_NS:
-		case LogicalTypeId::BLOB:
-		case LogicalTypeId::VARCHAR:
-		case LogicalTypeId::UUID:
-		case LogicalTypeId::BIGNUM:
-		case LogicalTypeId::TIME_NS:
-		case LogicalTypeId::INTERVAL:
-		case LogicalTypeId::BIT:
-		case LogicalTypeId::GEOMETRY:
-			break;
-		default:
-			throw InvalidInputException("Variants can not be shredded on type: %s", type.ToString());
-		}
-		return false;
-	});
-
-	auto shredding_type = TypeVisitor::VisitReplace(logical_type, [](const LogicalType &type) {
-		return LogicalType::STRUCT({{"typed_value", type}, {"untyped_value_index", LogicalType::UINTEGER}});
-	});
-	force_variant_shredding =
-	    LogicalType::STRUCT({{"unshredded", VariantShredding::GetUnshreddedType()}, {"shredded", shredding_type}});
-}
-
-void ForceVariantShredding::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.force_variant_shredding = LogicalType::INVALID;
-}
-
-Value ForceVariantShredding::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.force_variant_shredding.ToString());
-}
+// Bodo Change: Remove variant shredding
+//void ForceVariantShredding::SetGlobal(DatabaseInstance *_, DBConfig &config, const Value &value) {
+//	auto &force_variant_shredding = config.options.force_variant_shredding;
+//
+//	if (value.type().id() != LogicalTypeId::VARCHAR) {
+//		throw InvalidInputException("The argument to 'force_variant_shredding' should be of type VARCHAR, not %s",
+//		                            value.type().ToString());
+//	}
+//
+//	auto logical_type = UnboundType::TryParseAndDefaultBind(value.GetValue<string>());
+//	if (logical_type.id() == LogicalTypeId::INVALID) {
+//		throw InvalidInputException("Could not parse the argument '%s' to 'force_variant_shredding' as a built in type",
+//		                            value.GetValue<string>());
+//	}
+//
+//	TypeVisitor::Contains(logical_type, [](const LogicalType &type) {
+//		if (type.IsNested()) {
+//			if (type.id() != LogicalTypeId::STRUCT && type.id() != LogicalTypeId::LIST) {
+//				throw InvalidInputException("Shredding can consist of the nested types LIST (for ARRAY Variant values) "
+//				                            "or STRUCT (for OBJECT Variant values), not %s",
+//				                            type.ToString());
+//			}
+//			if (type.id() == LogicalTypeId::STRUCT && StructType::IsUnnamed(type)) {
+//				throw InvalidInputException("STRUCT types in the shredding can not be empty");
+//			}
+//			return false;
+//		}
+//		switch (type.id()) {
+//		case LogicalTypeId::BOOLEAN:
+//		case LogicalTypeId::TINYINT:
+//		case LogicalTypeId::SMALLINT:
+//		case LogicalTypeId::INTEGER:
+//		case LogicalTypeId::BIGINT:
+//		case LogicalTypeId::HUGEINT:
+//		case LogicalTypeId::UTINYINT:
+//		case LogicalTypeId::USMALLINT:
+//		case LogicalTypeId::UINTEGER:
+//		case LogicalTypeId::UBIGINT:
+//		case LogicalTypeId::UHUGEINT:
+//		case LogicalTypeId::FLOAT:
+//		case LogicalTypeId::DOUBLE:
+//		case LogicalTypeId::DECIMAL:
+//		case LogicalTypeId::DATE:
+//		case LogicalTypeId::TIME:
+//		case LogicalTypeId::TIME_TZ:
+//		case LogicalTypeId::TIMESTAMP_TZ:
+//		case LogicalTypeId::TIMESTAMP:
+//		case LogicalTypeId::TIMESTAMP_SEC:
+//		case LogicalTypeId::TIMESTAMP_MS:
+//		case LogicalTypeId::TIMESTAMP_NS:
+//		case LogicalTypeId::BLOB:
+//		case LogicalTypeId::VARCHAR:
+//		case LogicalTypeId::UUID:
+//		case LogicalTypeId::BIGNUM:
+//		case LogicalTypeId::TIME_NS:
+//		case LogicalTypeId::INTERVAL:
+//		case LogicalTypeId::BIT:
+//		case LogicalTypeId::GEOMETRY:
+//			break;
+//		default:
+//			throw InvalidInputException("Variants can not be shredded on type: %s", type.ToString());
+//		}
+//		return false;
+//	});
+//
+//	auto shredding_type = TypeVisitor::VisitReplace(logical_type, [](const LogicalType &type) {
+//		return LogicalType::STRUCT({{"typed_value", type}, {"untyped_value_index", LogicalType::UINTEGER}});
+//	});
+//	force_variant_shredding =
+//	    LogicalType::STRUCT({{"unshredded", VariantShredding::GetUnshreddedType()}, {"shredded", shredding_type}});
+//}
+//
+//void ForceVariantShredding::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.force_variant_shredding = LogicalType::INVALID;
+//}
+//
+//Value ForceVariantShredding::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	return Value(config.options.force_variant_shredding.ToString());
+//}
 
 //===----------------------------------------------------------------------===//
 // Extension Directory
 //===----------------------------------------------------------------------===//
-void ExtensionDirectoriesSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.extension_directories.clear();
-
-	auto &list = ListValue::GetChildren(input);
-	for (auto &val : list) {
-		config.options.extension_directories.emplace_back(val.GetValue<string>());
-	}
-}
-
-void ExtensionDirectoriesSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.extension_directories = DBConfigOptions().extension_directories;
-}
-
-Value ExtensionDirectoriesSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	vector<Value> extension_directories;
-	for (auto &dir : config.options.extension_directories) {
-		extension_directories.emplace_back(dir);
-	}
-	return Value::LIST(LogicalType::VARCHAR, std::move(extension_directories));
-}
+// Bodo Change: Remove extension code
+//void ExtensionDirectoriesSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+//	config.options.extension_directories.clear();
+//
+//	auto &list = ListValue::GetChildren(input);
+//	for (auto &val : list) {
+//		config.options.extension_directories.emplace_back(val.GetValue<string>());
+//	}
+//}
+//
+//void ExtensionDirectoriesSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+//	config.options.extension_directories = DBConfigOptions().extension_directories;
+//}
+//
+//Value ExtensionDirectoriesSetting::GetSetting(const ClientContext &context) {
+//	auto &config = DBConfig::GetConfig(context);
+//	vector<Value> extension_directories;
+//	for (auto &dir : config.options.extension_directories) {
+//		extension_directories.emplace_back(dir);
+//	}
+//	return Value::LIST(LogicalType::VARCHAR, std::move(extension_directories));
+//}
 
 //===----------------------------------------------------------------------===//
 // Logging Mode

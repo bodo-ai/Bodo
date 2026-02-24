@@ -192,18 +192,19 @@ vector<string> SplitQueries(const string &input_query) {
 }
 
 unique_ptr<SQLStatement> Parser::GetStatement(const string &query) {
-	Transformer transformer(options);
-	vector<unique_ptr<SQLStatement>> statements;
-	PostgresParser parser;
-	parser.Parse(query);
-	if (parser.success) {
-		if (!parser.parse_tree) {
-			// empty statement
-			return {};
-		}
-		transformer.TransformParseTree(parser.parse_tree, statements);
-		return std::move(statements[0]);
-	}
+	// Bodo Change: Remove parser
+	//Transformer transformer(options);
+	//vector<unique_ptr<SQLStatement>> statements;
+	//PostgresParser parser;
+	//parser.Parse(query);
+	//if (parser.success) {
+	//	if (!parser.parse_tree) {
+	//		// empty statement
+	//		return {};
+	//	}
+	//	transformer.TransformParseTree(parser.parse_tree, statements);
+	//	return std::move(statements[0]);
+	//}
 	return {};
 }
 

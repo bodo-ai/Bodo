@@ -8,8 +8,8 @@
 #include "duckdb/main/database_path_and_type.hpp"
 // Bodo Change: Remove extension code
 //#include "duckdb/main/extension_helper.hpp"
-//#include "duckdb/parser/parsed_data/alter_database_info.hpp"
-//#include "duckdb/storage/storage_extension.hpp"
+#include "duckdb/parser/parsed_data/alter_database_info.hpp"
+#include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
@@ -185,7 +185,7 @@ shared_ptr<AttachedDatabase> DatabaseManager::AttachDatabase(ClientContext &cont
 	//		throw MissingExtensionException("Attaching path '%s' requires extension '%s' to be loaded", info.path,
 	//		                                extension);
 	//	}
-	}
+	//}
 
 	// now create the attached database
 	auto &db = DatabaseInstance::GetDatabase(context);

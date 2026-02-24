@@ -15,9 +15,11 @@
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_distinct.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_materialized_cte.hpp"
 #include "duckdb/planner/operator/logical_order.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_set_operation.hpp"
@@ -262,7 +264,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		// The duplicate groups optimizer will be responsible for not breaking ROLLUP by skipping when
 		// multiple grouping sets are present
         // Bodo Change: pass "pass" to all sub-passes
-		RemoveUnusedColumns remove(binder, context, everything_referenced, pass);
+		RemoveUnusedColumns remove(binder, context,pass, everything_referenced );
         // Bodo Change End
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
@@ -330,6 +332,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				entries.push_back(i);
 			}
 			ClearUnusedExpressions(entries, setop.table_index);
+			if (entries.size() >= setop.column_count) {
 				return;
 			}
 			if (entries.empty()) {
@@ -428,7 +431,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		if (!op.children.empty()) {
 			// Some LOGICAL_GET operators (e.g., table in out functions) may have a
 			// child operator. So we recurse into it if it exists.
-			RemoveUnusedColumns remove(binder, context, true);
+			RemoveUnusedColumns remove(binder, context, pass, true);
 			remove.VisitOperator(*op.children[0]);
 		}
 		return;

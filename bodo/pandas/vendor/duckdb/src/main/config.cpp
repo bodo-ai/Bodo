@@ -67,7 +67,8 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_SETTING(AllowExtensionsMetadataMismatchSetting),
     DUCKDB_SETTING_CALLBACK(AllowParserOverrideExtensionSetting),
     DUCKDB_GLOBAL(AllowPersistentSecretsSetting),
-    DUCKDB_GLOBAL(AllowUnredactedSecretsSetting),
+	// Bodo Change: DUCKDB_GLOBAL -> DUCKDB_SETTING, since this is not a global setting
+    DUCKDB_SETTING(AllowUnredactedSecretsSetting),
     DUCKDB_SETTING_CALLBACK(AllowUnredactedSecretsSetting),
 	// Boco Change: Remove extension code
     //DUCKDB_SETTING_CALLBACK(AllowUnsignedExtensionsSetting),
@@ -132,13 +133,16 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_SETTING(ErrorsAsJSONSetting),
     DUCKDB_SETTING(ExperimentalMetadataReuseSetting),
     DUCKDB_SETTING_CALLBACK(ExplainOutputSetting),
-    DUCKDB_GLOBAL(ExtensionDirectoriesSetting),
-    DUCKDB_SETTING(ExtensionDirectorySetting),
+	// Bodo Change: Remove extension code
+    //DUCKDB_GLOBAL(ExtensionDirectoriesSetting),
+    //DUCKDB_SETTING(ExtensionDirectorySetting),
     DUCKDB_SETTING_CALLBACK(ExternalThreadsSetting),
     DUCKDB_SETTING(FileSearchPathSetting),
-    DUCKDB_SETTING_CALLBACK(ForceBitpackingModeSetting),
-    DUCKDB_SETTING_CALLBACK(ForceCompressionSetting),
-    DUCKDB_GLOBAL(ForceMbedtlsUnsafeSetting),
+	// Bodo Change: Remove compression code
+    //DUCKDB_SETTING_CALLBACK(ForceBitpackingModeSetting),
+    //DUCKDB_SETTING_CALLBACK(ForceCompressionSetting),
+	// Bodo Chnage: Remove encryption code
+    //DUCKDB_GLOBAL(ForceMbedtlsUnsafeSetting),
     DUCKDB_GLOBAL(ForceVariantShredding),
     DUCKDB_SETTING(GeometryMinimumShreddingSize),
     DUCKDB_SETTING_CALLBACK(HomeDirectorySetting),
