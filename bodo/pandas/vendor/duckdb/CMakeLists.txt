@@ -779,7 +779,8 @@ function(add_third_party NAME)
 endfunction()
 
 # this depends on disable_target_warnings so the order matters
-include(${PROJECT_SOURCE_DIR}/extension/extension_build_tools.cmake)
+# Bodo change: avoid building extensions
+#include(${PROJECT_SOURCE_DIR}/extension/extension_build_tools.cmake)
 
 if(PREBUILT_BINARY)
   message("Using pre-built static library from file ${PREBUILT_BINARY}")
@@ -791,13 +792,15 @@ if(PREBUILT_BINARY)
 
   # Bodo change: avoid building tools
   # add_subdirectory(tools)
-  add_subdirectory(extension)
+  # Bodo change: avoid building extensions
+  #add_subdirectory(extension)
 elseif (BUILD_MAIN_DUCKDB_LIBRARY)
   add_subdirectory(src)
 
   # Bodo change: avoid building tools
   # add_subdirectory(tools)
-  add_subdirectory(extension)
+  # Bodo change: avoid building extensions
+  #add_subdirectory(extension)
 endif()
 
 add_third_party(fastpforlib)

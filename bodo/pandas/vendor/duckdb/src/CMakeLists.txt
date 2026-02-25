@@ -1,3 +1,8 @@
+# Bodo Change: Add missing functions from extension cmake
+function(link_threads LIBRARY LINKAGE)
+    target_link_libraries(${LIBRARY} ${LINKAGE} Threads::Threads)
+endfunction()
+
 add_definitions(-DDUCKDB)
 
 if(${DISABLE_THREADS})
@@ -104,7 +109,8 @@ link_threads(duckdb_static PUBLIC)
 
 add_library(duckdb SHARED ${ALL_OBJECT_FILES} ${LINK_OBJECTS})
 target_link_libraries(duckdb PUBLIC ${DUCKDB_SYSTEM_LIBS})
-link_extension_libraries(duckdb PRIVATE)
+# Bodo Change: Remove extension code
+#link_extension_libraries(duckdb PRIVATE)
 
 link_threads(duckdb PUBLIC)
 
