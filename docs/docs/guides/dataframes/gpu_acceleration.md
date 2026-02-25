@@ -35,43 +35,48 @@ When GPU acceleration is enabled, users can view which plan nodes will be run on
 export BODO_DATAFRAME_LIBRARY_DUMP_PLANS=1
 ```
 
-The following is an example output when this environment variable is enabled.  By looking at the first section, we learn that the projection will be run on the GPU but note that this does not imply that its read parquet child node will also be run on the GPU.  However, in the second section we find the CPU/GPU selection for that read parquet node and it is also scheduled to run on GPU.  By printing the full subtree for each node, this allows the user to better place that subtree within the overall plan.
+The following is an example output when this environment variable is enabled.
 
 ```
-=========================================================================
-    The following node (but not necessarily its children) will run on GPU
 ┌───────────────────────────┐
-│         PROJECTION        │
+│      (GPU) PROJECTION     │
 │    ────────────────────   │
 │        Expressions:       │
-│           #[0.0]          │
+│           #[1.0]          │
+│           #[1.1]          │
 │           #[0.1]          │
-│           #[0.2]          │
-│           #[0.3]          │
-│           #[0.4]          │
 │                           │
-│        ~56,961 rows       │
+│          ~3 rows          │
 └─────────────┬─────────────┘
 ┌─────────────┴─────────────┐
-│BODO_READ_PARQUET(TIME...  │
+│   (GPU) COMPARISON_JOIN   │
 │    ────────────────────   │
-│   Filters: Amount<100.0   │
+│      Join Type: INNER     │
 │                           │
-│        ~56,961 rows       │
-└───────────────────────────┘
-
-=========================================================================
-=========================================================================
-    The following node (but not necessarily its children) will run on GPU
-┌───────────────────────────┐
-│BODO_READ_PARQUET(TIME...  │
+│        Conditions:        ├──────────────┐
+│     (#[1.0] = #[0.0])     │              │
+│                           │              │
+│          ~3 rows          │              │
+└─────────────┬─────────────┘              │
+┌─────────────┴─────────────┐┌─────────────┴─────────────┐
+│  (GPU) LogicalJoinFilter  ││(GPU) BODO_READ_PARQUE...  │
+│    ────────────────────   ││    ────────────────────   │
+│       filter_ids: 0       ││                           │
+│                           ││                           │
+│      filter_columns:      ││                           │
+│          [[0], ]          ││                           │
+│                           ││                           │
+│    is_first_locations:    ││                           │
+│         [[true], ]        ││                           │
+│                           ││                           │
+│    orig_build_key_cols:   ││                           │
+│          [[0], ]          ││          ~3 rows          │
+└─────────────┬─────────────┘└───────────────────────────┘
+┌─────────────┴─────────────┐
+│  (CPU) BODO_READ_DF(A, B) │
 │    ────────────────────   │
-│   Filters: Amount<100.0   │
-│                           │
-│        ~56,961 rows       │
+│          ~3 rows          │
 └───────────────────────────┘
-
-=========================================================================
 ```
 
 ## Configuration and Tuning
