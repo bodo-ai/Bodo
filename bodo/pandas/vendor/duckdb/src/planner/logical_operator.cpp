@@ -125,7 +125,7 @@ vector<ColumnBinding> LogicalOperator::MapBindings(const vector<ColumnBinding> &
 	}
 }
 
-string LogicalOperator::ToString(ExplainFormat format, const device_mapping_t &device_mapping) const {
+string LogicalOperator::ToString(ExplainFormat format, device_mapping_t *device_mapping) const {
 	auto renderer = TreeRenderer::CreateRenderer(format);
 	duckdb::stringstream ss;
 	auto tree = RenderTree::CreateRenderTree(*this, device_mapping);

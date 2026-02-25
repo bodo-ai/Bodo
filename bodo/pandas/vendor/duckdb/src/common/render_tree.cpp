@@ -87,10 +87,10 @@ static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height) {
 	height++;
 }
 
-static unique_ptr<RenderTreeNode> CreateNode(const LogicalOperator &op, const device_mapping_t& device_mapping) {
+static unique_ptr<RenderTreeNode> CreateNode(const LogicalOperator &op, device_mapping_t *device_mapping) {
 	std::string name = op.GetName();
 	if (device_mapping) {
-		if ((*device_mapping)[(void*)&op]) {
+		if ((*device_mapping)[&op]) {
 			name = "(GPU) " + name;
 		} else {
 			name = "(CPU) " + name;
@@ -99,15 +99,15 @@ static unique_ptr<RenderTreeNode> CreateNode(const LogicalOperator &op, const de
 	return make_uniq<RenderTreeNode>(name, op.ParamsToString());
 }
 
-static unique_ptr<RenderTreeNode> CreateNode(const PhysicalOperator &op, const device_mapping_t& device_mapping) {
+static unique_ptr<RenderTreeNode> CreateNode(const PhysicalOperator &op, device_mapping_t *device_mapping) {
 	return make_uniq<RenderTreeNode>(op.GetName(), op.ParamsToString());
 }
 
-static unique_ptr<RenderTreeNode> CreateNode(const PipelineRenderNode &op, const device_mapping_t& device_mapping) {
+static unique_ptr<RenderTreeNode> CreateNode(const PipelineRenderNode &op, device_mapping_t *device_mapping) {
 	return CreateNode(op.op, device_mapping);
 }
 
-static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, const device_mapping_t& device_mapping) {
+static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, device_mapping_t *device_mapping) {
 	auto &info = op.GetProfilingInfo();
 	InsertionOrderPreservingMap<string> extra_info;
 	if (info.Enabled(info.settings, MetricsType::EXTRA_INFO)) {
@@ -133,7 +133,7 @@ static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, const devi
 }
 
 template <class T>
-static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, const device_mapping_t& device_mapping) {
+static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping) {
 	auto node = CreateNode(op, device_mapping);
 
 	if (!TreeChildrenIterator::HasChildren(op)) {
@@ -153,7 +153,7 @@ static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t
 }
 
 template <class T>
-static unique_ptr<RenderTree> CreateTree(const T &op, const device_mapping_t& device_mapping = nullptr) {
+static unique_ptr<RenderTree> CreateTree(const T &op, device_mapping_t *device_mapping = nullptr) {
 	idx_t width, height;
 	GetTreeWidthHeight<T>(op, width, height);
 
@@ -190,7 +190,7 @@ void RenderTree::SetNode(idx_t x, idx_t y, unique_ptr<RenderTreeNode> node) {
 	nodes[GetPosition(x, y)] = std::move(node);
 }
 
-unique_ptr<RenderTree> RenderTree::CreateRenderTree(const LogicalOperator &op, const device_mapping_t& device_mapping) {
+unique_ptr<RenderTree> RenderTree::CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping) {
 	return CreateTree<LogicalOperator>(op, device_mapping);
 }
 

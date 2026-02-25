@@ -117,17 +117,16 @@ class Executor {
     // construction. Executor only active for one plan execution so ctes cleaned
     // up by destructor.
     std::map<duckdb::idx_t, CTEInfo> ctes;
-    std::map<duckdb::LogicalOperator *, bool> run_on_gpu;
+    duckdb::device_mapping_t run_on_gpu;
 
    private:
-    void partition_internal(
-        duckdb::LogicalOperator &op,
-        std::map<duckdb::LogicalOperator *, bool> &run_on_gpu);
+    void partition_internal(duckdb::LogicalOperator &op,
+                            duckdb::device_mapping_t &run_on_gpu);
 
    public:
-    std::map<duckdb::LogicalOperator *, bool> partition_to_gpu(
+    duckdb::device_mapping_t partition_to_gpu(
         std::unique_ptr<duckdb::LogicalOperator> &plan) {
-        std::map<duckdb::LogicalOperator *, bool> run_on_gpu;
+        duckdb::device_mapping_t run_on_gpu;
         partition_internal(*plan, run_on_gpu);
         return run_on_gpu;
     }
@@ -138,13 +137,17 @@ class Executor {
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
 
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        if (myrank == 0) {
-            std::cout << "Partitioning complete. Run on GPU map:\n";
-            std::cout << plan->ToString(bododuckdb::ExplainFormat::DEFAULT,
-                                        &run_on_gpu)
-                      << std::endl;
+        if (get_dump_plans()) {
+            int myrank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+            if (myrank == 0) {
+                std::cout << "Optimized Plan with Device Annotations"
+                          << std::endl;
+                std::cout << plan->ToString(bododuckdb::ExplainFormat::DEFAULT,
+                                            &run_on_gpu)
+                          << std::endl;
+            }
         }
 
         // Convert the logical plan to a physical plan
