@@ -100,12 +100,6 @@ jobs:
             set +eo pipefail
 
             if [[ "${{ inputs.test-type }}" == "DF_LIB_GPU" ]]; then
-              # C++ GPU tests
-              GPU_CPP_TESTS=(
-                  bodo/tests/test_streaming/test_gpu_shuffle.cpp
-                  bodo/tests/test_streaming/test_gpu_batch_gen.cpp
-              )
-
               # Ignore iceberg tests since PyIceberg is not compatible with GPU environment
               PYTEST_IGNORE_ICEBERG_FLAGS=(
                   --ignore bodo/tests/test_iceberg
@@ -114,18 +108,18 @@ jobs:
               PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_FLAGS[*]} $PYTEST_IGNORE"
 
               # CPP tests (Single GPU)
-              pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
+              pytest -s -v -Wignore $PYTEST_IGNORE -m gpu_cpp bodo/tests
               cpp_single_gpu_exit_code=$?
 
               # CPP tests (Multi GPU)
-              mpiexec -n 4 pytest -s -v -Wignore "${GPU_CPP_TESTS[@]}"
+              mpiexec -n 4 pytest -s -v -Wignore $PYTEST_IGNORE -m gpu_cpp bodo/tests
               cpp_multi_gpu_exit_code=$?
 
               # Python tests (NUM_WORKERS = NUM GPUS)
               BODO_NUM_WORKERS=4 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo \
                 --store-durations --clean-durations \
-                --durations-path=buildscripts/github/test_dur_bodo_1.json  \
+                --durations-path=buildscripts/github/test_dur_bodo_multi_gpu.json  \
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
@@ -133,7 +127,7 @@ jobs:
               BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo --cov-append \
                 --store-durations --clean-durations \
-                --durations-path=buildscripts/github/test_dur_bodo_2.json \
+                --durations-path=buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json \
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
@@ -230,8 +224,8 @@ jobs:
             mkdir -p outputs
             mv .coverage outputs/.coverage_${{ inputs.batch }}_${{ inputs.test-type }}
             if [[ "${{ inputs.test-type }}" == "DF_LIB_GPU" ]]; then
-              mv buildscripts/github/test_dur_bodo_1.json outputs/test_dur_bodo_1_${{ inputs.batch }}_${{ inputs.test-type }}.json
-              mv buildscripts/github/test_dur_bodo_2.json outputs/test_dur_bodo_2_${{ inputs.batch }}_${{ inputs.test-type }}.json
+              mv buildscripts/github/test_dur_bodo_multi_gpu.json outputs/test_dur_bodo_multi_gpu_${{ inputs.batch }}_${{ inputs.test-type }}.json
+              mv buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json outputs/test_dur_bodo_multi_gpu_more_workers_${{ inputs.batch }}_${{ inputs.test-type }}.json
             else
               mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
               mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
