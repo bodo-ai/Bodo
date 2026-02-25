@@ -59,7 +59,7 @@ struct RenderTree {
 	idx_t height;
 
 public:
-	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op);
+	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op, const device_mapping_t& device_mapping = nullptr);
 	static unique_ptr<RenderTree> CreateRenderTree(const PhysicalOperator &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const ProfilingNode &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const Pipeline &op);

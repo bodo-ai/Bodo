@@ -23,6 +23,8 @@
 
 namespace duckdb {
 
+using device_mapping_t = std::map<void *, bool>*;
+
 //! LogicalOperator is the base class of the logical operators present in the
 //! logical query tree
 class LogicalOperator {
@@ -56,7 +58,7 @@ public:
 
 	virtual string GetName() const;
 	virtual InsertionOrderPreservingMap<string> ParamsToString() const;
-	virtual string ToString(ExplainFormat format = ExplainFormat::DEFAULT) const;
+	virtual string ToString(ExplainFormat format = ExplainFormat::DEFAULT, const device_mapping_t &device_mapping = nullptr) const;
 	DUCKDB_API void Print();
 	//! Debug method: verify that the integrity of expressions & child nodes are maintained
 	virtual void Verify(ClientContext &context);
