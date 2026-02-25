@@ -2,6 +2,8 @@
 ``` py
 BodoDataFrame.to_parquet(path=None, engine="auto", compression="snappy", index=None, partition_cols=None, storage_options=None, row_group_size=-1, **kwargs)
 ```
+**GPU:** ✔ Supported
+
 Write a DataFrame as a Parquet dataset.
 
 <p class="api-header">Parameters</p>
