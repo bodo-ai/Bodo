@@ -117,16 +117,17 @@ class Executor {
     // construction. Executor only active for one plan execution so ctes cleaned
     // up by destructor.
     std::map<duckdb::idx_t, CTEInfo> ctes;
-    std::map<void *, bool> run_on_gpu;
+    std::map<duckdb::LogicalOperator *, bool> run_on_gpu;
 
    private:
-    void partition_internal(duckdb::LogicalOperator &op,
-                            std::map<void *, bool> &run_on_gpu);
+    void partition_internal(
+        duckdb::LogicalOperator &op,
+        std::map<duckdb::LogicalOperator *, bool> &run_on_gpu);
 
    public:
-    std::map<void *, bool> partition_to_gpu(
+    std::map<duckdb::LogicalOperator *, bool> partition_to_gpu(
         std::unique_ptr<duckdb::LogicalOperator> &plan) {
-        std::map<void *, bool> run_on_gpu;
+        std::map<duckdb::LogicalOperator *, bool> run_on_gpu;
         partition_internal(*plan, run_on_gpu);
         return run_on_gpu;
     }

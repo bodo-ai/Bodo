@@ -9,6 +9,7 @@ BodoDataFrame.drop_duplicates(
         ignore_index=False,
     ) -> BodoDataFrame
 ```
+**GPU:** ✔ Supported
 
 Return DataFrame with duplicate rows removed.
 
