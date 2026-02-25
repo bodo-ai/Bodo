@@ -21,7 +21,11 @@ If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only 
 
 ## How Placement is Decided
 
+Currently, when GPU execution is enabled, Bodo will run every operation on the GPU for which we have a GPU implementation (see supported capabilities below).  However, this approach will be replaced in the near future with an advanced device placement algorithm that will use a cost-model to determine which plan nodes should run on CPU versus GPU such that the plan execution achieves the lowest latency.  In either case, when adjacent nodes in a plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
+
+<!--
 Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of the plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.  The first time BODO_GPU is enabled, Bodo will run a small number of example operators on CPU and GPU to determine their relative speeds and these statistics are later used to estimate execution time for operators on CPU and GPU.
+-->
 
 ## Checking Placement
 
