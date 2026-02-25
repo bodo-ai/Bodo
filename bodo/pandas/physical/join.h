@@ -114,7 +114,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.IsComparison()) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    bododuckdb::ExpressionType::COMPARE_EQUAL) {
                 if (cond.GetLHS().GetExpressionClass() !=
                     duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                     throw std::runtime_error(
@@ -125,23 +127,18 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                     throw std::runtime_error(
                         "Join condition right side is not a column reference.");
                 }
-                if (cond.GetComparisonType() !=
-                    duckdb::ExpressionType::COMPARE_EQUAL) {
-                    has_non_equi_cond = true;
-                }
-                if (cond.GetComparisonType() ==
-                    duckdb::ExpressionType::COMPARE_EQUAL) {
-                    auto& left_bce =
-                        cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
-                    auto& right_bce =
-                        cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
-                    this->left_keys.push_back(
-                        left_col_ref_map[{left_bce.binding.table_index,
-                                          left_bce.binding.column_index}]);
-                    this->right_keys.push_back(
-                        right_col_ref_map[{right_bce.binding.table_index,
-                                           right_bce.binding.column_index}]);
-                }
+                auto& left_bce =
+                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+                auto& right_bce =
+                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
+                this->left_keys.push_back(
+                    left_col_ref_map[{left_bce.binding.table_index,
+                                      left_bce.binding.column_index}]);
+                this->right_keys.push_back(
+                    right_col_ref_map[{right_bce.binding.table_index,
+                                       right_bce.binding.column_index}]);
+            } else {
+                has_non_equi_cond = true;
             }
         }
 
@@ -164,9 +161,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
             probe_table_schema->Project(probe_col_inds);
 
-        // std::set<uint64_t> left_non_equi_keys;
-        // std::set<uint64_t> right_non_equi_keys;
-
         for (duckdb::JoinCondition& cond : conditions) {
             if (cond.IsComparison() &&
                 cond.GetComparisonType() ==
@@ -178,18 +172,16 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             std::shared_ptr<PhysicalExpression> new_phys_expr;
             if (cond.IsComparison()) {
                 std::shared_ptr<PhysicalExpression> left_expr =
-                    buildPhysicalExprTree(cond.GetLHS(), left_col_ref_map,
-                                          false);
+                    buildPhysicalExprTree(cond.GetLHS(), left_col_ref_map);
                 std::shared_ptr<PhysicalExpression> right_expr =
-                    buildPhysicalExprTree(cond.GetRHS(), right_col_ref_map,
-                                          false);
+                    buildPhysicalExprTree(cond.GetRHS(), right_col_ref_map);
                 new_phys_expr = std::static_pointer_cast<PhysicalExpression>(
                     std::make_shared<PhysicalComparisonExpression>(
                         std::move(left_expr), std::move(right_expr),
                         cond.GetComparisonType()));
             } else {
                 new_phys_expr = buildPhysicalExprTree(cond.GetJoinExpression(),
-                                                      join_col_ref_map, false);
+                                                      join_col_ref_map);
             }
             // If we have more than one non-equi join condition then 'and'
             // them together.
