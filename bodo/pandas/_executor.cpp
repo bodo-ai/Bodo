@@ -978,6 +978,20 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
         dp_compute(root, dp_cache);
         // Fill out the run_on_gpu map.
         assign_devices(root, dp_cache, run_on_gpu);
+
+        if (get_dump_plans()) {
+            int myrank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+            if (myrank == 0) {
+                std::cout << "Optimized Plan with Device Annotations"
+                          << std::endl;
+                std::cout << root->getOp().ToString(
+                                 bododuckdb::ExplainFormat::DEFAULT,
+                                 &run_on_gpu)
+                          << std::endl;
+            }
+        }
 #else
         throw std::runtime_error(
             "Cannot use BODO_GPU mode when not built with GPU enabled.");

@@ -137,19 +137,6 @@ class Executor {
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
 
-        if (get_dump_plans()) {
-            int myrank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
-            if (myrank == 0) {
-                std::cout << "Optimized Plan with Device Annotations"
-                          << std::endl;
-                std::cout << plan->ToString(bododuckdb::ExplainFormat::DEFAULT,
-                                            &run_on_gpu)
-                          << std::endl;
-            }
-        }
-
         // Convert the logical plan to a physical plan
         PhysicalPlanBuilder builder(ctes, run_on_gpu);
         builder.Visit(*plan);
