@@ -105,17 +105,23 @@ jobs:
                   --ignore bodo/tests/test_iceberg
                   --ignore bodo/tests/test_df_lib/test_iceberg.py
               )
-              PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_FLAGS[*]} $PYTEST_IGNORE"
 
-              # CPP tests (Single GPU)
-              pytest -s -v -Wignore $PYTEST_IGNORE -m gpu_cpp bodo/tests
+              ### CPP tests ###
+              export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=0 # Avoid false positive JIT imports in cpp tests.
+
+              # Single GPU
+              pytest -s -v -Wignore "${PYTEST_IGNORE_ICEBERG_FLAGS[@]}" -m gpu_cpp bodo/tests
               cpp_single_gpu_exit_code=$?
 
-              # CPP tests (Multi GPU)
-              mpiexec -n 4 pytest -s -v -Wignore $PYTEST_IGNORE -m gpu_cpp bodo/tests
+              # Multi GPU
+              mpiexec -n 4 pytest -s -v -Wignore "${PYTEST_IGNORE_ICEBERG_FLAGS[@]}" -m gpu_cpp bodo/tests
               cpp_multi_gpu_exit_code=$?
 
-              # Python tests (NUM_WORKERS = NUM GPUS)
+              ### Python tests ###
+              export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
+              PYTEST_IGNORE="${PYTEST_IGNORE_ICEBERG_FLAGS[*]} $PYTEST_IGNORE"
+
+              # Case 1: NUM_WORKERS = NUM GPUS
               BODO_NUM_WORKERS=4 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo \
                 --store-durations --clean-durations \
@@ -123,7 +129,7 @@ jobs:
                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_test_exit_code=$?
 
-              # Python tests (NUM_WORKERS > NUM GPUS)
+              # Case 2: NUM_WORKERS > NUM GPUS
               BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
                 --cov-report= --cov=bodo --cov-append \
                 --store-durations --clean-durations \
