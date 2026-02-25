@@ -1,10 +1,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include "../../libs/streaming/_join.h"
 #include "../_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -40,6 +42,15 @@ struct PhysicalJoinMetrics {
 
     stat_t output_row_count = 0;
 };
+/**
+ * @brief Helper function to set whether column ref expressions use the left or
+ * right table in the join based on the column bindings of the column ref and
+ * the left table column bindings.
+ */
+void setExprTreeLeftRight(
+    std::shared_ptr<PhysicalExpression> expr,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        left_col_ref_map);
 
 /**
  * @brief Physical node for join.
@@ -194,6 +205,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 physExprTree = new_phys_expr;
             }
         }
+        setExprTreeLeftRight(physExprTree, left_col_ref_map);
 
         initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
                                 bound_right_inds, build_col_inds_rev);
@@ -683,5 +695,28 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     PhysicalJoinMetrics metrics;
 };
+
+void setExprTreeLeftRight(
+    std::shared_ptr<PhysicalExpression> expr,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        left_col_ref_map) {
+    if (!expr) {
+        return;
+    }
+    if (expr->GetExpressionType() == PhysicalExpressionType::COLUMN_REF) {
+        auto col_ref_expr =
+            std::static_pointer_cast<PhysicalColumnRefExpression>(expr);
+        duckdb::ColumnBinding col_binding = col_ref_expr->get_col_binding();
+        if (left_col_ref_map.contains(
+                {col_binding.table_index, col_binding.column_index})) {
+            col_ref_expr->set_left_side(true);
+        } else {
+            col_ref_expr->set_left_side(false);
+        }
+    }
+    for (auto& child : expr->GetChildren()) {
+        setExprTreeLeftRight(child, left_col_ref_map);
+    }
+}
 
 #undef CONSUME_PROBE_BATCH

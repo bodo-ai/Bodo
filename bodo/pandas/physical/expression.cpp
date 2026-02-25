@@ -526,7 +526,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             size_t col_idx =
                 col_ref_map[{binding.table_index, binding.column_index}];
             return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalColumnRefExpression>(col_idx,
+                std::make_shared<PhysicalColumnRefExpression>(col_idx, binding,
                                                               bce.GetName()));
             // binding.table_index, binding.column_index));
         } break;  // suppress wrong fallthrough error

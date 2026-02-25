@@ -18,6 +18,7 @@
 #include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
@@ -78,6 +79,24 @@ class ScalarExprResult : public ExprResult {
 };
 
 /**
+ * @brief Identifies the specific subclass type of a PhysicalExpression.
+ */
+enum class PhysicalExpressionType {
+    INVALID = 0,
+    COMPARISON,
+    NULL_CONSTANT,
+    CONSTANT,
+    COLUMN_REF,
+    CONJUNCTION,
+    CAST,
+    UNARY,
+    BINARY,
+    CASE,
+    UDF,
+    ARROW
+};
+
+/**
  * @brief Superclass for Bodo Physical expression tree nodes. Like duckdb
  *        it is convenient to store child nodes here because many expr
  *        node types have children.
@@ -87,8 +106,10 @@ class PhysicalExpression {
    public:
     PhysicalExpression() {}
     PhysicalExpression(
-        std::vector<std::shared_ptr<PhysicalExpression>> &_children)
-        : children(_children) {}
+        std::vector<std::shared_ptr<PhysicalExpression>> &_children,
+        PhysicalExpressionType type)
+        : children(_children), phys_expr_type(type) {}
+    PhysicalExpression(PhysicalExpressionType type) : phys_expr_type(type) {}
     virtual ~PhysicalExpression() = default;
 
     /**
@@ -121,8 +142,17 @@ class PhysicalExpression {
 
     virtual void ReportMetrics(std::vector<MetricBase> &metrics_out) {};
 
+    PhysicalExpressionType GetExpressionType() const { return phys_expr_type; }
+
+    std::vector<std::shared_ptr<PhysicalExpression>> &GetChildren() {
+        return children;
+    }
+
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
+
+   private:
+    PhysicalExpressionType phys_expr_type = PhysicalExpressionType::INVALID;
 };
 
 /**
@@ -201,7 +231,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
    public:
     PhysicalComparisonExpression(std::shared_ptr<PhysicalExpression> left,
                                  std::shared_ptr<PhysicalExpression> right,
-                                 duckdb::ExpressionType etype) {
+                                 duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::COMPARISON) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -351,7 +382,9 @@ template <typename T>
 class PhysicalNullExpression : public PhysicalExpression {
    public:
     PhysicalNullExpression(const T &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::NULL_CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalNullExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -405,7 +438,9 @@ template <typename T>
 class PhysicalConstantExpression : public PhysicalExpression {
    public:
     PhysicalConstantExpression(const T &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -455,7 +490,9 @@ template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
     PhysicalConstantExpression(const std::string &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -502,9 +539,15 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
  */
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
-    PhysicalColumnRefExpression(size_t column, const std::string &_bound_name,
+    PhysicalColumnRefExpression(size_t column,
+                                duckdb::ColumnBinding _col_binding,
+                                const std::string &_bound_name,
                                 bool _left_side = true)
-        : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
+        : PhysicalExpression(PhysicalExpressionType::COLUMN_REF),
+          col_idx(column),
+          col_binding(_col_binding),
+          bound_name(_bound_name),
+          left_side(_left_side) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -554,8 +597,13 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
         }
     }
 
+    void set_left_side(bool _left_side) { left_side = _left_side; }
+
+    duckdb::ColumnBinding get_col_binding() const { return col_binding; }
+
    protected:
     size_t col_idx;
+    duckdb::ColumnBinding col_binding;
     std::string bound_name;
     bool left_side;
 };
@@ -569,7 +617,8 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
    public:
     PhysicalConjunctionExpression(std::shared_ptr<PhysicalExpression> left,
                                   std::shared_ptr<PhysicalExpression> right,
-                                  duckdb::ExpressionType etype) {
+                                  duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::CONJUNCTION) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -634,7 +683,8 @@ class PhysicalCastExpression : public PhysicalExpression {
    public:
     PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
                            duckdb::LogicalType _return_type)
-        : return_type(_return_type) {
+        : PhysicalExpression(PhysicalExpressionType::CAST),
+          return_type(_return_type) {
         children.push_back(left);
     }
 
@@ -672,7 +722,8 @@ class PhysicalCastExpression : public PhysicalExpression {
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
     PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            duckdb::ExpressionType etype) {
+                            duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::UNARY) {
         children.push_back(left);
         switch (etype) {
             case duckdb::ExpressionType::OPERATOR_NOT:
@@ -737,7 +788,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         std::shared_ptr<PhysicalExpression> left,
         std::shared_ptr<PhysicalExpression> right, duckdb::ExpressionType etype,
         const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+        : PhysicalExpression(PhysicalExpressionType::BINARY),
+          result_type(_result_type) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -823,7 +875,8 @@ class PhysicalCaseExpression : public PhysicalExpression {
    public:
     PhysicalCaseExpression(std::shared_ptr<PhysicalExpression> when_expr,
                            std::shared_ptr<PhysicalExpression> then_expr,
-                           std::shared_ptr<PhysicalExpression> else_expr) {
+                           std::shared_ptr<PhysicalExpression> else_expr)
+        : PhysicalExpression(PhysicalExpressionType::CASE) {
         children.push_back(when_expr);
         children.push_back(then_expr);
         children.push_back(else_expr);
@@ -893,7 +946,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
-        : PhysicalExpression(children),
+        : PhysicalExpression(children, PhysicalExpressionType::UDF),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type),
           cfunc_ptr(nullptr),
@@ -1013,7 +1066,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
-        : PhysicalExpression(children),
+        : PhysicalExpression(children, PhysicalExpressionType::ARROW),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type) {}
 
