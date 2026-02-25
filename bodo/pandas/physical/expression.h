@@ -204,8 +204,9 @@ std::shared_ptr<array_info> do_arrow_compute_case(
  * @brief Run arrow compute operation on unary Datum.
  *
  */
-arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
-                                    const std::string &comparator);
+arrow::Datum do_arrow_compute_unary(
+    arrow::Datum left_res, const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
  * @brief Run arrow compute operation on two Datums.
@@ -415,8 +416,8 @@ class PhysicalNullExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalNullExpression::join_expr_internal unimplemented ");
+        return arrow::Datum(
+            arrow::MakeNullScalar(ScalarToArrowArray(constant)->type()));
     }
 
     friend std::ostream &operator<<(std::ostream &os,
@@ -707,8 +708,10 @@ class PhysicalCastExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalCastExpression::join_expr_internal unimplemented ");
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_cast(left_datum, return_type);
     }
 
    protected:
@@ -906,8 +909,24 @@ class PhysicalCaseExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalCastExpression::join_expr_internal unimplemented ");
+        arrow::Datum when_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum then_datum = children[1]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum else_datum = children[2]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+
+        arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
+            "if_else", {when_datum, then_datum, else_datum});
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_case: Error in Arrow compute: " +
+                cmp_res.status().message());
+        }
+        return cmp_res.ValueOrDie();
     }
 };
 
@@ -1083,8 +1102,10 @@ class PhysicalArrowExpression : public PhysicalExpression {
                                     void **right_null_bitmap,
                                     int64_t left_index,
                                     int64_t right_index) override {
-        throw std::runtime_error(
-            "PhysicalArrowExpression::join_expr_internal unimplemented ");
+        arrow::Datum child_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute(child_datum);
     }
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
@@ -1096,4 +1117,50 @@ class PhysicalArrowExpression : public PhysicalExpression {
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalArrowExpressionMetrics metrics;
+
+    template <typename T>
+    using compute_return_t =
+        std::conditional_t<std::is_same_v<T, std::shared_ptr<ExprResult>>,
+                           std::shared_ptr<array_info>, T>;
+    template <typename T>
+    compute_return_t<T> do_arrow_compute(T res) {
+        compute_return_t<T> result;
+        if (scalar_func_data.arrow_func_name == "date") {
+            // The Arrow compute equivalent of Series.dt.date() is
+            // year_month_day, which returns a struct. To match the output dtype
+            // of Pandas, we Cast to Date32 instead.
+            result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex") {
+            if (!PyTuple_Check(scalar_func_data.args) ||
+                PyTuple_Size(scalar_func_data.args) != 1) {
+                throw std::runtime_error(
+                    "match_substring_regex args not a 1-element tuple.");
+            }
+
+            // Get the first element (borrowed reference)
+            PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+            if (!PyUnicode_Check(py_str)) {
+                throw std::runtime_error(
+                    "match_substring_regex args element is not a Python "
+                    "string.");
+            }
+
+            // Convert to UTF‑8 C string
+            const char *c_str = PyUnicode_AsUTF8(py_str);
+            if (!c_str) {
+                throw std::runtime_error(
+                    "match_substring_regex error extracting Python string.");
+            }
+
+            arrow::compute::MatchSubstringOptions opts(c_str);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else {
+            result =
+                do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+        }
+        return result;
+    }
 };
