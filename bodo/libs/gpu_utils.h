@@ -1,6 +1,6 @@
 #pragma once
 
-extern bool G_USE_ASYNC;
+extern bool g_use_async;
 
 #ifdef USE_CUDF
 #include <mpi.h>
