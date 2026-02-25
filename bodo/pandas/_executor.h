@@ -136,10 +136,15 @@ class Executor {
         QueryProfileCollector::Default().Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
-        std::cout << "Partitioning complete. Run on GPU map:\n";
-        std::cout << plan->ToString(bododuckdb::ExplainFormat::DEFAULT,
-                                    &run_on_gpu)
-                  << std::endl;
+
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        if (myrank == 0) {
+            std::cout << "Partitioning complete. Run on GPU map:\n";
+            std::cout << plan->ToString(bododuckdb::ExplainFormat::DEFAULT,
+                                        &run_on_gpu)
+                      << std::endl;
+        }
 
         // Convert the logical plan to a physical plan
         PhysicalPlanBuilder builder(ctes, run_on_gpu);
