@@ -96,7 +96,8 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
     // Get the column bindings for join equality keys. If a filter column is an
     // equality key, we can push the filter to the other side of the join.
     for (const auto &cond : join_op.conditions) {
-        if (cond.GetComparisonType() ==
+        if (cond.IsComparison() &&
+            cond.GetComparisonType() ==
                 bododuckdb::ExpressionType::COMPARE_EQUAL &&
             cond.GetLHS().GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF &&
@@ -260,8 +261,9 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             // TODO Support non-equalities for pushing to I/O
             // e.g. if T1.A < T2.B is a join conditition we can push A < the
             // minimum of B to T1's scan operator
-            if (cond.GetComparisonType() !=
-                duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (!cond.IsComparison() ||
+                cond.GetComparisonType() !=
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 // Only support equality join conditions for now
                 continue;
             }

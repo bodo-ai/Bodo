@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "../../libs/streaming/_join.h"
 #include "../_util.h"
+#include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -109,8 +110,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.GetComparisonType() !=
-                duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() !=
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 has_non_equi_cond = true;
             }
             if (cond.GetLHS().GetExpressionClass() !=
@@ -123,8 +125,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 throw std::runtime_error(
                     "Join condition right side is not a column reference.");
             }
-            if (cond.GetComparisonType() ==
-                duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 auto& left_bce =
                     cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
                 auto& right_bce =
@@ -161,8 +164,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::set<uint64_t> right_non_equi_keys;
 
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.GetComparisonType() ==
-                duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 // These cases are handled by the left_keys and right_keys
                 // above.  Only the non-equi tests are handled here.
                 continue;
@@ -188,7 +192,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                         std::make_shared<PhysicalColumnRefExpression>(
                             this->build_col_inds_rev[right_cond_col_ind],
                             right_bce.GetName(), false),
-                        cond.GetComparisonType()));
+                        cond.IsComparison()
+                            ? cond.GetComparisonType()
+                            : bododuckdb::ExpressionType::INVALID));
             // If we have more than one non-equi join condition then 'and'
             // them together.
             if (physExprTree) {
