@@ -158,4 +158,4 @@ If you expect a portion of your pipeline to run on GPU but it executes on CPU in
 
 ## Roadmap
 
-Additional join variants are forthcoming.
+Other operators and additional join variants are forthcoming. We are working on performance tuning and optimization as well.
