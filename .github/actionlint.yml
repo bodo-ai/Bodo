@@ -8,3 +8,4 @@ self-hosted-runner:
     - self-hosted-medium
     - self-hosted-large
     - self-hosted-xlarge
+    - self-hosted-multi-gpu
