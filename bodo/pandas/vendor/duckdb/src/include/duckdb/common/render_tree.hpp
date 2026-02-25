@@ -59,7 +59,8 @@ struct RenderTree {
 	idx_t height;
 
 public:
-	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op);
+	// Bodo Change: Pass optional device mapping to CreateRenderTree for annotating name in node boxes.
+	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping = nullptr);
 	static unique_ptr<RenderTree> CreateRenderTree(const PhysicalOperator &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const ProfilingNode &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const Pipeline &op);
