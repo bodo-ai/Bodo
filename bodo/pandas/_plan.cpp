@@ -44,9 +44,10 @@
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "optimizer/runtime_join_filter.h"
 
+#include "../libs/gpu_utils.h"
+
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
-#include "../libs/gpu_utils.h"
 #include "cuda_runtime_api.h"
 #endif
 

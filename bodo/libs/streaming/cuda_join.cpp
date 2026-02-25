@@ -158,8 +158,7 @@ void CudaHashJoin::FinalizeBuild() {
 }
 
 void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                                     cuda_event_wrapper event,
-                                     rmm::cuda_stream_view& stream) {
+                                     cuda_event_wrapper event) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory.
     // Store the incoming build chunk for later finalization

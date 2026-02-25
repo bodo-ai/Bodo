@@ -203,8 +203,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        cuda_join->BuildConsumeBatch(
-            input_batch.table, input_batch.stream_event->event, se->stream);
+        cuda_join->BuildConsumeBatch(input_batch.table,
+                                     input_batch.stream_event->event);
         if (prev_op_result == OperatorResult::FINISHED) {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we

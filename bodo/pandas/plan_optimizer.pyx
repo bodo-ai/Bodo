@@ -1179,7 +1179,7 @@ cpdef cpp_table_to_arrow_array(cpp_table, delete_cpp_table=True):
     return out
 
 
-cpdef c_set_cudf_vars(use_cudf, cache_dir, dump_plans):
+cpdef c_set_cudf_vars(use_cudf, cache_dir, dump_plans, use_async):
     set_cudf_vars(use_cudf, cache_dir.encode(), dump_plans, use_async)
 
 

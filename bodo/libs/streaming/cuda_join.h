@@ -70,8 +70,7 @@ struct CudaHashJoin {
      * @brief Process input tables to build side of join
      */
     void BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                           cuda_event_wrapper event,
-                           rmm::cuda_stream_view& stream);
+                           cuda_event_wrapper event);
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
