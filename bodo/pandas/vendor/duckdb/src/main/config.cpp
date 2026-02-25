@@ -143,7 +143,8 @@ static const ConfigurationOption internal_options[] = {
     //DUCKDB_SETTING_CALLBACK(ForceCompressionSetting),
 	// Bodo Chnage: Remove encryption code
     //DUCKDB_GLOBAL(ForceMbedtlsUnsafeSetting),
-    DUCKDB_GLOBAL(ForceVariantShredding),
+	// Bodo Change: Disable force variant shredding
+    //DUCKDB_GLOBAL(ForceVariantShredding),
     DUCKDB_SETTING(GeometryMinimumShreddingSize),
     DUCKDB_SETTING_CALLBACK(HomeDirectorySetting),
 	// Bodo Change: Remove HTTP logging

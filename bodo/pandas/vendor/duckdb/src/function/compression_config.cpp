@@ -84,13 +84,14 @@ idx_t CompressionFunctionSet::GetCompressionIndex(PhysicalType physical_type) {
 //	return static_cast<idx_t>(type);
 //}
 //
-//CompressionFunctionSet::CompressionFunctionSet() {
-//	for (idx_t i = 0; i < PHYSICAL_TYPE_COUNT; i++) {
-//		is_loaded[i] = false;
-//	}
-//	ResetDisabledMethods();
-//	functions.resize(PHYSICAL_TYPE_COUNT);
-//}
+CompressionFunctionSet::CompressionFunctionSet() {
+	for (idx_t i = 0; i < PHYSICAL_TYPE_COUNT; i++) {
+		is_loaded[i] = false;
+	}
+	ResetDisabledMethods();
+	functions.resize(PHYSICAL_TYPE_COUNT);
+}
+// Bodo Change: Remove compression files
 //
 //bool EmitCompressionFunction(CompressionType type) {
 //	switch (type) {
@@ -181,16 +182,17 @@ idx_t CompressionFunctionSet::GetCompressionIndex(PhysicalType physical_type) {
 //	return nullptr;
 //}
 
-void CompressionFunctionSet::SetDisabledCompressionMethods(const vector<CompressionType> &methods) {
-	ResetDisabledMethods();
-	for (auto &method : methods) {
-		auto idx = GetCompressionIndex(method);
-		is_disabled[idx] = true;
-	}
-}
+//void CompressionFunctionSet::SetDisabledCompressionMethods(const vector<CompressionType> &methods) {
+//	ResetDisabledMethods();
+//	for (auto &method : methods) {
+//		auto idx = GetCompressionIndex(method);
+//		is_disabled[idx] = true;
+//	}
+//}
 
 void DBConfig::SetDisabledCompressionMethods(const vector<CompressionType> &methods) {
-	compression_functions->SetDisabledCompressionMethods(methods);
+	// Bodo Change: Remove compression code
+	//compression_functions->SetDisabledCompressionMethods(methods);
 }
 
 vector<CompressionType> CompressionFunctionSet::GetDisabledCompressionMethods() const {
@@ -214,12 +216,16 @@ void CompressionFunctionSet::ResetDisabledMethods() {
 }
 
 vector<reference<CompressionFunction>> DBConfig::GetCompressionFunctions(const PhysicalType physical_type) {
-	return compression_functions->GetCompressionFunctions(physical_type);
+	// Bodo Change: Remove compression code
+	//return compression_functions->GetCompressionFunctions(physical_type);
+	return {};
 }
 
 optional_ptr<CompressionFunction> DBConfig::TryGetCompressionFunction(CompressionType type,
                                                                       const PhysicalType physical_type) {
-	return compression_functions->GetCompressionFunction(type, physical_type);
+	// Bodo Change: Remove compression code
+	// return compression_functions->GetCompressionFunction(type, physical_type);
+	return nullptr;
 }
 
 reference<CompressionFunction> DBConfig::GetCompressionFunction(CompressionType type,

@@ -337,9 +337,9 @@ struct CompressionFunctionSet {
 public:
 	CompressionFunctionSet();
 
-	vector<reference<CompressionFunction>> GetCompressionFunctions(PhysicalType physical_type);
-	optional_ptr<CompressionFunction> GetCompressionFunction(CompressionType type, PhysicalType physical_type);
-	void SetDisabledCompressionMethods(const vector<CompressionType> &methods);
+	//vector<reference<CompressionFunction>> GetCompressionFunctions(PhysicalType physical_type);
+	//optional_ptr<CompressionFunction> GetCompressionFunction(CompressionType type, PhysicalType physical_type);
+	//void SetDisabledCompressionMethods(const vector<CompressionType> &methods);
 	vector<CompressionType> GetDisabledCompressionMethods() const;
 
 private:
@@ -349,12 +349,13 @@ private:
 	vector<vector<CompressionFunction>> functions;
 
 private:
-	void LoadCompressionFunctions(PhysicalType physical_type);
+	// Bodo Change: Remove compression code
+	//void LoadCompressionFunctions(PhysicalType physical_type);
 
-	static void TryLoadCompression(CompressionType type, PhysicalType physical_type,
-	                               vector<CompressionFunction> &result);
+	//static void TryLoadCompression(CompressionType type, PhysicalType physical_type,
+	//                               vector<CompressionFunction> &result);
 	static idx_t GetCompressionIndex(PhysicalType physical_type);
-	static idx_t GetCompressionIndex(CompressionType type);
+	//static idx_t GetCompressionIndex(CompressionType type);
 	void ResetDisabledMethods();
 };
 

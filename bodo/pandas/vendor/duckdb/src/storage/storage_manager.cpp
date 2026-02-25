@@ -133,9 +133,10 @@ void StorageOptions::Initialize(unordered_map<string, Value> &options) {
 	// erase encryption settings
 	options.erase("encryption_key");
 	options.erase("encryption_cipher");
-	if (encryption) {
-		SetEncryptionVersion(storage_version_user_provided);
-	}
+	// Bodo Change: Remove encryption code
+	//if (encryption) {
+	//	SetEncryptionVersion(storage_version_user_provided);
+	//}
 }
 
 StorageManager::StorageManager(AttachedDatabase &db, string path_p, AttachOptions &options)

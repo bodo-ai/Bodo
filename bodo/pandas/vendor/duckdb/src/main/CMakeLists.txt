@@ -36,7 +36,7 @@ add_library_unity(
   error_manager.cpp
   # Bodo Change: Remove extension related files
   #extension.cpp
-  #extension_callback_manager.cpp
+  extension_callback_manager.cpp
   #extension_install_info.cpp
   #extension_manager.cpp
   materialized_query_result.cpp
