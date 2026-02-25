@@ -14,6 +14,7 @@ bodo.pandas.read_parquet(
     **kwargs,
 ) -> BodoDataFrame
 ```
+**GPU:** ✔ Supported
 
 Creates a BodoDataFrame object for reading from parquet file(s) lazily.
 
@@ -55,6 +56,9 @@ Output:
 3    3   18
 4    4   19
 ```
+
+!!! tip "GPU Acceleration"
+    May fall back to CPU if the plan includes operations such as `head()` that require Pandas sampling.
 
 ---
 

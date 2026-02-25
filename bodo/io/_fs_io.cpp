@@ -91,7 +91,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name) {
+                         const std::string *orig_path, std::string *path_name) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
