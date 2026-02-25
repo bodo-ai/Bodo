@@ -1870,16 +1870,21 @@ void cpp_table_delete(int64_t cpp_table) {
 
 bool g_use_cudf;
 std::string g_cache_dir;
+bool g_dump_plans = false;
 
-void set_use_cudf(bool use_cudf, std::string cache_dir, bool use_async) {
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans,
+                   bool use_async) {
     g_use_cudf = use_cudf;
     g_cache_dir = cache_dir;
-    G_USE_ASYNC = use_async;
+    g_dump_plans = dump_plans;
+    g_use_async = use_async;
 }
 
 bool get_use_cudf() { return g_use_cudf; }
 
 std::string get_cache_dir() { return g_cache_dir; }
+
+bool get_dump_plans() { return g_dump_plans; }
 
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

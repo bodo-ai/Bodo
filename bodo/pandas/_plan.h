@@ -717,7 +717,8 @@ void cpp_table_delete(int64_t cpp_table);
  *
  * @param use_cudf bool that if true enables use of cudf in backend
  */
-void set_use_cudf(bool use_cudf, std::string cache_dir, bool use_async);
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans,
+                   bool use_async);
 
 /**
  * @brief Gets the use cudf flag.
@@ -732,3 +733,10 @@ bool get_use_cudf();
  * @return std::string the Bodo cache directory
  */
 std::string get_cache_dir();
+
+/**
+ * @brief Gets the dump plans flag.
+ *
+ * @return bool that is true if the user wants us to dump plan details.
+ */
+bool get_dump_plans();

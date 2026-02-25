@@ -173,7 +173,7 @@ jobs:
             -e libarrow -e libarrow_acero -e libarrow_dataset -e libarrow_flight
             -e libarrow_python -e libarrow_python_flight -e libarrow_python_parquet_encryption
             -e libarrow_substrait -e libparquet
-            --require-archs {delocate_archs} -v {wheel} && mv {wheel} {dest_dir}
+            --require-archs {delocate_archs} -v -w {dest_dir} {wheel}
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
             auditwheel -v repair
