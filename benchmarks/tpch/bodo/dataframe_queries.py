@@ -16,9 +16,6 @@ import bodo.spawn.spawner as spawner
 def load_lineitem(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/lineitem.pq"
     df = pd.read_parquet(data_path, dtype_backend="pyarrow")
-    df["L_SHIPDATE"] = pd.to_datetime(df.L_SHIPDATE, format="%Y-%m-%d")
-    df["L_RECEIPTDATE"] = pd.to_datetime(df.L_RECEIPTDATE, format="%Y-%m-%d")
-    df["L_COMMITDATE"] = pd.to_datetime(df.L_COMMITDATE, format="%Y-%m-%d")
     return df
 
 
@@ -31,7 +28,6 @@ def load_part(data_folder: str, pd=bodo.pandas):
 def load_orders(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/orders.pq"
     df = pd.read_parquet(data_path, dtype_backend="pyarrow")
-    df["O_ORDERDATE"] = pd.to_datetime(df.O_ORDERDATE, format="%Y-%m-%d")
     return df
 
 
