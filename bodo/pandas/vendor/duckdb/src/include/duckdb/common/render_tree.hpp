@@ -59,7 +59,7 @@ struct RenderTree {
 	idx_t height;
 
 public:
-	// Bodo Change: Pass optional device mapping to CreateRenderTree to annotate plans boxes with device in ToString ouput.
+	// Bodo Change: Pass optional device mapping to CreateRenderTree for annotating name in node boxes.
 	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping = nullptr);
 	static unique_ptr<RenderTree> CreateRenderTree(const PhysicalOperator &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const ProfilingNode &op);

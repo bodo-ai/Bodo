@@ -88,6 +88,7 @@ static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height) {
 }
 
 static unique_ptr<RenderTreeNode> CreateNode(const LogicalOperator &op, device_mapping_t *device_mapping) {
+	// Bodo Change: Annotate node name with device information if device mapping is provided.
 	std::string name = op.GetName();
 	if (device_mapping) {
 		if ((*device_mapping)[&op]) {

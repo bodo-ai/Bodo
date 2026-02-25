@@ -58,7 +58,7 @@ public:
 
 	virtual string GetName() const;
 	virtual InsertionOrderPreservingMap<string> ParamsToString() const;
-	// Bodo Change: Pass optional device mapping to ToString to annotate plans with device in ToString ouput.
+	// Bodo Change: Pass optional device mapping to ToString to annotate plan strings with device information.
 	virtual string ToString(ExplainFormat format = ExplainFormat::DEFAULT, device_mapping_t *device_mapping = nullptr) const;
 	DUCKDB_API void Print();
 	//! Debug method: verify that the integrity of expressions & child nodes are maintained
