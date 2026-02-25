@@ -51,16 +51,16 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 #                CACHE STRING "" FORCE)
 #    endif()
 #endif()
-
-if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
-    find_program(COMPILER_LAUNCHER NAMES ccache sccache)
-    if(COMPILER_LAUNCHER)
-        message(STATUS "Using ${COMPILER_LAUNCHER} as C++ compiler launcher")
-        set(CMAKE_CXX_COMPILER_LAUNCHER
-                "${COMPILER_LAUNCHER}"
-                CACHE STRING "" FORCE)
-    endif()
-endif()
+#
+#if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
+#    find_program(COMPILER_LAUNCHER NAMES ccache sccache)
+#    if(COMPILER_LAUNCHER)
+#        message(STATUS "Using ${COMPILER_LAUNCHER} as C++ compiler launcher")
+#        set(CMAKE_CXX_COMPILER_LAUNCHER
+#                "${COMPILER_LAUNCHER}"
+#                CACHE STRING "" FORCE)
+#    endif()
+#endif()
 
 
 # Determine install paths
