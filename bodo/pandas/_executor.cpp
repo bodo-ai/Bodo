@@ -987,8 +987,7 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
                 std::cout << "Optimized Plan with Device Annotations"
                           << std::endl;
                 std::cout << root->getOp().ToString(
-                                 bododuckdb::ExplainFormat::DEFAULT,
-                                 &run_on_gpu)
+                                 duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
                           << std::endl;
             }
         }
