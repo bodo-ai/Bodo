@@ -58,7 +58,6 @@ Output:
 ```
 
 !!! tip "GPU Acceleration"
-    **Supported on GPU** when reading Parquet files from the **local filesystem or S3**.
     May fall back to CPU if the plan includes operations such as `head()` that require Pandas sampling.
 
 ---
