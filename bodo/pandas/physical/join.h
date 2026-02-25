@@ -181,19 +181,20 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 continue;
             }
             std::shared_ptr<PhysicalExpression> new_phys_expr;
-            if (cond.IsComparison()) {
-                std::shared_ptr<PhysicalExpression> left_expr =
-                    buildPhysicalExprTree(cond.GetLHS(), left_col_ref_map);
-                std::shared_ptr<PhysicalExpression> right_expr =
-                    buildPhysicalExprTree(cond.GetRHS(), right_col_ref_map);
-                new_phys_expr = std::static_pointer_cast<PhysicalExpression>(
-                    std::make_shared<PhysicalComparisonExpression>(
-                        std::move(left_expr), std::move(right_expr),
-                        cond.GetComparisonType()));
-            } else {
-                new_phys_expr = buildPhysicalExprTree(cond.GetJoinExpression(),
-                                                      join_col_ref_map);
+            duckdb::unique_ptr<duckdb::Expression> expr =
+                bododuckdb::JoinCondition::CreateExpression(std::move(cond));
+            // Create a col ref map for both the tables, mapping to their
+            // respective positions in the reordered schemas
+            std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+                combined_left_right_expr_col_ref_map;
+            for (const auto& [k, v] : left_col_ref_map) {
+                combined_left_right_expr_col_ref_map[k] = probe_col_inds_rev[v];
             }
+            for (const auto& [k, v] : right_col_ref_map) {
+                combined_left_right_expr_col_ref_map[k] = build_col_inds_rev[v];
+            }
+            new_phys_expr = buildPhysicalExprTree(
+                expr, combined_left_right_expr_col_ref_map, false);
             // If we have more than one non-equi join condition then 'and'
             // them together.
             if (physExprTree) {
