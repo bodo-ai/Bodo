@@ -926,7 +926,7 @@ def _load_args(query: int, root: str, scale_factor: float, backend):
     return args
 
 
-def run_queries(root: str, queries: list[int], scale_factor: float, backend):
+def run_queries(root: str, queries: list[int], scale_factor: float, backend, warmup):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
@@ -941,8 +941,9 @@ def run_queries(root: str, queries: list[int], scale_factor: float, backend):
             query_func, name=f"Q{query:02} Execution time (including read_parquet) (s):"
         )
 
-        # Warm up run:
-        query_func()
+        if warmup:
+            # Warm up run:
+            query_func()
 
         # Second run for timing:
         query_func()
@@ -984,6 +985,12 @@ def main():
         required=False,
         help="Whether to print the output.",
     )
+    parser.add_argument(
+        "--no_warmup",
+        action="store_true",
+        required=False,
+        help="Whether to do warmup run.",
+    )
 
     args = parser.parse_args()
     data_set = args.folder
@@ -993,6 +1000,7 @@ def main():
 
     global show_output
     show_output = args.show_output
+    do_warmup = not args.no_warmup
 
     queries = list(range(1, 23))
     if args.queries is not None:
@@ -1003,7 +1011,11 @@ def main():
 
     backend_module = bodo.pandas if backend == "bodo" else pd
     run_queries(
-        data_set, queries=queries, scale_factor=scale_factor, backend=backend_module
+        data_set,
+        queries=queries,
+        scale_factor=scale_factor,
+        backend=backend_module,
+        warmup=do_warmup,
     )
 
 
