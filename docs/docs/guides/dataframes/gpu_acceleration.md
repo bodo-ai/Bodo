@@ -42,40 +42,15 @@ The following is an example output when this environment variable is enabled.
 │      (GPU) PROJECTION     │
 │    ────────────────────   │
 │        Expressions:       │
-│           #[1.0]          │
-│           #[1.1]          │
+│           #[0.0]          │
 │           #[0.1]          │
 │                           │
-│          ~3 rows          │
+│        ~3,000 rows        │
 └─────────────┬─────────────┘
 ┌─────────────┴─────────────┐
-│   (GPU) COMPARISON_JOIN   │
+│(GPU) BODO_READ_PARQUE...  │
 │    ────────────────────   │
-│      Join Type: INNER     │
-│                           │
-│        Conditions:        ├──────────────┐
-│     (#[1.0] = #[0.0])     │              │
-│                           │              │
-│          ~3 rows          │              │
-└─────────────┬─────────────┘              │
-┌─────────────┴─────────────┐┌─────────────┴─────────────┐
-│  (GPU) LogicalJoinFilter  ││(GPU) BODO_READ_PARQUE...  │
-│    ────────────────────   ││    ────────────────────   │
-│       filter_ids: 0       ││                           │
-│                           ││                           │
-│      filter_columns:      ││                           │
-│          [[0], ]          ││                           │
-│                           ││                           │
-│    is_first_locations:    ││                           │
-│         [[true], ]        ││                           │
-│                           ││                           │
-│    orig_build_key_cols:   ││                           │
-│          [[0], ]          ││          ~3 rows          │
-└─────────────┬─────────────┘└───────────────────────────┘
-┌─────────────┴─────────────┐
-│  (CPU) BODO_READ_DF(A, B) │
-│    ────────────────────   │
-│          ~3 rows          │
+│        ~3,000 rows        │
 └───────────────────────────┘
 ```
 
