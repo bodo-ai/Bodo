@@ -719,17 +719,12 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     this->metrics.total_recv_size_bytes +=
         new_data.has_value() ? table_local_memory_size(new_data.value(), false)
                              : 0;
-    std::cout << " new data after shuffle: "
-              << (new_data.has_value() ? new_data.value()->nrows() : 0)
-              << " rows" << std::endl;
 
     start = start_timer();
     // Remove send state if recv done
     std::erase_if(this->send_states, [&](AsyncShuffleSendState& s) {
         bool done = s.sendDone();
         if (done) {
-            std::cout << " Completed send with tag " << s.get_starting_msg_tag()
-                      << std::endl;
             inflight_tags.erase(s.get_starting_msg_tag());
         }
         return done;

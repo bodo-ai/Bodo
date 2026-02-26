@@ -100,7 +100,7 @@ class RankDataExchange {
     // to/from GPU ranks.
     std::unique_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
-    bool exchange_complete = false;
+    bool finished = false;
 };
 
 struct GPUBatchGenerator {

@@ -198,17 +198,10 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    std::cout
-        << "Calling PhysicalGPUProcessBatch::ProcessBatch with CPU batch of "
-        << input_batch->nrows() << " rows" << std::endl;
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
-    std::cout << "exchange_result: " << toString(exchange_result) << std::endl;
-
     auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
-    std::cout << "Process GPU result:" << toString(gpu_result.second)
-              << std::endl;
     se->event.record(se->stream);
     return gpu_result;
 }
@@ -470,6 +463,14 @@ RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
 GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
                              OperatorResult prev_op_result) {
+    if (finished) {
+        if (input_batch && input_batch->nrows() > 0) {
+            throw std::runtime_error(
+                "GPUtoCPUExchange::operator(): Received non-empty batch after "
+                "exchange was marked finished");
+        }
+    }
+
     if (!this->shuffle_state) {
         Initialize(input_batch.get());
     }
@@ -496,8 +497,7 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
     auto [output_batch, _] = ctb_state->builder->PopChunk(
         /*force_return*/ global_is_last);
 
-    bool finished =
-        global_is_last && this->ctb_state->builder->total_remaining == 0;
+    finished = global_is_last && this->ctb_state->builder->total_remaining == 0;
 
     if (finished) {
         this->shuffle_state->Finalize();
@@ -526,7 +526,12 @@ void GPUtoCPUExchange::Initialize(table_info *input_batch) {
 std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     std::shared_ptr<table_info> input_batch, std::shared_ptr<StreamAndEvent> se,
     OperatorResult prev_op_result) {
-    if (exchange_complete) {
+    if (finished) {
+        if (input_batch && input_batch->nrows() > 0) {
+            throw std::runtime_error(
+                "CPUtoGPUExchange::operator(): Received non-empty batch after "
+                "exchange was marked finished");
+        }
         return std::make_tuple(convertTableToGPU(input_batch, se),
                                OperatorResult::FINISHED);
     }
@@ -542,49 +547,27 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     auto result = this->shuffle_state->ShuffleIfRequired(true);
 
     if (result.has_value()) {
-        std::cout << " Result has value, appending...  "
-                  << result.value()->nrows() << " rows" << std::endl;
         gpu_batch_generator->append_batch(
             convertTableToGPU(result.value(), se));
-        std::cout << " GPU batch generator collected rows: "
-                  << gpu_batch_generator->collected_rows << std::endl;
     }
     // Determine whether we need more input, have more output, or are finished
     // with the exchange.
     bool request_input = !(this->shuffle_state->BuffersFull() &&
                            (gpu_batch_generator->collected_rows >
                             (2 * gpu_batch_generator->out_batch_size)));
-    if (!request_input) {
-        std::cout << " Requesting more input...  " << std::endl;
-        std::cout << " Shuffle buffer full: "
-                  << this->shuffle_state->BuffersFull() << std::endl;
-        std::cout << " GPU batch generator collected rows: "
-                  << gpu_batch_generator->collected_rows << std::endl;
-    }
 
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
-    std::cout << " SendRecv Empty?: " << this->shuffle_state->SendRecvEmpty()
-              << std::endl;
+
     auto output_batch = gpu_batch_generator->next(se, local_is_last);
-    std::cout << " GPU batch generator collected rows after next was called: "
-              << gpu_batch_generator->collected_rows << std::endl;
-    std::cout << output_batch.table->num_rows() << " rows in output batch"
-              << std::endl;
-    bool finished =
-        static_cast<bool>(sync_is_last_non_blocking(
-            is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
-        gpu_batch_generator->collected_rows == 0;
+
+    finished = static_cast<bool>(sync_is_last_non_blocking(
+                   is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
+               gpu_batch_generator->collected_rows == 0;
 
     if (finished) {
-        exchange_complete = true;
         this->shuffle_state->Finalize();
     }
-    OperatorResult res =
-        finished ? OperatorResult::FINISHED
-                 : (request_input ? OperatorResult::NEED_MORE_INPUT
-                                  : OperatorResult::HAVE_MORE_OUTPUT);
-    std::cout << "Exchange result: " << toString(res) << std::endl;
 
     return std::make_tuple(
         output_batch, finished
