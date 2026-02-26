@@ -1,13 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include "../../libs/streaming/_join.h"
-#include "../_util.h"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
-#include "duckdb/planner/joinside.hpp"
-#include "duckdb/planner/operator/logical_comparison_join.hpp"
-#include "duckdb/planner/operator/logical_cross_product.hpp"
-#include "gpu_expression.h"
 #include "operator.h"
 
 class PhysicalGPUCTERef;
