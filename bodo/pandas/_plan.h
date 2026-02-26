@@ -6,6 +6,7 @@
 #include <Python.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
+#include <pytypedefs.h>
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
@@ -739,3 +740,12 @@ std::string get_cache_dir();
  * @return bool that is true if the user wants us to dump plan details.
  */
 bool get_dump_plans();
+
+/**
+ * @brief Count number of GPU operators in a plan for testing purposes.
+ *
+ * @param plan Optimized logical plan to count GPU operators in.
+ * @param out_schema_py the schema of the output data.
+ * @return int
+ */
+int count_gpu_plan_nodes(std::unique_ptr<duckdb::LogicalOperator> &plan);

@@ -51,6 +51,19 @@
     } while (0)
 #endif
 
+void partition_internal(duckdb::LogicalOperator &op,
+                        duckdb::device_mapping_t &run_on_gpu);
+
+/**
+ * @brief Partition a plan across CPU and GPU.
+ *
+ * @param plan Root node in the plan.
+ * @return duckdb::device_mapping_t Mapping of operators that's true if they
+ * should run on GPU and false otherwise.
+ */
+duckdb::device_mapping_t partition_to_gpu(
+    std::unique_ptr<duckdb::LogicalOperator> &plan);
+
 /**
  * @brief Executor class for executing a DuckDB logical plan in streaming
  * fashion (push-based approach).
@@ -119,18 +132,7 @@ class Executor {
     std::map<duckdb::idx_t, CTEInfo> ctes;
     duckdb::device_mapping_t run_on_gpu;
 
-   private:
-    void partition_internal(duckdb::LogicalOperator &op,
-                            duckdb::device_mapping_t &run_on_gpu);
-
    public:
-    duckdb::device_mapping_t partition_to_gpu(
-        std::unique_ptr<duckdb::LogicalOperator> &plan) {
-        duckdb::device_mapping_t run_on_gpu;
-        partition_internal(*plan, run_on_gpu);
-        return run_on_gpu;
-    }
-
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
         QueryProfileCollector::Default().Init();
@@ -218,4 +220,15 @@ class Executor {
             gr_res);
         return ret;
     }
+
+    // int count_gpu_ops() {
+    //     return 1;
+    //     // int gpu_op_count = 0;
+    //     // for (const auto &kv : run_on_gpu) {
+    //     //     if (kv.second) {
+    //     //         gpu_op_count++;
+    //     //     }
+    //     // }
+    //     // return gpu_op_count;
+    // }
 };
