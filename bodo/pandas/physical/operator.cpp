@@ -201,6 +201,7 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(G_USE_ASYNC);
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
+
     auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
     se->event.record(se->stream);
     return gpu_result;
@@ -475,8 +476,7 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
         Initialize(input_batch.get());
     }
 
-    // Shuffle data to destination ranks (either all ranks or GPU ranks)
-    // and append result to output builder
+    // Shuffle data to all ranks and append result to output builder
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
@@ -558,9 +558,7 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
 
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
-
     auto output_batch = gpu_batch_generator->next(se, local_is_last);
-
     finished = static_cast<bool>(sync_is_last_non_blocking(
                    is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
                gpu_batch_generator->collected_rows == 0;
@@ -568,7 +566,6 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     if (finished) {
         this->shuffle_state->Finalize();
     }
-
     return std::make_tuple(
         output_batch, finished
                           ? OperatorResult::FINISHED
