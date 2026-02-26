@@ -84,8 +84,19 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
+    duckdb::shared_ptr<duckdb::ClientContext> client_context =
+        get_duckdb_context();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+        started_transaction = false;
+    }
 
     // Insert and pushdown runtime join filters after optimization since they
     // aren't relational
