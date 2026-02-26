@@ -438,15 +438,36 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
-    auto physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
-    std::shared_ptr<Pipeline> done_pipeline =
-        this->active_pipeline->Build(physical_cte);
+    std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalCTE>, std::shared_ptr<PhysicalGPUCTE>>
+        physical_cte;
 
+    if (node_run_on_gpu(op)) {
+        physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
+    } else {
+        physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
+    }
+
+    std::visit(
+        [&](auto& vop) {
+            done_pipeline = this->active_pipeline->Build(vop);
+            ctes.insert(
+                {op.table_index,
+                 {.physical_node = vop, .cte_pipeline_root = done_pipeline}});
+        },
+        physical_cte);
+#else
+    std::shared_ptr<PhysicalCTE> physical_cte =
+        std::make_shared<PhysicalCTE>(in_table_schema);
+    done_pipeline = this->active_pipeline->Build(physical_cte);
     // Save the physical_cte node away so that cte ref's on the non-duplicate
     // side can find it.
     ctes.insert(
         {op.table_index,
          {.physical_node = physical_cte, .cte_pipeline_root = done_pipeline}});
+#endif
+
     // The active pipeline finishes after the duplicate side.
     this->active_pipeline = nullptr;
     // Create pipelines for the side that uses the duplicate side.
@@ -461,10 +482,57 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
         throw std::runtime_error(
             "LogicalCTERef couldn't find matching table_index.");
     }
-    auto& cte_index_info = table_index_iter->second;
-    auto physical_cte_ref =
+    CTEInfo& cte_index_info = table_index_iter->second;
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalCTERef>,
+                 std::shared_ptr<PhysicalGPUCTERef>>
+        physical_cte_ref;
+    /*
+    if (node_run_on_gpu(op)) {
+        physical_cte_ref =
+    std::make_shared<PhysicalGPUCTERef>(cte_index_info.physical_node); } else {
+        physical_cte_ref =
+    std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
+    }
+    */
+    std::visit(
+        [&](auto& pn) {
+            using U = std::decay_t<decltype(pn)>;
+
+            if constexpr (std::is_same_v<U, std::shared_ptr<PhysicalCTE>>) {
+                if (node_run_on_gpu(op)) {
+                    throw std::runtime_error(
+                        "Got mismatch with CPU CTE and GPU CTERef in "
+                        "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+                } else {
+                    physical_cte_ref = std::make_shared<PhysicalCTERef>(pn);
+                }
+            } else if constexpr (std::is_same_v<
+                                     U, std::shared_ptr<PhysicalGPUCTE>>) {
+                if (node_run_on_gpu(op)) {
+                    physical_cte_ref = std::make_shared<PhysicalGPUCTERef>(pn);
+                } else {
+                    throw std::runtime_error(
+                        "Got mismatch with GPU CTE and CPU CTERef in "
+                        "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+                }
+            } else {
+                throw std::runtime_error(
+                    "Got unknown type in "
+                    "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+            }
+        },
+        cte_index_info.physical_node);
+    std::visit(
+        [&](auto& vop) {
+            this->active_pipeline = std::make_shared<PipelineBuilder>(vop);
+        },
+        physical_cte_ref);
+#else
+    std::shared_ptr<PhysicalCTERef> physical_cte_ref =
         std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
+#endif
     this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);
 }
 
