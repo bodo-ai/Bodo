@@ -540,8 +540,7 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
         Initialize(input_batch, se);
     }
 
-    // Shuffle data to destination GPU ranks
-    // and append result to output builder
+    // Shuffle data to destination GPU ranks and append result to output builder
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
@@ -555,7 +554,6 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     bool request_input = !(this->shuffle_state->BuffersFull() &&
                            (gpu_batch_generator->collected_rows >
                             (2 * gpu_batch_generator->out_batch_size)));
-
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
     auto output_batch = gpu_batch_generator->next(se, local_is_last);

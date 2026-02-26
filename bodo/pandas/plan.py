@@ -1142,7 +1142,7 @@ def getPlanStatistics(plan: LazyPlan):
 
 
 def count_gpu_plan_nodes(plan: LazyPlan) -> int:
-    """Count the number of nodes in the plan that would be executed on GPU."""
+    """Count the number of GPU nodes in the optimized duckdb plan corresponding to *plan*."""
     from bodo.ext import plan_optimizer
 
     duckdb_plan = plan.generate_duckdb()

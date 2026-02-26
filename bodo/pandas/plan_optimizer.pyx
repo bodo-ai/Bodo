@@ -1233,6 +1233,7 @@ def py_get_table_index():
 
 
 cpdef py_count_gpu_plan_nodes(object root):
+    """ Count the number of plan nodes that would be executed on GPU. """
     cdef LogicalOperator wrapped_operator
 
     if not isinstance(root, LogicalOperator):

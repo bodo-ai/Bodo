@@ -22,7 +22,7 @@ def is_gpu_plan(plan: LazyPlan) -> bool:
 
 
 def create_write_plan(df: bd.DataFrame, out_path: str) -> LogicalParquetWrite:
-    """Helper function to create a LogicalParquetWrite plan for a given DataFrame."""
+    """Create a LogicalParquetWrite plan for a given DataFrame."""
     return LogicalParquetWrite(
         _empty_like(df),
         df._plan,
@@ -88,7 +88,7 @@ def test_cpu_to_gpu_exchange(datapath):
         bdf.to_parquet(out_path)
 
         out_df = pd.read_parquet(out_path)
-        # [BSE-5322] Sorting data because CPU -> GPU affect order.
+        # [BSE-5322] Sorting data because CPU -> GPU affects the order.
         _test_equal(pdf, out_df, sort_output=True, reset_index=True)
 
         # Check the write parquet is happening on GPU:
@@ -126,9 +126,3 @@ def test_gpu_to_cpu_exchange(datapath):
 
     pdf = pd.read_parquet(path)
     _test_equal(pdf, bdf)
-
-    # GPU (join) -> CPU sink (limit)
-    # bdf2 = bdf.merge(bdf, how="inner", on="A").head(5)
-    # assert count_gpu_plan_nodes(bdf2._plan) == 5, "Expected GPU nodes for ReadParquet, JoinFilter, Join, Project"
-    # print(bdf2)
-    # assert len(bdf2) == 5, "Expected 5 rows after head(5)"
