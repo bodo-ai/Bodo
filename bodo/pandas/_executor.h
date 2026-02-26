@@ -220,15 +220,4 @@ class Executor {
             gr_res);
         return ret;
     }
-
-    // int count_gpu_ops() {
-    //     return 1;
-    //     // int gpu_op_count = 0;
-    //     // for (const auto &kv : run_on_gpu) {
-    //     //     if (kv.second) {
-    //     //         gpu_op_count++;
-    //     //     }
-    //     // }
-    //     // return gpu_op_count;
-    // }
 };

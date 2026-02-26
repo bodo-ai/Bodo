@@ -955,63 +955,58 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 
 #endif  // USE_CUDF
 
-<<<<<<< HEAD void partition_internal(duckdb::LogicalOperator &op,
-                          duckdb::device_mapping_t &run_on_gpu) {
-=======
-    void Executor::partition_internal(duckdb::LogicalOperator & op,
-                                      duckdb::device_mapping_t & run_on_gpu) {
->>>>>>> main
-        /*
-         * If GPU mode is enabled then we will run an algorithm to determine
-         * whether to run each node on CPU or GPU.
-         */
-        if (get_use_cudf()) {
+void partition_internal(duckdb::LogicalOperator &op,
+                        duckdb::device_mapping_t &run_on_gpu) {
+    /*
+     * If GPU mode is enabled then we will run an algorithm to determine
+     * whether to run each node on CPU or GPU.
+     */
+    if (get_use_cudf()) {
 #ifdef USE_CUDF
-            DevicePlanNode::startDeviceAssignment();
-            // Wrap each node in the DuckDB LogicalOperator tree with
-            // a DevicePlanNode to make a DevicePlanNode tree in which
-            // we can store cardinality and whether a node is GPU capable.
-            std::shared_ptr<DevicePlanNode> root =
-                std::make_shared<DevicePlanNode>(op);
-            DevicePlanNode::endDeviceAssignment();
+        DevicePlanNode::startDeviceAssignment();
+        // Wrap each node in the DuckDB LogicalOperator tree with
+        // a DevicePlanNode to make a DevicePlanNode tree in which
+        // we can store cardinality and whether a node is GPU capable.
+        std::shared_ptr<DevicePlanNode> root =
+            std::make_shared<DevicePlanNode>(op);
+        DevicePlanNode::endDeviceAssignment();
 
-            std::map<uint64_t, DPCost> dp_cache;
-            // Run the dynamic programming algorithm on the tree in postorder
-            // to determine the cost for each node if it is run on CPU or GPU
-            // depending on whether its children are run on CPU or GPU.
-            dp_compute(root, dp_cache);
-            // Fill out the run_on_gpu map.
-            assign_devices(root, dp_cache, run_on_gpu);
+        std::map<uint64_t, DPCost> dp_cache;
+        // Run the dynamic programming algorithm on the tree in postorder
+        // to determine the cost for each node if it is run on CPU or GPU
+        // depending on whether its children are run on CPU or GPU.
+        dp_compute(root, dp_cache);
+        // Fill out the run_on_gpu map.
+        assign_devices(root, dp_cache, run_on_gpu);
 
-            if (get_dump_plans()) {
-                int myrank;
-                MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        if (get_dump_plans()) {
+            int myrank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-                if (myrank == 0) {
-                    std::cout << "Optimized Plan with Device Annotations"
-                              << std::endl;
-                    std::cout
-                        << root->getOp().ToString(
-                               duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
-                        << std::endl;
-                }
+            if (myrank == 0) {
+                std::cout << "Optimized Plan with Device Annotations"
+                          << std::endl;
+                std::cout << root->getOp().ToString(
+                                 duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
+                          << std::endl;
             }
-#else
-            throw std::runtime_error(
-                "Cannot use BODO_GPU mode when not built with GPU enabled.");
-#endif
-        } else {
-            for (auto &child : op.children) {
-                partition_internal(*child, run_on_gpu);
-            }
-            // Run on CPU always if CUDF not enabled.
-            run_on_gpu[&op] = false;
         }
+#else
+        throw std::runtime_error(
+            "Cannot use BODO_GPU mode when not built with GPU enabled.");
+#endif
+    } else {
+        for (auto &child : op.children) {
+            partition_internal(*child, run_on_gpu);
+        }
+        // Run on CPU always if CUDF not enabled.
+        run_on_gpu[&op] = false;
     }
+}
 
-    duckdb::device_mapping_t partition_to_gpu(
-        std::unique_ptr<duckdb::LogicalOperator> & plan) {
-        duckdb::device_mapping_t run_on_gpu;
-        partition_internal(*plan, run_on_gpu);
-        return run_on_gpu;
-    }
+duckdb::device_mapping_t partition_to_gpu(
+    std::unique_ptr<duckdb::LogicalOperator> &plan) {
+    duckdb::device_mapping_t run_on_gpu;
+    partition_internal(*plan, run_on_gpu);
+    return run_on_gpu;
+}
