@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/api.h>
+#include <arrow/chunked_array.h>
 #include <arrow/compute/api.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
@@ -568,16 +569,42 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
                                     void **null_bitmap, int64_t index) {
         array_info *sel_col = table[col_idx];
         void *sel_data = data[col_idx];
+
+        arrow::Datum ret;
         std::unique_ptr<bodo::DataType> col_dt = sel_col->data_type();
         std::shared_ptr<::arrow::DataType> arrow_dt = col_dt->ToArrowDataType();
         int32_t dt_byte_width = arrow_dt->byte_width();
         if (dt_byte_width <= 0) {
-            throw std::runtime_error(
-                "Non-fixed datatype byte width in PhysicalColumnRefExpression "
-                "join_expr_internal.");
+            if (col_dt->array_type == bodo_array_type::STRING) {
+                // For strings we need to read the offset and then
+                // For variable-width types we need to read the offset and then
+                // read the value.
+                char *null_bitmask = sel_col->null_bitmask();
+                if (!arrow::bit_util::GetBit((const uint8_t *)null_bitmask,
+                                             index)) {
+                    return arrow::Datum(arrow::MakeNullScalar(arrow_dt));
+                }
+                offset_t start_offset =
+                    sel_col->data2<bodo_array_type::STRING, offset_t>()[index];
+                offset_t end_offset =
+                    sel_col
+                        ->data2<bodo_array_type::STRING, offset_t>()[index + 1];
+                std::string str(
+                    sel_col->data1<bodo_array_type::STRING>() + start_offset,
+                    end_offset - start_offset);
+                ret = arrow::Datum(std::make_shared<arrow::StringScalar>(str));
+
+            } else {
+                throw std::runtime_error(
+                    "Unsupported variable-width type in join_expr_internal.");
+            }
+
+        } else {
+            // For fixed-width types we can just calculate the offset and read
+            // the value.
+            void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
+            ret = ConvertToDatum(index_ptr, arrow_dt);
         }
-        void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
-        arrow::Datum ret = ConvertToDatum(index_ptr, arrow_dt);
         if (null_bitmap[col_idx] != nullptr &&
             !GetBit((const uint8_t *)null_bitmap[col_idx], index)) {
             ret = arrow::Datum(arrow::MakeNullScalar(ret.type()));
@@ -666,7 +693,7 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             right_null_bitmap, left_index, right_index);
         arrow::Datum ret =
             do_arrow_compute_binary(left_datum, right_datum, comparator);
-        if (!ret.scalar()->is_valid) {
+        if (ret.is_scalar() && !ret.scalar()->is_valid) {
             ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
         }
         return ret;
@@ -1050,6 +1077,62 @@ class PhysicalUDFExpression : public PhysicalExpression {
                                     void **right_null_bitmap,
                                     int64_t left_index,
                                     int64_t right_index) override {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        for (const auto &child : children) {
+            arrow::Datum child_datum = child->join_expr_internal(
+                left_table, right_table, left_data, right_data,
+                left_null_bitmap, right_null_bitmap, left_index, right_index);
+            std::shared_ptr<arrow::Array> child_arrow_array;
+            if (child_datum.is_array()) {
+                child_arrow_array = child_datum.make_array();
+            } else if (child_datum.is_scalar()) {
+                // Convert scalar to array of length 1 for UDF input.
+                child_arrow_array = ScalarToArrowArray(child_datum.scalar(), 1);
+            } else {
+                throw std::runtime_error(
+                    "Child datum is neither array nor scalar in "
+                    "PhysicalUDFExpression::join_expr_internal");
+            }
+            auto child_array_info = arrow_array_to_bodo(
+                child_arrow_array, bodo::BufferPool::DefaultPtr());
+            child_arrays.push_back(std::move(child_array_info));
+        }
+        std::shared_ptr<table_info> udf_input =
+            std::make_shared<table_info>(std::move(child_arrays));
+        // Actually run the UDF.
+        std::shared_ptr<table_info> udf_output;
+        if (cfunc_ptr) {
+            if (cfunc_ptr == (table_udf_t)1) {
+                PyThreadState *save = PyEval_SaveThread();
+                cfunc_ptr = compile_future.get();
+                PyEval_RestoreThread(save);
+            }
+            time_pt start_init_time = start_timer();
+            udf_output = runCfuncScalarFunction(udf_input, cfunc_ptr);
+            this->metrics.udf_execution_time += end_timer(start_init_time);
+        } else {
+            auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
+                runPythonScalarFunction(udf_input, result_type,
+                                        scalar_func_data.args,
+                                        scalar_func_data.has_state, init_state);
+            udf_output = out_temp;
+            // Update the metrics.
+            this->metrics.cpp_to_py_time += cpp_to_py_time;
+            this->metrics.udf_execution_time += udf_time;
+            this->metrics.py_to_cpp_time += py_to_cpp_time;
+        }
+        std::shared_ptr<arrow::ChunkedArray> res_array =
+            bodo_table_to_arrow(udf_output)->column(0);
+        arrow::Result<std::shared_ptr<arrow::Scalar>> res_scalar =
+            res_array->GetScalar(0);
+        if (!res_scalar.ok()) {
+            throw std::runtime_error(
+                "Error getting scalar from UDF result array: " +
+                res_scalar.status().message());
+        }
+
+        return res_scalar.ValueOrDie();
+
         throw std::runtime_error(
             "PhysicalUDFExpression::join_expr_internal unimplemented ");
     }
