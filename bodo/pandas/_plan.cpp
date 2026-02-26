@@ -277,7 +277,11 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
 
     duckdb::shared_ptr<duckdb::ClientContext> client_context =
         get_duckdb_context();
-    client_context->transaction.BeginTransaction();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -308,7 +312,9 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     bound_func_expr.bind_info =
         duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
 
-    client_context->transaction.ClearTransaction();
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+    }
     return result;
 }
 
@@ -324,7 +330,11 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
 
     duckdb::shared_ptr<duckdb::ClientContext> client_context =
         get_duckdb_context();
-    client_context->transaction.BeginTransaction();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -351,7 +361,9 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
             "make_unaryop_expr BindScalarFunction did not return a "
             "BOUND_FUNCTION");
     }
-    client_context->transaction.ClearTransaction();
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+    }
     return result;
 }
 
