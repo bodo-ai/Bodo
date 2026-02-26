@@ -1,5 +1,6 @@
 # Original from https://gist.githubusercontent.com/UranusSeven/55817bf0f304cc24f5eb63b2f1c3e2cd/raw/796dbd2fce6441821fc0b5bc51491edb49639c55/tpch.py
 import argparse
+import datetime
 import functools
 import inspect
 import time
@@ -14,53 +15,49 @@ import bodo.spawn.spawner as spawner
 
 def load_lineitem(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/lineitem.pq"
-    df = pd.read_parquet(data_path)
-    df["L_SHIPDATE"] = pd.to_datetime(df.L_SHIPDATE, format="%Y-%m-%d")
-    df["L_RECEIPTDATE"] = pd.to_datetime(df.L_RECEIPTDATE, format="%Y-%m-%d")
-    df["L_COMMITDATE"] = pd.to_datetime(df.L_COMMITDATE, format="%Y-%m-%d")
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_part(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/part.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_orders(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/orders.pq"
-    df = pd.read_parquet(data_path)
-    df["O_ORDERDATE"] = pd.to_datetime(df.O_ORDERDATE, format="%Y-%m-%d")
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_customer(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/customer.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_nation(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/nation.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_region(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/region.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_supplier(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/supplier.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
 def load_partsupp(data_folder: str, pd=bodo.pandas):
     data_path = data_folder + "/partsupp.pq"
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
     return df
 
 
@@ -87,7 +84,7 @@ def tpch_q01(lineitem, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/dask/q1.py
     """
-    var1 = pd.Timestamp("1998-09-02")
+    var1 = datetime.date(1998, 9, 2)
     filt = lineitem[lineitem["L_SHIPDATE"] <= var1]
 
     filt["DISC_PRICE"] = filt.L_EXTENDEDPRICE * (1.0 - filt.L_DISCOUNT)
@@ -160,7 +157,7 @@ def tpch_q03(lineitem, orders, customer, pd=bodo.pandas):
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q3.py
     """
     var1 = "HOUSEHOLD"
-    var2 = pd.Timestamp("1995-03-04")
+    var2 = datetime.date(1995, 3, 4)
 
     fcustomer = customer[customer["C_MKTSEGMENT"] == var1]
 
@@ -187,8 +184,8 @@ def tpch_q04(lineitem, orders, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
     """
-    var1 = pd.Timestamp("1993-11-01")
-    var2 = pd.Timestamp("1993-08-01")
+    var1 = datetime.date(1993, 11, 1)
+    var2 = datetime.date(1993, 8, 1)
 
     flineitem = lineitem[lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE]
     forders = orders[(orders.O_ORDERDATE < var1) & (orders.O_ORDERDATE >= var2)]
@@ -207,8 +204,8 @@ def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=bodo.panda
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q5.py
     """
     var1 = "ASIA"
-    var2 = pd.Timestamp("1996-01-01")
-    var3 = pd.Timestamp("1997-01-01")
+    var2 = datetime.date(1996, 1, 1)
+    var3 = datetime.date(1997, 1, 1)
 
     jn1 = region.merge(nation, left_on="R_REGIONKEY", right_on="N_REGIONKEY")
     jn2 = jn1.merge(customer, left_on="N_NATIONKEY", right_on="C_NATIONKEY")
@@ -234,8 +231,8 @@ def tpch_q06(lineitem, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q6.py
     """
-    var1 = pd.Timestamp("1996-01-01")
-    var2 = pd.Timestamp("1997-01-01")
+    var1 = datetime.date(1996, 1, 1)
+    var2 = datetime.date(1997, 1, 1)
     var3 = 0.08
     var4 = 0.1
     var5 = 24
@@ -255,8 +252,8 @@ def tpch_q07(lineitem, supplier, orders, customer, nation, pd=bodo.pandas):
     """
     var1 = "FRANCE"
     var2 = "GERMANY"
-    var3 = pd.Timestamp("1995-01-01")
-    var4 = pd.Timestamp("1997-01-01")
+    var3 = datetime.date(1995, 1, 1)
+    var4 = datetime.date(1997, 1, 1)
 
     n1 = nation[(nation["N_NAME"] == var1)]
     n2 = nation[(nation["N_NAME"] == var2)]
@@ -302,8 +299,8 @@ def tpch_q08(
     var1 = "BRAZIL"
     var2 = "AMERICA"
     var3 = "ECONOMY ANODIZED STEEL"
-    var4 = pd.Timestamp("1995-01-01")
-    var5 = pd.Timestamp("1997-01-01")
+    var4 = datetime.date(1995, 1, 1)
+    var5 = datetime.date(1997, 1, 1)
 
     n1 = nation.loc[:, ["N_NATIONKEY", "N_REGIONKEY"]]
     n2 = nation.loc[:, ["N_NATIONKEY", "N_NAME"]]
@@ -388,8 +385,8 @@ def tpch_q10(lineitem, orders, customer, nation, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
-    var1 = pd.Timestamp("1994-11-01")
-    var2 = pd.Timestamp("1995-02-01")
+    var1 = datetime.date(1994, 11, 1)
+    var2 = datetime.date(1995, 2, 1)
 
     forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
     flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
@@ -444,8 +441,8 @@ def tpch_q12(lineitem, orders, pd=bodo.pandas):
     """Adapted from:
     https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
     """
-    var1 = pd.Timestamp("1994-01-01")
-    var2 = pd.Timestamp("1995-01-01")
+    var1 = datetime.date(1994, 1, 1)
+    var2 = datetime.date(1995, 1, 1)
 
     jn1 = orders.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
     jn1 = jn1[
@@ -497,8 +494,8 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
-    var1 = pd.Timestamp("1994-03-01")
-    var2 = var1 + pd.DateOffset(months=1)
+    var1 = datetime.date(1994, 3, 1)
+    var2 = datetime.date(1994, 4, 1)
 
     jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
 
@@ -523,8 +520,8 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
-    var1 = pd.Timestamp("1996-01-01")
-    var2 = var1 + pd.DateOffset(months=3)
+    var1 = datetime.date(1996, 1, 1)
+    var2 = datetime.date(1996, 4, 1)
 
     jn1 = lineitem[(lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)]
 
@@ -669,8 +666,8 @@ def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
-    var1 = pd.Timestamp("1996-01-01")
-    var2 = pd.Timestamp("1997-01-01")
+    var1 = datetime.date(1996, 1, 1)
+    var2 = datetime.date(1997, 1, 1)
     var3 = "JORDAN"
     var4 = "azure"
 
