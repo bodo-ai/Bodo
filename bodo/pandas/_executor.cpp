@@ -145,10 +145,10 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalAggregate>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CTE_REF:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalCTERef>());
 
             case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalMaterializedCTE>());
 
             case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
@@ -840,7 +840,7 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
             }
         }
 
-        if (cost_cpu <= cost_gpu) {
+        if (cost_cpu < cost_gpu) {
             // If running child on CPU is cheaper than running child on GPU
             // then add the CPU child cost to the total CPU time for this node
             // and remember that for CPU we will run this child also on CPU.
@@ -927,7 +927,11 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
         dev = *chosen_device;
     } else {
         // This is the root node so select the best time.
-        dev = (dpc.cpu_cost <= dpc.gpu_cost) ? DEVICE::CPU : DEVICE::GPU;
+        dev = (dpc.cpu_cost < dpc.gpu_cost) ? DEVICE::CPU : DEVICE::GPU;
+#ifdef DEBUG_GPU_SELECTOR
+        std::cout << "root node " << dpc.cpu_cost << " " << dpc.gpu_cost
+                  << std::endl;
+#endif
     }
 
 #ifdef DEBUG_GPU_SELECTOR
