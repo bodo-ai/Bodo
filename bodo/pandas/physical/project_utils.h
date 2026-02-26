@@ -49,12 +49,13 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
                     output_schema->append_column(
                         input_schema->column_types[expr_idx]->copy());
                     col_names.emplace_back("floor");
+                } else {
+                    std::shared_ptr<arrow::DataType> arrow_type =
+                        duckdbTypeToArrow(func_expr.return_type);
+                    output_schema->append_column(
+                        arrow_type_to_bodo_data_type(arrow_type));
+                    col_names.emplace_back(func_expr.function.name);
                 }
-                std::shared_ptr<arrow::DataType> arrow_type =
-                    duckdbTypeToArrow(func_expr.return_type);
-                output_schema->append_column(
-                    arrow_type_to_bodo_data_type(arrow_type));
-                col_names.emplace_back(func_expr.function.name);
             }
         } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
             auto& const_expr = expr->Cast<duckdb::BoundConstantExpression>();
