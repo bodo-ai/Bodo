@@ -487,14 +487,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     std::variant<std::shared_ptr<PhysicalCTERef>,
                  std::shared_ptr<PhysicalGPUCTERef>>
         physical_cte_ref;
-    /*
-    if (node_run_on_gpu(op)) {
-        physical_cte_ref =
-    std::make_shared<PhysicalGPUCTERef>(cte_index_info.physical_node); } else {
-        physical_cte_ref =
-    std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
-    }
-    */
     std::visit(
         [&](auto& pn) {
             using U = std::decay_t<decltype(pn)>;

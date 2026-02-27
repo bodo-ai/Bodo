@@ -4089,10 +4089,10 @@ def test_crossproduct_column_removal(datapath):
         pdf = df2[df2["prod"] == t]
 
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-        (bodo_df1["A"] * bodo_df1["D"]).sum() * 2
+        bodo_t = (bodo_df1["A"] * bodo_df1["D"]).sum() * 2
         bodo_df1["prod"] = bodo_df1["A"] * bodo_df1["D"]
         bodo_df2 = bodo_df1.groupby("B", as_index=False)["prod"].sum()
-        bdf = bodo_df2[bodo_df2["prod"] == t]
+        bdf = bodo_df2[bodo_df2["prod"] == bodo_t]
 
     _test_equal(
         bdf,
