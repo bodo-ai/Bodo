@@ -128,7 +128,7 @@ void CudaGroupbyState::build_consume_batch(
     // pass.
     if (input_table->view().num_rows() != 0) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
-            make_stream_and_event(G_USE_ASYNC);
+            make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
         std::shared_ptr<cudf::table> new_data = std::move(
             do_groupby(input_table->view(), key_indices, column_indices,

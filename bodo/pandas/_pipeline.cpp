@@ -210,7 +210,7 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            auto empty_se = make_stream_and_event(g_use_async);
                             x.stream_event->event.wait(empty_se->stream);
                             batch = GPU_DATA(make_empty_like(x.table, empty_se),
                                              x.schema, empty_se);
@@ -282,7 +282,7 @@ bool Pipeline::midPipelineExecute(
                             batch = RetrieveTable(x, std::vector<int64_t>());
                         } else {
 #ifdef USE_CUDF
-                            auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                            auto empty_se = make_stream_and_event(g_use_async);
                             x.stream_event->event.wait(empty_se->stream);
                             batch = GPU_DATA(make_empty_like(x.table, empty_se),
                                              x.schema, empty_se);
@@ -352,7 +352,7 @@ uint64_t Pipeline::Execute() {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
 #ifdef USE_CUDF
-                        auto empty_se = make_stream_and_event(G_USE_ASYNC);
+                        auto empty_se = make_stream_and_event(g_use_async);
                         x.stream_event->event.wait(empty_se->stream);
                         batch = GPU_DATA(make_empty_like(x.table, empty_se),
                                          x.schema, empty_se);

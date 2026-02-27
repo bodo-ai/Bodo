@@ -366,7 +366,7 @@ cdef extern from "_plan.h" nogil:
     cdef c_string cpp_table_get_first_field_name(int64_t cpp_table) except +
     cdef object cpp_table_to_pyarrow(int64_t cpp_table, c_bool delete_cpp_table) except +
     cdef void cpp_table_delete(int64_t cpp_table) except +
-    cdef void set_cudf_vars(c_bool use_cudf, c_string cache_dir, c_bool dump_plans) except +
+    cdef void set_cudf_vars(c_bool use_cudf, c_string cache_dir, c_bool dump_plans, c_bool use_async) except +
     cdef int count_gpu_plan_nodes(unique_ptr[CLogicalOperator] root) except +
 
 
@@ -1180,8 +1180,8 @@ cpdef cpp_table_to_arrow_array(cpp_table, delete_cpp_table=True):
     return out
 
 
-cpdef c_set_cudf_vars(use_cudf, cache_dir, dump_plans):
-    set_cudf_vars(use_cudf, cache_dir.encode(), dump_plans)
+cpdef c_set_cudf_vars(use_cudf, cache_dir, dump_plans, use_async):
+    set_cudf_vars(use_cudf, cache_dir.encode(), dump_plans, use_async)
 
 
 cpdef py_optimize_plan(object plan):

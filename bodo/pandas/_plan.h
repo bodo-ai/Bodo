@@ -716,8 +716,12 @@ void cpp_table_delete(int64_t cpp_table);
  * @brief Sets the use cudf flag.
  *
  * @param use_cudf bool that if true enables use of cudf in backend
+ * @param cache_dir the location to store the results of sample CPU/GPU runs
+ * @param dump_plans whether to dump CPU or GPU device placement decisions
+ * @param use_async whether to use asynchronous streams and events.
  */
-void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans);
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans,
+                   bool use_async);
 
 /**
  * @brief Gets the use cudf flag.
