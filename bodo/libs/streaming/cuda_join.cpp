@@ -172,7 +172,8 @@ void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
 }
 
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
-    const std::shared_ptr<cudf::table>& probe_chunk, cuda_event_wrapper event) {
+    const std::shared_ptr<cudf::table>& probe_chunk, cuda_event_wrapper event,
+    rmm::cuda_stream_view& stream) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
@@ -195,10 +196,10 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         probe_views.push_back(chunk->view());
     }
     std::unique_ptr<cudf::table> coalesced_probe =
-        cudf::concatenate(probe_views);
+        cudf::concatenate(probe_views, stream);
 
     auto [probe_indices, build_indices] = _join_handle->inner_join(
-        coalesced_probe->select(this->probe_key_indices));
+        coalesced_probe->select(this->probe_key_indices), {}, stream);
 
     if (probe_indices->size() == 0) {
         return empty_table_from_arrow_schema(
@@ -221,8 +222,12 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Materialize the selected rows
-    auto gathered_probe = cudf::gather(probe_kept_view, probe_idx_view);
-    auto gathered_build = cudf::gather(build_kept_view, build_idx_view);
+    auto gathered_probe =
+        cudf::gather(probe_kept_view, probe_idx_view,
+                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
+    auto gathered_build =
+        cudf::gather(build_kept_view, build_idx_view,
+                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
 
     // Assemble Final Result
     std::vector<std::unique_ptr<cudf::column>> final_columns;

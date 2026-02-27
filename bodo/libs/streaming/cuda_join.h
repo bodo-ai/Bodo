@@ -78,7 +78,7 @@ struct CudaHashJoin {
      */
     std::unique_ptr<cudf::table> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
-        cuda_event_wrapper event);
+        cuda_event_wrapper event, rmm::cuda_stream_view& stream);
 
     /**
      * @brief Get the min-max statistics for runtime join filters
