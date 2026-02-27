@@ -49,12 +49,7 @@
 namespace duckdb {
 
 Optimizer::Optimizer(Binder &binder, ClientContext &context) : context(context), binder(binder), rewriter(context) {
-	// Bodo Change: Disable ConstantOrderNormalizationRule for now since it causes
-	// overflows to occur in some cases where it didn't before,
-	// constant int32 * (constant int32 * column int64) => (constant int32 * constant int32) * column int64
-	// which can overflow if the constants are large enough
-	// In upgrades we can check if this issue goes away
-	//rewriter.rules.push_back(make_uniq<ConstantOrderNormalizationRule>(rewriter));
+	rewriter.rules.push_back(make_uniq<ConstantOrderNormalizationRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<ConstantFoldingRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<DistributivityRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<ArithmeticSimplificationRule>(rewriter));
