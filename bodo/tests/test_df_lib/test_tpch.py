@@ -168,7 +168,7 @@ def test_tpch_q20():
 
 
 def test_tpch_q21():
-    run_tpch_query_test(tpch.tpch_q21, ctes_created=2)
+    run_tpch_query_test(tpch.tpch_q21, ctes_created=1)
 
 
 def test_tpch_q22():

@@ -227,8 +227,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
         std::unique_ptr<cudf::table> output_table =
-            cuda_join->ProbeProcessBatch(input_batch.table,
-                                         input_batch.stream_event->event);
+            cuda_join->ProbeProcessBatch(
+                input_batch.table, input_batch.stream_event->event, se->stream);
         GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
                                     se};
 

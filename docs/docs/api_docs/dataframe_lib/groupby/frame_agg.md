@@ -2,7 +2,10 @@
 ```
 DataFrameGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame
 ```
+**GPU:** ✔ Supported
 
+!!! tip
+    When running on GPU, only the following aggregation functions are accelerated: `sum`, `count`, `mean`, `min`, `max`, `var`, `std`, `size`, `skew`, and `nunique`. Other aggregations, including custom aggregations and UDFs, run on CPU even when a GPU is available.
 Apply one or more aggregate functions to groups of data in a BodoDataFrame. This method is the same as `DataFrameGroupBy.aggregate`.
 
 <p class="api-header">Parameters</p>

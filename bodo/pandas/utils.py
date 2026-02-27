@@ -302,7 +302,12 @@ if bodo.gpu_enabled:
     from bodo.ext import plan_optimizer
     from bodo.numba_compat import BodoCacheLocator
 
-    plan_optimizer.c_set_use_cudf(True, BodoCacheLocator.cache_dir)
+    plan_optimizer.c_set_cudf_vars(
+        True,
+        BodoCacheLocator.cache_dir,
+        bodo.dataframe_library_dump_plans,
+        bodo.gpu_async_enabled,
+    )
 
 
 def _maybe_create_bodo_obj(cls, obj: pd.DataFrame | pd.Series):

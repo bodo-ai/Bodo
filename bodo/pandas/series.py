@@ -3251,7 +3251,7 @@ def validate_dtype(name, obj):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.duration("ns"))]
+            name, allowed_types_map["dt_default"]
         ) and not _is_pd_pa_timestamp(dtype):
             raise AttributeError("Can only use .dt accessor with datetimelike values!")
 

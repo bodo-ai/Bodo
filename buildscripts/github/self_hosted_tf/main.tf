@@ -59,7 +59,7 @@ module "runners" {
         # Instance Type(s) (Multiple Options to Choose for Spot)
         instance_types = [
           // Disable for now until OOM is confirmed
-          // "c7i.xlarge", "c7i-flex.xlarge", "c6i.xlarge", "c6a.xlarge", "c6id.xlarge", "c6in.xlarge", 
+          // "c7i.xlarge", "c7i-flex.xlarge", "c6i.xlarge", "c6a.xlarge", "c6id.xlarge", "c6in.xlarge",
           "m7i.xlarge", "r7i.xlarge",
           "m7i-flex.xlarge",
           "m6i.xlarge", "r6i.xlarge",
@@ -110,6 +110,23 @@ module "runners" {
         runner_name_prefix = "${local.prefix}_xlarge_"
         # Max # of Runners of this Size
         runners_maximum_count = 5
+      })
+    }
+
+    "multi-gpu" = {
+      matcherConfig : {
+        labelMatchers = [["self-hosted", "multi-gpu"], ["self-hosted-multi-gpu"]]
+        exactMatch    = true
+      }
+
+      # Recommended disabled for ephemeral runners
+      fifo = false
+
+      runner_config = merge(local.base_gpu_runner_config, {
+        # Instance Type(s) (Multiple Options to Choose for Spot)
+        instance_types = ["g4dn.12xlarge", "g5.12xlarge", "g6.12xlarge"]
+        # Prefix runners with the environment name
+        runner_name_prefix = "${local.prefix}_multi_gpu_"
       })
     }
   }

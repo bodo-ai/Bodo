@@ -190,6 +190,9 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 # Flag to enable Bodo to use GPUs when available.
 gpu_enabled = os.environ.get("BODO_GPU", "0") != "0"
 
+# Flag to use async streams when GPU enabled.
+gpu_async_enabled = os.environ.get("BODO_GPU_ASYNC", "0") != "0"
+
 # ---------------------------- GPU Config ----------------------------
 
 # ---------------------------- DataFrame Library Config ----------------------------

@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <fstream>
 #include "_bodo_scan_function.h"
+#include "duckdb/planner/logical_operator.hpp"
 
 #ifdef USE_CUDF
 #include <cuda_runtime.h>
@@ -249,7 +250,7 @@ class DevicePlanNode {
 #endif
     }
 
-    duckdb::LogicalOperator &getOp() const { return op; }
+    const duckdb::LogicalOperator &getOp() const { return op; }
 
     bool isGPUCapable() const { return gpu_capable; }
 
@@ -910,7 +911,7 @@ DPCost dp_compute(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache) {
  * map is used to select whether the child will run on CPU or GPU.
  */
 void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
-                    std::map<void *, bool> &run_on_gpu,
+                    duckdb::device_mapping_t &run_on_gpu,
                     std::optional<DEVICE> chosen_device = {}) {
     auto dp_iter = dp_cache.find(node->getId());
     if (dp_iter == dp_cache.end()) {
@@ -955,7 +956,7 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 #endif  // USE_CUDF
 
 void Executor::partition_internal(duckdb::LogicalOperator &op,
-                                  std::map<void *, bool> &run_on_gpu) {
+                                  duckdb::device_mapping_t &run_on_gpu) {
     /*
      * If GPU mode is enabled then we will run an algorithm to determine
      * whether to run each node on CPU or GPU.
@@ -977,6 +978,19 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
         dp_compute(root, dp_cache);
         // Fill out the run_on_gpu map.
         assign_devices(root, dp_cache, run_on_gpu);
+
+        if (get_dump_plans()) {
+            int myrank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+            if (myrank == 0) {
+                std::cout << "Optimized Plan with Device Annotations"
+                          << std::endl;
+                std::cout << root->getOp().ToString(
+                                 duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
+                          << std::endl;
+            }
+        }
 #else
         throw std::runtime_error(
             "Cannot use BODO_GPU mode when not built with GPU enabled.");
