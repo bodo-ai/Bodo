@@ -11,7 +11,7 @@
 namespace duckdb {
 
 ExpressionExecutor::ExpressionExecutor(ClientContext &context) : context(&context) {
-	debug_vector_verification = DBConfig::GetSetting<DebugVerifyVectorSetting>(context);
+	debug_vector_verification = Settings::Get<DebugVerifyVectorSetting>(context);
 }
 
 ExpressionExecutor::ExpressionExecutor(ClientContext &context, const Expression *expression)
@@ -85,7 +85,7 @@ void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 		ExecuteExpression(i, result.data[i]);
 	}
 	result.SetCardinality(input ? input->size() : 1);
-	result.Verify();
+	result.Verify(context ? context->db : nullptr);
 }
 
 void ExpressionExecutor::ExecuteExpression(DataChunk &input, Vector &result) {
@@ -162,7 +162,8 @@ void ExpressionExecutor::Verify(const Expression &expr, Vector &vector, idx_t co
 	if (debug_vector_verification == DebugVectorVerification::VARIANT_VECTOR) {
 		if (TypeVisitor::Contains(vector.GetType(), [](const LogicalType &type) {
 			    if (type.IsJSONType() || type.id() == LogicalTypeId::VARIANT || type.id() == LogicalTypeId::UNION ||
-			        type.id() == LogicalTypeId::ENUM || type.id() == LogicalTypeId::AGGREGATE_STATE) {
+			        type.id() == LogicalTypeId::ENUM || type.id() == LogicalTypeId::LEGACY_AGGREGATE_STATE ||
+			        type.id() == LogicalTypeId::AGGREGATE_STATE) {
 				    return true;
 			    }
 			    if (type.id() == LogicalTypeId::STRUCT && StructType::IsUnnamed(type)) {
@@ -181,6 +182,8 @@ void ExpressionExecutor::Verify(const Expression &expr, Vector &vector, idx_t co
 		} else {
 			VectorOperations::DefaultCast(vector, intermediate, count, true);
 		}
+		intermediate.Verify(count);
+		//! FIXME: this is probably also where we want to test 'variant_normalize'
 
 		Vector result(vector.GetType(), true, false, count);
 		//! Then cast back into the original type
@@ -190,6 +193,7 @@ void ExpressionExecutor::Verify(const Expression &expr, Vector &vector, idx_t co
 			VectorOperations::DefaultCast(intermediate, result, count, true);
 		}
 		vector.Reference(result);
+		vector.Verify(count);
 	}
 }
 
@@ -227,7 +231,6 @@ void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state,
 	// The result vector must be used for the first time, or must be reset.
 	// Otherwise, the validity mask can contain previous (now incorrect) data.
 	if (result.GetVectorType() == VectorType::FLAT_VECTOR) {
-
 		// We do not initialize vector caches for these expressions.
 		if (expr.GetExpressionClass() != ExpressionClass::BOUND_REF &&
 		    expr.GetExpressionClass() != ExpressionClass::BOUND_CONSTANT &&

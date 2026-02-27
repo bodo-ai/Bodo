@@ -2,6 +2,8 @@
 
 #include "duckdb/common/types/constraint_conflict_info.hpp"
 #include "duckdb/execution/index/art/art.hpp"
+#include "duckdb/storage/data_table.hpp"
+#include "duckdb/transaction/local_storage.hpp"
 
 namespace duckdb {
 
@@ -87,7 +89,7 @@ optional_idx ConflictManager::GetFirstInvalidIndex(const idx_t count, const bool
 	for (idx_t i = 0; i < count; i++) {
 		if (negate && !validity.RowIsValid(i)) {
 			return i;
-		} else if (validity.RowIsValid(i)) {
+		} else if (!negate && validity.RowIsValid(i)) {
 			return i;
 		}
 	}

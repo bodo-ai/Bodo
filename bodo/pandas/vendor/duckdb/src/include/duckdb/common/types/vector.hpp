@@ -11,6 +11,7 @@
 #include "duckdb/common/bitset.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/vector_type.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/types/selection_vector.hpp"
 #include "duckdb/common/types/validity_mask.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -21,6 +22,7 @@
 namespace duckdb {
 
 class VectorCache;
+class VectorChildBuffer;
 class VectorStringBuffer;
 class VectorStructBuffer;
 class VectorListBuffer;
@@ -132,6 +134,7 @@ class Vector {
 	friend struct UnionVector;
 	friend struct SequenceVector;
 	friend struct ArrayVector;
+	friend struct ShreddedVector;
 
 	friend class DataChunk;
 	friend class VectorCacheBuffer;
@@ -195,6 +198,8 @@ public:
 	DUCKDB_API void Dictionary(idx_t dictionary_size, const SelectionVector &sel, idx_t count);
 	//! Creates a reference to a dictionary of the other vector
 	DUCKDB_API void Dictionary(Vector &dict, idx_t dictionary_size, const SelectionVector &sel, idx_t count);
+	//! Creates a dictionary on the reusable dict
+	DUCKDB_API void Dictionary(buffer_ptr<VectorChildBuffer> reusable_dict, const SelectionVector &sel);
 
 	//! Creates the data of this vector with the specified type. Any data that
 	//! is currently in the vector is destroyed.
@@ -222,6 +227,9 @@ public:
 
 	//! Turn the vector into a sequence vector
 	DUCKDB_API void Sequence(int64_t start, int64_t increment, idx_t count);
+
+	//! Turn the vector into a shredded variant vector
+	DUCKDB_API void Shred(Vector &shredded_data);
 
 	//! Verify that the Vector is in a consistent, not corrupt state. DEBUG
 	//! FUNCTION ONLY!
@@ -291,6 +299,9 @@ private:
 	//! Returns the [index] element of the Vector as a Value.
 	static Value GetValueInternal(const Vector &v, idx_t index);
 
+	//! Flatten a constant vector
+	void FlattenConstant(idx_t count);
+
 protected:
 	//! The vector type specifies how the data of the vector is physically stored (i.e. if it is a single repeated
 	//! constant, if it is compressed)
@@ -306,20 +317,24 @@ protected:
 	//! The buffer holding auxiliary data of the vector
 	//! e.g. a string vector uses this to store strings
 	buffer_ptr<VectorBuffer> auxiliary;
-	//! The buffer holding precomputed hashes of the data in the vector
-	//! used for caching hashes of string dictionaries
-	buffer_ptr<VectorBuffer> cached_hashes;
 };
 
-//! The DictionaryBuffer holds a selection vector
+//! The VectorChildBuffer holds a child Vector
 class VectorChildBuffer : public VectorBuffer {
 public:
 	explicit VectorChildBuffer(Vector vector)
-	    : VectorBuffer(VectorBufferType::VECTOR_CHILD_BUFFER), data(std::move(vector)) {
+	    : VectorBuffer(VectorBufferType::VECTOR_CHILD_BUFFER), data(std::move(vector)),
+	      cached_hashes(LogicalType::HASH, nullptr) {
 	}
 
 public:
 	Vector data;
+	//! Optional size/id to uniquely identify re-occurring dictionaries
+	optional_idx size;
+	string id;
+	//! For caching the hashes of a child buffer
+	mutex cached_hashes_lock;
+	Vector cached_hashes;
 };
 
 struct ConstantVector {
@@ -409,15 +424,19 @@ struct DictionaryVector {
 	}
 	static inline optional_idx DictionarySize(const Vector &vector) {
 		VerifyDictionary(vector);
+		const auto &child_buffer = vector.auxiliary->Cast<VectorChildBuffer>();
+		if (child_buffer.size.IsValid()) {
+			return child_buffer.size;
+		}
 		return vector.buffer->Cast<DictionaryBuffer>().GetDictionarySize();
 	}
 	static inline const string &DictionaryId(const Vector &vector) {
 		VerifyDictionary(vector);
+		const auto &child_buffer = vector.auxiliary->Cast<VectorChildBuffer>();
+		if (!child_buffer.id.empty()) {
+			return child_buffer.id;
+		}
 		return vector.buffer->Cast<DictionaryBuffer>().GetDictionaryId();
-	}
-	static inline void SetDictionaryId(Vector &vector, string new_id) {
-		VerifyDictionary(vector);
-		vector.buffer->Cast<DictionaryBuffer>().SetDictionaryId(std::move(new_id));
 	}
 	static inline bool CanCacheHashes(const LogicalType &type) {
 		return type.InternalType() == PhysicalType::VARCHAR;
@@ -425,6 +444,7 @@ struct DictionaryVector {
 	static inline bool CanCacheHashes(const Vector &vector) {
 		return DictionarySize(vector).IsValid() && CanCacheHashes(vector.GetType());
 	}
+	static buffer_ptr<VectorChildBuffer> CreateReusableDictionary(const LogicalType &type, const idx_t &size);
 	static const Vector &GetCachedHashes(Vector &input);
 };
 
@@ -488,6 +508,13 @@ struct FlatVector {
 };
 
 struct ListVector {
+	static inline const list_entry_t *GetData(const Vector &v) {
+		if (v.GetVectorType() == VectorType::DICTIONARY_VECTOR) {
+			auto &child = DictionaryVector::Child(v);
+			return GetData(child);
+		}
+		return FlatVector::GetData<const list_entry_t>(v);
+	}
 	static inline list_entry_t *GetData(Vector &v) {
 		if (v.GetVectorType() == VectorType::DICTIONARY_VECTOR) {
 			auto &child = DictionaryVector::Child(v);
@@ -519,6 +546,8 @@ struct ListVector {
 	DUCKDB_API static void GetConsecutiveChildSelVector(Vector &list, SelectionVector &sel, idx_t offset, idx_t count);
 	//! Share the entry of the other list vector
 	DUCKDB_API static void ReferenceEntry(Vector &vector, Vector &other);
+	//! Returns the total number of entries in the list
+	DUCKDB_API static idx_t GetTotalEntryCount(Vector &list, idx_t count);
 
 private:
 	template <class T>
@@ -609,6 +638,30 @@ struct VariantVector {
 	//! Gets a reference to the binary blob 'value', which encodes the data of the row
 	DUCKDB_API static Vector &GetData(Vector &vec);
 	DUCKDB_API static Vector &GetData(const Vector &vec);
+};
+
+struct ShreddedVector {
+	static void VerifyShreddedVector(const Vector &vector) {
+#ifdef DUCKDB_DEBUG_NO_SAFETY
+		D_ASSERT(vector.GetVectorType() == VectorType::SHREDDED_VECTOR);
+#else
+		if (vector.GetVectorType() != VectorType::SHREDDED_VECTOR) {
+			throw InternalException("Operation requires a shredded vector but a non-shredded vector was encountered");
+		}
+#endif
+	}
+	//! Get the underlying vector holding the unshredded data
+	DUCKDB_API static const Vector &GetUnshreddedVector(const Vector &vec);
+	//! Get the underlying vector holding the unshredded data
+	DUCKDB_API static Vector &GetUnshreddedVector(Vector &vec);
+	//! Get the underlying vector holding the shredded data
+	DUCKDB_API static const Vector &GetShreddedVector(const Vector &vec);
+	//! Get the underlying vector holding the shredded data
+	DUCKDB_API static Vector &GetShreddedVector(Vector &vec);
+
+	//! Unshred a shredded vector
+	DUCKDB_API static void Unshred(Vector &vec, idx_t count);
+	DUCKDB_API static void Unshred(Vector &vec, const SelectionVector &sel, idx_t count);
 };
 
 enum class UnionInvalidReason : uint8_t {

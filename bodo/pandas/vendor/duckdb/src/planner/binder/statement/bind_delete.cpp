@@ -5,34 +5,30 @@
 #include "duckdb/planner/operator/logical_delete.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
-#include "duckdb/planner/bound_tableref.hpp"
-#include "duckdb/planner/tableref/bound_basetableref.hpp"
 #include "duckdb/planner/operator/logical_cross_product.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/storage/data_table.hpp"
 
 namespace duckdb {
 
 BoundStatement Binder::Bind(DeleteStatement &stmt) {
 	// visit the table reference
 	auto bound_table = Bind(*stmt.table);
-	if (bound_table->type != TableReferenceType::BASE_TABLE) {
-		throw BinderException("Can only delete from base table!");
+	auto root = std::move(bound_table.plan);
+	if (root->type != LogicalOperatorType::LOGICAL_GET) {
+		throw BinderException("Can only delete from base table");
 	}
-	auto &table_binding = bound_table->Cast<BoundBaseTableRef>();
-	auto &table = table_binding.table;
-
-	auto root = CreatePlan(*bound_table);
 	auto &get = root->Cast<LogicalGet>();
-	D_ASSERT(root->type == LogicalOperatorType::LOGICAL_GET);
-
+	auto table_ptr = get.GetTable();
+	if (!table_ptr) {
+		throw BinderException("Can only delete from base table");
+	}
+	auto &table = *table_ptr;
 	if (!table.temporary) {
 		// delete from persistent table: not read only!
 		auto &properties = GetStatementProperties();
-		properties.RegisterDBModify(table.catalog, context);
+		properties.RegisterDBModify(table.catalog, context, DatabaseModificationType::DELETE_DATA);
 	}
-
-	// Add CTEs as bindable
-	AddCTEMap(stmt.cte_map);
 
 	// plan any tables from the various using clauses
 	if (!stmt.using_clauses.empty()) {
@@ -40,13 +36,12 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 		for (auto &using_clause : stmt.using_clauses) {
 			// bind the using clause
 			auto using_binder = Binder::CreateBinder(context, this);
-			auto bound_node = using_binder->Bind(*using_clause);
-			auto op = CreatePlan(*bound_node);
+			auto op = using_binder->Bind(*using_clause);
 			if (child_operator) {
 				// already bound a child: create a cross product to unify the two
-				child_operator = LogicalCrossProduct::Create(std::move(child_operator), std::move(op));
+				child_operator = LogicalCrossProduct::Create(std::move(child_operator), std::move(op.plan));
 			} else {
-				child_operator = std::move(op);
+				child_operator = std::move(op.plan);
 			}
 			bind_context.AddContext(std::move(using_binder->bind_context));
 		}
@@ -69,6 +64,21 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 	// create the delete node
 	auto del = make_uniq<LogicalDelete>(table, GenerateTableIndex());
 	del->bound_constraints = BindConstraints(table);
+
+	// Add columns to the scan to avoid fetching by row ID in PhysicalDelete:
+	// - If RETURNING: add all physical columns (for RETURNING projection)
+	// - Else if unique indexes exist: add only indexed columns (for delete index tracking)
+	if (!stmt.returning_list.empty()) {
+		// Add all physical columns for RETURNING
+		BindDeleteReturningColumns(table, get, del->return_columns);
+	} else if (table.IsDuckTable()) {
+		// Only optimize for DuckDB tables (not attached external tables like SQLite)
+		auto &storage = table.GetStorage();
+		if (storage.HasUniqueIndexes()) {
+			BindDeleteIndexColumns(table, get, del->return_columns);
+		}
+	}
+
 	del->AddChild(std::move(root));
 
 	// bind the row id columns and add them to the projection list
@@ -81,8 +91,10 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 		del->table_index = update_table_index;
 
 		unique_ptr<LogicalOperator> del_as_logicaloperator = std::move(del);
+		// Include virtual columns (like rowid) so they can be referenced in RETURNING
+		auto virtual_columns = table.GetVirtualColumns();
 		return BindReturning(std::move(stmt.returning_list), table, stmt.table->alias, update_table_index,
-		                     std::move(del_as_logicaloperator));
+		                     std::move(del_as_logicaloperator), std::move(virtual_columns));
 	}
 	BoundStatement result;
 	result.plan = std::move(del);
@@ -90,7 +102,7 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 	result.types = {LogicalType::BIGINT};
 
 	auto &properties = GetStatementProperties();
-	properties.allow_stream_result = false;
+	properties.output_type = QueryResultOutputType::FORCE_MATERIALIZED;
 	properties.return_type = StatementReturnType::CHANGED_ROWS;
 
 	return result;

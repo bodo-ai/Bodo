@@ -731,7 +731,7 @@ target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLU
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
 
 # plan_optimizer build on top of DuckDB
-target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/"
+target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/" "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/src/include"
 )
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 )

@@ -12,6 +12,7 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/column_data.hpp"
+#include "duckdb/storage/table/data_table_info.hpp"
 #include "duckdb/storage/table/row_group.hpp"
 #include "duckdb/storage/table/row_version_manager.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
@@ -158,6 +159,7 @@ void WALWriteState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
 	case CatalogType::COPY_FUNCTION_ENTRY:
 	case CatalogType::PRAGMA_FUNCTION_ENTRY:
 	case CatalogType::COLLATION_ENTRY:
+	case CatalogType::COORDINATE_SYSTEM_ENTRY:
 	case CatalogType::DEPENDENCY_ENTRY:
 	case CatalogType::SECRET_ENTRY:
 	case CatalogType::SECRET_TYPE_ENTRY:
@@ -217,7 +219,7 @@ void WALWriteState::WriteUpdate(UpdateInfo &info) {
 
 	// write the row ids into the chunk
 	auto row_ids = FlatVector::GetData<row_t>(update_chunk->data[1]);
-	idx_t start = column_data.start + info.vector_index * STANDARD_VECTOR_SIZE;
+	idx_t start = info.row_group_start + info.vector_index * STANDARD_VECTOR_SIZE;
 	auto tuples = info.GetTuples();
 	for (idx_t i = 0; i < info.N; i++) {
 		row_ids[tuples[i]] = UnsafeNumericCast<int64_t>(start + tuples[i]);

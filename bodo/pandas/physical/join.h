@@ -1,9 +1,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include "../../libs/streaming/_join.h"
 #include "../_util.h"
+#include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -39,6 +42,15 @@ struct PhysicalJoinMetrics {
 
     stat_t output_row_count = 0;
 };
+/**
+ * @brief Helper function to set whether column ref expressions use the left or
+ * right table in the join based on the column bindings of the column ref and
+ * the left table column bindings.
+ */
+void setExprTreeLeftRight(
+    std::shared_ptr<PhysicalExpression> expr,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        left_col_ref_map);
 
 /**
  * @brief Physical node for join.
@@ -65,11 +77,15 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         // Build side
         duckdb::vector<duckdb::ColumnBinding> right_bindings =
             logical_join.children[1]->GetColumnBindings();
+        duckdb::vector<duckdb::ColumnBinding> join_bindings =
+            logical_join.GetColumnBindings();
 
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
             left_col_ref_map = getColRefMap(left_bindings);
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
             right_col_ref_map = getColRefMap(right_bindings);
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+            join_col_ref_map = getColRefMap(join_bindings);
 
         bool is_left_anti = logical_join.join_type == duckdb::JoinType::ANTI;
         bool is_right_anti =
@@ -109,30 +125,31 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
-                has_non_equi_cond = true;
-            }
-            if (cond.left->GetExpressionClass() !=
-                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Join condition left side is not a column reference.");
-            }
-            if (cond.right->GetExpressionClass() !=
-                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Join condition right side is not a column reference.");
-            }
-            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    bododuckdb::ExpressionType::COMPARE_EQUAL) {
+                if (cond.GetLHS().GetExpressionClass() !=
+                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Join condition left side is not a column reference.");
+                }
+                if (cond.GetRHS().GetExpressionClass() !=
+                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Join condition right side is not a column reference.");
+                }
                 auto& left_bce =
-                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
                 auto& right_bce =
-                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
+                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
                 this->left_keys.push_back(
                     left_col_ref_map[{left_bce.binding.table_index,
                                       left_bce.binding.column_index}]);
                 this->right_keys.push_back(
                     right_col_ref_map[{right_bce.binding.table_index,
                                        right_bce.binding.column_index}]);
+            } else {
+                has_non_equi_cond = true;
             }
         }
 
@@ -155,37 +172,29 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
             probe_table_schema->Project(probe_col_inds);
 
-        std::set<uint64_t> left_non_equi_keys;
-        std::set<uint64_t> right_non_equi_keys;
-
-        for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+        for (duckdb::JoinCondition& cond : conditions) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 // These cases are handled by the left_keys and right_keys
                 // above.  Only the non-equi tests are handled here.
                 continue;
             }
-            auto& left_bce =
-                cond.left->Cast<duckdb::BoundColumnRefExpression>();
-            auto& right_bce =
-                cond.right->Cast<duckdb::BoundColumnRefExpression>();
-
-            uint64_t left_cond_col_ind = left_col_ref_map[{
-                left_bce.binding.table_index, left_bce.binding.column_index}];
-            uint64_t right_cond_col_ind = right_col_ref_map[{
-                right_bce.binding.table_index, right_bce.binding.column_index}];
-            left_non_equi_keys.insert(left_cond_col_ind);
-            right_non_equi_keys.insert(right_cond_col_ind);
-
-            std::shared_ptr<PhysicalExpression> new_phys_expr =
-                std::static_pointer_cast<PhysicalExpression>(
-                    std::make_shared<PhysicalComparisonExpression>(
-                        std::make_shared<PhysicalColumnRefExpression>(
-                            this->probe_col_inds_rev[left_cond_col_ind],
-                            left_bce.GetName(), true),
-                        std::make_shared<PhysicalColumnRefExpression>(
-                            this->build_col_inds_rev[right_cond_col_ind],
-                            right_bce.GetName(), false),
-                        cond.comparison));
+            std::shared_ptr<PhysicalExpression> new_phys_expr;
+            duckdb::unique_ptr<duckdb::Expression> expr =
+                bododuckdb::JoinCondition::CreateExpression(std::move(cond));
+            // Create a col ref map for both the tables, mapping to their
+            // respective positions in the reordered schemas
+            std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+                combined_left_right_expr_col_ref_map;
+            for (const auto& [k, v] : left_col_ref_map) {
+                combined_left_right_expr_col_ref_map[k] = probe_col_inds_rev[v];
+            }
+            for (const auto& [k, v] : right_col_ref_map) {
+                combined_left_right_expr_col_ref_map[k] = build_col_inds_rev[v];
+            }
+            new_phys_expr = buildPhysicalExprTree(
+                expr, combined_left_right_expr_col_ref_map, false);
             // If we have more than one non-equi join condition then 'and'
             // them together.
             if (physExprTree) {
@@ -197,6 +206,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 physExprTree = new_phys_expr;
             }
         }
+        setExprTreeLeftRight(physExprTree, left_col_ref_map);
 
         initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
                                 bound_right_inds, build_col_inds_rev);
@@ -686,5 +696,28 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     PhysicalJoinMetrics metrics;
 };
+
+void setExprTreeLeftRight(
+    std::shared_ptr<PhysicalExpression> expr,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        left_col_ref_map) {
+    if (!expr) {
+        return;
+    }
+    if (expr->GetExpressionType() == PhysicalExpressionType::COLUMN_REF) {
+        auto col_ref_expr =
+            std::static_pointer_cast<PhysicalColumnRefExpression>(expr);
+        duckdb::ColumnBinding col_binding = col_ref_expr->get_col_binding();
+        if (left_col_ref_map.contains(
+                {col_binding.table_index, col_binding.column_index})) {
+            col_ref_expr->set_left_side(true);
+        } else {
+            col_ref_expr->set_left_side(false);
+        }
+    }
+    for (auto& child : expr->GetChildren()) {
+        setExprTreeLeftRight(child, left_col_ref_map);
+    }
+}
 
 #undef CONSUME_PROBE_BATCH

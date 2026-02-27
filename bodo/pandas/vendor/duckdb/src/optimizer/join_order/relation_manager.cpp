@@ -46,7 +46,6 @@ void RelationManager::AddAggregateOrWindowRelation(LogicalOperator &op, optional
 
 void RelationManager::AddRelation(LogicalOperator &op, optional_ptr<LogicalOperator> parent,
                                   const RelationStats &stats) {
-
 	// if parent is null, then this is a root relation
 	// if parent is not null, it should have multiple children
 	D_ASSERT(!parent || parent->children.size() >= 2);
@@ -54,7 +53,13 @@ void RelationManager::AddRelation(LogicalOperator &op, optional_ptr<LogicalOpera
 	auto relation_id = relations.size();
 
 	auto table_indexes = op.GetTableIndex();
-	if (table_indexes.empty()) {
+	bool is_mark = op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN &&
+	               op.Cast<LogicalComparisonJoin>().join_type == JoinType::MARK;
+	bool get_all_child_bindings = op.type == LogicalOperatorType::LOGICAL_UNNEST;
+	if (op.type == LogicalOperatorType::LOGICAL_GET) {
+		get_all_child_bindings = !op.children.empty();
+	}
+	if (table_indexes.empty() || is_mark) {
 		// relation represents a non-reorderable relation, most likely a join relation
 		// Get the tables referenced in the non-reorderable relation and add them to the relation mapping
 		// This should all table references, even if there are nested non-reorderable joins.
@@ -65,9 +70,9 @@ void RelationManager::AddRelation(LogicalOperator &op, optional_ptr<LogicalOpera
 			D_ASSERT(relation_mapping.find(reference) == relation_mapping.end());
 			relation_mapping[reference] = relation_id;
 		}
-	} else if (op.type == LogicalOperatorType::LOGICAL_UNNEST) {
-		// logical unnest has a logical_unnest index, but other bindings can refer to
-		// columns that are not unnested.
+	} else if (get_all_child_bindings) {
+		// logical get has a logical_get index, but if a function is present other bindings can refer to
+		// columns that are not unnested, and from the child of the logical get.
 		auto bindings = op.GetColumnBindings();
 		for (auto &binding : bindings) {
 			relation_mapping[binding.table_index] = relation_id;
@@ -137,14 +142,27 @@ bool ExpressionContainsColumnRef(const Expression &root_expr) {
 static bool JoinIsReorderable(LogicalOperator &op) {
 	if (op.type == LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
 		return true;
-	} else if (op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+	}
+
+	if (op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
 		auto &join = op.Cast<LogicalComparisonJoin>();
+
+		// TODO: SEMI/ANTI joins with residual predicates are not supported
+		if (join.join_type == JoinType::SEMI || join.join_type == JoinType::ANTI) {
+			for (auto &cond : join.conditions) {
+				if (!cond.IsComparison()) {
+					return false;
+				}
+			}
+		}
+
 		switch (join.join_type) {
 		case JoinType::INNER:
 		case JoinType::SEMI:
 		case JoinType::ANTI:
 			for (auto &cond : join.conditions) {
-				if (ExpressionContainsColumnRef(*cond.left) && ExpressionContainsColumnRef(*cond.right)) {
+				if (cond.IsComparison() && ExpressionContainsColumnRef(cond.GetLHS()) &&
+				    ExpressionContainsColumnRef(cond.GetRHS())) {
 					return true;
 				}
 			}
@@ -180,6 +198,21 @@ static void ModifyStatsIfLimit(optional_ptr<LogicalOperator> limit_op, RelationS
 	if (limit.limit_val.Type() == LimitNodeType::CONSTANT_VALUE) {
 		stats.cardinality = MinValue(limit.limit_val.GetConstantValue(), stats.cardinality);
 	}
+}
+
+void RelationManager::AddRelationWithChildren(JoinOrderOptimizer &optimizer, LogicalOperator &op,
+                                              LogicalOperator &input_op, optional_ptr<LogicalOperator> parent,
+                                              RelationStats &child_stats, optional_ptr<LogicalOperator> limit_op,
+                                              vector<reference<LogicalOperator>> &datasource_filters) {
+	D_ASSERT(!op.children.empty());
+	auto child_optimizer = optimizer.CreateChildOptimizer();
+	op.children[0] = child_optimizer.Optimize(std::move(op.children[0]), &child_stats);
+	if (!datasource_filters.empty()) {
+		child_stats.cardinality = LossyNumericCast<idx_t>(static_cast<double>(child_stats.cardinality) *
+		                                                  RelationStatisticsHelper::DEFAULT_SELECTIVITY);
+	}
+	ModifyStatsIfLimit(limit_op.get(), child_stats);
+	AddRelation(input_op, parent, child_stats);
 }
 
 bool RelationManager::ExtractJoinRelations(JoinOrderOptimizer &optimizer, LogicalOperator &input_op,
@@ -279,15 +312,7 @@ bool RelationManager::ExtractJoinRelations(JoinOrderOptimizer &optimizer, Logica
 	case LogicalOperatorType::LOGICAL_UNNEST: {
 		// optimize children of unnest
 		RelationStats child_stats;
-		auto child_optimizer = optimizer.CreateChildOptimizer();
-		op->children[0] = child_optimizer.Optimize(std::move(op->children[0]), &child_stats);
-		// the extracted cardinality should be set for window
-		if (!datasource_filters.empty()) {
-			child_stats.cardinality = LossyNumericCast<idx_t>(static_cast<double>(child_stats.cardinality) *
-			                                                  RelationStatisticsHelper::DEFAULT_SELECTIVITY);
-		}
-		ModifyStatsIfLimit(limit_op.get(), child_stats);
-		AddRelation(input_op, parent, child_stats);
+		AddRelationWithChildren(optimizer, *op, input_op, parent, child_stats, limit_op, datasource_filters);
 		return true;
 	}
 	case LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
@@ -345,6 +370,14 @@ bool RelationManager::ExtractJoinRelations(JoinOrderOptimizer &optimizer, Logica
 	case LogicalOperatorType::LOGICAL_GET: {
 		// TODO: Get stats from a logical GET
 		auto &get = op->Cast<LogicalGet>();
+		// this is a get that *most likely* has a function (like unnest or json_each).
+		// there are new bindings for output of the function, but child bindings also exist, and can
+		// be used in joins
+		if (!op->children.empty()) {
+			RelationStats child_stats;
+			AddRelationWithChildren(optimizer, *op, input_op, parent, child_stats, limit_op, datasource_filters);
+			return true;
+		}
 		auto stats = RelationStatisticsHelper::ExtractGetStats(get, context);
 		// if there is another logical filter that could not be pushed down into the
 		// table scan, apply another selectivity.
@@ -528,6 +561,21 @@ bool RelationManager::ExtractBindings(Expression &expression, unordered_set<idx_
 	return can_reorder;
 }
 
+//! Flatten a predicate into individual conjuncts
+static inline void FlattenConjunction(Expression &expr, vector<unique_ptr<Expression>> &result) {
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
+		auto &conj = expr.Cast<BoundConjunctionExpression>();
+		if (conj.GetExpressionType() == ExpressionType::CONJUNCTION_AND) {
+			for (auto &child : conj.children) {
+				FlattenConjunction(*child, result);
+			}
+			return;
+		}
+	}
+	// not an AND conjunction - add as is
+	result.push_back(expr.Copy());
+}
+
 vector<unique_ptr<FilterInfo>> RelationManager::ExtractEdges(LogicalOperator &op,
                                                              vector<reference<LogicalOperator>> &filter_operators,
                                                              JoinRelationSetManager &set_manager) {
@@ -542,7 +590,6 @@ vector<unique_ptr<FilterInfo>> RelationManager::ExtractEdges(LogicalOperator &op
 			auto &join = f_op.Cast<LogicalComparisonJoin>();
 			D_ASSERT(join.expressions.empty());
 			if (join.join_type == JoinType::SEMI || join.join_type == JoinType::ANTI) {
-
 				auto conjunction_expression = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
 				// create a conjunction expression for the semi join.
 				// It's possible multiple LHS relations have a condition in
@@ -554,9 +601,11 @@ vector<unique_ptr<FilterInfo>> RelationManager::ExtractEdges(LogicalOperator &op
 				// the relations from the conditions in the conjunction expression, we can prevent invalid
 				// reordering.
 				for (auto &cond : join.conditions) {
-					auto comparison = make_uniq<BoundComparisonExpression>(cond.comparison, std::move(cond.left),
-					                                                       std::move(cond.right));
-					conjunction_expression->children.push_back(std::move(comparison));
+					if (cond.IsComparison()) {
+						auto comparison = make_uniq<BoundComparisonExpression>(
+						    cond.GetComparisonType(), cond.GetLHS().Copy(), cond.GetRHS().Copy());
+						conjunction_expression->children.push_back(std::move(comparison));
+					}
 				}
 
 				// create the filter info so all required LHS relations are present when reconstructing the
@@ -602,19 +651,31 @@ vector<unique_ptr<FilterInfo>> RelationManager::ExtractEdges(LogicalOperator &op
 			} else {
 				// can extract every inner join condition individually.
 				for (auto &cond : join.conditions) {
-					auto comparison = make_uniq<BoundComparisonExpression>(cond.comparison, std::move(cond.left),
-					                                                       std::move(cond.right));
-					if (filter_set.find(*comparison) == filter_set.end()) {
-						filter_set.insert(*comparison);
+					unique_ptr<Expression> expr;
+					bool is_residual = false;
+
+					if (cond.IsComparison()) {
+						auto comp_type = cond.GetComparisonType();
+						expr =
+						    make_uniq<BoundComparisonExpression>(comp_type, cond.GetLHS().Copy(), cond.GetRHS().Copy());
+					} else {
+						expr = cond.GetJoinExpression().Copy();
+						is_residual = true;
+					}
+
+					if (filter_set.find(*expr) == filter_set.end()) {
+						filter_set.insert(*expr);
 						unordered_set<idx_t> bindings;
-						ExtractBindings(*comparison, bindings);
+						ExtractBindings(*expr, bindings);
 						auto &set = set_manager.GetJoinRelation(bindings);
-						auto filter_info = make_uniq<FilterInfo>(std::move(comparison), set,
-						                                         filters_and_bindings.size(), join.join_type);
+						auto filter_info =
+						    make_uniq<FilterInfo>(std::move(expr), set, filters_and_bindings.size(), join.join_type);
+						filter_info->from_residual_predicate = is_residual;
 						filters_and_bindings.push_back(std::move(filter_info));
 					}
 				}
 			}
+
 			join.conditions.clear();
 		} else {
 			vector<unique_ptr<Expression>> leftover_expressions;
