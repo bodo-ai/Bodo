@@ -145,19 +145,24 @@ void CudaGroupbyState::build_consume_batch(
 
     std::vector<cudf::table_view> views;
 
+    // Add all the shuffled chunks to the merge set.
+    for (auto& merge_chunk : shuffled_merge_chunks) {
+        // Shuffler may give us an empty table if nothing
+        // belongs on this node.
+        if (merge_chunk->num_rows() > 0) {
+            views.emplace_back(merge_chunk->view());
+        }
+    }
+
+    if (views.size() == 0) {
+        // If there is no received data to merge then no state changes.
+        return;
+    }
+
     // If we have already accumulated on this node then add the result
     // of that to the new shuffled tables to merge.
     if (accumulation) {
         views.emplace_back(accumulation->view());
-    }
-
-    // Add all the shuffled chunks to the merge set.
-    for (auto& merge_chunk : shuffled_merge_chunks) {
-        views.emplace_back(merge_chunk->view());
-    }
-
-    if (views.size() == 0) {
-        return;
     }
 
     // Make one table out of all the views.
