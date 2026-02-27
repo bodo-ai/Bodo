@@ -1887,5 +1887,17 @@ std::string get_cache_dir() { return g_cache_dir; }
 
 bool get_dump_plans() { return g_dump_plans; }
 
+int count_gpu_plan_nodes(std::unique_ptr<duckdb::LogicalOperator> &plan) {
+    auto run_on_gpu = partition_to_gpu(plan);
+
+    int gpu_op_count = 0;
+    for (const auto &kv : run_on_gpu) {
+        if (kv.second) {
+            gpu_op_count++;
+        }
+    }
+    return gpu_op_count;
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

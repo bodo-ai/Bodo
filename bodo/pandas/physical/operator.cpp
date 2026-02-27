@@ -464,12 +464,20 @@ RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
 GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
                              OperatorResult prev_op_result) {
+    if (finished) {
+        if (input_batch && input_batch->nrows() > 0) {
+            throw std::runtime_error(
+                "GPUtoCPUExchange::operator(): Received non-empty batch after "
+                "exchange was marked finished");
+        }
+        return std::make_tuple(input_batch, OperatorResult::FINISHED);
+    }
+
     if (!this->shuffle_state) {
         Initialize(input_batch.get());
     }
 
-    // Shuffle data to destination ranks (either all ranks or GPU ranks)
-    // and append result to output builder
+    // Shuffle data to all ranks and append result to output builder
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
@@ -490,8 +498,7 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
     auto [output_batch, _] = ctb_state->builder->PopChunk(
         /*force_return*/ global_is_last);
 
-    bool finished =
-        global_is_last && this->ctb_state->builder->total_remaining == 0;
+    finished = global_is_last && this->ctb_state->builder->total_remaining == 0;
 
     if (finished) {
         this->shuffle_state->Finalize();
@@ -520,12 +527,21 @@ void GPUtoCPUExchange::Initialize(table_info *input_batch) {
 std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     std::shared_ptr<table_info> input_batch, std::shared_ptr<StreamAndEvent> se,
     OperatorResult prev_op_result) {
+    if (finished) {
+        if (input_batch && input_batch->nrows() > 0) {
+            throw std::runtime_error(
+                "CPUtoGPUExchange::operator(): Received non-empty batch after "
+                "exchange was marked finished");
+        }
+        return std::make_tuple(convertTableToGPU(input_batch, se),
+                               OperatorResult::FINISHED);
+    }
+
     if (!this->shuffle_state) {
         Initialize(input_batch, se);
     }
 
-    // Shuffle data to destination ranks (either all ranks or GPU ranks)
-    // and append result to output builder
+    // Shuffle data to destination GPU ranks and append result to output builder
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
@@ -542,10 +558,9 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
     auto output_batch = gpu_batch_generator->next(se, local_is_last);
-    bool finished =
-        static_cast<bool>(sync_is_last_non_blocking(
-            is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
-        gpu_batch_generator->collected_rows == 0;
+    finished = static_cast<bool>(sync_is_last_non_blocking(
+                   is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
+               gpu_batch_generator->collected_rows == 0;
 
     if (finished) {
         this->shuffle_state->Finalize();

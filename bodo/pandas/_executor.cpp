@@ -955,8 +955,8 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 
 #endif  // USE_CUDF
 
-void Executor::partition_internal(duckdb::LogicalOperator &op,
-                                  duckdb::device_mapping_t &run_on_gpu) {
+void partition_internal(duckdb::LogicalOperator &op,
+                        duckdb::device_mapping_t &run_on_gpu) {
     /*
      * If GPU mode is enabled then we will run an algorithm to determine
      * whether to run each node on CPU or GPU.
@@ -1002,4 +1002,11 @@ void Executor::partition_internal(duckdb::LogicalOperator &op,
         // Run on CPU always if CUDF not enabled.
         run_on_gpu[&op] = false;
     }
+}
+
+duckdb::device_mapping_t partition_to_gpu(
+    std::unique_ptr<duckdb::LogicalOperator> &plan) {
+    duckdb::device_mapping_t run_on_gpu;
+    partition_internal(*plan, run_on_gpu);
+    return run_on_gpu;
 }
