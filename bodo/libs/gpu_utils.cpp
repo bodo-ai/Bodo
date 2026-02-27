@@ -1,5 +1,4 @@
 #include "gpu_utils.h"
-#include <mpi_proto.h>
 #include "vendored/simd-block-fixed-fpp.h"
 
 bool g_use_async = false;
