@@ -184,7 +184,7 @@ def main():
     for i in range(args.n_iters):
         try:
             with CodeTimer(
-                f"Q5 Polars GPU Streaming (sf= {scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}"
+                f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}"
             ) as timer:
                 result: pl.LazyFrame = q(args.root)
                 print(result.collect(engine=pl_engine))
@@ -197,7 +197,7 @@ def main():
                     )
         except Exception as e:
             print(
-                f"Error executing query engine={args.engine}, n_gpus={args.n_workers}: {e}"
+                f"Error executing query sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}: {e}"
             )
 
 
