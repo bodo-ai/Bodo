@@ -144,14 +144,12 @@ LogicalType ExpressionBinder::GetExpressionReturnType(const Expression &expr) {
 		if (expr.return_type == LogicalTypeId::VARCHAR && StringType::GetCollation(expr.return_type).empty()) {
 			return LogicalTypeId::STRING_LITERAL;
 		}
-		// Bodo Change: Don't limit type size based on the value of the constant to avoid overflows, we always
-		// type integer const as BIGINT
-		//if (expr.return_type.IsIntegral()) {
-		//	auto &constant = expr.Cast<BoundConstantExpression>();
-		//	if (!constant.value.IsNull()) {
-		//		return LogicalType::INTEGER_LITERAL(constant.value);
-		//	}
-		//}
+		if (expr.return_type.IsIntegral()) {
+			auto &constant = expr.Cast<BoundConstantExpression>();
+			if (!constant.value.IsNull()) {
+				return LogicalType::INTEGER_LITERAL(constant.value);
+			}
+		}
 	}
 	return expr.return_type;
 }
