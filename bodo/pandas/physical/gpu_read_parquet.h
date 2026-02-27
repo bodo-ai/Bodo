@@ -63,7 +63,9 @@ struct FilePart {
 
 class RankBatchGenerator {
    public:
-    RankBatchGenerator(PyObject *dataset_path, std::size_t target_rows,
+    RankBatchGenerator(PyObject *dataset_path,
+                       duckdb::unique_ptr<duckdb::TableFilterSet> &filter_exprs,
+                       std::size_t target_rows,
                        const std::vector<std::string> &_selected_columns,
                        std::shared_ptr<arrow::Schema> _arrow_schema,
                        MPI_Comm comm)
@@ -175,13 +177,11 @@ class RankBatchGenerator {
             try {
                 cudf::io::parquet_reader_options reader_opts =
                     cudf::io::parquet_reader_options::builder(source_info)
+                        .columns(selected_columns)
                         .row_groups(std::vector<std::vector<int>>{
                             std::vector<int>{current_rg_}})
                         .build();
 
-                if (selected_columns.size() > 0) {
-                    reader_opts.set_columns(selected_columns);
-                }
                 auto result = cudf::io::read_parquet(reader_opts, se->stream);
 
                 // result.tbl is typically a std::unique_ptr<cudf::table> or
@@ -419,7 +419,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     const std::vector<int> selected_columns;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
-    std::unique_ptr<CudfExpr> cudfExprTree;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -524,18 +523,11 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
         }
-        if (!filters_initialized) {
-            init_filter_exprs();
-        }
 
         time_pt start_produce = start_timer();
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
             batch_gen->next(se);
-        if (cudfExprTree) {
-            next_batch_tup.first =
-                cudfExprTree->eval(*(next_batch_tup.first), se);
-        }
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
@@ -566,8 +558,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     std::shared_ptr<RankBatchGenerator> batch_gen;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
-    bool filters_initialized = false;
-
     // Communicator for GPU ranks (for part assignments)
     MPI_Comm comm;
 
@@ -579,22 +569,11 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     void init_batch_gen() {
         auto batch_size = get_gpu_streaming_batch_size();
 
-        batch_gen = std::make_shared<RankBatchGenerator>(
-            path, batch_size, output_schema->column_names, arrow_schema, comm);
-    }
-    void init_filter_exprs() {
-        std::map<int, int> old_to_new_column_map;
-        // Generate map of original column indices to selected column indices.
-        for (size_t i = 0; i < selected_columns.size(); ++i) {
-            old_to_new_column_map.insert({selected_columns[i], i});
-        }
         this->filter_exprs = join_filter_col_stats.insert_filters(
             std::move(this->filter_exprs), this->selected_columns);
 
-        if (this->filter_exprs->filters.size() != 0) {
-            cudfExprTree =
-                tableFilterSetToCudf(*filter_exprs, old_to_new_column_map);
-        }
-        this->filters_initialized = true;
+        batch_gen = std::make_shared<RankBatchGenerator>(
+            path, filter_exprs, batch_size, output_schema->column_names,
+            arrow_schema, comm);
     }
 };

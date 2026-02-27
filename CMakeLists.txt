@@ -878,12 +878,6 @@ if(USE_CUDF)
   message(STATUS "libcudf include: ${LIBCUDF_INCLUDE_DIR} lib: ${LIBCUDF_LIB}")
   add_library(libcudf SHARED IMPORTED)
   set_target_properties(libcudf PROPERTIES IMPORTED_LOCATION "${LIBCUDF_LIB}")
-  # libkvikio defines
-  find_library(LIBKVIKIO_LIB NAMES libkvikio.so)
-  get_filename_component(LIBKVIKIO_LIBDIR "${LIBKVIKIO_LIB}" DIRECTORY)
-  message(STATUS "libkvikio lib: ${LIBKVIKIO_LIB} libdir: ${LIBKVIKIO_LIBDIR}")
-  add_library(libkvikio SHARED IMPORTED)
-  set_target_properties(libkvikio PROPERTIES IMPORTED_LOCATION "${LIBKVIKIO_LIB}")
 
   # cudart
   find_library(LIBCUDART_LIB NAMES libcudart.so.13)
@@ -901,17 +895,14 @@ if(USE_CUDF)
 
   # RPATH
   set_target_properties(ext PROPERTIES
-    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
-    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
   )
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
   target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
-  # Force the linker to include libkvikio even if no symbols are used directly
-      "-Wl,--no-as-needed"
-      libkvikio
       "-Wl,--as-needed")
 endif()
 
