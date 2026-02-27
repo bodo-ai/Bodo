@@ -1140,6 +1140,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # this plan with the extra column containing the scalar value.
             if isinstance(key._plan.source, LogicalInsertScalarSubquery):
                 plan = key._plan.source
+                from_subquery = True
+            else:
+                from_subquery = False
 
             key_expr = get_proj_expr_single(key._plan)
             key_expr = key_expr.replace_source(plan)
@@ -1149,9 +1152,22 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
-            return wrap_plan(
-                plan=LogicalFilter(empty_data, plan, key_expr),
-            )
+            plan_to_wrap = LogicalFilter(empty_data, plan, key_expr)
+            if from_subquery:
+                # LogicalInsertScalarSubquery is a cross-product which will add a
+                # column at the end of the table.  However, that extra column will
+                # not be present in empty_data here.  Much of the time this extra
+                # column will have no effect but there are some operators that
+                # check that the actual number of columns received is the same as
+                # expected (e.g., empty_data here) and those cases will then throw.
+                # So, we strip off the extra column from the crossproduct here.
+                plan_to_wrap = LogicalProjection(
+                    empty_data,
+                    plan_to_wrap,
+                    make_col_ref_exprs(range(len(empty_data.columns)), plan_to_wrap),
+                )
+
+            return wrap_plan(plan_to_wrap)
         # Select one or more columns
         elif isinstance(key, str) or (
             isinstance(key, list) and all(isinstance(k, str) for k in key)
