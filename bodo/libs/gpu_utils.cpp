@@ -1,8 +1,7 @@
 #include "gpu_utils.h"
-#include <mpi_proto.h>
 #include "vendored/simd-block-fixed-fpp.h"
 
-extern const bool G_USE_ASYNC = false;
+bool g_use_async = false;
 
 #ifdef USE_CUDF
 #include <thrust/execution_policy.h>

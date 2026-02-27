@@ -44,9 +44,10 @@
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "optimizer/runtime_join_filter.h"
 
+#include "../libs/gpu_utils.h"
+
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
-#include "../libs/gpu_utils.h"
 #include "cuda_runtime_api.h"
 #endif
 
@@ -1872,10 +1873,12 @@ bool g_use_cudf;
 std::string g_cache_dir;
 bool g_dump_plans = false;
 
-void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans) {
+void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans,
+                   bool use_async) {
     g_use_cudf = use_cudf;
     g_cache_dir = cache_dir;
     g_dump_plans = dump_plans;
+    g_use_async = use_async;
 }
 
 bool get_use_cudf() { return g_use_cudf; }

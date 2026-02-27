@@ -118,7 +118,7 @@ endif()
 
 # ----------------------------- Download Apache Datasketches -------------------------
 set(BUILD_TESTS OFF CACHE BOOL "Disable datasketches tests" FORCE)
-set(BUILD_EXAMPLES OFF CACHE BOOL "Disable datasketches examples" FORCE) 
+set(BUILD_EXAMPLES OFF CACHE BOOL "Disable datasketches examples" FORCE)
 
 FetchContent_Declare(
   datasketches
@@ -641,6 +641,7 @@ set(sources_list
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
+  "bodo/libs/gpu_utils.cpp"
 )
 
 if (BUILD_WITH_V8)
@@ -720,7 +721,6 @@ if (USE_CUDF)
     "bodo/pandas/physical/gpu_aggregate.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
-    "bodo/libs/gpu_utils.cpp"
     )
 endif()
 
