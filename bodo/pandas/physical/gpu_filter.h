@@ -104,29 +104,37 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
         std::shared_ptr<StreamAndEvent> se) override {
         this->metrics.input_row_count += input_batch.table->num_rows();
         time_pt start_expr_eval = start_timer();
-        // Evaluate the Physical expression tree with the given input batch.
-        std::shared_ptr<ExprGPUResult> expr_output =
-            expression->ProcessBatch(input_batch, se);
-        // Make sure that the output of the expression tree is a bitmask in
-        // the form of a boolean array.
-        std::shared_ptr<ArrayExprGPUResult> arr_output =
-            std::dynamic_pointer_cast<ArrayExprGPUResult>(expr_output);
-        if (!arr_output) {
-            throw std::runtime_error(
-                "Filter expression tree did not result in an array");
-        }
-        GPU_COLUMN bitmask = std::move(arr_output->result);
-        if (bitmask->type().id() != cudf::type_id::BOOL8) {
-            throw std::runtime_error(
-                "Filter expression tree did not result in a boolean array " +
-                std::to_string(static_cast<int>(bitmask->type().id())));
-        }
-        this->metrics.expr_eval_time += end_timer(start_expr_eval);
+        std::shared_ptr<cudf::table> filtered_table;
+        time_pt start_filtering;
+        if (input_batch.table->num_rows() == 0) {
+            filtered_table = std::move(input_batch.table);
+            start_filtering = start_timer();
+        } else {
+            // Evaluate the Physical expression tree with the given input batch.
+            std::shared_ptr<ExprGPUResult> expr_output =
+                expression->ProcessBatch(input_batch, se);
+            // Make sure that the output of the expression tree is a bitmask in
+            // the form of a boolean array.
+            std::shared_ptr<ArrayExprGPUResult> arr_output =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(expr_output);
+            if (!arr_output) {
+                throw std::runtime_error(
+                    "Filter expression tree did not result in an array");
+            }
+            GPU_COLUMN bitmask = std::move(arr_output->result);
+            if (bitmask->type().id() != cudf::type_id::BOOL8) {
+                throw std::runtime_error(
+                    "Filter expression tree did not result in a boolean "
+                    "array " +
+                    std::to_string(static_cast<int>(bitmask->type().id())));
+            }
+            this->metrics.expr_eval_time += end_timer(start_expr_eval);
 
-        time_pt start_filtering = start_timer();
-        // Apply the bitmask to the input_batch to do row filtering.
-        std::unique_ptr<cudf::table> filtered_table = cudf::apply_boolean_mask(
-            input_batch.table->view(), bitmask->view(), se->stream);
+            start_filtering = start_timer();
+            // Apply the bitmask to the input_batch to do row filtering.
+            filtered_table = std::move(cudf::apply_boolean_mask(
+                input_batch.table->view(), bitmask->view(), se->stream));
+        }
 
         if (has_projection_map) {
             std::vector<GPU_COLUMN> out_cols;
@@ -136,7 +144,7 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
                     filtered_table->get_column(this->kept_cols[i])));
             }
             filtered_table =
-                std::make_unique<cudf::table>(std::move(out_cols), se->stream);
+                std::make_shared<cudf::table>(std::move(out_cols), se->stream);
         }
 
         GPU_DATA out_table_info(std::move(filtered_table), arrow_output_schema,
