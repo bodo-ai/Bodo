@@ -26,6 +26,7 @@
 #include <cudf/types.hpp>
 #include <memory>
 
+#include <cudf/ast/expressions.hpp>
 #include <cudf/binaryop.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
@@ -959,3 +960,20 @@ struct CudfExpr {
  */
 std::unique_ptr<CudfExpr> tableFilterSetToCudf(
     duckdb::TableFilterSet &filters, const std::map<int, int> &column_map);
+
+/**
+ * @brief Convert a duckdb TableFilterSet to cudf AST expressions.
+ *
+ * @param filters - duckdb TableFilterSet to convert
+ * @param column_names - column names of the table (before removing unused
+ * columns)
+ * @param filter_ast_tree - output cudf AST expressions representing the
+ * filters. All expressions should be added to be kept alive.
+ * @param filter_scalars - output vector of cudf scalars representing any
+ * constants in the filters. All scalars should be added to be kept alive.
+ */
+void tableFilterSetToCudfAST(
+    duckdb::TableFilterSet &filters,
+    const std::vector<std::string> &column_names,
+    cudf::ast::tree &filter_ast_tree,
+    std::vector<std::unique_ptr<cudf::scalar>> &filter_scalars);

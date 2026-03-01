@@ -2,6 +2,9 @@
 
 #include <Python.h>
 #include <arrow/util/key_value_metadata.h>
+#include <cudf/ast/ast_operator.hpp>
+#include <cudf/ast/expressions.hpp>
+#include <cudf/scalar/scalar.hpp>
 #include <memory>
 #include <utility>
 #include "../_util.h"
@@ -74,6 +77,9 @@ class RankBatchGenerator {
           target_rows_(target_rows),
           selected_columns(_selected_columns),
           arrow_schema(std::move(_arrow_schema)) {
+        tableFilterSetToCudfAST(*filter_exprs, arrow_schema->field_names(),
+                                filter_ast_tree, filter_scalars);
+
         get_dataset();
 
         // Only assign parts to GPU-pinned ranks
@@ -181,6 +187,10 @@ class RankBatchGenerator {
                         .row_groups(std::vector<std::vector<int>>{
                             std::vector<int>{current_rg_}})
                         .build();
+
+                if (filter_ast_tree.size() > 0) {
+                    reader_opts.set_filter(filter_ast_tree.back());
+                }
 
                 auto result = cudf::io::read_parquet(reader_opts, se->stream);
 
@@ -373,6 +383,12 @@ class RankBatchGenerator {
     std::shared_ptr<arrow::fs::FileSystem> filesystem_;
     std::size_t target_rows_;
     int rank_{0}, size_{1};
+
+    // Filter expressions to apply to read_parquet()
+    // NOTE: all expressions and scalars must be kept alive in these data
+    // structures since cudf APIs take in references.
+    cudf::ast::tree filter_ast_tree;
+    std::vector<std::unique_ptr<cudf::scalar>> filter_scalars;
 
     std::vector<std::string> files_;
     std::vector<FilePart> parts_;
