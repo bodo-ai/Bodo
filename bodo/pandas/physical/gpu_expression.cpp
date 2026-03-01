@@ -1052,15 +1052,22 @@ void duckdbValuetoCudfLiteral(
                     filter_scalars.back().get())));
             return;
         }
-        // case duckdb::LogicalTypeId::TIMESTAMP: {
-        //     // Define a timestamp type with microsecond precision
-        //     auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MICRO);
-        //     duckdb::timestamp_t extracted =
-        //         value.GetValue<duckdb::timestamp_t>();
-        //     // Create a TimestampScalar with microsecond value
-        //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
-        //                                                     timestamp_type);
-        // } break;
+        case duckdb::LogicalTypeId::TIMESTAMP: {
+            // Define a timestamp type with microsecond precision
+            duckdb::timestamp_t extracted =
+                value.GetValue<duckdb::timestamp_t>();
+            // Create a TimestampScalar with microsecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
+                    cudf::timestamp_us{
+                        cuda::std::chrono::microseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_us>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
         // case duckdb::LogicalTypeId::TIMESTAMP_MS: {
         //     // Define a timestamp type with millisecond precision
         //     auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MILLI);
