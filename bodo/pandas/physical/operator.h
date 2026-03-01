@@ -74,6 +74,8 @@ struct GPU_DATA {
     std::shared_ptr<arrow::Schema> schema;
     std::shared_ptr<StreamAndEvent> stream_event;
 
+    GPU_DATA() {}
+
     GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s,
              std::shared_ptr<StreamAndEvent> se)
         : table(t), schema(s), stream_event(se) {}
@@ -100,6 +102,7 @@ class RankDataExchange {
     // to/from GPU ranks.
     std::unique_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
+    bool finished = false;
 };
 
 struct GPUBatchGenerator {

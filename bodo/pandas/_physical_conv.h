@@ -12,9 +12,17 @@
 
 #include "_pipeline.h"
 #include "physical/cte.h"
+#ifdef USE_CUDF
+#include "physical/gpu_cte.h"
+#endif
 
 struct CTEInfo {
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalCTE>, std::shared_ptr<PhysicalGPUCTE>>
+        physical_node;
+#else
     std::shared_ptr<PhysicalCTE> physical_node;
+#endif
     std::shared_ptr<Pipeline> cte_pipeline_root;
 };
 

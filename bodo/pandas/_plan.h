@@ -743,3 +743,11 @@ std::string get_cache_dir();
  * @return bool that is true if the user wants us to dump plan details.
  */
 bool get_dump_plans();
+
+/**
+ * @brief Count the number of GPU operators in a plan.
+ *
+ * @param plan Optimized logical plan to count GPU operators in.
+ * @return int
+ */
+int count_gpu_plan_nodes(std::unique_ptr<duckdb::LogicalOperator> &plan);

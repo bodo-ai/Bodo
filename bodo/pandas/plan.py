@@ -1141,6 +1141,15 @@ def getPlanStatistics(plan: LazyPlan):
     return preOptNum, postOptNum
 
 
+def count_gpu_plan_nodes(plan: LazyPlan) -> int:
+    """Count the number of GPU nodes in the optimized duckdb plan corresponding to *plan*."""
+    from bodo.ext import plan_optimizer
+
+    duckdb_plan = plan.generate_duckdb()
+    optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+    return plan_optimizer.py_count_gpu_plan_nodes(optimized_plan)
+
+
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
     assert is_single_projection(proj), "Expected single projection"

@@ -532,7 +532,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
             batch_gen->next(se);
-        if (cudfExprTree) {
+        if (cudfExprTree && next_batch_tup.first->num_rows() > 0) {
             next_batch_tup.first =
                 cudfExprTree->eval(*(next_batch_tup.first), se);
         }

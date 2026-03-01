@@ -4076,6 +4076,31 @@ def test_empty_result(datapath):
     )
 
 
+def test_crossproduct_column_removal(datapath):
+    """Test that extra column introduced by crossproduct is removed."""
+
+    with assert_executed_plan_count(0):
+        df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        t = (df1["A"] * df1["D"]).sum() * 2
+        df1["prod"] = df1["A"] * df1["D"]
+        df2 = df1.groupby("B", as_index=False)["prod"].sum()
+        pdf = df2[df2["prod"] == t]
+
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_t = (bodo_df1["A"] * bodo_df1["D"]).sum() * 2
+        bodo_df1["prod"] = bodo_df1["A"] * bodo_df1["D"]
+        bodo_df2 = bodo_df1.groupby("B", as_index=False)["prod"].sum()
+        bdf = bodo_df2[bodo_df2["prod"] == bodo_t]
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=True,
+    )
+
+
 def test_join_filter_push_cross_product():
     """Test for join filter pushdown through cross product."""
     df1 = pd.DataFrame(

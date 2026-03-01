@@ -367,6 +367,7 @@ cdef extern from "_plan.h" nogil:
     cdef object cpp_table_to_pyarrow(int64_t cpp_table, c_bool delete_cpp_table) except +
     cdef void cpp_table_delete(int64_t cpp_table) except +
     cdef void set_cudf_vars(c_bool use_cudf, c_string cache_dir, c_bool dump_plans, c_bool use_async) except +
+    cdef int count_gpu_plan_nodes(unique_ptr[CLogicalOperator] root) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -1225,6 +1226,18 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
         raise ValueError("output_func is None.")
     return output_func(cpp_table, out_schema)
 
+
 def py_get_table_index():
     """Python-callable wrapper for getTableIndex()."""
     return getTableIndex()
+
+
+cpdef py_count_gpu_plan_nodes(object root):
+    """ Count the number of plan nodes that would be executed on GPU. """
+    cdef LogicalOperator wrapped_operator
+
+    if not isinstance(root, LogicalOperator):
+        raise TypeError("Expected a LogicalOperator instance")
+
+    wrapped_operator = root
+    return count_gpu_plan_nodes(wrapped_operator.c_logical_operator)
