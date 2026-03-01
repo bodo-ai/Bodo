@@ -844,6 +844,36 @@ endif()
 
 if(USE_CUDF)
   message(STATUS "Configuring for cudf.")
+  enable_language(CUDA) # compile .cu with cuda toolchain
+  find_package(CUDAToolkit REQUIRED)
+  set(cuda_sources_list
+      "bodo/libs/gpu_bloom_filter.cu"
+  )
+  add_library(gpu_kernels OBJECT ${cuda_sources_list})
+  set_target_properties(gpu_kernels PROPERTIES
+      POSITION_INDEPENDENT_CODE ON
+      CUDA_SEPARABLE_COMPILATION ON
+      CUDA_STANDARD 14
+      CUDA_STANDARD_REQUIRED ON
+  )
+  set_target_properties(gpu_kernels PROPERTIES
+      CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
+  )
+
+  target_include_directories(gpu_kernels BEFORE PRIVATE
+    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
+  )
+
+#      $<$<COMPILE_LANGUAGE:CUDA>:
+#      -Xcompiler=-fPIC
+#      >
+  target_compile_options(gpu_kernels PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}/cccl>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${PYLIBCUDF_BASE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${RMM_BASE_DIR}>
+  )
+
   execute_process( COMMAND "${Python_EXECUTABLE}" -c "import os, pathlib; \ root = os.environ.get('CONDA_PREFIX', ''); \ matches = list(pathlib.Path(root).rglob('cuda_runtime.h')); \ print(matches[0].parent if matches else '')" OUTPUT_VARIABLE CUDA_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
 
   message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
