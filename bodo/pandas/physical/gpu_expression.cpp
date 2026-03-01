@@ -1110,13 +1110,20 @@ void duckdbValuetoCudfLiteral(
         //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
         //                                                     timestamp_type);
         // } break;
-        // case duckdb::LogicalTypeId::DATE: {
-        //     // Define a date type
-        //     auto date_type = arrow::date32();
-        //     duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
-        //     // Create a DateScalar with the date value
-        //     return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
-        // } break;
+        case duckdb::LogicalTypeId::DATE: {
+            // Define a date type
+            duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
+            // Create a DateScalar with the date value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
+                    cudf::timestamp_D{cuda::std::chrono::days{extracted.days}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_D>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
         default:
             throw std::runtime_error(
                 "duckdbValuetoCudfLiteral unhandled type." +
