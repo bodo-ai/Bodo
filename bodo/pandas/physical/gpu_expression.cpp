@@ -1175,53 +1175,71 @@ void tableFilterToCudfAST(
             filter_ast_tree.push(expr);
         } break;
 
-            // case TF::CONJUNCTION_AND: {
-            //     auto af =
-            //     dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
-            //         std::move(tf));
-            //     if (af->child_filters.size() < 2) {
-            //         throw std::runtime_error("AND filter with <2 children");
-            //     }
-            //     auto expr = tableFilterToCudfAST(col_idx,
-            //     af->child_filters[0], column_names, filter_ast_tree); for
-            //     (std::size_t i = 1; i < af->child_filters.size(); ++i) {
-            //         expr = make_and(
-            //             std::move(expr),
-            //             tableFilterToCudfAST(col_idx, af->child_filters[i],
-            //             column_names, filter_ast_tree));
-            //     }
-            //     return expr;
-            // } break;  // prevent fallthrough error
+        case TF::CONJUNCTION_AND: {
+            auto af = dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                std::move(tf));
+            if (af->child_filters.size() < 2) {
+                throw std::runtime_error("AND filter with <2 children");
+            }
+            tableFilterToCudfAST(col_idx, af->child_filters[0], column_names,
+                                 filter_ast_tree, filter_scalars);
+            for (std::size_t i = 1; i < af->child_filters.size(); ++i) {
+                const cudf::ast::expression* prev_child =
+                    &filter_ast_tree.back();
+                tableFilterToCudfAST(col_idx, af->child_filters[i],
+                                     column_names, filter_ast_tree,
+                                     filter_scalars);
+                const cudf::ast::expression* new_child =
+                    &filter_ast_tree.back();
+                cudf::ast::operation expr =
+                    cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_AND,
+                                         *prev_child, *new_child);
+                filter_ast_tree.push(expr);
+            }
+        } break;
 
-            // case TF::CONJUNCTION_OR: {
-            //     auto of =
-            //     dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
-            //         std::move(tf));
-            //     if (of->child_filters.size() < 2) {
-            //         throw std::runtime_error("OR filter with <2 children");
-            //     }
-            //     auto expr = tableFilterToCudfAST(col_idx,
-            //     of->child_filters[0], column_names, filter_ast_tree); for
-            //     (std::size_t i = 1; i < of->child_filters.size(); ++i) {
-            //         expr = make_or(
-            //             std::move(expr),
-            //             tableFilterToCudfAST(col_idx, of->child_filters[i],
-            //             column_names, filter_ast_tree));
-            //     }
-            //     return expr;
-            // } break;  // prevent fallthrough error
+        case TF::CONJUNCTION_OR: {
+            auto of = dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                std::move(tf));
+            if (of->child_filters.size() < 2) {
+                throw std::runtime_error("OR filter with <2 children");
+            }
+            tableFilterToCudfAST(col_idx, of->child_filters[0], column_names,
+                                 filter_ast_tree, filter_scalars);
+            for (std::size_t i = 1; i < of->child_filters.size(); ++i) {
+                const cudf::ast::expression* prev_child =
+                    &filter_ast_tree.back();
+                tableFilterToCudfAST(col_idx, of->child_filters[i],
+                                     column_names, filter_ast_tree,
+                                     filter_scalars);
+                const cudf::ast::expression* new_child =
+                    &filter_ast_tree.back();
+                cudf::ast::operation expr =
+                    cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_OR,
+                                         *prev_child, *new_child);
+                filter_ast_tree.push(expr);
+            }
+        } break;
 
-            // case TF::OPTIONAL_FILTER: {
-            //     auto of =
-            //         dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
-            //     try {
-            //         return tableFilterToCudfAST(col_idx, of->child_filter,
-            //         column_names, filter_ast_tree);
-            //     } catch (...) {
-            //         // No-op: literal true
-            //         return make_literal(duckdb::Value::BOOLEAN(true));
-            //     }
-            // } break;  // prevent fallthrough error
+        case TF::OPTIONAL_FILTER: {
+            auto of =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                tableFilterToCudfAST(col_idx, of->child_filter, column_names,
+                                     filter_ast_tree, filter_scalars);
+            } catch (...) {
+                // No-op: literal true
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<bool>>(true);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<bool>*>(
+                        filter_scalars.back().get())));
+                cudf::ast::operation expr = cudf::ast::operation(
+                    cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+                filter_ast_tree.push(expr);
+            }
+        } break;
 
         default:
             throw std::runtime_error(
