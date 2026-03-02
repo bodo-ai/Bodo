@@ -27,7 +27,8 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
         return false;
     }
     for (const duckdb::JoinCondition& cond : logical_join.conditions) {
-        if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+        if (cond.IsComparison() &&
+            cond.GetComparisonType() != duckdb::ExpressionType::COMPARE_EQUAL) {
             return false;
         }
     }
@@ -85,32 +86,31 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::vector<cudf::size_type> build_keys;
 
         for (const duckdb::JoinCondition& cond : logical_join.conditions) {
-            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (!cond.IsComparison() ||
+                cond.GetComparisonType() !=
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
                 throw std::runtime_error(
                     "Non-equi join conditions are not supported in GPU join.");
             }
-            if (cond.left->GetExpressionClass() !=
+            if (cond.GetLHS().GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
                     "Join condition left side is not a column reference.");
             }
-            if (cond.right->GetExpressionClass() !=
+            if (cond.GetRHS().GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
                     "Join condition right side is not a column reference.");
             }
-            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
-                auto& left_bce =
-                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
-                auto& right_bce =
-                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
-                probe_keys.push_back(
-                    left_col_ref_map[{left_bce.binding.table_index,
-                                      left_bce.binding.column_index}]);
-                build_keys.push_back(
-                    right_col_ref_map[{right_bce.binding.table_index,
-                                       right_bce.binding.column_index}]);
-            }
+            auto& left_bce =
+                cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+            auto& right_bce =
+                cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
+            probe_keys.push_back(left_col_ref_map[{
+                left_bce.binding.table_index, left_bce.binding.column_index}]);
+            build_keys.push_back(
+                right_col_ref_map[{right_bce.binding.table_index,
+                                   right_bce.binding.column_index}]);
         }
 
         // Get the indices of kept build columns

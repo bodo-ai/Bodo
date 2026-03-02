@@ -92,7 +92,7 @@ unique_ptr<GlobalTableFunctionState> DuckDBSettingsInit(ClientContext &context, 
 		result->settings.push_back(std::move(value));
 	}
 	// Bodo Change: Remove extension files
-	//for (auto &ext_param : config.extension_parameters) {
+	//for (auto &ext_param : config.GetExtensionSettings()) {
 	//	Value setting_val;
 	//	auto scope = SettingScope::GLOBAL;
 	//	auto lookup_result = context.TryGetCurrentSetting(ext_param.first, setting_val);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/api.h>
+#include <arrow/chunked_array.h>
 #include <arrow/compute/api.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
@@ -18,6 +19,7 @@
 #include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
@@ -78,6 +80,24 @@ class ScalarExprResult : public ExprResult {
 };
 
 /**
+ * @brief Identifies the specific subclass type of a PhysicalExpression.
+ */
+enum class PhysicalExpressionType {
+    INVALID = 0,
+    COMPARISON,
+    NULL_CONSTANT,
+    CONSTANT,
+    COLUMN_REF,
+    CONJUNCTION,
+    CAST,
+    UNARY,
+    BINARY,
+    CASE,
+    UDF,
+    ARROW
+};
+
+/**
  * @brief Superclass for Bodo Physical expression tree nodes. Like duckdb
  *        it is convenient to store child nodes here because many expr
  *        node types have children.
@@ -87,8 +107,10 @@ class PhysicalExpression {
    public:
     PhysicalExpression() {}
     PhysicalExpression(
-        std::vector<std::shared_ptr<PhysicalExpression>> &_children)
-        : children(_children) {}
+        std::vector<std::shared_ptr<PhysicalExpression>> &_children,
+        PhysicalExpressionType type)
+        : children(_children), phys_expr_type(type) {}
+    PhysicalExpression(PhysicalExpressionType type) : phys_expr_type(type) {}
     virtual ~PhysicalExpression() = default;
 
     /**
@@ -121,8 +143,17 @@ class PhysicalExpression {
 
     virtual void ReportMetrics(std::vector<MetricBase> &metrics_out) {};
 
+    PhysicalExpressionType GetExpressionType() const { return phys_expr_type; }
+
+    std::vector<std::shared_ptr<PhysicalExpression>> &GetChildren() {
+        return children;
+    }
+
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
+
+   private:
+    PhysicalExpressionType phys_expr_type = PhysicalExpressionType::INVALID;
 };
 
 /**
@@ -174,8 +205,9 @@ std::shared_ptr<array_info> do_arrow_compute_case(
  * @brief Run arrow compute operation on unary Datum.
  *
  */
-arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
-                                    const std::string &comparator);
+arrow::Datum do_arrow_compute_unary(
+    arrow::Datum left_res, const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
  * @brief Run arrow compute operation on two Datums.
@@ -201,7 +233,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
    public:
     PhysicalComparisonExpression(std::shared_ptr<PhysicalExpression> left,
                                  std::shared_ptr<PhysicalExpression> right,
-                                 duckdb::ExpressionType etype) {
+                                 duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::COMPARISON) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -351,7 +384,9 @@ template <typename T>
 class PhysicalNullExpression : public PhysicalExpression {
    public:
     PhysicalNullExpression(const T &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::NULL_CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalNullExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -382,8 +417,8 @@ class PhysicalNullExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalNullExpression::join_expr_internal unimplemented ");
+        return arrow::Datum(
+            arrow::MakeNullScalar(ScalarToArrowArray(constant)->type()));
     }
 
     friend std::ostream &operator<<(std::ostream &os,
@@ -405,7 +440,9 @@ template <typename T>
 class PhysicalConstantExpression : public PhysicalExpression {
    public:
     PhysicalConstantExpression(const T &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -455,7 +492,9 @@ template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
     PhysicalConstantExpression(const std::string &val, bool no_scalars)
-        : constant(val), generate_array(no_scalars) {}
+        : PhysicalExpression(PhysicalExpressionType::CONSTANT),
+          constant(val),
+          generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -502,9 +541,15 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
  */
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
-    PhysicalColumnRefExpression(size_t column, const std::string &_bound_name,
+    PhysicalColumnRefExpression(size_t column,
+                                duckdb::ColumnBinding _col_binding,
+                                const std::string &_bound_name,
                                 bool _left_side = true)
-        : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
+        : PhysicalExpression(PhysicalExpressionType::COLUMN_REF),
+          col_idx(column),
+          col_binding(_col_binding),
+          bound_name(_bound_name),
+          left_side(_left_side) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -524,16 +569,42 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
                                     void **null_bitmap, int64_t index) {
         array_info *sel_col = table[col_idx];
         void *sel_data = data[col_idx];
+
+        arrow::Datum ret;
         std::unique_ptr<bodo::DataType> col_dt = sel_col->data_type();
         std::shared_ptr<::arrow::DataType> arrow_dt = col_dt->ToArrowDataType();
         int32_t dt_byte_width = arrow_dt->byte_width();
         if (dt_byte_width <= 0) {
-            throw std::runtime_error(
-                "Non-fixed datatype byte width in PhysicalColumnRefExpression "
-                "join_expr_internal.");
+            if (col_dt->array_type == bodo_array_type::STRING) {
+                // For strings we need to read the offset and then
+                // For variable-width types we need to read the offset and then
+                // read the value.
+                char *null_bitmask = sel_col->null_bitmask();
+                if (!arrow::bit_util::GetBit((const uint8_t *)null_bitmask,
+                                             index)) {
+                    return arrow::Datum(arrow::MakeNullScalar(arrow_dt));
+                }
+                offset_t start_offset =
+                    sel_col->data2<bodo_array_type::STRING, offset_t>()[index];
+                offset_t end_offset =
+                    sel_col
+                        ->data2<bodo_array_type::STRING, offset_t>()[index + 1];
+                std::string str(
+                    sel_col->data1<bodo_array_type::STRING>() + start_offset,
+                    end_offset - start_offset);
+                ret = arrow::Datum(std::make_shared<arrow::StringScalar>(str));
+
+            } else {
+                throw std::runtime_error(
+                    "Unsupported variable-width type in join_expr_internal.");
+            }
+
+        } else {
+            // For fixed-width types we can just calculate the offset and read
+            // the value.
+            void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
+            ret = ConvertToDatum(index_ptr, arrow_dt);
         }
-        void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
-        arrow::Datum ret = ConvertToDatum(index_ptr, arrow_dt);
         if (null_bitmap[col_idx] != nullptr &&
             !GetBit((const uint8_t *)null_bitmap[col_idx], index)) {
             ret = arrow::Datum(arrow::MakeNullScalar(ret.type()));
@@ -554,8 +625,13 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
         }
     }
 
+    void set_left_side(bool _left_side) { left_side = _left_side; }
+
+    duckdb::ColumnBinding get_col_binding() const { return col_binding; }
+
    protected:
     size_t col_idx;
+    duckdb::ColumnBinding col_binding;
     std::string bound_name;
     bool left_side;
 };
@@ -569,7 +645,8 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
    public:
     PhysicalConjunctionExpression(std::shared_ptr<PhysicalExpression> left,
                                   std::shared_ptr<PhysicalExpression> right,
-                                  duckdb::ExpressionType etype) {
+                                  duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::CONJUNCTION) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -616,7 +693,7 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             right_null_bitmap, left_index, right_index);
         arrow::Datum ret =
             do_arrow_compute_binary(left_datum, right_datum, comparator);
-        if (!ret.scalar()->is_valid) {
+        if (ret.is_scalar() && !ret.scalar()->is_valid) {
             ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
         }
         return ret;
@@ -634,7 +711,8 @@ class PhysicalCastExpression : public PhysicalExpression {
    public:
     PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
                            duckdb::LogicalType _return_type)
-        : return_type(_return_type) {
+        : PhysicalExpression(PhysicalExpressionType::CAST),
+          return_type(_return_type) {
         children.push_back(left);
     }
 
@@ -657,8 +735,10 @@ class PhysicalCastExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalCastExpression::join_expr_internal unimplemented ");
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_cast(left_datum, return_type);
     }
 
    protected:
@@ -672,7 +752,8 @@ class PhysicalCastExpression : public PhysicalExpression {
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
     PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            duckdb::ExpressionType etype) {
+                            duckdb::ExpressionType etype)
+        : PhysicalExpression(PhysicalExpressionType::UNARY) {
         children.push_back(left);
         switch (etype) {
             case duckdb::ExpressionType::OPERATOR_NOT:
@@ -737,7 +818,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         std::shared_ptr<PhysicalExpression> left,
         std::shared_ptr<PhysicalExpression> right, duckdb::ExpressionType etype,
         const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : result_type(_result_type) {
+        : PhysicalExpression(PhysicalExpressionType::BINARY),
+          result_type(_result_type) {
         children.push_back(left);
         children.push_back(right);
         switch (etype) {
@@ -823,7 +905,8 @@ class PhysicalCaseExpression : public PhysicalExpression {
    public:
     PhysicalCaseExpression(std::shared_ptr<PhysicalExpression> when_expr,
                            std::shared_ptr<PhysicalExpression> then_expr,
-                           std::shared_ptr<PhysicalExpression> else_expr) {
+                           std::shared_ptr<PhysicalExpression> else_expr)
+        : PhysicalExpression(PhysicalExpressionType::CASE) {
         children.push_back(when_expr);
         children.push_back(then_expr);
         children.push_back(else_expr);
@@ -853,8 +936,24 @@ class PhysicalCaseExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error(
-            "PhysicalCastExpression::join_expr_internal unimplemented ");
+        arrow::Datum when_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum then_datum = children[1]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum else_datum = children[2]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+
+        arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
+            "if_else", {when_datum, then_datum, else_datum});
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_case: Error in Arrow compute: " +
+                cmp_res.status().message());
+        }
+        return cmp_res.ValueOrDie();
     }
 };
 
@@ -893,7 +992,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
-        : PhysicalExpression(children),
+        : PhysicalExpression(children, PhysicalExpressionType::UDF),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type),
           cfunc_ptr(nullptr),
@@ -978,6 +1077,62 @@ class PhysicalUDFExpression : public PhysicalExpression {
                                     void **right_null_bitmap,
                                     int64_t left_index,
                                     int64_t right_index) override {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        for (const auto &child : children) {
+            arrow::Datum child_datum = child->join_expr_internal(
+                left_table, right_table, left_data, right_data,
+                left_null_bitmap, right_null_bitmap, left_index, right_index);
+            std::shared_ptr<arrow::Array> child_arrow_array;
+            if (child_datum.is_array()) {
+                child_arrow_array = child_datum.make_array();
+            } else if (child_datum.is_scalar()) {
+                // Convert scalar to array of length 1 for UDF input.
+                child_arrow_array = ScalarToArrowArray(child_datum.scalar(), 1);
+            } else {
+                throw std::runtime_error(
+                    "Child datum is neither array nor scalar in "
+                    "PhysicalUDFExpression::join_expr_internal");
+            }
+            auto child_array_info = arrow_array_to_bodo(
+                child_arrow_array, bodo::BufferPool::DefaultPtr());
+            child_arrays.push_back(std::move(child_array_info));
+        }
+        std::shared_ptr<table_info> udf_input =
+            std::make_shared<table_info>(std::move(child_arrays));
+        // Actually run the UDF.
+        std::shared_ptr<table_info> udf_output;
+        if (cfunc_ptr) {
+            if (cfunc_ptr == (table_udf_t)1) {
+                PyThreadState *save = PyEval_SaveThread();
+                cfunc_ptr = compile_future.get();
+                PyEval_RestoreThread(save);
+            }
+            time_pt start_init_time = start_timer();
+            udf_output = runCfuncScalarFunction(udf_input, cfunc_ptr);
+            this->metrics.udf_execution_time += end_timer(start_init_time);
+        } else {
+            auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
+                runPythonScalarFunction(udf_input, result_type,
+                                        scalar_func_data.args,
+                                        scalar_func_data.has_state, init_state);
+            udf_output = out_temp;
+            // Update the metrics.
+            this->metrics.cpp_to_py_time += cpp_to_py_time;
+            this->metrics.udf_execution_time += udf_time;
+            this->metrics.py_to_cpp_time += py_to_cpp_time;
+        }
+        std::shared_ptr<arrow::ChunkedArray> res_array =
+            bodo_table_to_arrow(udf_output)->column(0);
+        arrow::Result<std::shared_ptr<arrow::Scalar>> res_scalar =
+            res_array->GetScalar(0);
+        if (!res_scalar.ok()) {
+            throw std::runtime_error(
+                "Error getting scalar from UDF result array: " +
+                res_scalar.status().message());
+        }
+
+        return res_scalar.ValueOrDie();
+
         throw std::runtime_error(
             "PhysicalUDFExpression::join_expr_internal unimplemented ");
     }
@@ -1013,7 +1168,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
         BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
-        : PhysicalExpression(children),
+        : PhysicalExpression(children, PhysicalExpressionType::ARROW),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type) {}
 
@@ -1030,8 +1185,10 @@ class PhysicalArrowExpression : public PhysicalExpression {
                                     void **right_null_bitmap,
                                     int64_t left_index,
                                     int64_t right_index) override {
-        throw std::runtime_error(
-            "PhysicalArrowExpression::join_expr_internal unimplemented ");
+        arrow::Datum child_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute(child_datum);
     }
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
@@ -1043,4 +1200,50 @@ class PhysicalArrowExpression : public PhysicalExpression {
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalArrowExpressionMetrics metrics;
+
+    template <typename T>
+    using compute_return_t =
+        std::conditional_t<std::is_same_v<T, std::shared_ptr<ExprResult>>,
+                           std::shared_ptr<array_info>, T>;
+    template <typename T>
+    compute_return_t<T> do_arrow_compute(T res) {
+        compute_return_t<T> result;
+        if (scalar_func_data.arrow_func_name == "date") {
+            // The Arrow compute equivalent of Series.dt.date() is
+            // year_month_day, which returns a struct. To match the output dtype
+            // of Pandas, we Cast to Date32 instead.
+            result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex") {
+            if (!PyTuple_Check(scalar_func_data.args) ||
+                PyTuple_Size(scalar_func_data.args) != 1) {
+                throw std::runtime_error(
+                    "match_substring_regex args not a 1-element tuple.");
+            }
+
+            // Get the first element (borrowed reference)
+            PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+            if (!PyUnicode_Check(py_str)) {
+                throw std::runtime_error(
+                    "match_substring_regex args element is not a Python "
+                    "string.");
+            }
+
+            // Convert to UTF‑8 C string
+            const char *c_str = PyUnicode_AsUTF8(py_str);
+            if (!c_str) {
+                throw std::runtime_error(
+                    "match_substring_regex error extracting Python string.");
+            }
+
+            arrow::compute::MatchSubstringOptions opts(c_str);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else {
+            result =
+                do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+        }
+        return result;
+    }
 };

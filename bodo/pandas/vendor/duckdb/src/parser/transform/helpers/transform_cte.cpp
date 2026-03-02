@@ -1,5 +1,6 @@
 #include "duckdb/common/enums/set_operation_type.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/exception/parser_exception.hpp"
 #include "duckdb/parser/query_node/cte_node.hpp"
 #include "duckdb/parser/query_node/recursive_cte_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
@@ -18,6 +19,10 @@ unique_ptr<CommonTableExpressionInfo> CommonTableExpressionInfo::Copy() {
 		result->key_targets.push_back(key->Copy());
 	}
 
+	for (auto &agg : result->payload_aggregates) {
+		result->payload_aggregates.push_back(agg->Copy());
+	}
+
 	result->materialized = materialized;
 	return result;
 }
@@ -25,12 +30,14 @@ unique_ptr<CommonTableExpressionInfo> CommonTableExpressionInfo::Copy() {
 CommonTableExpressionInfo::~CommonTableExpressionInfo() {
 }
 
-CTEMaterialize CommonTableExpressionInfo::GetMaterializedForSerialization(Serializer &serializer) const { if (serializer.ShouldSerialize(7)) {
+CTEMaterialize CommonTableExpressionInfo::GetMaterializedForSerialization(Serializer &serializer) const {
+	if (serializer.ShouldSerialize(7)) {
 		return materialized;
 	}
 	return CTEMaterialize::CTE_MATERIALIZE_DEFAULT;
 }
 
+// Bodo Change:
 //void Transformer::ExtractCTEsRecursive(CommonTableExpressionMap &cte_map) {
 //	for (auto &cte_entry : stored_cte_map) {
 //		for (auto &entry : cte_entry.get().map) {
@@ -45,8 +52,8 @@ CTEMaterialize CommonTableExpressionInfo::GetMaterializedForSerialization(Serial
 //	if (parent) {
 //		parent->ExtractCTEsRecursive(cte_map);
 //	}
+//	return CTEMaterialize::CTE_MATERIALIZE_DEFAULT;
 //}
-//
 //void Transformer::TransformCTE(duckdb_libpgquery::PGWithClause &de_with_clause, CommonTableExpressionMap &cte_map) {
 //	stored_cte_map.push_back(cte_map);
 //
@@ -56,10 +63,11 @@ CTEMaterialize CommonTableExpressionInfo::GetMaterializedForSerialization(Serial
 //		auto info = make_uniq<CommonTableExpressionInfo>();
 //
 //		auto &cte = *PGPointerCast<duckdb_libpgquery::PGCommonTableExpr>(cte_ele->data.ptr_value);
-//		if (cte.recursive_keys) {
-//			auto key_target = PGPointerCast<duckdb_libpgquery::PGNode>(cte.recursive_keys->head->data.ptr_value);
-//			if (key_target) {
-//				TransformExpressionList(*cte.recursive_keys, info->key_targets);
+//
+//		if (cte.using_key_list) {
+//			for (auto key_ele = cte.using_key_list->head; key_ele != nullptr; key_ele = key_ele->next) {
+//				auto expr_ele = TransformExpression(*PGPointerCast<duckdb_libpgquery::PGNode>(key_ele->data.ptr_value));
+//				info->key_targets.push_back(std::move(expr_ele));
 //			}
 //		}
 //
