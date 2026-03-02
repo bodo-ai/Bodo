@@ -1,4 +1,5 @@
 #include "gpu_expression.h"
+#include <cudf/ast/expressions.hpp>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -895,4 +896,381 @@ std::unique_ptr<cudf::table> CudfExpr::eval(
     auto filtered =
         cudf::apply_boolean_mask(input.view(), mask_col->view(), se->stream);
     return filtered;
+}
+
+/**
+ * @brief convert duckdb comparison type to cudf ast operator type
+ */
+cudf::ast::ast_operator comparisonTypeToCudfOp(duckdb::ExpressionType t) {
+    using ET = duckdb::ExpressionType;
+    switch (t) {
+        case ET::COMPARE_EQUAL:
+            return cudf::ast::ast_operator::EQUAL;
+        case ET::COMPARE_NOTEQUAL:
+            return cudf::ast::ast_operator::NOT_EQUAL;
+        case ET::COMPARE_GREATERTHAN:
+            return cudf::ast::ast_operator::GREATER;
+        case ET::COMPARE_LESSTHAN:
+            return cudf::ast::ast_operator::LESS;
+        case ET::COMPARE_GREATERTHANOREQUALTO:
+            return cudf::ast::ast_operator::GREATER_EQUAL;
+        case ET::COMPARE_LESSTHANOREQUALTO:
+            return cudf::ast::ast_operator::LESS_EQUAL;
+        default:
+            throw std::runtime_error(
+                "comparisonTypeToCudfOp(): Unhandled comparison type");
+    }
+}
+
+/**
+ * @brief Convert a duckdb Value to a cudf literal and add it to the filter AST
+ * expressions.
+ *
+ * @param value - the duckdb Value to convert
+ * @param filter_ast_tree - the cudf AST expressions to which the literal will
+ * be added (all components should be added to be kept alive)
+ * @param filter_scalars - vector to store the created cudf scalars to keep them
+ * alive
+ */
+void duckdbValuetoCudfLiteral(
+    const duckdb::Value& value, cudf::ast::tree& filter_ast_tree,
+    std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars) {
+    duckdb::LogicalTypeId type = value.type().id();
+    switch (type) {
+        case duckdb::LogicalTypeId::TINYINT: {
+            auto literal_value = std::make_unique<cudf::numeric_scalar<int8_t>>(
+                value.GetValue<int8_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<int8_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::SMALLINT: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<int16_t>>(
+                    value.GetValue<int16_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<int16_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::INTEGER: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<int32_t>>(
+                    value.GetValue<int32_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<int32_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::BIGINT: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<int64_t>>(
+                    value.GetValue<int64_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<int64_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::UTINYINT: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<uint8_t>>(
+                    value.GetValue<uint8_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<uint8_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::USMALLINT: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<uint16_t>>(
+                    value.GetValue<uint16_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::numeric_scalar<uint16_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::UINTEGER: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<uint32_t>>(
+                    value.GetValue<uint32_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::numeric_scalar<uint32_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::UBIGINT: {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<uint64_t>>(
+                    value.GetValue<uint64_t>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::numeric_scalar<uint64_t>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::FLOAT: {
+            auto literal_value = std::make_unique<cudf::numeric_scalar<float>>(
+                value.GetValue<float>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<float>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::DOUBLE: {
+            auto literal_value = std::make_unique<cudf::numeric_scalar<double>>(
+                value.GetValue<double>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<double>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::BOOLEAN: {
+            auto literal_value = std::make_unique<cudf::numeric_scalar<bool>>(
+                value.GetValue<bool>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::VARCHAR: {
+            auto literal_value = std::make_unique<cudf::string_scalar>(
+                value.GetValue<std::string>());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::string_scalar*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP: {
+            // Define a timestamp type with microsecond precision
+            duckdb::timestamp_t extracted =
+                value.GetValue<duckdb::timestamp_t>();
+            // Create a TimestampScalar with microsecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
+                    cudf::timestamp_us{
+                        cuda::std::chrono::microseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_us>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP_MS: {
+            // Define a timestamp type with millisecond precision
+            duckdb::timestamp_ms_t extracted =
+                value.GetValue<duckdb::timestamp_ms_t>();
+            // Create a TimestampScalar with millisecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                    cudf::timestamp_ms{
+                        cuda::std::chrono::milliseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_ms>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP_SEC: {
+            // Define a timestamp type with millisecond precision
+            duckdb::timestamp_sec_t extracted =
+                value.GetValue<duckdb::timestamp_sec_t>();
+            // Create a TimestampScalar with second value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_s>>(
+                    cudf::timestamp_s{
+                        cuda::std::chrono::seconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_s>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP_NS: {
+            // Define a timestamp type with nanosecond precision
+            duckdb::timestamp_ns_t extracted =
+                value.GetValue<duckdb::timestamp_ns_t>();
+            // Create a TimestampScalar with nanosecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                    cudf::timestamp_ns{
+                        cuda::std::chrono::nanoseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_ns>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        // TODO(ehsan): support TIMESTAMP_TZ which is not trivial since cudf
+        // types don't have timezones
+        case duckdb::LogicalTypeId::DATE: {
+            // Define a date type
+            duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
+            // Create a DateScalar with the date value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
+                    cudf::timestamp_D{cuda::std::chrono::days{extracted.days}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_D>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        default:
+            throw std::runtime_error(
+                "duckdbValuetoCudfLiteral unhandled type." +
+                std::to_string(static_cast<int>(type)));
+    }
+}
+
+/**
+ * @brief Convert a duckdb TableFilter to cudf AST expressions.
+ *
+ * @param col_idx - index of the column to which the filter applies
+ * @param tf - duckdb TableFilter to convert
+ * @param column_names - column names of the table (before removing unused
+ * columns)
+ * @param filter_ast_tree - output cudf AST expressions representing the
+ * filters. All expressions should be added to be kept alive.
+ * @param filter_scalars - output vector of cudf scalars representing any
+ * constants in the filters. All scalars should be added to be kept alive.
+ */
+void tableFilterToCudfAST(
+    duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter>& tf,
+    const std::vector<std::string>& column_names,
+    cudf::ast::tree& filter_ast_tree,
+    std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars) {
+    using TF = duckdb::TableFilterType;
+
+    switch (tf->filter_type) {
+        case TF::CONSTANT_COMPARISON: {
+            auto cf =
+                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(std::move(tf));
+            cudf::ast::ast_operator cmp_kind =
+                comparisonTypeToCudfOp(cf->comparison_type);
+            cudf::ast::column_name_reference col_ref =
+                cudf::ast::column_name_reference(column_names[col_idx]);
+            filter_ast_tree.push(col_ref);
+            duckdbValuetoCudfLiteral(cf->constant, filter_ast_tree,
+                                     filter_scalars);
+            cudf::ast::operation expr = cudf::ast::operation(
+                cmp_kind, filter_ast_tree[filter_ast_tree.size() - 2],
+                filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+        } break;
+
+        case TF::CONJUNCTION_AND: {
+            auto af = dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                std::move(tf));
+            if (af->child_filters.size() < 2) {
+                throw std::runtime_error("AND filter with <2 children");
+            }
+            tableFilterToCudfAST(col_idx, af->child_filters[0], column_names,
+                                 filter_ast_tree, filter_scalars);
+            for (std::size_t i = 1; i < af->child_filters.size(); ++i) {
+                const cudf::ast::expression* prev_child =
+                    &filter_ast_tree.back();
+                tableFilterToCudfAST(col_idx, af->child_filters[i],
+                                     column_names, filter_ast_tree,
+                                     filter_scalars);
+                const cudf::ast::expression* new_child =
+                    &filter_ast_tree.back();
+                cudf::ast::operation expr =
+                    cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_AND,
+                                         *prev_child, *new_child);
+                filter_ast_tree.push(expr);
+            }
+        } break;
+
+        case TF::CONJUNCTION_OR: {
+            auto of = dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                std::move(tf));
+            if (of->child_filters.size() < 2) {
+                throw std::runtime_error("OR filter with <2 children");
+            }
+            tableFilterToCudfAST(col_idx, of->child_filters[0], column_names,
+                                 filter_ast_tree, filter_scalars);
+            for (std::size_t i = 1; i < of->child_filters.size(); ++i) {
+                const cudf::ast::expression* prev_child =
+                    &filter_ast_tree.back();
+                tableFilterToCudfAST(col_idx, of->child_filters[i],
+                                     column_names, filter_ast_tree,
+                                     filter_scalars);
+                const cudf::ast::expression* new_child =
+                    &filter_ast_tree.back();
+                cudf::ast::operation expr =
+                    cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_OR,
+                                         *prev_child, *new_child);
+                filter_ast_tree.push(expr);
+            }
+        } break;
+
+        case TF::OPTIONAL_FILTER: {
+            auto of =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                tableFilterToCudfAST(col_idx, of->child_filter, column_names,
+                                     filter_ast_tree, filter_scalars);
+            } catch (...) {
+                // No-op: literal true
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<bool>>(true);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<bool>*>(
+                        filter_scalars.back().get())));
+                cudf::ast::operation expr = cudf::ast::operation(
+                    cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+                filter_ast_tree.push(expr);
+            }
+        } break;
+
+        default:
+            throw std::runtime_error(
+                "tableFilterToCudfAST(): Unsupported TableFilter type");
+    }
+}
+
+void tableFilterSetToCudfAST(
+    duckdb::TableFilterSet& filters,
+    const std::vector<std::string>& column_names,
+    cudf::ast::tree& filter_ast_tree,
+    std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars) {
+    bool first = true;
+
+    // Combine all filters with AND
+    for (auto& pair : filters.filters) {
+        const cudf::ast::expression* prev_cond =
+            first ? nullptr : &filter_ast_tree.back();
+
+        duckdb::idx_t col_idx = pair.first;
+        auto& tf = pair.second;
+
+        tableFilterToCudfAST(col_idx, tf, column_names, filter_ast_tree,
+                             filter_scalars);
+
+        if (first) {
+            first = false;
+        } else {
+            filter_ast_tree.push(
+                cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_AND,
+                                     *prev_cond, filter_ast_tree.back()));
+        }
+    }
 }

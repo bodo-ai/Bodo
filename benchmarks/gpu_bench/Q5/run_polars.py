@@ -51,28 +51,6 @@ def q(root) -> pl.LazyFrame:
     var2 = date(1996, 1, 1)
     var3 = date(1997, 1, 1)
 
-    # jn order 1 (From Polars TPCH)
-    # return (
-    #     region.join(nation, left_on="R_REGIONKEY", right_on="N_REGIONKEY")
-    #     .join(customer, left_on="N_NATIONKEY", right_on="C_NATIONKEY")
-    #     .join(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
-    #     .join(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
-    #     .join(
-    #         supplier,
-    #         left_on=["L_SUPPKEY", "N_NATIONKEY"],
-    #         right_on=["S_SUPPKEY", "S_NATIONKEY"],
-    #     )
-    #     .filter(pl.col("R_NAME") == var1)
-    #     .filter(pl.col("O_ORDERDATE").is_between(var2, var3, closed="left"))
-    #     .with_columns(
-    #         (pl.col("L_EXTENDEDPRICE") * (1 - pl.col("L_DISCOUNT"))).alias("REVENUE")
-    #     )
-    #     .group_by("N_NAME")
-    #     .agg(pl.sum("REVENUE"))
-    #     .sort(by="REVENUE", descending=True)
-    # )
-
-    # jn order 2 (match order in SQL query)
     return (
         customer.join(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
         .join(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
@@ -149,7 +127,6 @@ def main():
         )
 
     if args.visualize_plan:
-        # Create Polars LazyFrame
         result: pl.LazyFrame = q(args.root)
 
         unoptimized_gviz_out_path = f"{args.visualize_plan}_unoptimized.png"
@@ -184,16 +161,16 @@ def main():
     for i in range(args.n_iters):
         try:
             with CodeTimer(
-                f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}"
+                f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}",
+                unit="s",
             ) as timer:
                 result: pl.LazyFrame = q(args.root)
                 print(result.collect(engine=pl_engine))
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
-                    time_s = timer.took / 1000  # convert ms to s
                     f.write(
-                        f"{scale_factor},{args.n_workers},Polars({args.engine}),{time_s:.4f}\n"
+                        f"{scale_factor},{args.n_workers},Polars({args.engine}),{timer.took:.4f}\n"
                     )
         except Exception as e:
             print(
