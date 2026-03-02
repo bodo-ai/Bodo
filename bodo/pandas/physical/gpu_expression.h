@@ -26,6 +26,7 @@
 #include <cudf/types.hpp>
 #include <memory>
 
+#include <cudf/ast/expressions.hpp>
 #include <cudf/binaryop.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
@@ -931,31 +932,19 @@ class PhysicalGPUUDFExpression : public PhysicalGPUExpression {
     PyObject *init_state;
 };
 
-// CudfExpr tree like Arrow expression tree
-struct CudfExpr {
-    enum class Kind { COLUMN_REF, LITERAL, EQ, NE, LT, LE, GT, GE, AND, OR };
-
-    Kind kind;
-
-    // For COLUMN_REF
-    int column_index = -1;
-
-    // For LITERAL
-    duckdb::Value literal;
-
-    // For binary ops
-    std::unique_ptr<CudfExpr> left;
-    std::unique_ptr<CudfExpr> right;
-
-    std::unique_ptr<cudf::table> eval(cudf::table &input,
-                                      std::shared_ptr<StreamAndEvent> se);
-};
-
-/*
- * @brief Convert a duckdb TableFilterSet to a CudfExpr.  Since we have to
- *        filter after columns are reduced (as supported in cudf), we have
- *        to map the original column indices that TableFilterSet uses to
- *        column indices after the column set is reduced.
+/**
+ * @brief Convert a duckdb TableFilterSet to cudf AST expressions.
+ *
+ * @param filters - duckdb TableFilterSet to convert
+ * @param column_names - column names of the table (before removing unused
+ * columns)
+ * @param filter_ast_tree - output cudf AST expressions representing the
+ * filters. All expressions should be added to be kept alive.
+ * @param filter_scalars - output vector of cudf scalars representing any
+ * constants in the filters. All scalars should be added to be kept alive.
  */
-std::unique_ptr<CudfExpr> tableFilterSetToCudf(
-    duckdb::TableFilterSet &filters, const std::map<int, int> &column_map);
+void tableFilterSetToCudfAST(
+    duckdb::TableFilterSet &filters,
+    const std::vector<std::string> &column_names,
+    cudf::ast::tree &filter_ast_tree,
+    std::vector<std::unique_ptr<cudf::scalar>> &filter_scalars);
