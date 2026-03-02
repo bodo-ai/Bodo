@@ -1,6 +1,4 @@
 #include "duckdb/storage/buffer/buffer_handle.hpp"
-
-#include "duckdb/storage/block_manager.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
 
@@ -36,7 +34,7 @@ void BufferHandle::Destroy() {
 	if (!handle || !IsValid()) {
 		return;
 	}
-	handle->GetMemory().GetBufferManager().Unpin(handle);
+	handle->block_manager.buffer_manager.Unpin(handle);
 	handle.reset();
 	node = nullptr;
 }

@@ -26,13 +26,13 @@ BoundStatement Binder::Bind(LogicalPlanStatement &stmt) {
 	result.plan = std::move(stmt.plan);
 
 	auto &properties = GetStatementProperties();
-	properties.output_type = QueryResultOutputType::ALLOW_STREAMING;
+	properties.allow_stream_result = true;
 	properties.return_type = StatementReturnType::QUERY_RESULT; // TODO could also be something else
 
 	if (parent) {
 		throw InternalException("LogicalPlanStatement should be bound in root binder");
 	}
-	global_binder_state->bound_tables = GetMaxTableIndex(*result.plan) + 1;
+	bound_tables = GetMaxTableIndex(*result.plan) + 1;
 	return result;
 }
 

@@ -71,7 +71,7 @@ bool PreparedStatementData::RequireRebind(ClientContext &context,
 		}
 	}
 	for (auto &it : properties.modified_databases) {
-		if (!CheckCatalogIdentity(context, it.first, it.second.identity)) {
+		if (!CheckCatalogIdentity(context, it.first, it.second)) {
 			return true;
 		}
 	}

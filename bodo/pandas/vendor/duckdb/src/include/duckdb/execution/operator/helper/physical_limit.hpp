@@ -36,8 +36,7 @@ public:
 public:
 	// Source interface
 	unique_ptr<GlobalSourceState> GetGlobalSourceState(ClientContext &context) const override;
-	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
-	                                 OperatorSourceInput &input) const override;
+	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {
 		return true;
@@ -70,8 +69,6 @@ public:
 	                          const BoundLimitNode &offset_val);
 	static bool HandleOffset(DataChunk &input, idx_t &current_offset, idx_t offset, idx_t limit);
 	static Value GetDelimiter(ExecutionContext &context, DataChunk &input, const Expression &expr);
-
-	InsertionOrderPreservingMap<string> ParamsToString() const override;
 };
 
 } // namespace duckdb

@@ -10,7 +10,6 @@
 
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/common.hpp"
-#include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/enums/output_type.hpp"
 #include "duckdb/common/enums/profiler_format.hpp"
 #include "duckdb/common/progress_bar/progress_bar.hpp"
@@ -18,7 +17,6 @@
 #include "duckdb/main/profiling_info.hpp"
 #include "duckdb/parser/expression/lambda_expression.hpp"
 #include "duckdb/main/query_profiler.hpp"
-#include "duckdb/main/user_settings.hpp"
 
 namespace duckdb {
 
@@ -29,6 +27,8 @@ class PreparedStatementData;
 typedef std::function<PhysicalOperator &(ClientContext &context, PreparedStatementData &data)> get_result_collector_t;
 
 struct ClientConfig {
+	//! The home directory used by the system (if any)
+	string home_directory;
 	//! If the query profiler is enabled or not.
 	bool enable_profiler = false;
 	//! If detailed query profiling is enabled
@@ -40,9 +40,7 @@ struct ClientConfig {
 	string profiler_save_location;
 	//! The custom settings for the profiler
 	//! (empty = use the default settings)
-	profiler_settings_t profiler_settings = MetricsUtils::GetDefaultMetrics();
-	//! The input format type of the profiler settings
-	LogicalTypeId profiler_settings_type = LogicalTypeId::VARCHAR;
+	profiler_settings_t profiler_settings = ProfilingInfo::DefaultSettings();
 
 	//! Allows suppressing profiler output, even if enabled. We turn on the profiler on all test runs but don't want
 	//! to output anything
@@ -56,6 +54,9 @@ struct ClientConfig {
 	bool print_progress_bar = true;
 	//! The wait time before showing the progress bar
 	int wait_time = 2000;
+
+	//! The maximum expression depth limit in the parser
+	idx_t max_expression_depth = 1000;
 
 	//! Whether or not aggressive query verification is enabled
 	bool query_verification_enabled = false;
@@ -82,19 +83,24 @@ struct ClientConfig {
 	//! The maximum amount of memory to keep buffered in a streaming query result. Default: 1mb.
 	idx_t streaming_buffer_size = 1000000;
 
-	//! The maximum memory for query intermediates (sorts, hash tables) per connection (in bytes). Default: Global
-	//! memory limit.
-	optional_idx operator_memory_limit;
-
 	//! Callback to create a progress bar display
 	progress_bar_display_create_func_t display_create_func = nullptr;
 
+	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
+	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;
+
+	//! If DEFAULT or ENABLE_SINGLE_ARROW, it is possible to use the deprecated single arrow operator (->) for lambda
+	//! functions. Otherwise, DISABLE_SINGLE_ARROW.
+	LambdaSyntax lambda_syntax = LambdaSyntax::DEFAULT;
 	//! The profiling coverage. SELECT is the default behavior, and ALL emits profiling information for all operator
 	//! types.
 	ProfilingCoverage profiling_coverage = ProfilingCoverage::SELECT;
 
+	//! Output error messages as structured JSON instead of as a raw string
+	bool errors_as_json = false;
+
 	//! Generic options
-	LocalUserSettings user_settings;
+	case_insensitive_map_t<Value> set_variables;
 
 	//! Variables set by the user
 	case_insensitive_map_t<Value> user_variables;
@@ -115,9 +121,19 @@ public:
 
 	bool AnyVerification() const;
 
-	void SetUserVariable(const String &name, Value value);
+	void SetUserVariable(const string &name, Value value);
 	bool GetUserVariable(const string &name, Value &result);
 	void ResetUserVariable(const String &name);
+
+	template <class OP>
+	static typename OP::RETURN_TYPE GetSetting(const ClientContext &context) {
+		return OP::GetSetting(context).template GetValue<typename OP::RETURN_TYPE>();
+	}
+
+	template <class OP>
+	static Value GetSettingValue(const ClientContext &context) {
+		return OP::GetSetting(context);
+	}
 
 public:
 	void SetDefaultStreamingBufferSize();

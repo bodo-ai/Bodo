@@ -9,8 +9,6 @@
 
 namespace duckdb {
 
-constexpr const char *TypeCatalogEntry::Name;
-
 TypeCatalogEntry::TypeCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTypeInfo &info)
     : StandardEntry(CatalogType::TYPE_ENTRY, schema, catalog, info.name), user_type(info.type),
       bind_function(info.bind_function) {

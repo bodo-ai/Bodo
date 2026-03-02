@@ -16,8 +16,10 @@ unique_ptr<LogicalOperator> Binder::PlanFilter(unique_ptr<Expression> condition,
 }
 
 unique_ptr<LogicalOperator> Binder::CreatePlan(BoundSelectNode &statement) {
-	D_ASSERT(statement.from_table.plan);
-	auto root = std::move(statement.from_table.plan);
+	unique_ptr<LogicalOperator> root;
+	D_ASSERT(statement.from_table);
+	root = CreatePlan(*statement.from_table);
+	D_ASSERT(root);
 
 	// plan the sample clause
 	if (statement.sample_options) {
@@ -28,7 +30,7 @@ unique_ptr<LogicalOperator> Binder::CreatePlan(BoundSelectNode &statement) {
 		root = PlanFilter(std::move(statement.where_clause), std::move(root));
 	}
 
-	if (!statement.aggregates.empty() || !statement.groups.group_expressions.empty() || statement.having) {
+	if (!statement.aggregates.empty() || !statement.groups.group_expressions.empty()) {
 		if (!statement.groups.group_expressions.empty()) {
 			// visit the groups
 			for (auto &group : statement.groups.group_expressions) {

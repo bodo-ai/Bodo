@@ -11,7 +11,6 @@ add_library_unity(
   decimal_cast.cpp
   default_casts.cpp
   enum_casts.cpp
-  geo_casts.cpp
   list_casts.cpp
   map_cast.cpp
   numeric_casts.cpp
@@ -19,7 +18,6 @@ add_library_unity(
   string_cast.cpp
   struct_cast.cpp
   time_casts.cpp
-  type_cast.cpp
   union_casts.cpp
   uuid_casts.cpp
   bignum_casts.cpp

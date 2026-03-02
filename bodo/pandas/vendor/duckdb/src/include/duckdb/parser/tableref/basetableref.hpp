@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/vector.hpp"
 #include "duckdb/main/table_description.hpp"
 #include "duckdb/parser/tableref.hpp"
 #include "duckdb/parser/tableref/at_clause.hpp"

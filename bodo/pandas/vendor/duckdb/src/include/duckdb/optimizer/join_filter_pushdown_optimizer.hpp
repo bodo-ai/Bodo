@@ -27,8 +27,6 @@ public:
 	static void GetPushdownFilterTargets(LogicalOperator &op, vector<JoinFilterPushdownColumn> columns,
 	                                     vector<PushdownFilterTarget> &targets);
 
-	static bool IsFiltering(const unique_ptr<LogicalOperator> &op);
-
 private:
 	void GenerateJoinFilters(LogicalComparisonJoin &join);
 

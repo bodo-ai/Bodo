@@ -96,17 +96,15 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
     // Get the column bindings for join equality keys. If a filter column is an
     // equality key, we can push the filter to the other side of the join.
     for (const auto &cond : join_op.conditions) {
-        if (cond.IsComparison() &&
-            cond.GetComparisonType() ==
-                bododuckdb::ExpressionType::COMPARE_EQUAL &&
-            cond.GetLHS().GetExpressionType() ==
+        if (cond.comparison == bododuckdb::ExpressionType::COMPARE_EQUAL &&
+            cond.left->GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF &&
-            cond.GetRHS().GetExpressionType() ==
+            cond.right->GetExpressionType() ==
                 duckdb::ExpressionType::BOUND_COLUMN_REF) {
             auto &left_colref =
-                cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+                cond.left->Cast<duckdb::BoundColumnRefExpression>();
             auto &right_colref =
-                cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
+                cond.right->Cast<duckdb::BoundColumnRefExpression>();
             left_keys.push_back(left_colref.binding);
             right_keys.push_back(right_colref.binding);
         }
@@ -261,18 +259,16 @@ RuntimeJoinFilterPushdownOptimizer::VisitCompJoin(
             // TODO Support non-equalities for pushing to I/O
             // e.g. if T1.A < T2.B is a join conditition we can push A < the
             // minimum of B to T1's scan operator
-            if (!cond.IsComparison() ||
-                cond.GetComparisonType() !=
-                    duckdb::ExpressionType::COMPARE_EQUAL) {
+            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
                 // Only support equality join conditions for now
                 continue;
             }
-            if (cond.GetLHS().GetExpressionType() ==
+            if (cond.left->GetExpressionType() ==
                     duckdb::ExpressionType::BOUND_COLUMN_REF &&
-                cond.GetRHS().GetExpressionType() ==
+                cond.right->GetExpressionType() ==
                     duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto &left_colref =
-                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
                 left_eq_cols.push_back(
                     left_child_colref_map[{left_colref.binding.table_index,
                                            left_colref.binding.column_index}]);

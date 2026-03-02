@@ -17,14 +17,12 @@ OrderedAggregateOptimizer::OrderedAggregateOptimizer(ExpressionRewriter &rewrite
 }
 
 unique_ptr<Expression> OrderedAggregateOptimizer::Apply(ClientContext &context, BoundAggregateExpression &aggr,
-                                                        vector<unique_ptr<Expression>> &groups,
-                                                        optional_ptr<vector<GroupingSet>> grouping_sets,
-                                                        bool &changes_made) {
+                                                        vector<unique_ptr<Expression>> &groups, bool &changes_made) {
 	if (!aggr.order_bys) {
 		// no ORDER BYs defined
 		return nullptr;
 	}
-	if (aggr.function.GetOrderDependent() == AggregateOrderDependent::NOT_ORDER_DEPENDENT) {
+	if (aggr.function.order_dependent == AggregateOrderDependent::NOT_ORDER_DEPENDENT) {
 		// not an order dependent aggregate but we have an ORDER BY clause - remove it
 		aggr.order_bys.reset();
 		changes_made = true;
@@ -32,7 +30,7 @@ unique_ptr<Expression> OrderedAggregateOptimizer::Apply(ClientContext &context, 
 	}
 
 	// Remove unnecessary ORDER BY clauses and return if nothing remains
-	if (aggr.order_bys->Simplify(groups, grouping_sets)) {
+	if (aggr.order_bys->Simplify(groups)) {
 		aggr.order_bys.reset();
 		changes_made = true;
 		return nullptr;
@@ -92,14 +90,7 @@ unique_ptr<Expression> OrderedAggregateOptimizer::Apply(ClientContext &context, 
 unique_ptr<Expression> OrderedAggregateOptimizer::Apply(LogicalOperator &op, vector<reference<Expression>> &bindings,
                                                         bool &changes_made, bool is_root) {
 	auto &aggr = bindings[0].get().Cast<BoundAggregateExpression>();
-
-	// only apply to LogicalAggregate nodes
-	if (op.type != LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY) {
-		return nullptr;
-	}
-
-	return Apply(rewriter.context, aggr, op.Cast<LogicalAggregate>().groups, op.Cast<LogicalAggregate>().grouping_sets,
-	             changes_made);
+	return Apply(rewriter.context, aggr, op.Cast<LogicalAggregate>().groups, changes_made);
 }
 
 } // namespace duckdb

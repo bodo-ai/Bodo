@@ -43,8 +43,7 @@ enum class RelationType : uint8_t {
 	VIEW_RELATION,
 	QUERY_RELATION,
 	DELIM_JOIN_RELATION,
-	DELIM_GET_RELATION,
-	EXTENSION_RELATION = 255
+	DELIM_GET_RELATION
 };
 
 string RelationTypeToString(RelationType type);

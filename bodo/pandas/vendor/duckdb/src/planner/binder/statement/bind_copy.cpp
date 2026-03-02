@@ -7,7 +7,6 @@
 #include "duckdb/common/local_file_system.hpp"
 // Bodo Change
 #include "duckdb/function/cast/cast_function_set.hpp"
-#include "duckdb/common/exception/parser_exception.hpp"
 #include "duckdb/function/table/read_csv.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
@@ -41,7 +40,7 @@ void IsFormatExtensionKnown(const string &format) {
 	//		// It's a match, we must throw
 	//		throw CatalogException(
 	//		    "Copy Function with name \"%s\" is not in the catalog, but it exists in the %s extension.", format,
-	//		    std::string(file_postfixes.extension));
+	//		    file_postfixes.extension);
 	//	}
 	//}
 }
@@ -120,7 +119,7 @@ BoundStatement Binder::BindCopyTo(CopyStatement &stmt, const CopyFunction &funct
 	PreserveOrderType preserve_order = PreserveOrderType::AUTOMATIC;
 	CopyFunctionReturnType return_type = CopyFunctionReturnType::CHANGED_ROWS;
 
-	CopyFunctionBindInput bind_input(*stmt.info, function.function_info);
+	CopyFunctionBindInput bind_input(*stmt.info);
 
 	bind_input.file_extension = function.extension;
 
@@ -256,6 +255,7 @@ BoundStatement Binder::BindCopyTo(CopyStatement &stmt, const CopyFunction &funct
 
 		auto new_select_list = function.copy_to_select(input);
 		if (!new_select_list.empty()) {
+
 			// We have a new select list, create a projection on top of the current plan
 			auto projection = make_uniq<LogicalProjection>(GenerateTableIndex(), std::move(new_select_list));
 			projection->children.push_back(std::move(select_node.plan));
@@ -426,22 +426,8 @@ vector<Value> BindCopyOption(ClientContext &context, TableFunctionBinder &option
 			return result;
 		}
 	}
-	const bool is_partition_by = StringUtil::CIEquals(name, "partition_by");
-
-	if (is_partition_by) {
-		//! When binding the 'partition_by' option, we don't want to resolve a column reference to a SQLValueFunction
-		//! (like 'user')
-		option_binder.DisableSQLValueFunctions();
-	}
 	auto bound_expr = option_binder.Bind(expr);
-	if (bound_expr->HasParameter()) {
-		throw ParameterNotResolvedException();
-	}
-	if (is_partition_by) {
-		option_binder.EnableSQLValueFunctions();
-	}
-
-	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr);
 	if (val.IsNull()) {
 		throw BinderException("NULL is not supported as a valid option for COPY option \"" + name + "\"");
 	}
@@ -569,8 +555,8 @@ BoundStatement Binder::Bind(CopyStatement &stmt, CopyToType copy_to_type) {
 			// check if this matches the mode
 			if (copy_option.mode != CopyOptionMode::READ_WRITE && copy_option.mode != copy_mode) {
 				throw InvalidInputException("Option \"%s\" is not supported for %s - only for %s", provided_option,
-				                            std::string(stmt.info->is_from ? "reading" : "writing"),
-				                            std::string(stmt.info->is_from ? "writing" : "reading"));
+				                            stmt.info->is_from ? "reading" : "writing",
+				                            stmt.info->is_from ? "writing" : "reading");
 			}
 			if (copy_option.type.id() != LogicalTypeId::ANY) {
 				if (provided_entry.second.empty()) {
@@ -617,7 +603,7 @@ BoundStatement Binder::Bind(CopyStatement &stmt, CopyToType copy_to_type) {
 	}
 
 	auto &properties = GetStatementProperties();
-	properties.output_type = QueryResultOutputType::FORCE_MATERIALIZED;
+	properties.allow_stream_result = false;
 	properties.return_type = StatementReturnType::CHANGED_ROWS;
 	if (stmt.info->is_from) {
 		return BindCopyFrom(stmt, function);

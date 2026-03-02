@@ -22,20 +22,18 @@ public:
 public:
 	PhysicalDelete(PhysicalPlan &physical_plan, vector<LogicalType> types, TableCatalogEntry &tableref,
 	               DataTable &table, vector<unique_ptr<BoundConstraint>> bound_constraints, idx_t row_id_index,
-	               idx_t estimated_cardinality, bool return_chunk, vector<idx_t> return_columns);
+	               idx_t estimated_cardinality, bool return_chunk);
 
 	TableCatalogEntry &tableref;
 	DataTable &table;
 	vector<unique_ptr<BoundConstraint>> bound_constraints;
 	idx_t row_id_index;
 	bool return_chunk;
-	vector<idx_t> return_columns;
 
 public:
 	// Source interface
 	unique_ptr<GlobalSourceState> GetGlobalSourceState(ClientContext &context) const override;
-	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
-	                                 OperatorSourceInput &input) const override;
+	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {
 		return true;

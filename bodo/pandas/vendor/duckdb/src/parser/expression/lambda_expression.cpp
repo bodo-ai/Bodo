@@ -1,9 +1,11 @@
 #include "duckdb/parser/expression/lambda_expression.hpp"
 
-#include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/types/hash.hpp"
-#include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
+
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -32,6 +34,7 @@ LambdaExpression::LambdaExpression(unique_ptr<ParsedExpression> lhs, unique_ptr<
 }
 
 vector<reference<const ParsedExpression>> LambdaExpression::ExtractColumnRefExpressions(string &error_message) const {
+
 	// we return an error message because we can't throw a binder exception here,
 	// since we can't distinguish between a lambda function and the JSON operator yet
 	vector<reference<const ParsedExpression>> column_refs;

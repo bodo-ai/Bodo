@@ -152,15 +152,10 @@ string Binder::ReplaceColumnsAlias(const string &alias, const string &column_nam
 
 void TryTransformStarLike(unique_ptr<ParsedExpression> &root) {
 	// detect "* LIKE [literal]" and similar expressions
-	bool inverse = root->GetExpressionType() == ExpressionType::OPERATOR_NOT;
-	auto &expr = inverse ? root->Cast<OperatorExpression>().children[0] : root;
-	if (!expr) {
+	if (root->GetExpressionClass() != ExpressionClass::FUNCTION) {
 		return;
 	}
-	if (expr->GetExpressionClass() != ExpressionClass::FUNCTION) {
-		return;
-	}
-	auto &function = expr->Cast<FunctionExpression>();
+	auto &function = root->Cast<FunctionExpression>();
 	if (function.children.size() < 2 || function.children.size() > 3) {
 		return;
 	}
@@ -202,7 +197,7 @@ void TryTransformStarLike(unique_ptr<ParsedExpression> &root) {
 	auto original_alias = root->GetAlias();
 	auto star_expr = std::move(left);
 	unique_ptr<ParsedExpression> child_expr;
-	if (!inverse && function.function_name == "regexp_full_match" && star.exclude_list.empty()) {
+	if (function.function_name == "regexp_full_match" && star.exclude_list.empty()) {
 		// * SIMILAR TO '[regex]' is equivalent to COLUMNS('[regex]') so we can just move the expression directly
 		child_expr = std::move(right);
 	} else {
@@ -212,23 +207,16 @@ void TryTransformStarLike(unique_ptr<ParsedExpression> &root) {
 		vector<string> named_parameters;
 		named_parameters.push_back("__lambda_col");
 		function.children[0] = make_uniq<ColumnRefExpression>("__lambda_col");
-		function.children[1] = std::move(right);
 
-		unique_ptr<ParsedExpression> lambda_body = std::move(expr);
-		if (inverse) {
-			vector<unique_ptr<ParsedExpression>> root_children;
-			root_children.push_back(std::move(lambda_body));
-			lambda_body = make_uniq<OperatorExpression>(ExpressionType::OPERATOR_NOT, std::move(root_children));
-		}
-		auto lambda = make_uniq<LambdaExpression>(std::move(named_parameters), std::move(lambda_body));
-
+		auto lambda = make_uniq<LambdaExpression>(std::move(named_parameters), std::move(root));
 		vector<unique_ptr<ParsedExpression>> filter_children;
 		filter_children.push_back(std::move(star_expr));
 		filter_children.push_back(std::move(lambda));
-		child_expr = make_uniq<FunctionExpression>("list_filter", std::move(filter_children));
+		auto list_filter = make_uniq<FunctionExpression>("list_filter", std::move(filter_children));
+		child_expr = std::move(list_filter);
 	}
 
-	auto columns_expr = make_uniq<StarExpression>(star.relation_name);
+	auto columns_expr = make_uniq<StarExpression>();
 	columns_expr->columns = true;
 	columns_expr->expr = std::move(child_expr);
 	columns_expr->SetAlias(std::move(original_alias));

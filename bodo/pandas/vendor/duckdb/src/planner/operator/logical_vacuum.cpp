@@ -1,11 +1,9 @@
 #include "duckdb/planner/operator/logical_vacuum.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
-#include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/parser/parsed_data/vacuum_info.hpp"
-#include "duckdb/planner/binder.hpp"
-#include "duckdb/planner/operator/logical_get.hpp"
 
 namespace duckdb {
 
@@ -48,14 +46,11 @@ unique_ptr<LogicalOperator> LogicalVacuum::Deserialize(Deserializer &deserialize
 		auto &context = deserializer.Get<ClientContext &>();
 		auto binder = Binder::CreateBinder(context);
 		auto bound_table = binder->Bind(*info.ref);
-		if (bound_table.plan->type != LogicalOperatorType::LOGICAL_GET) {
+		if (bound_table->type != TableReferenceType::BASE_TABLE) {
 			throw InvalidInputException("can only vacuum or analyze base tables");
 		}
-		auto table_ptr = bound_table.plan->Cast<LogicalGet>().GetTable();
-		if (!table_ptr) {
-			throw InvalidInputException("can only vacuum or analyze base tables");
-		}
-		auto &table = *table_ptr;
+		auto ref = unique_ptr_cast<BoundTableRef, BoundBaseTableRef>(std::move(bound_table));
+		auto &table = ref->table;
 		result->SetTable(table);
 		// FIXME: we should probably verify that the 'column_id_map' and 'columns' are the same on the bound table after
 		// deserialization?

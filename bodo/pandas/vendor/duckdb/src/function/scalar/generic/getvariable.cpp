@@ -36,7 +36,7 @@ unique_ptr<FunctionData> GetVariableBind(ClientContext &context, ScalarFunction 
 	if (!variable_name.IsNull()) {
 		ClientConfig::GetConfig(context).GetUserVariable(variable_name.ToString(), value);
 	}
-	function.SetReturnType(value.type());
+	function.return_type = value.type();
 	return make_uniq<GetVariableBindData>(std::move(value));
 }
 
@@ -54,7 +54,7 @@ unique_ptr<Expression> BindGetVariableExpression(FunctionBindExpressionInput &in
 
 ScalarFunction GetVariableFun::GetFunction() {
 	ScalarFunction getvar("getvariable", {LogicalType::VARCHAR}, LogicalType::ANY, nullptr, GetVariableBind, nullptr);
-	getvar.SetBindExpressionCallback(BindGetVariableExpression);
+	getvar.bind_expression = BindGetVariableExpression;
 	return getvar;
 }
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/parser/qualified_name.hpp"
+#include "duckdb/common/types/hash.hpp"
 #include "duckdb/common/unordered_set.hpp"
 
 namespace duckdb {

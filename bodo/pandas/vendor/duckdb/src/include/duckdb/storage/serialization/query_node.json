@@ -21,11 +21,6 @@
         "name": "cte_map",
         "type": "CommonTableExpressionMap"
       }
-    ],
-    "finalize_deserialization": [
-        "if (type == QueryNodeType::CTE_NODE) {",
-        "\tresult = std::move(result->Cast<CTENode>().child);",
-        "}"
     ]
   },
   {
@@ -95,14 +90,12 @@
       {
         "id": 201,
         "name": "left",
-        "type": "QueryNode*",
-        "serialize_property": "SerializeChildNode(serializer, 0)"
+        "type": "QueryNode*"
       },
       {
         "id": 202,
         "name": "right",
-        "type": "QueryNode*",
-        "serialize_property": "SerializeChildNode(serializer, 1)"
+        "type": "QueryNode*"
       },
       {
         "id": 203,
@@ -114,7 +107,7 @@
         "id": 204,
         "name": "children",
         "type": "vector<QueryNode*>",
-        "version": "6"
+        "serialize_property": "SerializeChildNodes()"
       }
     ],
     "constructor": ["setop_type", "left", "right", "children", "setop_all"]

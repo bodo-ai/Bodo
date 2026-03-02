@@ -28,7 +28,7 @@ protected:
 	enum class Type { SIMPLE, BATCHED };
 
 public:
-	BufferedData(Type type, ClientContext &context);
+	BufferedData(Type type, weak_ptr<ClientContext> context_p);
 	virtual ~BufferedData();
 
 public:

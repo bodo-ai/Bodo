@@ -20,7 +20,7 @@ public:
 	bool parallel;
 
 public:
-	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) const override;
+	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) override;
 
 public:
 	// Sink interface

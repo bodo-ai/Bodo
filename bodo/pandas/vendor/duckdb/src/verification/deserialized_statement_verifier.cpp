@@ -13,12 +13,11 @@ DeserializedStatementVerifier::DeserializedStatementVerifier(
 unique_ptr<StatementVerifier>
 DeserializedStatementVerifier::Create(const SQLStatement &statement,
                                       optional_ptr<case_insensitive_map_t<BoundParameterData>> parameters) {
+
 	auto &select_stmt = statement.Cast<SelectStatement>();
 	Allocator allocator;
 	MemoryStream stream(allocator);
-	SerializationOptions options;
-	options.serialization_compatibility = SerializationCompatibility::FromString("latest");
-	BinarySerializer::Serialize(select_stmt, stream, options);
+	BinarySerializer::Serialize(select_stmt, stream);
 	stream.Rewind();
 	auto result = BinaryDeserializer::Deserialize<SelectStatement>(stream);
 

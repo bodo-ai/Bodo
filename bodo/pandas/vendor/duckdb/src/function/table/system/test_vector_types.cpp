@@ -1,7 +1,6 @@
 #include "duckdb/function/table/system_functions.hpp"
 #include "duckdb/common/map.hpp"
 #include "duckdb/common/pair.hpp"
-#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
@@ -278,9 +277,6 @@ static unique_ptr<FunctionData> TestVectorTypesBind(ClientContext &context, Tabl
 	}
 	for (auto &entry : input.named_parameters) {
 		if (entry.first == "all_flat") {
-			if (entry.second.IsNull()) {
-				throw InvalidInputException("Cannot use NULL as argument for all_flat");
-			}
 			result->all_flat = BooleanValue::Get(entry.second);
 		} else {
 			throw InternalException("Unrecognized named parameter for test_vector_types");
@@ -307,12 +303,12 @@ unique_ptr<GlobalTableFunctionState> TestVectorTypesInit(ClientContext &context,
 	TestVectorDictionary::Generate(info);
 	TestVectorSequence::Generate(info);
 	for (auto &entry : result->entries) {
-		entry->Verify(context.db);
+		entry->Verify();
 	}
 	if (bind_data.all_flat) {
 		for (auto &entry : result->entries) {
 			entry->Flatten();
-			entry->Verify(context.db);
+			entry->Verify();
 		}
 	}
 	return std::move(result);

@@ -21,8 +21,8 @@ SingleFileRowGroupWriter::SingleFileRowGroupWriter(TableCatalogEntry &table, Par
     : RowGroupWriter(table, partial_block_manager), writer(writer), table_data_writer(table_data_writer) {
 }
 
-CheckpointOptions SingleFileRowGroupWriter::GetCheckpointOptions() const {
-	return writer.GetCheckpointOptions();
+CheckpointType SingleFileRowGroupWriter::GetCheckpointType() const {
+	return writer.GetCheckpointType();
 }
 
 WriteStream &SingleFileRowGroupWriter::GetPayloadWriter() {

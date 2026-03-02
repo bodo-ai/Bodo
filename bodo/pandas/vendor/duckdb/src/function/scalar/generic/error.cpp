@@ -26,8 +26,8 @@ static void ErrorFunction(DataChunk &args, ExpressionState &state, Vector &resul
 ScalarFunction ErrorFun::GetFunction() {
 	auto fun = ScalarFunction("error", {LogicalType::VARCHAR}, LogicalType::SQLNULL, ErrorFunction);
 	// Set the function with side effects to avoid the optimization.
-	fun.SetVolatile();
-	fun.SetFallible();
+	fun.stability = FunctionStability::VOLATILE;
+	BaseScalarFunction::SetReturnsError(fun);
 	return fun;
 }
 

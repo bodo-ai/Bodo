@@ -1,5 +1,6 @@
 #include "duckdb/planner/expression_binder.hpp"
 
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/parser/expression/list.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
 #include "duckdb/planner/binder.hpp"
@@ -7,8 +8,6 @@
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/main/client_config.hpp"
-#include "duckdb/main/settings.hpp"
-#include "duckdb/common/string_util.hpp"
 
 namespace duckdb {
 
@@ -48,11 +47,11 @@ void ExpressionBinder::InitializeStackCheck() {
 
 StackChecker<ExpressionBinder> ExpressionBinder::StackCheck(const ParsedExpression &expr, idx_t extra_stack) {
 	D_ASSERT(stack_depth != DConstants::INVALID_INDEX);
-	auto max_expression_depth = Settings::Get<MaxExpressionDepthSetting>(context);
-	if (stack_depth + extra_stack >= max_expression_depth) {
+	auto &options = ClientConfig::GetConfig(context);
+	if (stack_depth + extra_stack >= options.max_expression_depth) {
 		throw BinderException("Max expression depth limit of %lld exceeded. Use \"SET max_expression_depth TO x\" to "
 		                      "increase the maximum expression depth.",
-		                      max_expression_depth);
+		                      options.max_expression_depth);
 	}
 	return StackChecker<ExpressionBinder>(*this, extra_stack);
 }
@@ -71,7 +70,7 @@ BindResult ExpressionBinder::BindExpression(unique_ptr<ParsedExpression> &expr, 
 	case ExpressionClass::COLLATE:
 		return BindExpression(expr_ref.Cast<CollateExpression>(), depth);
 	case ExpressionClass::COLUMN_REF:
-		return BindExpression(expr_ref.Cast<ColumnRefExpression>(), depth, root_expression, expr);
+		return BindExpression(expr_ref.Cast<ColumnRefExpression>(), depth, root_expression);
 	case ExpressionClass::LAMBDA_REF:
 		return BindExpression(expr_ref.Cast<LambdaRefExpression>(), depth);
 	case ExpressionClass::COMPARISON:
@@ -80,8 +79,6 @@ BindResult ExpressionBinder::BindExpression(unique_ptr<ParsedExpression> &expr, 
 		return BindExpression(expr_ref.Cast<ConjunctionExpression>(), depth);
 	case ExpressionClass::CONSTANT:
 		return BindExpression(expr_ref.Cast<ConstantExpression>(), depth);
-	case ExpressionClass::TYPE:
-		return BindExpression(expr_ref.Cast<TypeExpression>(), depth);
 	case ExpressionClass::FUNCTION: {
 		auto &function = expr_ref.Cast<FunctionExpression>();
 		if (IsUnnestFunction(function.function_name)) {
@@ -169,7 +166,7 @@ static bool CombineMissingColumns(ErrorData &current, ErrorData new_error) {
 		}
 		auto score = StringUtil::SimilarityRating(candidate_column, column_name);
 		candidates.insert(candidate);
-		scores.emplace_back(std::move(candidate), score);
+		scores.emplace_back(make_pair(std::move(candidate), score));
 	}
 	// get a new top-n
 	auto top_candidates = StringUtil::TopNStrings(scores);
@@ -368,16 +365,6 @@ ErrorData ExpressionBinder::Bind(unique_ptr<ParsedExpression> &expr, idx_t depth
 		// already bound, don't bind it again
 		return ErrorData();
 	}
-	if (expression.GetExpressionClass() == ExpressionClass::WINDOW) {
-		auto &w = expression.Cast<WindowExpression>();
-		if (w.HasBoundedParts()) {
-			BindResult result =
-			    BindResult(BinderException::Unsupported(*expr, "window expression is not supported here"));
-			if (result.HasError()) {
-				return std::move(result.error);
-			}
-		}
-	}
 	// bind the expression
 	BindResult result = BindExpression(expr, depth, root_expression);
 	if (result.HasError()) {
@@ -411,14 +398,7 @@ bool ExpressionBinder::IsUnnestFunction(const string &function_name) {
 	return function_name == "unnest" || function_name == "unlist";
 }
 
-bool ExpressionBinder::IsPotentialAlias(const ColumnRefExpression &colref) {
-	// traditional alias (unqualified), or qualified with table name "alias"
-	if (!colref.IsQualified()) {
-		return true;
-	}
-	if (colref.column_names.size() == 2) {
-		return StringUtil::CIEquals(colref.GetTableName(), "alias");
-	}
+bool ExpressionBinder::TryBindAlias(ColumnRefExpression &colref, bool root_expression, BindResult &result) {
 	return false;
 }
 

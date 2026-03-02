@@ -15,11 +15,11 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateExpression(BoundFuncti
 			stats.push_back(stat->Copy());
 		}
 	}
-	if (!func.function.HasStatisticsCallback()) {
+	if (!func.function.statistics) {
 		return nullptr;
 	}
 	FunctionStatisticsInput input(func, func.bind_info.get(), stats, &expr_ptr);
-	return func.function.GetStatisticsCallback()(context, input);
+	return func.function.statistics(context, input);
 }
 
 } // namespace duckdb

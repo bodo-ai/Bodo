@@ -4,8 +4,11 @@ namespace duckdb {
 
 MetadataReader::MetadataReader(MetadataManager &manager, MetaBlockPointer pointer,
                                optional_ptr<vector<MetaBlockPointer>> read_pointers_p, BlockReaderType type)
-    : manager(manager), type(type), next_pointer(pointer), has_next_block(true), read_pointers(read_pointers_p),
-      index(0), offset(0), next_offset(pointer.offset), capacity(0) {
+    : manager(manager), type(type), next_pointer(FromDiskPointer(pointer)), has_next_block(true),
+      read_pointers(read_pointers_p), index(0), offset(0), next_offset(pointer.offset), capacity(0) {
+	if (read_pointers) {
+		read_pointers->push_back(pointer);
+	}
 }
 
 MetadataReader::MetadataReader(MetadataManager &manager, BlockPointer pointer)
@@ -56,10 +59,11 @@ MetaBlockPointer MetadataReader::GetMetaBlockPointer() {
 vector<MetaBlockPointer> MetadataReader::GetRemainingBlocks(MetaBlockPointer last_block) {
 	vector<MetaBlockPointer> result;
 	while (has_next_block) {
-		if (last_block.IsValid() && next_pointer.block_pointer == last_block.block_pointer) {
+		auto next_block_pointer = manager.GetDiskPointer(next_pointer, UnsafeNumericCast<uint32_t>(next_offset));
+		if (last_block.IsValid() && next_block_pointer.block_pointer == last_block.block_pointer) {
 			break;
 		}
-		result.push_back(next_pointer);
+		result.push_back(next_block_pointer);
 		ReadNextBlock();
 	}
 	return result;
@@ -73,18 +77,18 @@ void MetadataReader::ReadNextBlock(QueryContext context) {
 	if (!has_next_block) {
 		throw IOException("No more data remaining in MetadataReader");
 	}
-	if (read_pointers) {
-		read_pointers->push_back(next_pointer);
-	}
-	auto next_disk_pointer = FromDiskPointer(next_pointer);
-	block = manager.Pin(context, next_disk_pointer);
-	index = next_disk_pointer.index;
+	block = manager.Pin(context, next_pointer);
+	index = next_pointer.index;
 
 	idx_t next_block = Load<idx_t>(BasePtr());
 	if (next_block == idx_t(-1)) {
 		has_next_block = false;
 	} else {
-		next_pointer = MetaBlockPointer(next_block, 0);
+		next_pointer = FromDiskPointer(MetaBlockPointer(next_block, 0));
+		MetaBlockPointer next_block_pointer(next_block, 0);
+		if (read_pointers) {
+			read_pointers->push_back(next_block_pointer);
+		}
 	}
 	if (next_offset < sizeof(block_id_t)) {
 		next_offset = sizeof(block_id_t);

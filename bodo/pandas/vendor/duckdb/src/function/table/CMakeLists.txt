@@ -15,7 +15,6 @@ add_library_unity(
   repeat_row.cpp
   copy_csv.cpp
   read_csv.cpp
-  read_duckdb.cpp
   sniff_csv.cpp
   read_file.cpp
   system_functions.cpp

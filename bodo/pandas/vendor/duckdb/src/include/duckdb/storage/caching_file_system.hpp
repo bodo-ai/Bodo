@@ -8,25 +8,22 @@
 
 #pragma once
 
-#include "duckdb/common/enums/cache_validation_mode.hpp"
-#include "duckdb/common/file_opener.hpp"
+#include "duckdb/common/winapi.hpp"
 #include "duckdb/common/file_open_flags.hpp"
 #include "duckdb/common/open_file_info.hpp"
 #include "duckdb/common/shared_ptr.hpp"
-#include "duckdb/common/winapi.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/external_file_cache.hpp"
 
 namespace duckdb {
 
-class BufferHandle;
 class ClientContext;
-class DatabaseInstance;
+class QueryContext;
+class BufferHandle;
 class FileOpenFlags;
 class FileSystem;
 struct FileHandle;
-class StorageLockKey;
-class QueryContext;
 class CachingFileSystem;
 
 struct CachingFileHandle {
@@ -37,7 +34,7 @@ public:
 
 public:
 	DUCKDB_API CachingFileHandle(QueryContext context, CachingFileSystem &caching_file_system, const OpenFileInfo &path,
-	                             FileOpenFlags flags, optional_ptr<FileOpener> opener, CachedFile &cached_file);
+	                             FileOpenFlags flags, CachedFile &cached_file);
 	DUCKDB_API ~CachingFileHandle();
 
 public:
@@ -57,8 +54,6 @@ public:
 	DUCKDB_API bool CanSeek();
 	DUCKDB_API bool IsRemoteFile() const;
 	DUCKDB_API bool OnDiskFile();
-	DUCKDB_API idx_t SeekPosition();
-	DUCKDB_API void Seek(idx_t location);
 
 private:
 	//! Get the version tag of the file (for checking cache invalidation)
@@ -66,8 +61,7 @@ private:
 	//! Tries to read from the cache, filling "overlapping_ranges" with ranges that overlap with the request.
 	//! Returns an invalid BufferHandle if it fails
 	BufferHandle TryReadFromCache(data_ptr_t &buffer, idx_t nr_bytes, idx_t location,
-	                              vector<shared_ptr<CachedFileRange>> &overlapping_ranges,
-	                              optional_idx &start_location_of_next_range);
+	                              vector<shared_ptr<CachedFileRange>> &overlapping_ranges);
 	//! Try to read from the specified range, return an invalid BufferHandle if it fails
 	BufferHandle TryReadFromFileRange(const unique_ptr<StorageLockKey> &guard, CachedFileRange &file_range,
 	                                  data_ptr_t &buffer, idx_t nr_bytes, idx_t location);
@@ -91,10 +85,8 @@ private:
 	OpenFileInfo path;
 	//! Flags used to open the file
 	FileOpenFlags flags;
-	//! File opener, which contains file open context.
-	optional_ptr<FileOpener> opener;
-	//! Cache validation mode for this file
-	CacheValidationMode validate;
+	//! Whether to validate the cache entry
+	bool validate;
 	//! The associated CachedFile with cached ranges
 	CachedFile &cached_file;
 
@@ -116,23 +108,19 @@ private:
 	friend struct CachingFileHandle;
 
 public:
-	// Notice, the provided [file_system] should be a raw, non-caching filesystem.
 	DUCKDB_API CachingFileSystem(FileSystem &file_system, DatabaseInstance &db);
 	DUCKDB_API ~CachingFileSystem();
 
 public:
 	DUCKDB_API static CachingFileSystem Get(ClientContext &context);
 
-	DUCKDB_API unique_ptr<CachingFileHandle> OpenFile(const OpenFileInfo &path, FileOpenFlags flags,
-	                                                  optional_ptr<FileOpener> opener = nullptr);
+	DUCKDB_API unique_ptr<CachingFileHandle> OpenFile(const OpenFileInfo &path, FileOpenFlags flags);
 	DUCKDB_API unique_ptr<CachingFileHandle> OpenFile(QueryContext context, const OpenFileInfo &path,
-	                                                  FileOpenFlags flags, optional_ptr<FileOpener> opener = nullptr);
+	                                                  FileOpenFlags flags);
 
 private:
 	//! The Client FileSystem (needs to be client-specific so we can do, e.g., HTTPFS profiling)
 	FileSystem &file_system;
-	//! The DatabaseInstance.
-	DatabaseInstance &db;
 	//! The External File Cache that caches the files
 	ExternalFileCache &external_file_cache;
 };

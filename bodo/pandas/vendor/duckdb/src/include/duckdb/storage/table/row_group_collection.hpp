@@ -13,7 +13,6 @@
 #include "duckdb/storage/statistics/column_statistics.hpp"
 #include "duckdb/storage/table/table_statistics.hpp"
 #include "duckdb/storage/storage_index.hpp"
-#include "duckdb/common/enums/index_removal_type.hpp"
 
 namespace duckdb {
 
@@ -38,8 +37,6 @@ struct PersistentCollectionData;
 class CheckpointTask;
 class TableIOManager;
 class DataTable;
-class RowGroupIterationHelper;
-class TableScanState;
 
 class RowGroupCollection {
 public:
@@ -50,41 +47,36 @@ public:
 
 public:
 	idx_t GetTotalRows() const;
-	idx_t GetRowGroupCount() const;
 	Allocator &GetAllocator() const;
 
 	void Initialize(PersistentCollectionData &data);
 	void Initialize(PersistentTableData &data);
 	void InitializeEmpty();
-	void FinalizeCheckpoint(MetaBlockPointer pointer, const vector<MetaBlockPointer> &existing_pointers);
+	void FinalizeCheckpoint(MetaBlockPointer pointer);
 
 	bool IsEmpty() const;
 
 	void AppendRowGroup(SegmentLock &l, idx_t start_row);
 	//! Get the nth row-group, negative numbers start from the back (so -1 is the last row group, etc)
-	optional_ptr<RowGroup> GetRowGroup(int64_t index);
-	//! Overrides a row group - should only be used if you know what you're doing (will likely be removed in the future)
-	void SetRowGroup(int64_t index, shared_ptr<RowGroup> new_row_group);
+	RowGroup *GetRowGroup(int64_t index);
 	void Verify();
-	void Destroy();
 
-	void InitializeScan(const QueryContext &context, CollectionScanState &state, const vector<StorageIndex> &column_ids,
+	void InitializeScan(CollectionScanState &state, const vector<StorageIndex> &column_ids,
 	                    optional_ptr<TableFilterSet> table_filters);
 	void InitializeCreateIndexScan(CreateIndexScanState &state);
-	void InitializeScanWithOffset(const QueryContext &context, CollectionScanState &state,
-	                              const vector<StorageIndex> &column_ids, idx_t start_row, idx_t end_row);
-	static bool InitializeScanInRowGroup(ClientContext &context, CollectionScanState &state,
-	                                     RowGroupCollection &collection, SegmentNode<RowGroup> &row_group,
-	                                     idx_t vector_index, idx_t max_row);
+	void InitializeScanWithOffset(CollectionScanState &state, const vector<StorageIndex> &column_ids, idx_t start_row,
+	                              idx_t end_row);
+	static bool InitializeScanInRowGroup(CollectionScanState &state, RowGroupCollection &collection,
+	                                     RowGroup &row_group, idx_t vector_index, idx_t max_row);
 	void InitializeParallelScan(ParallelCollectionScanState &state);
 	bool NextParallelScan(ClientContext &context, ParallelCollectionScanState &state, CollectionScanState &scan_state);
 
-	RowGroupIterationHelper Chunks(DuckTransaction &transaction);
-	RowGroupIterationHelper Chunks(DuckTransaction &transaction, const vector<StorageIndex> &column_ids);
+	bool Scan(DuckTransaction &transaction, const vector<StorageIndex> &column_ids,
+	          const std::function<bool(DataChunk &chunk)> &fun);
+	bool Scan(DuckTransaction &transaction, const std::function<bool(DataChunk &chunk)> &fun);
 
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
 	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state);
-
 	//! Returns true, if the row group can fetch the row id for the transaction.
 	bool CanFetch(TransactionData, const row_t row_id);
 
@@ -105,8 +97,7 @@ public:
 	                  optional_ptr<StorageCommitState> commit_state);
 	bool IsPersistent() const;
 
-	void RemoveFromIndexes(const QueryContext &context, TableIndexList &indexes, Vector &row_identifiers, idx_t count,
-	                       IndexRemovalType removal_type, optional_idx active_checkpoint = optional_idx());
+	void RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count);
 
 	idx_t Delete(TransactionData transaction, DataTable &table, row_t *ids, idx_t count);
 	void Update(TransactionData transaction, DataTable &table, row_t *ids, const vector<PhysicalIndex> &column_ids,
@@ -116,7 +107,8 @@ public:
 
 	void Checkpoint(TableDataWriter &writer, TableStatistics &global_stats);
 
-	void InitializeVacuumState(CollectionCheckpointState &checkpoint_state, VacuumState &state);
+	void InitializeVacuumState(CollectionCheckpointState &checkpoint_state, VacuumState &state,
+	                           vector<SegmentNode<RowGroup>> &segments);
 	bool ScheduleVacuumTasks(CollectionCheckpointState &checkpoint_state, VacuumState &state, idx_t segment_idx,
 	                         bool schedule_vacuum);
 	unique_ptr<CheckpointTask> GetCheckpointTask(CollectionCheckpointState &checkpoint_state, idx_t segment_idx);
@@ -125,7 +117,7 @@ public:
 	void CommitDropTable();
 
 	vector<PartitionStatistics> GetPartitionStats() const;
-	vector<ColumnSegmentInfo> GetColumnSegmentInfo(const QueryContext &context);
+	vector<ColumnSegmentInfo> GetColumnSegmentInfo();
 	const vector<LogicalType> &GetTypes() const;
 
 	shared_ptr<RowGroupCollection> AddColumn(ClientContext &context, ColumnDefinition &new_column,
@@ -133,11 +125,10 @@ public:
 	shared_ptr<RowGroupCollection> RemoveColumn(idx_t col_idx);
 	shared_ptr<RowGroupCollection> AlterType(ClientContext &context, idx_t changed_idx, const LogicalType &target_type,
 	                                         vector<StorageIndex> bound_columns, Expression &cast_expr);
-	void VerifyNewConstraint(const QueryContext &context, DataTable &parent, const BoundConstraint &constraint);
+	void VerifyNewConstraint(DataTable &parent, const BoundConstraint &constraint);
 
-	void SetStats(TableStatistics &new_stats);
 	void CopyStats(TableStatistics &stats);
-	unique_ptr<BaseStatistics> CopyStats(const StorageIndex &column_id);
+	unique_ptr<BaseStatistics> CopyStats(column_t column_id);
 	unique_ptr<BlockingSample> GetSample();
 	void SetDistinct(column_t column_id, unique_ptr<DistinctStatistics> distinct_stats);
 
@@ -158,15 +149,11 @@ public:
 		return row_group_size;
 	}
 	void SetAppendRequiresNewRowGroup();
-	//! Returns the total amount of segments - use sparingly, as this forces all segments to be loaded
-	idx_t GetSegmentCount();
 
 private:
-	optional_ptr<SegmentNode<RowGroup>> NextUpdateRowGroup(RowGroupSegmentTree &row_groups, row_t *ids, idx_t &pos,
-	                                                       idx_t count) const;
+	bool IsEmpty(SegmentLock &) const;
 
-	shared_ptr<RowGroupSegmentTree> GetRowGroups() const;
-	void SetRowGroups(shared_ptr<RowGroupSegmentTree> row_groups);
+	optional_ptr<RowGroup> NextUpdateRowGroup(row_t *ids, idx_t &pos, idx_t count) const;
 
 private:
 	//! BlockManager
@@ -179,55 +166,17 @@ private:
 	shared_ptr<DataTableInfo> info;
 	//! The column types of the row group collection
 	vector<LogicalType> types;
-	//! Lock held when accessing or modifying the owned_row_groups pointer
-	mutable mutex row_group_pointer_lock;
-	//! The owning pointer of the segment tree
-	shared_ptr<RowGroupSegmentTree> owned_row_groups;
+	idx_t row_start;
+	//! The segment trees holding the various row_groups of the table
+	shared_ptr<RowGroupSegmentTree> row_groups;
 	//! Table statistics
 	TableStatistics stats;
 	//! Allocation size, only tracked for appends
 	atomic<idx_t> allocation_size;
 	//! Root metadata pointer, if the collection is loaded from disk
 	MetaBlockPointer metadata_pointer;
-	//! Other metadata pointers
-	vector<MetaBlockPointer> metadata_pointers;
 	//! Whether or not we need to append a new row group prior to appending
 	bool requires_new_row_group;
-};
-
-class RowGroupIterationHelper {
-public:
-	RowGroupIterationHelper(RowGroupCollection &collection, DuckTransaction &transaction,
-	                        vector<StorageIndex> column_ids);
-
-private:
-	RowGroupCollection &collection;
-	DuckTransaction &transaction;
-	vector<StorageIndex> column_ids;
-
-private:
-	class RowGroupIterator {
-	public:
-		RowGroupIterator(optional_ptr<RowGroupCollection> collection, optional_ptr<DuckTransaction> transaction,
-		                 const vector<StorageIndex> &column_ids);
-		~RowGroupIterator();
-		//! enable move constructor
-		RowGroupIterator(RowGroupIterator &&other) noexcept;
-
-		optional_ptr<RowGroupCollection> collection;
-		optional_ptr<DuckTransaction> transaction;
-		unique_ptr<DataChunk> chunk;
-		unique_ptr<TableScanState> state;
-
-	public:
-		RowGroupIterator &operator++();
-		bool operator!=(const RowGroupIterator &other) const;
-		DataChunk &operator*() const;
-	};
-
-public:
-	RowGroupIterator begin(); // NOLINT: match stl API
-	RowGroupIterator end();   // NOLINT: match stl API
 };
 
 } // namespace duckdb

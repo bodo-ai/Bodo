@@ -1,34 +1,31 @@
 #include "duckdb/storage/table/row_id_column_data.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
+#include "duckdb/storage/table/update_segment.hpp"
 
 namespace duckdb {
 
-RowIdColumnData::RowIdColumnData(BlockManager &block_manager, DataTableInfo &info)
-    : ColumnData(block_manager, info, COLUMN_IDENTIFIER_ROW_ID, LogicalType(LogicalTypeId::BIGINT),
-                 ColumnDataType::MAIN_TABLE, nullptr) {
-	stats->statistics.SetHasNoNullFast();
+RowIdColumnData::RowIdColumnData(BlockManager &block_manager, DataTableInfo &info, idx_t start_row)
+    : ColumnData(block_manager, info, COLUMN_IDENTIFIER_ROW_ID, start_row, LogicalType(LogicalTypeId::BIGINT),
+                 nullptr) {
 }
 
 FilterPropagateResult RowIdColumnData::CheckZonemap(ColumnScanState &state, TableFilter &filter) {
-	auto row_start = state.parent->row_group->GetRowStart();
-	return RowGroup::CheckRowIdFilter(filter, row_start, row_start + count);
+	return RowGroup::CheckRowIdFilter(filter, start, start + count);
+	;
 }
 
 void RowIdColumnData::InitializePrefetch(PrefetchState &prefetch_state, ColumnScanState &scan_state, idx_t rows) {
 }
 
 void RowIdColumnData::InitializeScan(ColumnScanState &state) {
-	InitializeScanWithOffset(state, 0);
+	InitializeScanWithOffset(state, start);
 }
 
 void RowIdColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) {
-	if (row_idx > count) {
-		throw InternalException("row_idx in InitializeScanWithOffset out of range");
-	}
 	state.current = nullptr;
 	state.segment_tree = nullptr;
-	state.offset_in_column = row_idx;
-	state.internal_index = state.offset_in_column;
+	state.row_index = row_idx;
+	state.internal_index = state.row_index;
 	state.initialized = true;
 	state.scan_state.reset();
 	state.last_offset = 0;
@@ -36,31 +33,35 @@ void RowIdColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row
 
 idx_t RowIdColumnData::Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                             idx_t scan_count) {
+	return ScanCommitted(vector_index, state, result, true, scan_count);
+}
+
+idx_t RowIdColumnData::ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
+                                     idx_t scan_count) {
 	return ScanCount(state, result, scan_count, 0);
 }
 
 void RowIdColumnData::ScanCommittedRange(idx_t row_group_start, idx_t offset_in_row_group, idx_t count,
                                          Vector &result) {
-	result.Sequence(UnsafeNumericCast<int64_t>(row_group_start + offset_in_row_group), 1, count);
+	D_ASSERT(this->start == row_group_start);
+	result.Sequence(UnsafeNumericCast<int64_t>(this->start + offset_in_row_group), 1, count);
 }
 
 idx_t RowIdColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset) {
-	auto row_start = state.parent->row_group->GetRowStart();
 	if (result_offset != 0) {
 		throw InternalException("RowIdColumnData result_offset must be 0");
 	}
-	ScanCommittedRange(row_start, state.offset_in_column, count, result);
-	state.offset_in_column += count;
+	ScanCommittedRange(start, state.row_index - start, count, result);
+	state.row_index += count;
 	return count;
 }
 
 void RowIdColumnData::Filter(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                              SelectionVector &sel, idx_t &count, const TableFilter &filter,
                              TableFilterState &filter_state) {
-	auto row_start = state.parent->row_group->GetRowStart();
-	auto current_row = row_start + state.offset_in_column;
+	auto current_row = state.row_index;
 	auto max_count = GetVectorCount(vector_index);
-	state.offset_in_column += max_count;
+	state.row_index += max_count;
 	// We do another quick statistics scan for row ids here
 	const auto rowid_start = current_row;
 	const auto rowid_end = current_row + max_count;
@@ -92,30 +93,32 @@ void RowIdColumnData::Filter(TransactionData transaction, idx_t vector_index, Co
 
 void RowIdColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                              SelectionVector &sel, idx_t count) {
+	SelectCommitted(vector_index, state, result, sel, count, true);
+}
+
+void RowIdColumnData::SelectCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, SelectionVector &sel,
+                                      idx_t count, bool allow_updates) {
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = FlatVector::GetData<row_t>(result);
-	auto row_start = state.parent->row_group->GetRowStart();
 	for (size_t sel_idx = 0; sel_idx < count; sel_idx++) {
-		result_data[sel_idx] = UnsafeNumericCast<row_t>(row_start + state.offset_in_column + sel.get_index(sel_idx));
+		result_data[sel_idx] = UnsafeNumericCast<row_t>(state.row_index + sel.get_index(sel_idx));
 	}
-	state.offset_in_column += GetVectorCount(vector_index);
+	state.row_index += GetVectorCount(vector_index);
 }
 
 idx_t RowIdColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	throw InternalException("Fetch is not supported for row id columns");
 }
 
-void RowIdColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                               row_t row_id, Vector &result, idx_t result_idx) {
+void RowIdColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
+                               idx_t result_idx) {
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto data = FlatVector::GetData<row_t>(result);
-	auto row_start = state.row_group->GetRowStart();
-	data[result_idx] = UnsafeNumericCast<row_t>(row_start) + row_id;
+	data[result_idx] = row_id;
 }
-
 void RowIdColumnData::Skip(ColumnScanState &state, idx_t count) {
-	state.offset_in_column += count;
-	state.internal_index = state.offset_in_column;
+	state.row_index += count;
+	state.internal_index = state.row_index;
 }
 
 void RowIdColumnData::InitializeAppend(ColumnAppendState &state) {
@@ -131,37 +134,36 @@ void RowIdColumnData::AppendData(BaseStatistics &stats, ColumnAppendState &state
 	throw InternalException("RowIdColumnData cannot be appended to");
 }
 
-void RowIdColumnData::RevertAppend(row_t new_count) {
+void RowIdColumnData::RevertAppend(row_t start_row) {
 	throw InternalException("RowIdColumnData cannot be appended to");
 }
 
 void RowIdColumnData::Update(TransactionData transaction, DataTable &data_table, idx_t column_index,
-                             Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t row_group_start) {
+                             Vector &update_vector, row_t *row_ids, idx_t update_count) {
 	throw InternalException("RowIdColumnData cannot be updated");
 }
 
 void RowIdColumnData::UpdateColumn(TransactionData transaction, DataTable &data_table,
                                    const vector<column_t> &column_path, Vector &update_vector, row_t *row_ids,
-                                   idx_t update_count, idx_t depth, idx_t row_group_start) {
+                                   idx_t update_count, idx_t depth) {
 	throw InternalException("RowIdColumnData cannot be updated");
 }
 
-void RowIdColumnData::VisitBlockIds(BlockIdVisitor &visitor) const {
-	throw InternalException("VisitBlockIds not supported for rowid");
+void RowIdColumnData::CommitDropColumn() {
+	throw InternalException("RowIdColumnData cannot be dropped");
 }
 
-unique_ptr<ColumnCheckpointState> RowIdColumnData::CreateCheckpointState(const RowGroup &row_group,
+unique_ptr<ColumnCheckpointState> RowIdColumnData::CreateCheckpointState(RowGroup &row_group,
                                                                          PartialBlockManager &partial_block_manager) {
 	throw InternalException("RowIdColumnData cannot be checkpointed");
 }
 
-unique_ptr<ColumnCheckpointState> RowIdColumnData::Checkpoint(const RowGroup &row_group, ColumnCheckpointInfo &info,
-                                                              const BaseStatistics &old_stats) {
+unique_ptr<ColumnCheckpointState> RowIdColumnData::Checkpoint(RowGroup &row_group, ColumnCheckpointInfo &info) {
 	throw InternalException("RowIdColumnData cannot be checkpointed");
 }
 
-void RowIdColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState &state, idx_t count,
-                                     Vector &scan_vector) const {
+void RowIdColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState &state, idx_t row_group_start, idx_t count,
+                                     Vector &scan_vector) {
 	throw InternalException("RowIdColumnData cannot be checkpointed");
 }
 

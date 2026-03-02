@@ -13,11 +13,6 @@
 
 namespace duckdb {
 
-struct WindowFunctionDefinition {
-	const char *name;
-	ExpressionType expression_type;
-};
-
 enum class WindowBoundary : uint8_t {
 	INVALID = 0,
 	UNBOUNDED_PRECEDING = 1,
@@ -62,9 +57,9 @@ public:
 	//! Expression representing a filter, only used for aggregates
 	unique_ptr<ParsedExpression> filter_expr;
 	//! True to ignore NULL values
-	bool ignore_nulls = false;
+	bool ignore_nulls;
 	//! Whether or not the aggregate function is distinct, only used for aggregates
-	bool distinct = false;
+	bool distinct;
 	//! The window boundaries
 	WindowBoundary start = WindowBoundary::INVALID;
 	WindowBoundary end = WindowBoundary::INVALID;
@@ -92,14 +87,11 @@ public:
 
 	static bool Equal(const WindowExpression &a, const WindowExpression &b);
 
-	bool HasBoundedParts();
-
 	unique_ptr<ParsedExpression> Copy() const override;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParsedExpression> Deserialize(Deserializer &deserializer);
 
-	static const WindowFunctionDefinition *WindowFunctions();
 	static ExpressionType WindowToExpressionType(string &fun_name);
 
 public:

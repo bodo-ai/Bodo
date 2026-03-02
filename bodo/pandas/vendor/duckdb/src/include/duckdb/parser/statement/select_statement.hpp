@@ -14,7 +14,6 @@
 
 namespace duckdb {
 
-class QueryNode;
 class Serializer;
 class Deserializer;
 

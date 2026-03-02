@@ -17,7 +17,7 @@ namespace duckdb {
 class InMemoryCheckpointer final : public CheckpointWriter {
 public:
 	InMemoryCheckpointer(QueryContext context, AttachedDatabase &db, BlockManager &block_manager,
-	                     StorageManager &storage_manager, CheckpointOptions options);
+	                     StorageManager &storage_manager, CheckpointType checkpoint_type);
 
 	void CreateCheckpoint() override;
 
@@ -27,8 +27,8 @@ public:
 	optional_ptr<ClientContext> GetClientContext() const {
 		return context;
 	}
-	CheckpointOptions GetCheckpointOptions() const {
-		return options;
+	CheckpointType GetCheckpointType() const {
+		return checkpoint_type;
 	}
 	PartialBlockManager &GetPartialBlockManager() {
 		return partial_block_manager;
@@ -41,7 +41,7 @@ private:
 	optional_ptr<ClientContext> context;
 	PartialBlockManager partial_block_manager;
 	StorageManager &storage_manager;
-	CheckpointOptions options;
+	CheckpointType checkpoint_type;
 };
 
 class InMemoryTableDataWriter : public TableDataWriter {
@@ -49,13 +49,11 @@ public:
 	InMemoryTableDataWriter(InMemoryCheckpointer &checkpoint_manager, TableCatalogEntry &table);
 
 public:
-	void WriteUnchangedTable(MetaBlockPointer pointer, const vector<MetaBlockPointer> &metadata_pointers,
-	                         idx_t total_rows) override;
+	void WriteUnchangedTable(MetaBlockPointer pointer, idx_t total_rows) override;
 	void FinalizeTable(const TableStatistics &global_stats, DataTableInfo &info, RowGroupCollection &collection,
 	                   Serializer &serializer) override;
 	unique_ptr<RowGroupWriter> GetRowGroupWriter(RowGroup &row_group) override;
-	void FlushPartialBlocks() override;
-	CheckpointOptions GetCheckpointOptions() const override;
+	CheckpointType GetCheckpointType() const override;
 	MetadataManager &GetMetadataManager() override;
 
 private:
@@ -68,7 +66,7 @@ public:
 	                       InMemoryCheckpointer &checkpoint_manager);
 
 public:
-	CheckpointOptions GetCheckpointOptions() const override;
+	CheckpointType GetCheckpointType() const override;
 	WriteStream &GetPayloadWriter() override;
 	MetaBlockPointer GetMetaBlockPointer() override;
 	optional_ptr<MetadataManager> GetMetadataManager() override;

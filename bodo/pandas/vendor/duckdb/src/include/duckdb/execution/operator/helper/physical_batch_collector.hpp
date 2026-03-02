@@ -18,7 +18,7 @@ public:
 	PhysicalBatchCollector(PhysicalPlan &physical_plan, PreparedStatementData &data);
 
 public:
-	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) const override;
+	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) override;
 
 public:
 	// Sink interface
@@ -44,8 +44,7 @@ public:
 //===--------------------------------------------------------------------===//
 class BatchCollectorGlobalState : public GlobalSinkState {
 public:
-	BatchCollectorGlobalState(ClientContext &context, const PhysicalBatchCollector &op)
-	    : data(context, op.types, op.memory_type) {
+	BatchCollectorGlobalState(ClientContext &context, const PhysicalBatchCollector &op) : data(context, op.types) {
 	}
 
 	mutex glock;
@@ -55,8 +54,7 @@ public:
 
 class BatchCollectorLocalState : public LocalSinkState {
 public:
-	BatchCollectorLocalState(ClientContext &context, const PhysicalBatchCollector &op)
-	    : data(context, op.types, op.memory_type) {
+	BatchCollectorLocalState(ClientContext &context, const PhysicalBatchCollector &op) : data(context, op.types) {
 	}
 
 	BatchedDataCollection data;

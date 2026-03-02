@@ -47,7 +47,6 @@ public:
 
 public:
 	virtual vector<ColumnBinding> GetColumnBindings();
-	virtual idx_t GetRootIndex();
 	static string ColumnBindingsToString(const vector<ColumnBinding> &bindings);
 	void PrintColumnBindings();
 	static vector<ColumnBinding> GenerateColumnBindings(idx_t table_idx, idx_t column_count);

@@ -1,39 +1,30 @@
 #include "duckdb/common/bignum.hpp"
 #include "duckdb/common/types/bignum.hpp"
-#include "duckdb/common/printer.hpp"
-#include "duckdb/common/to_string.hpp"
+#include <iostream>
 
 namespace duckdb {
 void PrintBits(const char value) {
-	string result;
 	for (int i = 7; i >= 0; --i) {
-		result += to_string((value >> i) & 1);
+		std::cout << ((value >> i) & 1);
 	}
-	Printer::RawPrint(OutputStream::STREAM_STDOUT, result);
 }
 
 void bignum_t::Print() const {
 	auto ptr = data.GetData();
 	auto length = data.GetSize();
-	string result;
 	for (idx_t i = 0; i < length; ++i) {
-		for (int j = 7; j >= 0; --j) {
-			result += to_string((ptr[i] >> j) & 1);
-		}
-		result += "  ";
+		PrintBits(ptr[i]);
+		std::cout << "  ";
 	}
-	Printer::Print(OutputStream::STREAM_STDOUT, result);
+	std::cout << '\n';
 }
 
 void BignumIntermediate::Print() const {
-	string result;
 	for (idx_t i = 0; i < size; ++i) {
-		for (int j = 7; j >= 0; --j) {
-			result += to_string((data[i] >> j) & 1);
-		}
-		result += "  ";
+		PrintBits(static_cast<char>(data[i]));
+		std::cout << "  ";
 	}
-	Printer::Print(OutputStream::STREAM_STDOUT, result);
+	std::cout << '\n';
 }
 
 BignumIntermediate::BignumIntermediate(const bignum_t &value) {
@@ -241,6 +232,7 @@ void BignumAddition(data_ptr_t result, int64_t result_end, bool is_target_absolu
 }
 
 string_t BignumIntermediate::Negate(Vector &result_vector) const {
+
 	auto target = StringVector::EmptyString(result_vector, size + Bignum::BIGNUM_HEADER_SIZE);
 	auto ptr = target.GetDataWriteable();
 

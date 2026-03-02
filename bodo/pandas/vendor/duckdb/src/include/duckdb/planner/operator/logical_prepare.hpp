@@ -46,7 +46,7 @@ protected:
 	}
 
 	bool RequireOptimizer() const override {
-		if (!prepared->properties.bound_all_parameters || prepared->properties.always_require_rebind) {
+		if (!prepared->properties.bound_all_parameters) {
 			return false;
 		}
 		return children[0]->RequireOptimizer();

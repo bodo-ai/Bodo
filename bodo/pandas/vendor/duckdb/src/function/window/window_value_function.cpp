@@ -23,6 +23,7 @@ public:
 	                       const ValidityMask &partition_mask, const ValidityMask &order_mask)
 	    : WindowExecutorGlobalState(client, executor, payload_count, partition_mask, order_mask),
 	      ignore_nulls(&all_valid), child_idx(executor.child_idx) {
+
 		if (!executor.arg_order_idx.empty()) {
 			value_tree =
 			    make_uniq<WindowIndexTree>(client, executor.wexpr.arg_orders, executor.arg_order_idx, payload_count);
@@ -138,6 +139,7 @@ void WindowValueLocalState::Finalize(ExecutionContext &context, CollectionPtr co
 //===--------------------------------------------------------------------===//
 WindowValueExecutor::WindowValueExecutor(BoundWindowExpression &wexpr, WindowSharedExpressions &shared)
     : WindowExecutor(wexpr, shared) {
+
 	for (const auto &order : wexpr.arg_orders) {
 		arg_order_idx.emplace_back(shared.RegisterSink(order.expression));
 	}
@@ -194,9 +196,11 @@ unique_ptr<LocalSinkState> WindowValueExecutor::GetLocalState(ExecutionContext &
 
 class WindowLeadLagGlobalState : public WindowValueGlobalState {
 public:
-	WindowLeadLagGlobalState(ClientContext &client, const WindowValueExecutor &executor, const idx_t payload_count,
-	                         const ValidityMask &partition_mask, const ValidityMask &order_mask)
+	explicit WindowLeadLagGlobalState(ClientContext &client, const WindowValueExecutor &executor,
+	                                  const idx_t payload_count, const ValidityMask &partition_mask,
+	                                  const ValidityMask &order_mask)
 	    : WindowValueGlobalState(client, executor, payload_count, partition_mask, order_mask) {
+
 		if (value_tree) {
 			use_framing = true;
 
@@ -230,7 +234,7 @@ public:
 //===--------------------------------------------------------------------===//
 class WindowLeadLagLocalState : public WindowValueLocalState {
 public:
-	WindowLeadLagLocalState(ExecutionContext &context, const WindowLeadLagGlobalState &gstate)
+	explicit WindowLeadLagLocalState(ExecutionContext &context, const WindowLeadLagGlobalState &gstate)
 	    : WindowValueLocalState(context, gstate) {
 		if (gstate.row_tree) {
 			local_row = gstate.row_tree->GetLocalState(context);
@@ -464,11 +468,7 @@ void WindowFirstValueExecutor::EvaluateInternal(ExecutionContext &context, DataC
 			if (frame_width) {
 				const auto first_idx = gvstate.value_tree->SelectNth(frames, 0);
 				D_ASSERT(first_idx.second == 0);
-				if (first_idx.first < cursor.Count()) {
-					cursor.CopyCell(0, first_idx.first, result, i);
-				} else {
-					FlatVector::SetNull(result, i, true);
-				}
+				cursor.CopyCell(0, first_idx.first, result, i);
 			} else {
 				FlatVector::SetNull(result, i, true);
 			}
@@ -522,7 +522,7 @@ void WindowLastValueExecutor::EvaluateInternal(ExecutionContext &context, DataCh
 					n -= last_idx.second;
 					last_idx = gvstate.value_tree->SelectNth(frames, n);
 				}
-				if (last_idx.second || last_idx.first >= cursor.Count()) {
+				if (last_idx.second) {
 					//	No last value - give up.
 					FlatVector::SetNull(result, i, true);
 				} else {
@@ -590,9 +590,9 @@ void WindowNthValueExecutor::EvaluateInternal(ExecutionContext &context, DataChu
 				frame_width += frame.end - frame.start;
 			}
 
-			if (--n < frame_width) {
-				const auto nth_index = gvstate.value_tree->SelectNth(frames, n);
-				if (nth_index.second || nth_index.first >= cursor.Count()) {
+			if (n < frame_width) {
+				const auto nth_index = gvstate.value_tree->SelectNth(frames, n - 1);
+				if (nth_index.second) {
 					// Past end of frame
 					FlatVector::SetNull(result, i, true);
 				} else {
@@ -840,16 +840,8 @@ static fill_value_t GetFillValueFunction(const LogicalType &type) {
 	}
 }
 
-WindowFillExecutor::WindowFillExecutor(BoundWindowExpression &wexpr, ClientContext &client,
-                                       WindowSharedExpressions &shared)
+WindowFillExecutor::WindowFillExecutor(BoundWindowExpression &wexpr, WindowSharedExpressions &shared)
     : WindowValueExecutor(wexpr, shared) {
-	//	If the argument order is prefix of the partition ordering,
-	//	then we can just use the partition ordering.
-	auto &arg_orders = wexpr.arg_orders;
-	const auto optimize = ClientConfig::GetConfig(client).enable_optimizer;
-	if (optimize && BoundWindowExpression::GetSharedOrders(wexpr.orders, arg_orders) == arg_orders.size()) {
-		arg_order_idx.clear();
-	}
 
 	//	We need the sort values for interpolation, so either use the range or the secondary ordering expression
 	if (arg_order_idx.empty()) {
@@ -879,8 +871,8 @@ static void WindowFillCopy(WindowCursor &cursor, Vector &result, idx_t count, id
 
 class WindowFillGlobalState : public WindowLeadLagGlobalState {
 public:
-	WindowFillGlobalState(ClientContext &client, const WindowFillExecutor &executor, const idx_t payload_count,
-	                      const ValidityMask &partition_mask, const ValidityMask &order_mask)
+	explicit WindowFillGlobalState(ClientContext &client, const WindowFillExecutor &executor, const idx_t payload_count,
+	                               const ValidityMask &partition_mask, const ValidityMask &order_mask)
 	    : WindowLeadLagGlobalState(client, executor, payload_count, partition_mask, order_mask),
 	      order_idx(executor.order_idx) {
 	}
@@ -893,11 +885,6 @@ class WindowFillLocalState : public WindowLeadLagLocalState {
 public:
 	WindowFillLocalState(ExecutionContext &context, const WindowLeadLagGlobalState &gvstate)
 	    : WindowLeadLagLocalState(context, gvstate) {
-		//	If we optimised the ordering, force computation of the validity range.
-		if (!gvstate.value_tree) {
-			state.required.insert(VALID_BEGIN);
-			state.required.insert(VALID_END);
-		}
 	}
 
 	//! Finish the sinking and prepare to scan
@@ -931,6 +918,7 @@ unique_ptr<LocalSinkState> WindowFillExecutor::GetLocalState(ExecutionContext &c
 
 void WindowFillExecutor::EvaluateInternal(ExecutionContext &context, DataChunk &eval_chunk, Vector &result, idx_t count,
                                           idx_t row_idx, OperatorSinkInput &sink) const {
+
 	auto &lfstate = sink.local_state.Cast<WindowFillLocalState>();
 	auto &cursor = *lfstate.cursor;
 
@@ -1020,9 +1008,6 @@ void WindowFillExecutor::EvaluateInternal(ExecutionContext &context, DataChunk &
 			if (prev_valid == DConstants::INVALID_INDEX) {
 				//	Skip to the next partition
 				i += partition_end[i] - row_idx - 1;
-				if (i >= count) {
-					return;
-				}
 				row_idx = partition_end[i] - 1;
 				continue;
 			}
@@ -1115,7 +1100,7 @@ void WindowFillExecutor::EvaluateInternal(ExecutionContext &context, DataChunk &
 			}
 		}
 
-		//	If there is nothing behind us (missing early value) then scan forward
+		//	If there is nothing beind us (missing early value) then scan forward
 		if (prev_valid == DConstants::INVALID_INDEX) {
 			for (idx_t j = row_idx + 1; j < valid_end[i]; ++j) {
 				if (!order_value_func(j, order_cursor)) {
@@ -1132,9 +1117,6 @@ void WindowFillExecutor::EvaluateInternal(ExecutionContext &context, DataChunk &
 		if (prev_valid == DConstants::INVALID_INDEX) {
 			//	Skip to the next partition
 			i += partition_end[i] - row_idx - 1;
-			if (i >= count) {
-				break;
-			}
 			row_idx = partition_end[i] - 1;
 			continue;
 		}

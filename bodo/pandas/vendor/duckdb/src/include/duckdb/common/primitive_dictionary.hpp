@@ -19,14 +19,6 @@ struct PrimitiveCastOperator {
 	static TGT Operation(SRC input) {
 		return TGT(input);
 	}
-	template <class SRC, class TGT>
-	static constexpr idx_t WriteSize(const TGT &input) {
-		return sizeof(TGT);
-	}
-	template <class SRC, class TGT>
-	static void WriteToStream(const TGT &input, WriteStream &ser) {
-		ser.WriteData(const_data_ptr_cast(&input), sizeof(TGT));
-	}
 };
 
 template <class SRC, class TGT = SRC, class OP = PrimitiveCastOperator>
@@ -59,19 +51,21 @@ public:
 	                                              : capacity * sizeof(TGT))),
 	      target_stream(allocated_target.get(), allocated_target.GetSize()),
 	      dictionary(reinterpret_cast<primitive_dictionary_entry_t *>(allocated_dictionary.get())), full(false) {
-		Clear();
+		// Initialize empty
+		for (idx_t i = 0; i < capacity; i++) {
+			dictionary[i].index = INVALID_INDEX;
+		}
 	}
 
 public:
 	//! Insert value into dictionary (if not full)
-	template <bool ADD_TO_TARGET = false>
 	void Insert(SRC value) {
 		if (full) {
 			return;
 		}
 		auto &entry = Lookup(value);
 		if (entry.IsEmpty()) {
-			if (size + 1 > maximum_size || (ADD_TO_TARGET && !AddToTarget(value))) {
+			if (size + 1 > maximum_size || !AddToTarget(value)) {
 				full = true;
 				return;
 			}
@@ -134,13 +128,7 @@ public:
 		allocated_target.Reset();
 	}
 
-	void Clear() {
-		for (idx_t i = 0; i < capacity; i++) {
-			dictionary[i].index = INVALID_INDEX;
-		}
-		size = 0;
-		full = false;
-	}
+private:
 	//! Look up a value in the dictionary using linear probing
 	primitive_dictionary_entry_t &Lookup(const SRC &value) const {
 		auto offset = Hash(value) & capacity_mask;
@@ -150,7 +138,6 @@ public:
 		return dictionary[offset];
 	}
 
-private:
 	//! Write a value to the target data (if source is not string)
 	template <typename S = SRC, typename std::enable_if<!std::is_same<S, string_t>::value, int>::type = 0>
 	bool AddToTarget(const SRC &src_value) {
@@ -218,7 +205,7 @@ private:
 
 	//! Maximum size and current size
 	const idx_t maximum_size;
-	uint32_t size;
+	idx_t size;
 
 	//! Dictionary capacity (power of two) and corresponding mask
 	const idx_t capacity;

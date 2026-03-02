@@ -86,7 +86,6 @@ public:
 	ClientContext &GetClientContext();
 
 	void AddDependency(shared_ptr<Pipeline> &pipeline);
-	vector<weak_ptr<Pipeline>> GetDependencies() const;
 
 	void Ready();
 	void Reset();

@@ -44,6 +44,8 @@ public:
 
 	//! The catalog search path.
 	unique_ptr<CatalogSearchPath> catalog_search_path;
+	//! The file search path.
+	string file_search_path;
 
 	//! The file opener of the client context.
 	unique_ptr<FileOpener> file_opener;

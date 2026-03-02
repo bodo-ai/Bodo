@@ -1,5 +1,8 @@
 #include "duckdb/parser/tableref/expressionlistref.hpp"
 
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
+
 namespace duckdb {
 
 string ExpressionListRef::ToString() const {

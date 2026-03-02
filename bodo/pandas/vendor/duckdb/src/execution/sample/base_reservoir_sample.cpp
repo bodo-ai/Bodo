@@ -60,6 +60,7 @@ void BaseReservoirSampling::SetNextEntry() {
 }
 
 void BaseReservoirSampling::ReplaceElementWithIndex(idx_t entry_index, double with_weight, bool pop) {
+
 	if (pop) {
 		reservoir_weights.pop();
 	}

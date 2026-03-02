@@ -19,7 +19,6 @@ class ColumnSegment;
 class RowGroup;
 class BaseStatistics;
 class SegmentStatistics;
-class MetadataWriter;
 
 // Writes data for an entire row group.
 class RowGroupWriter {
@@ -32,7 +31,7 @@ public:
 		return compression_types;
 	}
 
-	virtual CheckpointOptions GetCheckpointOptions() const = 0;
+	virtual CheckpointType GetCheckpointType() const = 0;
 	virtual WriteStream &GetPayloadWriter() = 0;
 	virtual MetaBlockPointer GetMetaBlockPointer() = 0;
 	virtual optional_ptr<MetadataManager> GetMetadataManager() = 0;
@@ -59,7 +58,7 @@ public:
 	                         TableDataWriter &writer, MetadataWriter &table_data_writer);
 
 public:
-	CheckpointOptions GetCheckpointOptions() const override;
+	CheckpointType GetCheckpointType() const override;
 	WriteStream &GetPayloadWriter() override;
 	MetaBlockPointer GetMetaBlockPointer() override;
 	optional_ptr<MetadataManager> GetMetadataManager() override;

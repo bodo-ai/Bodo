@@ -95,9 +95,7 @@ void Node4::DeleteChild(ART &art, Node &node, Node &parent, const uint8_t byte, 
 
 	auto prev_node4_status = node.GetGateStatus();
 	Node::FreeNode(art, node);
-	// Propagate both the prev_node_4 status and the general gate status (if the gate was earlier on),
-	// since the concatenation logic depends on both.
-	Prefix::Concat(art, parent, node, child, remaining_byte, prev_node4_status, status);
+	Prefix::Concat(art, parent, node, child, remaining_byte, prev_node4_status);
 }
 
 void Node4::ShrinkNode16(ART &art, Node &node4, Node &node16) {

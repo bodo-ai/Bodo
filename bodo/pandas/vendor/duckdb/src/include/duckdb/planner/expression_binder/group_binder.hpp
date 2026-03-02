@@ -33,11 +33,9 @@ protected:
 	string UnsupportedAggregateMessage() override;
 
 	BindResult BindSelectRef(idx_t entry);
-	BindResult BindColumnRef(ColumnRefExpression &expr, unique_ptr<ParsedExpression> &expr_ptr);
+	BindResult BindColumnRef(ColumnRefExpression &expr);
 	BindResult BindConstant(ConstantExpression &expr);
-
-	bool TryResolveAliasReference(ColumnRefExpression &colref, idx_t depth, bool root_expression, BindResult &result,
-	                              unique_ptr<ParsedExpression> &expr_ptr) override;
+	bool TryBindAlias(ColumnRefExpression &colref, bool root_expression, BindResult &result) override;
 
 	SelectNode &node;
 	SelectBindState &bind_state;

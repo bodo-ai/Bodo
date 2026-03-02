@@ -23,21 +23,6 @@ class ColumnDataCollection;
 class ExecutionContext;
 class PhysicalOperatorLogger;
 
-struct CopyFunctionInfo {
-	virtual ~CopyFunctionInfo() = default;
-
-	template <class TARGET>
-	TARGET &Cast() {
-		DynamicCastCheck<TARGET>(this);
-		return reinterpret_cast<TARGET &>(*this);
-	}
-	template <class TARGET>
-	const TARGET &Cast() const {
-		DynamicCastCheck<TARGET>(this);
-		return reinterpret_cast<const TARGET &>(*this);
-	}
-};
-
 struct LocalFunctionData {
 	virtual ~LocalFunctionData() = default;
 
@@ -84,12 +69,11 @@ struct PreparedBatchData {
 };
 
 struct CopyFunctionBindInput {
-	explicit CopyFunctionBindInput(const CopyInfo &info_p, shared_ptr<CopyFunctionInfo> function_info = nullptr)
-	    : info(info_p), function_info(std::move(function_info)) {
+	explicit CopyFunctionBindInput(const CopyInfo &info_p) : info(info_p) {
 	}
 
 	const CopyInfo &info;
-	shared_ptr<CopyFunctionInfo> function_info;
+
 	string file_extension;
 };
 
@@ -215,9 +199,6 @@ public:
 	TableFunction copy_from_function;
 
 	string extension;
-
-	//! Additional function info, passed to the bind
-	shared_ptr<CopyFunctionInfo> function_info;
 };
 
 } // namespace duckdb

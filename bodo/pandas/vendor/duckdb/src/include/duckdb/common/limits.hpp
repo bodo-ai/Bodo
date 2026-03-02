@@ -24,12 +24,10 @@ namespace duckdb {
 template <class T>
 struct NumericLimits {
 	static constexpr T Minimum() {
-		return std::numeric_limits<T>::has_infinity ? -std::numeric_limits<T>::infinity()
-		                                            : std::numeric_limits<T>::lowest();
+		return std::numeric_limits<T>::lowest();
 	}
 	static constexpr T Maximum() {
-		return std::numeric_limits<T>::has_infinity ? std::numeric_limits<T>::infinity()
-		                                            : std::numeric_limits<T>::max();
+		return std::numeric_limits<T>::max();
 	}
 	static constexpr bool IsSigned() {
 		return std::is_signed<T>::value;

@@ -28,61 +28,65 @@ ExceptionFormatValue::ExceptionFormatValue(uhugeint_t uhuge_val)
 ExceptionFormatValue::ExceptionFormatValue(string str_val)
     : type(ExceptionFormatValueType::FORMAT_VALUE_TYPE_STRING), str_val(std::move(str_val)) {
 }
-ExceptionFormatValue::ExceptionFormatValue(const String &str_val) : ExceptionFormatValue(str_val.ToStdString()) {
+ExceptionFormatValue::ExceptionFormatValue(String str_val)
+    : type(ExceptionFormatValueType::FORMAT_VALUE_TYPE_STRING), str_val(str_val.ToStdString()) {
 }
 
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const PhysicalType &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(PhysicalType value) {
 	return ExceptionFormatValue(TypeIdToString(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const LogicalType &value) {
+ExceptionFormatValue
+ExceptionFormatValue::CreateFormatValue(LogicalType value) { // NOLINT: templating requires us to copy value here
 	return ExceptionFormatValue(value.ToString());
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const float &value) {
-	return ExceptionFormatValue(static_cast<double>(value));
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(float value) {
+	return ExceptionFormatValue(double(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const double &value) {
-	return ExceptionFormatValue(value);
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(double value) {
+	return ExceptionFormatValue(double(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const string &value) {
-	return ExceptionFormatValue(value);
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(string value) {
+	return ExceptionFormatValue(std::move(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const String &value) {
-	return ExceptionFormatValue(value);
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(String value) {
+	return ExceptionFormatValue(std::move(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const SQLString &value) {
+ExceptionFormatValue
+ExceptionFormatValue::CreateFormatValue(SQLString value) { // NOLINT: templating requires us to copy value here
 	return KeywordHelper::WriteQuoted(value.raw_string, '\'');
 }
 
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const SQLIdentifier &value) {
+ExceptionFormatValue
+ExceptionFormatValue::CreateFormatValue(SQLIdentifier value) { // NOLINT: templating requires us to copy value here
 	return KeywordHelper::WriteOptionallyQuoted(value.raw_string, '"');
 }
 
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const char *const &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const char *value) {
 	return ExceptionFormatValue(string(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(char *const &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(char *value) {
 	return ExceptionFormatValue(string(value));
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const idx_t &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(idx_t value) {
 	return ExceptionFormatValue(value);
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const hugeint_t &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(hugeint_t value) {
 	return ExceptionFormatValue(value);
 }
 template <>
-ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(const uhugeint_t &value) {
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(uhugeint_t value) {
 	return ExceptionFormatValue(value);
 }
 

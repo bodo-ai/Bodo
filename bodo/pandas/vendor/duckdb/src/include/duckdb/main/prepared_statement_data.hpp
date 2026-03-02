@@ -45,9 +45,7 @@ public:
 	//! The map of parameter index to the actual value entry
 	bound_parameter_map_t value_map;
 	//! Whether we are creating a streaming result or not
-	QueryResultOutputType output_type;
-	//! Whether we are creating a buffer-managed result or not
-	QueryResultMemoryType memory_type;
+	bool is_streaming = false;
 
 public:
 	void CheckParameterCount(idx_t parameter_count);

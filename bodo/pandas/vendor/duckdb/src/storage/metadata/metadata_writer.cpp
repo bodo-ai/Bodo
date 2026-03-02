@@ -1,4 +1,5 @@
 #include "duckdb/storage/metadata/metadata_writer.hpp"
+#include "duckdb/storage/block_manager.hpp"
 
 namespace duckdb {
 
@@ -31,7 +32,7 @@ MetaBlockPointer MetadataWriter::GetMetaBlockPointer() {
 
 void MetadataWriter::SetWrittenPointers(optional_ptr<vector<MetaBlockPointer>> written_pointers_p) {
 	written_pointers = written_pointers_p;
-	if (written_pointers && capacity > 0 && offset < capacity) {
+	if (written_pointers && capacity > 0) {
 		written_pointers->push_back(manager.GetDiskPointer(current_pointer));
 	}
 }

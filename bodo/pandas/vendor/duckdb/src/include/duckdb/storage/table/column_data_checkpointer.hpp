@@ -22,16 +22,17 @@ public:
 	ColumnDataCheckpointData() {
 	}
 	ColumnDataCheckpointData(ColumnCheckpointState &checkpoint_state, ColumnData &col_data, DatabaseInstance &db,
-	                         const RowGroup &row_group, StorageManager &storage_manager)
+	                         RowGroup &row_group, ColumnCheckpointInfo &checkpoint_info,
+	                         StorageManager &storage_manager)
 	    : checkpoint_state(checkpoint_state), col_data(col_data), db(db), row_group(row_group),
-	      storage_manager(storage_manager) {
+	      checkpoint_info(checkpoint_info), storage_manager(storage_manager) {
 	}
 
 public:
 	CompressionFunction &GetCompressionFunction(CompressionType type);
 	const LogicalType &GetType() const;
 	ColumnData &GetColumnData();
-	const RowGroup &GetRowGroup();
+	RowGroup &GetRowGroup();
 	ColumnCheckpointState &GetCheckpointState();
 	DatabaseInstance &GetDatabase();
 	StorageManager &GetStorageManager();
@@ -40,7 +41,8 @@ private:
 	optional_ptr<ColumnCheckpointState> checkpoint_state;
 	optional_ptr<ColumnData> col_data;
 	optional_ptr<DatabaseInstance> db;
-	optional_ptr<const RowGroup> row_group;
+	optional_ptr<RowGroup> row_group;
+	optional_ptr<ColumnCheckpointInfo> checkpoint_info;
 	optional_ptr<StorageManager> storage_manager;
 };
 
@@ -61,7 +63,7 @@ public:
 class ColumnDataCheckpointer {
 public:
 	ColumnDataCheckpointer(vector<reference<ColumnCheckpointState>> &states, StorageManager &storage_manager,
-	                       const RowGroup &row_group, ColumnCheckpointInfo &checkpoint_info);
+	                       RowGroup &row_group, ColumnCheckpointInfo &checkpoint_info);
 
 public:
 	void Checkpoint();
@@ -71,8 +73,8 @@ private:
 	void ScanSegments(const std::function<void(Vector &, idx_t)> &callback);
 	vector<CheckpointAnalyzeResult> DetectBestCompressionMethod();
 	void WriteToDisk();
-	void WritePersistentSegments(ColumnCheckpointState &state);
 	bool HasChanges(ColumnData &col_data);
+	void WritePersistentSegments(ColumnCheckpointState &state);
 	void InitAnalyze();
 	void DropSegments();
 	bool ValidityCoveredByBasedata(vector<CheckpointAnalyzeResult> &result);
@@ -80,11 +82,11 @@ private:
 private:
 	vector<reference<ColumnCheckpointState>> &checkpoint_states;
 	StorageManager &storage_manager;
-	const RowGroup &row_group;
+	RowGroup &row_group;
 	Vector intermediate;
 	ColumnCheckpointInfo &checkpoint_info;
 
-	bool has_changes = false;
+	vector<bool> has_changes;
 	//! For every column data that is being checkpointed, the applicable functions
 	vector<vector<optional_ptr<CompressionFunction>>> compression_functions;
 	//! For every column data that is being checkpointed, the analyze state of functions being tried

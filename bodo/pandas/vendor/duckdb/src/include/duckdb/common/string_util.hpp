@@ -15,8 +15,6 @@
 #include "duckdb/common/set.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/complex_json.hpp"
-#include "duckdb/common/exception/parser_exception.hpp"
-
 #include <cstring>
 
 namespace duckdb {
@@ -42,9 +40,18 @@ class StringUtil {
 public:
 	static string GenerateRandomName(idx_t length = 16);
 
-	static uint8_t GetHexValue(char c);
-	static bool CharacterIsHex(char c);
-
+	static uint8_t GetHexValue(char c) {
+		if (c >= '0' && c <= '9') {
+			return UnsafeNumericCast<uint8_t>(c - '0');
+		}
+		if (c >= 'a' && c <= 'f') {
+			return UnsafeNumericCast<uint8_t>(c - 'a' + 10);
+		}
+		if (c >= 'A' && c <= 'F') {
+			return UnsafeNumericCast<uint8_t>(c - 'A' + 10);
+		}
+		throw InvalidInputException("Invalid input for hex digit: %s", string(1, c));
+	}
 	static uint8_t GetBinaryValue(char c) {
 		if (c >= '0' && c <= '1') {
 			return UnsafeNumericCast<uint8_t>(c - '0');
@@ -60,6 +67,9 @@ public:
 	}
 	static bool CharacterIsDigit(char c) {
 		return c >= '0' && c <= '9';
+	}
+	static bool CharacterIsHex(char c) {
+		return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 	}
 	static char CharacterToUpper(char c) {
 		if (c >= 'a' && c <= 'z') {
@@ -159,8 +169,6 @@ public:
 	DUCKDB_API static void SkipBOM(const char *buffer_ptr, const idx_t &buffer_size, idx_t &buffer_pos);
 
 	DUCKDB_API static idx_t ToUnsigned(const string &str);
-	DUCKDB_API static int64_t ToSigned(const string &str);
-	DUCKDB_API static double ToDouble(const string &str);
 
 	template <class T>
 	static string ToString(const vector<T> &input, const string &separator) {
@@ -195,10 +203,6 @@ public:
 	//! Return a string that formats the give number of bytes
 	DUCKDB_API static string BytesToHumanReadableString(idx_t bytes, idx_t multiplier = 1024);
 
-	DUCKDB_API static string TryParseFormattedBytes(const string &arg, idx_t &result);
-
-	DUCKDB_API static idx_t ParseFormattedBytes(const string &arg);
-
 	//! Convert a string to UPPERCASE
 	DUCKDB_API static string Upper(const string &str);
 
@@ -213,7 +217,6 @@ public:
 
 	//! Case insensitive hash
 	DUCKDB_API static uint64_t CIHash(const string &str);
-	DUCKDB_API static uint64_t CIHash(const char *str, idx_t size);
 
 	//! Case insensitive equals
 	DUCKDB_API static bool CIEquals(const string &l1, const string &l2);
@@ -296,17 +299,6 @@ public:
 		}
 		return strcmp(s1, s2) == 0;
 	}
-	static bool Equals(const string &s1, const char *s2) {
-		return Equals(s1.c_str(), s2);
-	}
-	static bool Equals(const char *s1, const string &s2) {
-		return Equals(s1, s2.c_str());
-	}
-	static bool Equals(const string &s1, const string &s2) {
-		return s1 == s2;
-	}
-	static bool Equals(const string_t &s1, const char *s2);
-	static bool Equals(const char *s1, const string_t &s2);
 
 	//! JSON method that parses a { string: value } JSON blob
 	//! NOTE: this method is not efficient
@@ -345,4 +337,5 @@ public:
 	DUCKDB_API static const uint8_t ASCII_TO_LOWER_MAP[];
 	DUCKDB_API static const uint8_t ASCII_TO_UPPER_MAP[];
 };
+
 } // namespace duckdb

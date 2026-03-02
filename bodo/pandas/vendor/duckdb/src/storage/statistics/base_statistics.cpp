@@ -1,7 +1,6 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/vector.hpp"
-#include "duckdb/function/variant/variant_shredding.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/storage/statistics/list_stats.hpp"
 #include "duckdb/storage/statistics/struct_stats.hpp"
@@ -31,9 +30,6 @@ void BaseStatistics::Construct(BaseStatistics &stats, LogicalType type) {
 		break;
 	case StatisticsType::ARRAY_STATS:
 		ArrayStats::Construct(stats);
-		break;
-	case StatisticsType::VARIANT_STATS:
-		VariantStats::Construct(stats);
 		break;
 	default:
 		break;
@@ -65,12 +61,6 @@ BaseStatistics &BaseStatistics::operator=(BaseStatistics &&other) noexcept {
 StatisticsType BaseStatistics::GetStatsType(const LogicalType &type) {
 	if (type.id() == LogicalTypeId::SQLNULL) {
 		return StatisticsType::BASE_STATS;
-	}
-	if (type.id() == LogicalTypeId::GEOMETRY) {
-		return StatisticsType::GEOMETRY_STATS;
-	}
-	if (type.id() == LogicalTypeId::VARIANT) {
-		return StatisticsType::VARIANT_STATS;
 	}
 	switch (type.InternalType()) {
 	case PhysicalType::BOOL:
@@ -113,7 +103,7 @@ void BaseStatistics::InitializeUnknown() {
 
 void BaseStatistics::InitializeEmpty() {
 	has_null = false;
-	has_no_null = false;
+	has_no_null = true;
 }
 
 bool BaseStatistics::CanHaveNull() const {
@@ -163,12 +153,6 @@ void BaseStatistics::Merge(const BaseStatistics &other) {
 	case StatisticsType::ARRAY_STATS:
 		ArrayStats::Merge(*this, other);
 		break;
-	case StatisticsType::GEOMETRY_STATS:
-		GeometryStats::Merge(*this, other);
-		break;
-	case StatisticsType::VARIANT_STATS:
-		VariantStats::Merge(*this, other);
-		break;
 	default:
 		break;
 	}
@@ -190,10 +174,6 @@ BaseStatistics BaseStatistics::CreateUnknownType(LogicalType type) {
 		return StructStats::CreateUnknown(std::move(type));
 	case StatisticsType::ARRAY_STATS:
 		return ArrayStats::CreateUnknown(std::move(type));
-	case StatisticsType::GEOMETRY_STATS:
-		return GeometryStats::CreateUnknown(std::move(type));
-	case StatisticsType::VARIANT_STATS:
-		return VariantStats::CreateUnknown(std::move(type));
 	default:
 		return BaseStatistics(std::move(type));
 	}
@@ -211,10 +191,6 @@ BaseStatistics BaseStatistics::CreateEmptyType(LogicalType type) {
 		return StructStats::CreateEmpty(std::move(type));
 	case StatisticsType::ARRAY_STATS:
 		return ArrayStats::CreateEmpty(std::move(type));
-	case StatisticsType::GEOMETRY_STATS:
-		return GeometryStats::CreateEmpty(std::move(type));
-	case StatisticsType::VARIANT_STATS:
-		return VariantStats::CreateEmpty(std::move(type));
 	default:
 		return BaseStatistics(std::move(type));
 	}
@@ -243,10 +219,8 @@ BaseStatistics BaseStatistics::CreateEmpty(LogicalType type) {
 void BaseStatistics::Copy(const BaseStatistics &other) {
 	D_ASSERT(GetType() == other.GetType());
 	CopyBase(other);
-	auto stats_type = GetStatsType();
-
 	stats_union = other.stats_union;
-	switch (stats_type) {
+	switch (GetStatsType()) {
 	case StatisticsType::LIST_STATS:
 		ListStats::Copy(*this, other);
 		break;
@@ -256,23 +230,8 @@ void BaseStatistics::Copy(const BaseStatistics &other) {
 	case StatisticsType::ARRAY_STATS:
 		ArrayStats::Copy(*this, other);
 		break;
-	case StatisticsType::VARIANT_STATS:
-		VariantStats::Copy(*this, other);
-		break;
 	default:
 		break;
-	}
-}
-
-unique_ptr<BaseStatistics> BaseStatistics::PushdownExtract(const StorageIndex &index) const {
-	auto stats_type = GetStatsType();
-	switch (stats_type) {
-	case StatisticsType::STRUCT_STATS:
-		return StructStats::PushdownExtract(*this, index);
-	case StatisticsType::VARIANT_STATS:
-		return VariantStats::PushdownExtract(*this, index);
-	default:
-		throw InternalException("PushdownExtract not supported for StatisticsType::%s", EnumUtil::ToString(stats_type));
 	}
 }
 
@@ -319,10 +278,6 @@ void BaseStatistics::Set(StatsInfo info) {
 
 void BaseStatistics::SetHasNull() {
 	has_null = true;
-	if (type.id() == LogicalTypeId::VARIANT) {
-		VariantStats::GetUnshreddedStats(*this).SetHasNull();
-		return;
-	}
 	if (type.InternalType() == PhysicalType::STRUCT) {
 		for (idx_t c = 0; c < StructType::GetChildCount(type); c++) {
 			StructStats::GetChildStats(*this, c).SetHasNull();
@@ -332,10 +287,6 @@ void BaseStatistics::SetHasNull() {
 
 void BaseStatistics::SetHasNoNull() {
 	has_no_null = true;
-	if (type.id() == LogicalTypeId::VARIANT) {
-		VariantStats::GetUnshreddedStats(*this).SetHasNoNull();
-		return;
-	}
 	if (type.InternalType() == PhysicalType::STRUCT) {
 		for (idx_t c = 0; c < StructType::GetChildCount(type); c++) {
 			StructStats::GetChildStats(*this, c).SetHasNoNull();
@@ -343,12 +294,12 @@ void BaseStatistics::SetHasNoNull() {
 	}
 }
 
-void BaseStatistics::CombineValidity(const BaseStatistics &left, const BaseStatistics &right) {
+void BaseStatistics::CombineValidity(BaseStatistics &left, BaseStatistics &right) {
 	has_null = left.has_null || right.has_null;
 	has_no_null = left.has_no_null || right.has_no_null;
 }
 
-void BaseStatistics::CopyValidity(const BaseStatistics &stats) {
+void BaseStatistics::CopyValidity(BaseStatistics &stats) {
 	has_null = stats.has_null;
 	has_no_null = stats.has_no_null;
 }
@@ -377,12 +328,6 @@ void BaseStatistics::Serialize(Serializer &serializer) const {
 			break;
 		case StatisticsType::ARRAY_STATS:
 			ArrayStats::Serialize(*this, serializer);
-			break;
-		case StatisticsType::GEOMETRY_STATS:
-			GeometryStats::Serialize(*this, serializer);
-			break;
-		case StatisticsType::VARIANT_STATS:
-			VariantStats::Serialize(*this, serializer);
 			break;
 		default:
 			break;
@@ -422,12 +367,6 @@ BaseStatistics BaseStatistics::Deserialize(Deserializer &deserializer) {
 		case StatisticsType::ARRAY_STATS:
 			ArrayStats::Deserialize(obj, stats);
 			break;
-		case StatisticsType::GEOMETRY_STATS:
-			GeometryStats::Deserialize(obj, stats);
-			break;
-		case StatisticsType::VARIANT_STATS:
-			VariantStats::Deserialize(obj, stats);
-			break;
 		default:
 			break;
 		}
@@ -436,43 +375,32 @@ BaseStatistics BaseStatistics::Deserialize(Deserializer &deserializer) {
 	return stats;
 }
 
-Value BaseStatistics::ToStruct() const {
-	child_list_t<Value> children;
+string BaseStatistics::ToString() const {
+	auto has_n = has_null ? "true" : "false";
+	auto has_n_n = has_no_null ? "true" : "false";
+	string result =
+	    StringUtil::Format("%s%s", StringUtil::Format("[Has Null: %s, Has No Null: %s]", has_n, has_n_n),
+	                       distinct_count > 0 ? StringUtil::Format("[Approx Unique: %lld]", distinct_count) : "");
 	switch (GetStatsType()) {
 	case StatisticsType::NUMERIC_STATS:
-		children = NumericStats::ToStruct(*this);
+		result = NumericStats::ToString(*this) + result;
 		break;
 	case StatisticsType::STRING_STATS:
-		children = StringStats::ToStruct(*this);
+		result = StringStats::ToString(*this) + result;
 		break;
 	case StatisticsType::LIST_STATS:
-		children = ListStats::ToStruct(*this);
+		result = ListStats::ToString(*this) + result;
 		break;
 	case StatisticsType::STRUCT_STATS:
-		children = StructStats::ToStruct(*this);
+		result = StructStats::ToString(*this) + result;
 		break;
 	case StatisticsType::ARRAY_STATS:
-		children = ArrayStats::ToStruct(*this);
-		break;
-	case StatisticsType::GEOMETRY_STATS:
-		children = GeometryStats::ToStruct(*this);
-		break;
-	case StatisticsType::VARIANT_STATS:
-		children = VariantStats::ToStruct(*this);
+		result = ArrayStats::ToString(*this) + result;
 		break;
 	default:
 		break;
 	}
-	children.emplace_back("has_null", Value::BOOLEAN(has_null));
-	children.emplace_back("has_no_null", Value::BOOLEAN(has_no_null));
-	if (distinct_count > 0) {
-		children.emplace_back("approx_unique", Value::UBIGINT(distinct_count));
-	}
-	return Value::STRUCT(std::move(children));
-}
-
-string BaseStatistics::ToString() const {
-	return ToStruct().ToString();
+	return result;
 }
 
 void BaseStatistics::Verify(Vector &vector, const SelectionVector &sel, idx_t count, const bool ignore_has_null) const {
@@ -492,12 +420,6 @@ void BaseStatistics::Verify(Vector &vector, const SelectionVector &sel, idx_t co
 		break;
 	case StatisticsType::ARRAY_STATS:
 		ArrayStats::Verify(*this, vector, sel, count);
-		break;
-	case StatisticsType::GEOMETRY_STATS:
-		GeometryStats::Verify(*this, vector, sel, count);
-		break;
-	case StatisticsType::VARIANT_STATS:
-		VariantStats::Verify(*this, vector, sel, count);
 		break;
 	default:
 		break;
@@ -580,25 +502,6 @@ BaseStatistics BaseStatistics::FromConstantType(const Value &input) {
 			for (auto &child_element : list_children) {
 				child_stats.Merge(FromConstant(child_element));
 			}
-		}
-		return result;
-	}
-	case StatisticsType::GEOMETRY_STATS: {
-		auto result = GeometryStats::CreateEmpty(input.type());
-		if (!input.IsNull()) {
-			auto &string_value = StringValue::Get(input);
-			GeometryStats::Update(result, string_t(string_value));
-		}
-		return result;
-	}
-	case StatisticsType::VARIANT_STATS: {
-		auto result = VariantStats::CreateEmpty(input.type());
-		auto unshredded_type = VariantShredding::GetUnshreddedType();
-		if (input.IsNull()) {
-			VariantStats::SetUnshreddedStats(result, FromConstant(Value(unshredded_type)));
-		} else {
-			VariantStats::SetUnshreddedStats(
-			    result, FromConstant(Value::STRUCT(unshredded_type, StructValue::GetChildren(input))));
 		}
 		return result;
 	}

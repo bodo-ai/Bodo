@@ -24,7 +24,6 @@ public:
 	TableCatalogEntry &table;
 	idx_t table_index;
 	bool return_chunk;
-	vector<idx_t> return_columns;
 	vector<unique_ptr<BoundConstraint>> bound_constraints;
 
 public:

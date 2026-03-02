@@ -48,10 +48,7 @@ void SecretManager::Initialize(DatabaseInstance &db) {
 	for (auto &path_ele : path_components) {
 		config.default_secret_path = fs.JoinPath(config.default_secret_path, path_ele);
 	}
-	// Use default path if none has been specified by the user configuration
-	if (config.secret_path.empty()) {
-		config.secret_path = config.default_secret_path;
-	}
+	config.secret_path = config.default_secret_path;
 
 	// Set the defaults for persistent storage
 	config.default_persistent_storage = LOCAL_FILE_STORAGE_NAME;

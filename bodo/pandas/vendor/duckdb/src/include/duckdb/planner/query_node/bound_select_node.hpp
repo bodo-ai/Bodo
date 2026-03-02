@@ -11,6 +11,7 @@
 #include "duckdb/planner/bound_query_node.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/parser/expression_map.hpp"
+#include "duckdb/planner/bound_tableref.hpp"
 #include "duckdb/parser/parsed_data/sample_options.hpp"
 #include "duckdb/parser/group_by_node.hpp"
 #include "duckdb/planner/expression_binder/select_bind_state.hpp"
@@ -35,12 +36,18 @@ struct BoundUnnestNode {
 //! Bound equivalent of SelectNode
 class BoundSelectNode : public BoundQueryNode {
 public:
+	static constexpr const QueryNodeType TYPE = QueryNodeType::SELECT_NODE;
+
+public:
+	BoundSelectNode() : BoundQueryNode(QueryNodeType::SELECT_NODE) {
+	}
+
 	//! Bind information
 	SelectBindState bind_state;
 	//! The projection list
 	vector<unique_ptr<Expression>> select_list;
 	//! The FROM clause
-	BoundStatement from_table;
+	unique_ptr<BoundTableRef> from_table;
 	//! The WHERE clause
 	unique_ptr<Expression> where_clause;
 	//! list of groups

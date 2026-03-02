@@ -70,8 +70,7 @@ public:
 	                      AggregateType aggr_type = AggregateType::NON_DISTINCT);
 
 	DUCKDB_API static void BindSortedAggregate(ClientContext &context, BoundAggregateExpression &expr,
-	                                           const vector<unique_ptr<Expression>> &groups,
-	                                           optional_ptr<vector<GroupingSet>> grouping_sets);
+	                                           const vector<unique_ptr<Expression>> &groups);
 	DUCKDB_API static void BindSortedAggregate(ClientContext &context, BoundWindowExpression &expr);
 
 	//! Cast a set of expressions to the arguments of this function

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/bound_tableref.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/parser/tableref/pivotref.hpp"
 #include "duckdb/function/aggregate_function.hpp"
@@ -29,13 +30,19 @@ struct BoundPivotInfo {
 	static BoundPivotInfo Deserialize(Deserializer &deserializer);
 };
 
-class BoundPivotRef {
+class BoundPivotRef : public BoundTableRef {
 public:
+	static constexpr const TableReferenceType TYPE = TableReferenceType::PIVOT;
+
+public:
+	explicit BoundPivotRef() : BoundTableRef(TableReferenceType::PIVOT) {
+	}
+
 	idx_t bind_index;
 	//! The binder used to bind the child of the pivot
 	shared_ptr<Binder> child_binder;
 	//! The child node of the pivot
-	BoundStatement child;
+	unique_ptr<BoundTableRef> child;
 	//! The bound pivot info
 	BoundPivotInfo bound_pivot;
 };

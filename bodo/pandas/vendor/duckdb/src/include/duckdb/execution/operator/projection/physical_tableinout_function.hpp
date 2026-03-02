@@ -46,10 +46,6 @@ public:
 	//! Information for WITH ORDINALITY
 	optional_idx ordinality_idx;
 
-	OrderPreservationType OperatorOrder() const override {
-		return function.order_preservation_type;
-	}
-
 private:
 	//! The table function
 	TableFunction function;

@@ -12,6 +12,7 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/storage/block.hpp"
+#include "duckdb/storage/storage_info.hpp"
 
 namespace duckdb {
 
@@ -42,13 +43,6 @@ struct IndexBufferInfo {
 struct IndexStorageInfo {
 	IndexStorageInfo() {};
 	explicit IndexStorageInfo(const string &name) : name(name) {};
-
-	//! Disable copy constructor and copy assignment, this type's lifetime is explicitly managed.
-	IndexStorageInfo(const IndexStorageInfo &) = delete;
-	IndexStorageInfo &operator=(const IndexStorageInfo &) = delete;
-
-	IndexStorageInfo(IndexStorageInfo &&) = default;
-	IndexStorageInfo &operator=(IndexStorageInfo &&) = default;
 
 	//! The name.
 	string name;

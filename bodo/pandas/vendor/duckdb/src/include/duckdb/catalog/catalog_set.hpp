@@ -24,7 +24,6 @@
 
 namespace duckdb {
 struct AlterInfo;
-struct ChangeOwnershipInfo;
 
 class ClientContext;
 class LogicalDependencyList;

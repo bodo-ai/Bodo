@@ -40,16 +40,15 @@ public:
 	// Contains the result of the key variant
 	shared_ptr<ColumnDataCollection> recurring_table;
 	// Contains the types of the payload and key columns.
-	vector<LogicalType> payload_types, distinct_types, internal_types;
+	vector<LogicalType> payload_types, distinct_types;
 	// Contains the payload and key indices
 	vector<idx_t> payload_idx, distinct_idx;
 	// Contains the aggregates for the payload
-	vector<unique_ptr<Expression>> payload_aggregates;
+	vector<unique_ptr<BoundAggregateExpression>> payload_aggregates;
 
 public:
 	// Source interface
-	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
-	                                 OperatorSourceInput &input) const override;
+	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {
 		return true;

@@ -26,38 +26,36 @@ struct DenomInfo {
 	double denominator;
 };
 
-struct RelationsSetToStats {
+struct RelationsToTDom {
 	//! column binding sets that are equivalent in a join plan.
 	//! if you have A.x = B.y and B.y = C.z, then one set is {A.x, B.y, C.z}.
 	column_binding_set_t equivalent_relations;
 	//!	the estimated total domains of the equivalent relations determined using HLL
-	idx_t distinct_count_hll;
+	idx_t tdom_hll;
 	//! the estimated total domains of each relation without using HLL
-	idx_t distinct_count_no_hll;
-	bool has_distinct_count_hll;
+	idx_t tdom_no_hll;
+	bool has_tdom_hll;
 	vector<optional_ptr<FilterInfo>> filters;
 	vector<string> column_names;
 
-	explicit RelationsSetToStats(const column_binding_set_t &column_binding_set)
-	    : equivalent_relations(column_binding_set), distinct_count_hll(0),
-	      distinct_count_no_hll(NumericLimits<idx_t>::Maximum()), has_distinct_count_hll(false) {};
+	explicit RelationsToTDom(const column_binding_set_t &column_binding_set)
+	    : equivalent_relations(column_binding_set), tdom_hll(0), tdom_no_hll(NumericLimits<idx_t>::Maximum()),
+	      has_tdom_hll(false) {};
 };
 
-// class to wrap a join Filter along with some statistical information about the joined columns
 class FilterInfoWithTotalDomains {
 public:
-	FilterInfoWithTotalDomains(optional_ptr<FilterInfo> filter_info, RelationsSetToStats &relation_set_to_stats)
-	    : filter_info(filter_info), distinct_count_hll(relation_set_to_stats.distinct_count_hll),
-	      distinct_count_no_hll(relation_set_to_stats.distinct_count_no_hll),
-	      has_distinct_count_hll(relation_set_to_stats.has_distinct_count_hll) {
+	FilterInfoWithTotalDomains(optional_ptr<FilterInfo> filter_info, RelationsToTDom &relation2tdom)
+	    : filter_info(filter_info), tdom_hll(relation2tdom.tdom_hll), tdom_no_hll(relation2tdom.tdom_no_hll),
+	      has_tdom_hll(relation2tdom.has_tdom_hll) {
 	}
 
 	optional_ptr<FilterInfo> filter_info;
-	//!	the estimated distinct count the joined columns determined using HLL
-	idx_t distinct_count_hll;
+	//!	the estimated total domains of the equivalent relations determined using HLL
+	idx_t tdom_hll;
 	//! the estimated total domains of each relation without using HLL
-	idx_t distinct_count_no_hll;
-	bool has_distinct_count_hll;
+	idx_t tdom_no_hll;
+	bool has_tdom_hll;
 };
 
 struct Subgraph2Denominator {
@@ -93,7 +91,7 @@ public:
 	explicit CardinalityEstimator() {};
 
 private:
-	vector<RelationsSetToStats> relation_set_stats;
+	vector<RelationsToTDom> relations_to_tdoms;
 	unordered_map<string, CardinalityHelper> relation_set_2_cardinality;
 	JoinRelationSetManager set_manager;
 	vector<RelationStats> relation_stats;
@@ -111,8 +109,8 @@ public:
 	T EstimateCardinalityWithSet(JoinRelationSet &new_set);
 
 	//! used for debugging.
-	void AddRelationNamesToRelationStats(vector<RelationStats> &stats);
-	void PrintRelationStats();
+	void AddRelationNamesToTdoms(vector<RelationStats> &stats);
+	void PrintRelationToTdomInfo();
 
 private:
 	double GetNumerator(JoinRelationSet &set);
@@ -130,7 +128,7 @@ private:
 	JoinRelationSet &UpdateNumeratorRelations(Subgraph2Denominator left, Subgraph2Denominator right,
 	                                          FilterInfoWithTotalDomains &filter);
 
-	void AddRelationStats(FilterInfo &filter_info);
+	void AddRelationTdom(FilterInfo &filter_info);
 	bool EmptyFilter(FilterInfo &filter_info);
 };
 

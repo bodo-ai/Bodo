@@ -92,18 +92,11 @@ void StatementProperties::RegisterDBRead(Catalog &catalog, ClientContext &contex
 	read_databases[catalog.GetName()] = catalog_identity;
 }
 
-void StatementProperties::RegisterDBModify(Catalog &catalog, ClientContext &context,
-                                           DatabaseModificationType modification) {
+void StatementProperties::RegisterDBModify(Catalog &catalog, ClientContext &context) {
 	auto catalog_identity = CatalogIdentity {catalog.GetOid(), catalog.GetCatalogVersion(context)};
-	auto entry = modified_databases.insert(make_pair(catalog.GetName(), ModificationInfo()));
-	if (entry.second) {
-		// new entry - set the identity
-		entry.first->second.identity = catalog_identity;
-	} else {
-		// existing entry - verify this has the same identity
-		D_ASSERT(entry.first->second.identity == catalog_identity);
-	}
-	entry.first->second.modifications |= modification;
+	D_ASSERT(modified_databases.count(catalog.GetName()) == 0 ||
+	         modified_databases[catalog.GetName()] == catalog_identity);
+	modified_databases[catalog.GetName()] = catalog_identity;
 }
 
 } // namespace duckdb

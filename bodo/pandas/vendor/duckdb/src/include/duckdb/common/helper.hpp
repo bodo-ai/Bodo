@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb/common/bswap.hpp"
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 #include <string.h>
@@ -137,6 +136,20 @@ shared_ptr<TGT> shared_ptr_cast(shared_ptr<SRC> src) { // NOLINT: mimic std styl
 	return shared_ptr<TGT>(std::static_pointer_cast<TGT, SRC>(src.internal));
 }
 
+struct SharedConstructor {
+	template <class T, typename... ARGS>
+	static shared_ptr<T> Create(ARGS &&...args) {
+		return make_shared_ptr<T>(std::forward<ARGS>(args)...);
+	}
+};
+
+struct UniqueConstructor {
+	template <class T, typename... ARGS>
+	static unique_ptr<T> Create(ARGS &&...args) {
+		return make_uniq<T>(std::forward<ARGS>(args)...);
+	}
+};
+
 #ifdef DUCKDB_DEBUG_MOVE
 template<class T>
 typename std::remove_reference<T>::type&& move(T&& t) noexcept {
@@ -219,11 +232,6 @@ const T Load(const_data_ptr_t ptr) {
 	T ret;
 	memcpy(&ret, ptr, sizeof(ret)); // NOLINT
 	return ret;
-}
-
-template <typename T>
-const T LoadLE(const_data_ptr_t ptr) {
-	return BSwapIfBE(Load<T>(ptr));
 }
 
 template <typename T>

@@ -1,7 +1,6 @@
 #include "duckdb/common/bind_helpers.hpp"
 #include "duckdb/common/csv_writer.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/multi_file/multi_file_function.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/common/serializer/write_stream.hpp"
@@ -9,8 +8,8 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_multi_file_info.hpp"
 #include "duckdb/execution/operator/csv_scanner/sniffer/csv_sniffer.hpp"
+#include "duckdb/execution/operator/csv_scanner/csv_multi_file_info.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/function/scalar/string_functions.hpp"
 #include "duckdb/function/table/read_csv.hpp"
@@ -19,9 +18,8 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
-#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include "duckdb/planner/expression_binder.hpp"
+#include "duckdb/common/multi_file/multi_file_function.hpp"
 
 namespace duckdb {
 
@@ -282,31 +280,7 @@ struct GlobalWriteCSVData : public GlobalFunctionData {
 		return writer.FileSize();
 	}
 
-	unique_ptr<CSVWriterState> GetLocalState(ClientContext &context, const idx_t flush_size) {
-		{
-			lock_guard<mutex> guard(local_state_lock);
-			if (!local_states.empty()) {
-				auto result = std::move(local_states.back());
-				local_states.pop_back();
-				return result;
-			}
-		}
-		auto result = make_uniq<CSVWriterState>(context, flush_size);
-		result->require_manual_flush = true;
-		return result;
-	}
-
-	void StoreLocalState(unique_ptr<CSVWriterState> lstate) {
-		lock_guard<mutex> guard(local_state_lock);
-		lstate->Reset();
-		local_states.push_back(std::move(lstate));
-	}
-
 	CSVWriter writer;
-
-private:
-	mutex local_state_lock;
-	vector<unique_ptr<CSVWriterState>> local_states;
 };
 
 static unique_ptr<LocalFunctionData> WriteCSVInitializeLocal(ExecutionContext &context, FunctionData &bind_data) {
@@ -397,7 +371,9 @@ CopyFunctionExecutionMode WriteCSVExecutionMode(bool preserve_insertion_order, b
 // Prepare Batch
 //===--------------------------------------------------------------------===//
 struct WriteCSVBatchData : public PreparedBatchData {
-	explicit WriteCSVBatchData(unique_ptr<CSVWriterState> writer_state) : writer_local_state(std::move(writer_state)) {
+	explicit WriteCSVBatchData(ClientContext &context, const idx_t flush_size)
+	    : writer_local_state(make_uniq<CSVWriterState>(context, flush_size)) {
+		writer_local_state->require_manual_flush = true;
 	}
 
 	//! The thread-local buffer to write data into
@@ -421,8 +397,7 @@ unique_ptr<PreparedBatchData> WriteCSVPrepareBatch(ClientContext &context, Funct
 	auto &global_state = gstate.Cast<GlobalWriteCSVData>();
 
 	// write CSV chunks to the batch data
-	auto local_writer_state = global_state.GetLocalState(context, NextPowerOfTwo(collection->SizeInBytes()));
-	auto batch = make_uniq<WriteCSVBatchData>(std::move(local_writer_state));
+	auto batch = make_uniq<WriteCSVBatchData>(context, NextPowerOfTwo(collection->SizeInBytes()));
 	for (auto &chunk : collection->Chunks()) {
 		WriteCSVChunkInternal(global_state.writer, *batch->writer_local_state, cast_chunk, chunk, executor);
 	}
@@ -437,7 +412,6 @@ void WriteCSVFlushBatch(ClientContext &context, FunctionData &bind_data, GlobalF
 	auto &csv_batch = batch.Cast<WriteCSVBatchData>();
 	auto &global_state = gstate.Cast<GlobalWriteCSVData>();
 	global_state.writer.Flush(*csv_batch.writer_local_state);
-	global_state.StoreLocalState(std::move(csv_batch.writer_local_state));
 }
 
 //===--------------------------------------------------------------------===//

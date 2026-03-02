@@ -1,8 +1,6 @@
 #include "duckdb/planner/operator/logical_merge_into.hpp"
-
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
-#include "duckdb/planner/binder.hpp"
 
 namespace duckdb {
 

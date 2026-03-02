@@ -9,7 +9,6 @@
 #pragma once
 
 #include "duckdb/common/limits.hpp"
-#include "duckdb/parser/group_by_node.hpp"
 #include "duckdb/parser/result_modifier.hpp"
 #include "duckdb/planner/bound_statement.hpp"
 #include "duckdb/planner/expression.hpp"
@@ -156,9 +155,8 @@ public:
 
 	//! Remove unneeded/duplicate order elements.
 	//! Returns true of orders is not empty.
-	static bool Simplify(vector<BoundOrderByNode> &orders, const vector<unique_ptr<Expression>> &groups,
-	                     optional_ptr<vector<GroupingSet>> grouping_sets);
-	bool Simplify(const vector<unique_ptr<Expression>> &groups, optional_ptr<vector<GroupingSet>> grouping_sets);
+	static bool Simplify(vector<BoundOrderByNode> &orders, const vector<unique_ptr<Expression>> &groups);
+	bool Simplify(const vector<unique_ptr<Expression>> &groups);
 };
 
 enum class DistinctType : uint8_t { DISTINCT = 0, DISTINCT_ON = 1 };

@@ -9,8 +9,6 @@
 #pragma once
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/vector.hpp"
-#include "duckdb/common/string.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/parser/query_error_context.hpp"
 #include "duckdb/common/unordered_map.hpp"
@@ -21,18 +19,14 @@ struct EntryLookupInfo;
 class CatalogException : public Exception {
 public:
 	DUCKDB_API explicit CatalogException(const string &msg);
-
-	DUCKDB_API explicit CatalogException(const unordered_map<string, string> &extra_info, const string &msg);
+	DUCKDB_API explicit CatalogException(const string &msg, const unordered_map<string, string> &extra_info);
 
 	template <typename... ARGS>
-	explicit CatalogException(const string &msg, ARGS &&...params)
-	    : CatalogException(ConstructMessage(msg, std::forward<ARGS>(params)...)) {
+	explicit CatalogException(const string &msg, ARGS... params) : CatalogException(ConstructMessage(msg, params...)) {
 	}
-
 	template <typename... ARGS>
-	explicit CatalogException(QueryErrorContext error_context, const string &msg, ARGS &&...params)
-	    : CatalogException(Exception::InitializeExtraInfo(error_context),
-	                       ConstructMessage(msg, std::forward<ARGS>(params)...)) {
+	explicit CatalogException(QueryErrorContext error_context, const string &msg, ARGS... params)
+	    : CatalogException(ConstructMessage(msg, params...), Exception::InitializeExtraInfo(error_context)) {
 	}
 
 	static CatalogException MissingEntry(const EntryLookupInfo &lookup_info, const string &suggestion);

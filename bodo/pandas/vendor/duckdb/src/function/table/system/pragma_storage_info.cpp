@@ -12,7 +12,6 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/storage/table/column_data.hpp"
 
 #include <algorithm>
 
@@ -63,7 +62,7 @@ static unique_ptr<FunctionData> PragmaStorageInfoBind(ClientContext &context, Ta
 	return_types.emplace_back(LogicalType::VARCHAR);
 
 	names.emplace_back("stats");
-	return_types.emplace_back(LogicalType::VARIANT());
+	return_types.emplace_back(LogicalType::VARCHAR);
 
 	names.emplace_back("has_updates");
 	return_types.emplace_back(LogicalType::BOOLEAN);
@@ -89,7 +88,7 @@ static unique_ptr<FunctionData> PragmaStorageInfoBind(ClientContext &context, Ta
 	Binder::BindSchemaOrCatalog(context, qname.catalog, qname.schema);
 	auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(context, qname.catalog, qname.schema, qname.name);
 	auto result = make_uniq<PragmaStorageFunctionData>(table_entry);
-	result->column_segments_info = table_entry.GetColumnSegmentInfo(context);
+	result->column_segments_info = table_entry.GetColumnSegmentInfo();
 	return std::move(result);
 }
 
@@ -134,7 +133,7 @@ static void PragmaStorageInfoFunction(ClientContext &context, TableFunctionInput
 		// compression
 		output.SetValue(col_idx++, count, Value(entry.compression_type));
 		// stats
-		output.SetValue(col_idx++, count, entry.segment_stats);
+		output.SetValue(col_idx++, count, Value(entry.segment_stats));
 		// has_updates
 		output.SetValue(col_idx++, count, Value::BOOLEAN(entry.has_updates));
 		// persistent
@@ -156,7 +155,6 @@ static void PragmaStorageInfoFunction(ClientContext &context, TableFunctionInput
 		} else {
 			output.SetValue(col_idx++, count, Value());
 		}
-
 		count++;
 	}
 	output.SetCardinality(count);

@@ -19,7 +19,6 @@ add_library_unity(
   bind_unpacked_star_expression.cpp
   bind_star_expression.cpp
   bind_subquery_expression.cpp
-  bind_type_expression.cpp
   bind_unnest_expression.cpp
   bind_window_expression.cpp)
 set(ALL_OBJECT_FILES

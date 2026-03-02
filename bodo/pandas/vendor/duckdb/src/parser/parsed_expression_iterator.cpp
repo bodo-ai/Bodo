@@ -84,13 +84,6 @@ void ParsedExpressionIterator::EnumerateChildren(
 		}
 		break;
 	}
-	case ExpressionClass::TYPE: {
-		auto &type_expr = expr.Cast<TypeExpression>();
-		for (auto &child : type_expr.GetChildren()) {
-			callback(child);
-		}
-		break;
-	}
 	case ExpressionClass::LAMBDA: {
 		auto &lambda_expr = expr.Cast<LambdaExpression>();
 		callback(lambda_expr.lhs);
@@ -169,6 +162,7 @@ void ParsedExpressionIterator::EnumerateChildren(
 
 void ParsedExpressionIterator::EnumerateQueryNodeModifiers(
     QueryNode &node, const std::function<void(unique_ptr<ParsedExpression> &child)> &callback) {
+
 	for (auto &modifier : node.modifiers) {
 		switch (modifier->type) {
 		case ResultModifierType::LIMIT_MODIFIER: {
@@ -277,6 +271,12 @@ void ParsedExpressionIterator::EnumerateQueryNodeChildren(
 		EnumerateQueryNodeChildren(*rcte_node.right, expr_callback, ref_callback);
 		break;
 	}
+	case QueryNodeType::CTE_NODE: {
+		auto &cte_node = node.Cast<CTENode>();
+		EnumerateQueryNodeChildren(*cte_node.query, expr_callback, ref_callback);
+		EnumerateQueryNodeChildren(*cte_node.child, expr_callback, ref_callback);
+		break;
+	}
 	case QueryNodeType::SELECT_NODE: {
 		auto &sel_node = node.Cast<SelectNode>();
 		for (idx_t i = 0; i < sel_node.select_list.size(); i++) {
@@ -300,9 +300,8 @@ void ParsedExpressionIterator::EnumerateQueryNodeChildren(
 	}
 	case QueryNodeType::SET_OPERATION_NODE: {
 		auto &setop_node = node.Cast<SetOperationNode>();
-		for (auto &child : setop_node.children) {
-			EnumerateQueryNodeChildren(*child, expr_callback, ref_callback);
-		}
+		EnumerateQueryNodeChildren(*setop_node.left, expr_callback, ref_callback);
+		EnumerateQueryNodeChildren(*setop_node.right, expr_callback, ref_callback);
 		break;
 	}
 	default:

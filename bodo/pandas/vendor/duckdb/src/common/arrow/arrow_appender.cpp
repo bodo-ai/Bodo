@@ -169,7 +169,6 @@ static void InitializeFunctionPointers(ArrowAppendData &append_data, const Logic
 		break;
 	}
 	case LogicalTypeId::TIME:
-	case LogicalTypeId::TIME_NS:
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:

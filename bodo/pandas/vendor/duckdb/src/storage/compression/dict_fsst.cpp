@@ -56,7 +56,7 @@ struct DictFSSTCompressionStorage {
 	static void Compress(CompressionState &state_p, Vector &scan_vector, idx_t count);
 	static void FinalizeCompress(CompressionState &state_p);
 
-	static unique_ptr<SegmentScanState> StringInitScan(const QueryContext &context, ColumnSegment &segment);
+	static unique_ptr<SegmentScanState> StringInitScan(ColumnSegment &segment);
 	template <bool ALLOW_DICT_VECTORS>
 	static void StringScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
 	                              idx_t result_offset);
@@ -111,15 +111,12 @@ void DictFSSTCompressionStorage::FinalizeCompress(CompressionState &state_p) {
 //===--------------------------------------------------------------------===//
 // Scan
 //===--------------------------------------------------------------------===//
-unique_ptr<SegmentScanState> DictFSSTCompressionStorage::StringInitScan(const QueryContext &context,
-                                                                        ColumnSegment &segment) {
+unique_ptr<SegmentScanState> DictFSSTCompressionStorage::StringInitScan(ColumnSegment &segment) {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	auto state = make_uniq<CompressedStringScanState>(segment, buffer_manager.Pin(segment.block));
 	state->Initialize(true);
-
-	const auto &stats = segment.stats.statistics;
-	if (stats.GetStatsType() == StatisticsType::STRING_STATS && StringStats::HasMaxStringLength(stats)) {
-		state->all_values_inlined = StringStats::MaxStringLength(stats) <= string_t::INLINE_LENGTH;
+	if (StringStats::HasMaxStringLength(segment.stats.statistics)) {
+		state->all_values_inlined = StringStats::MaxStringLength(segment.stats.statistics) <= string_t::INLINE_LENGTH;
 	}
 	return std::move(state);
 }
@@ -133,7 +130,7 @@ void DictFSSTCompressionStorage::StringScanPartial(ColumnSegment &segment, Colum
 	// clear any previously locked buffers and get the primary buffer handle
 	auto &scan_state = state.scan_state->Cast<CompressedStringScanState>();
 
-	auto start = state.GetPositionInSegment();
+	auto start = segment.GetRelativeIndex(state.row_index);
 	if (!ALLOW_DICT_VECTORS || !scan_state.AllowDictionaryScan(scan_count)) {
 		scan_state.ScanToFlatVector(result, result_offset, start, scan_count);
 	} else {
@@ -165,7 +162,7 @@ void DictFSSTSelect(ColumnSegment &segment, ColumnScanState &state, idx_t vector
 	auto &scan_state = state.scan_state->Cast<CompressedStringScanState>();
 	if (scan_state.mode == DictFSSTMode::FSST_ONLY) {
 		// for FSST only
-		auto start = state.GetPositionInSegment();
+		auto start = segment.GetRelativeIndex(state.row_index);
 		scan_state.Select(result, start, sel, sel_count);
 		return;
 	}
@@ -181,7 +178,7 @@ static void DictFSSTFilter(ColumnSegment &segment, ColumnScanState &state, idx_t
                            SelectionVector &sel, idx_t &sel_count, const TableFilter &filter,
                            TableFilterState &filter_state) {
 	auto &scan_state = state.scan_state->Cast<CompressedStringScanState>();
-	auto start = state.GetPositionInSegment();
+	auto start = segment.GetRelativeIndex(state.row_index);
 	if (scan_state.AllowDictionaryScan(vector_count)) {
 		// only pushdown filters on dictionaries
 		if (!scan_state.filter_result) {
@@ -190,13 +187,12 @@ static void DictFSSTFilter(ColumnSegment &segment, ColumnScanState &state, idx_t
 			scan_state.filter_result = make_unsafe_uniq_array<bool>(scan_state.dict_count);
 
 			// apply the filter
-			auto &dict_data = scan_state.dictionary->data;
 			UnifiedVectorFormat vdata;
-			dict_data.ToUnifiedFormat(scan_state.dict_count, vdata);
+			scan_state.dictionary->ToUnifiedFormat(scan_state.dict_count, vdata);
 			SelectionVector dict_sel;
 			idx_t filter_count = scan_state.dict_count;
-			ColumnSegment::FilterSelection(dict_sel, dict_data, vdata, filter, filter_state, scan_state.dict_count,
-			                               filter_count);
+			ColumnSegment::FilterSelection(dict_sel, *scan_state.dictionary, vdata, filter, filter_state,
+			                               scan_state.dict_count, filter_count);
 
 			// now set all matching tuples to true
 			for (idx_t i = 0; i < filter_count; i++) {
@@ -221,7 +217,8 @@ static void DictFSSTFilter(ColumnSegment &segment, ColumnScanState &state, idx_t
 		}
 		sel_count = approved_tuple_count;
 
-		result.Dictionary(scan_state.dictionary, dict_sel);
+		result.Dictionary(*(scan_state.dictionary), scan_state.dict_count, dict_sel, vector_count);
+		DictionaryVector::SetDictionaryId(result, to_string(CastPointerToValue(&segment)));
 		return;
 	}
 	// fallback: scan + filter

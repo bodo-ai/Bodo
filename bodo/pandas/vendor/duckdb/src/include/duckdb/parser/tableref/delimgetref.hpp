@@ -13,6 +13,7 @@
 namespace duckdb {
 
 class DelimGetRef : public TableRef {
+
 public:
 	explicit DelimGetRef(const vector<LogicalType> &types_p) : TableRef(TableReferenceType::DELIM_GET), types(types_p) {
 		for (idx_t i = 0; i < types.size(); i++) {

@@ -9,8 +9,6 @@ string CatalogTypeToString(CatalogType type) {
 	switch (type) {
 	case CatalogType::COLLATION_ENTRY:
 		return "Collation";
-	case CatalogType::COORDINATE_SYSTEM_ENTRY:
-		return "Coordinate System";
 	case CatalogType::TYPE_ENTRY:
 		return "Type";
 	case CatalogType::TABLE_ENTRY:
@@ -59,9 +57,6 @@ string CatalogTypeToString(CatalogType type) {
 CatalogType CatalogTypeFromString(const string &type) {
 	if (type == "Collation") {
 		return CatalogType::COLLATION_ENTRY;
-	}
-	if (type == "Coordinate System") {
-		return CatalogType::COORDINATE_SYSTEM_ENTRY;
 	}
 	if (type == "Type") {
 		return CatalogType::TYPE_ENTRY;

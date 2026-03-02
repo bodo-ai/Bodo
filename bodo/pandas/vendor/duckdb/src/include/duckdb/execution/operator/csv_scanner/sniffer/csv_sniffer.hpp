@@ -116,7 +116,6 @@ private:
 	//! Highest number of columns found
 	idx_t max_columns_found = 0;
 	idx_t max_columns_found_error = 0;
-	bool best_candidate_is_strict = false;
 	//! Current Candidates being considered
 	vector<unique_ptr<ColumnCountScanner>> candidates;
 	//! Reference to original CSV Options, it will be modified as a result of the sniffer.

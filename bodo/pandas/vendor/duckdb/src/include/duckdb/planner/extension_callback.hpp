@@ -9,10 +9,8 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
-#include "duckdb/main/extension_callback_manager.hpp"
 
 namespace duckdb {
-struct DBConfig;
 class ClientContext;
 class DatabaseInstance;
 class ErrorData;
@@ -36,14 +34,6 @@ public:
 	}
 	//! Called after an extension fails to load loading
 	virtual void OnExtensionLoadFail(DatabaseInstance &db, const string &name, const ErrorData &error) {
-	}
-
-	static void Register(DBConfig &config, shared_ptr<ExtensionCallback> extension);
-	static ExtensionCallbackIteratorHelper<shared_ptr<ExtensionCallback>> Iterate(ClientContext &context) {
-		return ExtensionCallbackManager::Get(context).ExtensionCallbacks();
-	}
-	static ExtensionCallbackIteratorHelper<shared_ptr<ExtensionCallback>> Iterate(DatabaseInstance &db) {
-		return ExtensionCallbackManager::Get(db).ExtensionCallbacks();
 	}
 };
 

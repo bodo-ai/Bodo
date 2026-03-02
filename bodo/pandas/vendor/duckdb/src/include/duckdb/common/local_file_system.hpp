@@ -38,12 +38,8 @@ public:
 	int64_t GetFileSize(FileHandle &handle) override;
 	//! Returns the file last modified time of a file handle, returns timespec with zero on all attributes on error
 	timestamp_t GetLastModifiedTime(FileHandle &handle) override;
-	//! Returns a tag that uniquely identifies the version of the file
-	string GetVersionTag(FileHandle &handle) override;
 	//! Returns the file last modified time of a file handle, returns timespec with zero on all attributes on error
 	FileType GetFileType(FileHandle &handle) override;
-	//! Returns the file stats of the attached handle.
-	FileMetadata Stats(FileHandle &handle) override;
 	//! Truncate a file to a maximum size of new_size, new_size should be smaller than or equal to the current size of
 	//! the file
 	void Truncate(FileHandle &handle, int64_t new_size) override;
@@ -67,10 +63,8 @@ public:
 	//! Sync a file handle to disk
 	void FileSync(FileHandle &handle) override;
 
-	//! Checks if path is is an absolute path
-	bool IsPathAbsolute(const string &path) override;
-	string MakePathAbsolute(const string &input, optional_ptr<FileOpener> opener);
-	bool PathStartsWithDrive(const string &path);
+	//! Runs a glob on the file system, returning a list of matching files
+	vector<OpenFileInfo> Glob(const string &path, FileOpener *opener = nullptr) override;
 
 	bool CanHandleFile(const string &fpath) override {
 		//! Whether or not a sub-system can handle a specific file path
@@ -99,9 +93,8 @@ public:
 	//! Checks a file is private (checks for 600 on linux/macos, TODO: currently always returns true on windows)
 	static bool IsPrivateFile(const string &path_p, FileOpener *opener);
 
-	vector<OpenFileInfo> FetchFileWithoutGlob(const string &path, optional_ptr<FileOpener> opener, bool absolute_path);
-
-	string CanonicalizePath(const string &path_p, optional_ptr<FileOpener> opener) override;
+	// returns a C-string of the path that trims any file:/ prefix
+	static const char *NormalizeLocalPath(const string &path);
 
 protected:
 	bool ListFilesExtended(const string &directory, const std::function<void(OpenFileInfo &info)> &callback,
@@ -111,18 +104,12 @@ protected:
 		return true;
 	}
 
-	unique_ptr<MultiFileList> GlobFilesExtended(const string &path, const FileGlobInput &input,
-	                                            optional_ptr<FileOpener> opener) override;
-	bool SupportsGlobExtended() const override {
-		return true;
-	}
-
-	bool TryCanonicalizeExistingPath(string &path_p);
-
 private:
 	//! Set the file pointer of a file handle to a specified location. Reads and writes will happen from this location
 	void SetFilePointer(FileHandle &handle, idx_t location);
 	idx_t GetFilePointer(FileHandle &handle);
+
+	vector<OpenFileInfo> FetchFileWithoutGlob(const string &path, FileOpener *opener, bool absolute_path);
 };
 
 } // namespace duckdb

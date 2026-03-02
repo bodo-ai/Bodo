@@ -19,10 +19,9 @@ struct TestAllTypesData : public GlobalTableFunctionState {
 	idx_t offset;
 };
 
-vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const bool use_large_bignum) {
+vector<TestType> TestAllTypesFun::GetTestTypes(bool use_large_enum, bool use_large_bignum) {
 	vector<TestType> result;
-
-	// Numeric types.
+	// scalar types/numerics
 	result.emplace_back(LogicalType::BOOLEAN, "bool");
 	result.emplace_back(LogicalType::TINYINT, "tinyint");
 	result.emplace_back(LogicalType::SMALLINT, "smallint");
@@ -34,31 +33,24 @@ vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const 
 	result.emplace_back(LogicalType::USMALLINT, "usmallint");
 	result.emplace_back(LogicalType::UINTEGER, "uint");
 	result.emplace_back(LogicalType::UBIGINT, "ubigint");
-
-	// BIGNUM.
 	if (use_large_bignum) {
 		string data;
-		constexpr idx_t total_data_size = Bignum::BIGNUM_HEADER_SIZE + Bignum::MAX_DATA_SIZE;
+		idx_t total_data_size = Bignum::BIGNUM_HEADER_SIZE + Bignum::MAX_DATA_SIZE;
 		data.resize(total_data_size);
-
-		// Let's set the max header.
+		// Let's set our header
 		Bignum::SetHeader(&data[0], Bignum::MAX_DATA_SIZE, false);
-		// Set all other max bits.
+		// Set all our other bits
 		memset(&data[Bignum::BIGNUM_HEADER_SIZE], 0xFF, Bignum::MAX_DATA_SIZE);
 		auto max = Value::BIGNUM(data);
-
-		// Let's set the min header.
+		// Let's set our header
 		Bignum::SetHeader(&data[0], Bignum::MAX_DATA_SIZE, true);
-		// Set all other min bits.
+		// Set all our other bits
 		memset(&data[Bignum::BIGNUM_HEADER_SIZE], 0x00, Bignum::MAX_DATA_SIZE);
 		auto min = Value::BIGNUM(data);
 		result.emplace_back(LogicalType::BIGNUM, "bignum", min, max);
-
 	} else {
 		result.emplace_back(LogicalType::BIGNUM, "bignum");
 	}
-
-	// Time-types.
 	result.emplace_back(LogicalType::DATE, "date");
 	result.emplace_back(LogicalType::TIME, "time");
 	result.emplace_back(LogicalType::TIMESTAMP, "timestamp");
@@ -67,19 +59,15 @@ vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const 
 	result.emplace_back(LogicalType::TIMESTAMP_NS, "timestamp_ns");
 	result.emplace_back(LogicalType::TIME_TZ, "time_tz");
 	result.emplace_back(LogicalType::TIMESTAMP_TZ, "timestamp_tz");
-
-	// More complex numeric types.
-	result.emplace_back(LogicalType::FLOAT, "float", Value::FLOAT(std::numeric_limits<float>::lowest()),
-	                    Value::FLOAT(std::numeric_limits<float>::max()));
-	result.emplace_back(LogicalType::DOUBLE, "double", Value::DOUBLE(std::numeric_limits<double>::lowest()),
-	                    Value::DOUBLE(std::numeric_limits<double>::max()));
+	result.emplace_back(LogicalType::FLOAT, "float");
+	result.emplace_back(LogicalType::DOUBLE, "double");
 	result.emplace_back(LogicalType::DECIMAL(4, 1), "dec_4_1");
 	result.emplace_back(LogicalType::DECIMAL(9, 4), "dec_9_4");
 	result.emplace_back(LogicalType::DECIMAL(18, 6), "dec_18_6");
 	result.emplace_back(LogicalType::DECIMAL(38, 10), "dec38_10");
 	result.emplace_back(LogicalType::UUID, "uuid");
 
-	// Interval.
+	// interval
 	interval_t min_interval;
 	min_interval.months = 0;
 	min_interval.days = 0;
@@ -91,15 +79,14 @@ vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const 
 	max_interval.micros = 999999999;
 	result.emplace_back(LogicalType::INTERVAL, "interval", Value::INTERVAL(min_interval),
 	                    Value::INTERVAL(max_interval));
-
-	// VARCHAR / BLOB / Bitstrings.
+	// strings/blobs/bitstrings
 	result.emplace_back(LogicalType::VARCHAR, "varchar", Value("🦆🦆🦆🦆🦆🦆"),
 	                    Value(string("goo\x00se", 6)));
 	result.emplace_back(LogicalType::BLOB, "blob", Value::BLOB("thisisalongblob\\x00withnullbytes"),
 	                    Value::BLOB("\\x00\\x00\\x00a"));
 	result.emplace_back(LogicalType::BIT, "bit", Value::BIT("0010001001011100010101011010111"), Value::BIT("10101"));
 
-	// ENUMs.
+	// enums
 	Vector small_enum(LogicalType::VARCHAR, 2);
 	auto small_enum_ptr = FlatVector::GetData<string_t>(small_enum);
 	small_enum_ptr[0] = StringVector::AddStringOrBlob(small_enum, "DUCK_DUCK_ENUM");
@@ -129,7 +116,7 @@ vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const 
 		result.emplace_back(LogicalType::ENUM(large_enum, 2), "large_enum");
 	}
 
-	// ARRAYs.
+	// arrays
 	auto int_list_type = LogicalType::LIST(LogicalType::INTEGER);
 	auto empty_int_list = Value::LIST(LogicalType::INTEGER, vector<Value>());
 	auto int_list =
@@ -318,8 +305,6 @@ vector<TestType> TestAllTypesFun::GetTestTypes(const bool use_large_enum, const 
 	result.emplace_back(list_of_fixed_array_of_int_type, "list_of_fixed_int_array",
 	                    list_of_fixed_array_of_int_min_value, list_of_fixed_array_of_int_max_value);
 
-	result.emplace_back(LogicalType::TIME_NS, "time_ns");
-
 	return result;
 }
 
@@ -334,16 +319,10 @@ static unique_ptr<FunctionData> TestAllTypesBind(ClientContext &context, TableFu
 	bool use_large_bignum = false;
 	auto entry = input.named_parameters.find("use_large_enum");
 	if (entry != input.named_parameters.end()) {
-		if (entry->second.IsNull()) {
-			throw InvalidInputException("Cannot use NULL as argument for use_large_enum");
-		}
 		use_large_enum = BooleanValue::Get(entry->second);
 	}
 	entry = input.named_parameters.find("use_large_bignum");
 	if (entry != input.named_parameters.end()) {
-		if (entry->second.IsNull()) {
-			throw InvalidInputException("Cannot use NULL as argument for use_large_bignum");
-		}
 		use_large_bignum = BooleanValue::Get(entry->second);
 	}
 	result->test_types = TestAllTypesFun::GetTestTypes(use_large_enum, use_large_bignum);

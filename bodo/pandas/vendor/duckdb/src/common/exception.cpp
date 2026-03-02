@@ -4,7 +4,6 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/exception/list.hpp"
 #include "duckdb/parser/tableref.hpp"
-#include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/planner/expression.hpp"
 
 #ifdef DUCKDB_CRASH_ON_ASSERT
@@ -20,20 +19,20 @@ Exception::Exception(ExceptionType exception_type, const string &message)
     : std::runtime_error(ToJSON(exception_type, message)) {
 }
 
-Exception::Exception(const unordered_map<string, string> &extra_info, ExceptionType exception_type,
-                     const string &message)
-    : std::runtime_error(ToJSON(extra_info, exception_type, message)) {
+Exception::Exception(ExceptionType exception_type, const string &message,
+                     const unordered_map<string, string> &extra_info)
+    : std::runtime_error(ToJSON(exception_type, message, extra_info)) {
 }
 
 string Exception::ToJSON(ExceptionType type, const string &message) {
 	unordered_map<string, string> extra_info;
-	return ToJSON(extra_info, type, message);
+	return ToJSON(type, message, extra_info);
 }
 
-string Exception::ToJSON(const unordered_map<string, string> &extra_info, ExceptionType type, const string &message) {
+string Exception::ToJSON(ExceptionType type, const string &message, const unordered_map<string, string> &extra_info) {
 #ifndef DUCKDB_DEBUG_STACKTRACE
 	// by default we only enable stack traces for internal exceptions
-	if (type == ExceptionType::INTERNAL)
+	if (type == ExceptionType::INTERNAL || type == ExceptionType::FATAL)
 #endif
 	{
 		auto extended_extra_info = extra_info;
@@ -241,8 +240,9 @@ TypeMismatchException::TypeMismatchException(const LogicalType &type_1, const Lo
 
 TypeMismatchException::TypeMismatchException(optional_idx error_location, const LogicalType &type_1,
                                              const LogicalType &type_2, const string &msg)
-    : Exception(Exception::InitializeExtraInfo(error_location), ExceptionType::MISMATCH_TYPE,
-                "Type " + type_1.ToString() + " does not match with " + type_2.ToString() + ". " + msg) {
+    : Exception(ExceptionType::MISMATCH_TYPE,
+                "Type " + type_1.ToString() + " does not match with " + type_2.ToString() + ". " + msg,
+                Exception::InitializeExtraInfo(error_location)) {
 }
 
 TypeMismatchException::TypeMismatchException(const string &msg) : Exception(ExceptionType::MISMATCH_TYPE, msg) {
@@ -306,12 +306,8 @@ DependencyException::DependencyException(const string &msg) : Exception(Exceptio
 IOException::IOException(const string &msg) : Exception(ExceptionType::IO, msg) {
 }
 
-IOException::IOException(const unordered_map<string, string> &extra_info, const string &msg)
-    : Exception(extra_info, ExceptionType::IO, msg) {
-}
-
-NotImplementedException::NotImplementedException(const unordered_map<string, string> &extra_info, const string &msg)
-    : Exception(extra_info, ExceptionType::NOT_IMPLEMENTED, msg) {
+IOException::IOException(const string &msg, const unordered_map<string, string> &extra_info)
+    : Exception(ExceptionType::IO, msg, extra_info) {
 }
 
 MissingExtensionException::MissingExtensionException(const string &msg)
@@ -319,10 +315,9 @@ MissingExtensionException::MissingExtensionException(const string &msg)
 }
 
 AutoloadException::AutoloadException(const string &extension_name, const string &message)
-    : Exception(
-          ExceptionType::AUTOLOAD,
-          StringUtil::Format("An error occurred while trying to automatically install the required extension '%s:\n%s",
-                             extension_name, message)) {
+    : Exception(ExceptionType::AUTOLOAD,
+                "An error occurred while trying to automatically install the required extension '" + extension_name +
+                    "':\n" + message) {
 }
 
 SerializationException::SerializationException(const string &msg) : Exception(ExceptionType::SERIALIZATION, msg) {
@@ -331,39 +326,33 @@ SerializationException::SerializationException(const string &msg) : Exception(Ex
 SequenceException::SequenceException(const string &msg) : Exception(ExceptionType::SEQUENCE, msg) {
 }
 
-InterruptException::InterruptException() : Exception(ExceptionType::INTERRUPT, INTERRUPT_MESSAGE) {
+InterruptException::InterruptException() : Exception(ExceptionType::INTERRUPT, "Interrupted!") {
 }
 
 FatalException::FatalException(ExceptionType type, const string &msg) : Exception(type, msg) {
-	// FIXME: Make any log context available to add error logging.
 }
 
 InternalException::InternalException(const string &msg) : Exception(ExceptionType::INTERNAL, msg) {
-	// FIXME: Make any log context available to add error logging.
 #ifdef DUCKDB_CRASH_ON_ASSERT
 	Printer::Print("ABORT THROWN BY INTERNAL EXCEPTION: " + msg + "\n" + StackTrace::GetStackTrace());
 	abort();
 #endif
 }
 
-InternalException::InternalException(const unordered_map<string, string> &extra_info, const string &msg)
-    : Exception(extra_info, ExceptionType::INTERNAL, msg) {
-}
-
 InvalidInputException::InvalidInputException(const string &msg) : Exception(ExceptionType::INVALID_INPUT, msg) {
 }
 
-InvalidInputException::InvalidInputException(const unordered_map<string, string> &extra_info, const string &msg)
-    : Exception(extra_info, ExceptionType::INVALID_INPUT, msg) {
+InvalidInputException::InvalidInputException(const string &msg, const unordered_map<string, string> &extra_info)
+    : Exception(ExceptionType::INVALID_INPUT, msg, extra_info) {
 }
 
 InvalidConfigurationException::InvalidConfigurationException(const string &msg)
     : Exception(ExceptionType::INVALID_CONFIGURATION, msg) {
 }
 
-InvalidConfigurationException::InvalidConfigurationException(const unordered_map<string, string> &extra_info,
-                                                             const string &msg)
-    : Exception(extra_info, ExceptionType::INVALID_CONFIGURATION, msg) {
+InvalidConfigurationException::InvalidConfigurationException(const string &msg,
+                                                             const unordered_map<string, string> &extra_info)
+    : Exception(ExceptionType::INVALID_CONFIGURATION, msg, extra_info) {
 }
 
 OutOfMemoryException::OutOfMemoryException(const string &msg)

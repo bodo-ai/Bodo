@@ -30,6 +30,7 @@ public:
 
 public:
 	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override;
+	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
 
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
@@ -49,13 +50,13 @@ public:
 
 private:
 	void ExecuteFunctions(ExecutionContext &context, DataChunk &chunk, DataChunk &delayed,
-	                      GlobalOperatorState &gstate_p) const;
+	                      GlobalOperatorState &gstate_p, OperatorState &state_p) const;
 	void ExecuteInput(ExecutionContext &context, DataChunk &delayed, DataChunk &input, DataChunk &chunk,
-	                  GlobalOperatorState &gstate) const;
+	                  GlobalOperatorState &gstate, OperatorState &state) const;
 	void ExecuteDelayed(ExecutionContext &context, DataChunk &delayed, DataChunk &input, DataChunk &chunk,
-	                    GlobalOperatorState &gstate) const;
+	                    GlobalOperatorState &gstate, OperatorState &state) const;
 	void ExecuteShifted(ExecutionContext &context, DataChunk &delayed, DataChunk &input, DataChunk &chunk,
-	                    GlobalOperatorState &gstate) const;
+	                    GlobalOperatorState &gstate, OperatorState &state) const;
 };
 
 } // namespace duckdb

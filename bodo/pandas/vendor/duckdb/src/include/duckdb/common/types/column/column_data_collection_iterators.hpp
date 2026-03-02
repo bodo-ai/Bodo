@@ -26,14 +26,12 @@ private:
 
 	class ColumnDataChunkIterator {
 	public:
-		DUCKDB_API ColumnDataChunkIterator(optional_ptr<const ColumnDataCollection> collection_p,
-		                                   vector<column_t> column_ids);
-		//! enable move constructor
-		DUCKDB_API ColumnDataChunkIterator(ColumnDataChunkIterator &&other) noexcept;
+		DUCKDB_API explicit ColumnDataChunkIterator(const ColumnDataCollection *collection_p,
+		                                            vector<column_t> column_ids);
 
-		optional_ptr<const ColumnDataCollection> collection;
+		const ColumnDataCollection *collection;
 		ColumnDataScanState scan_state;
-		unique_ptr<DataChunk> scan_chunk;
+		shared_ptr<DataChunk> scan_chunk;
 		idx_t row_index;
 
 	public:
@@ -65,9 +63,7 @@ private:
 
 	class ColumnDataRowIterator {
 	public:
-		DUCKDB_API explicit ColumnDataRowIterator(
-		    const ColumnDataCollection *collection_p,
-		    ColumnDataScanProperties properties = ColumnDataScanProperties::DISALLOW_ZERO_COPY);
+		DUCKDB_API explicit ColumnDataRowIterator(const ColumnDataCollection *collection_p);
 
 		const ColumnDataCollection *collection;
 		ColumnDataScanState scan_state;

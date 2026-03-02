@@ -290,7 +290,7 @@ void PerfectAggregateHashTable::Destroy() {
 	// check if there is any destructor to call
 	bool has_destructor = false;
 	for (auto &aggr : layout_ptr->GetAggregates()) {
-		if (aggr.function.HasStateDestructorCallback()) {
+		if (aggr.function.destructor) {
 			has_destructor = true;
 		}
 	}

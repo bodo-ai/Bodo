@@ -31,7 +31,7 @@ class OuterJoinMarker {
 public:
 	explicit OuterJoinMarker(bool enabled);
 
-	bool Enabled() const {
+	bool Enabled() {
 		return enabled;
 	}
 	//! Initializes the outer join counter

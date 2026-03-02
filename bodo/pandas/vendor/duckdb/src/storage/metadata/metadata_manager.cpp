@@ -99,16 +99,12 @@ MetadataHandle MetadataManager::Pin(const MetadataPointer &pointer) {
 	return Pin(QueryContext(), pointer);
 }
 
-MetadataHandle MetadataManager::Pin(const QueryContext &context, const MetadataPointer &pointer) {
+MetadataHandle MetadataManager::Pin(QueryContext context, const MetadataPointer &pointer) {
 	D_ASSERT(pointer.index < METADATA_BLOCK_COUNT);
 	shared_ptr<BlockHandle> block_handle;
 	{
 		lock_guard<mutex> guard(block_lock);
-		auto entry = blocks.find(UnsafeNumericCast<int64_t>(pointer.block_index));
-		if (entry == blocks.end()) {
-			throw InternalException("Trying to pin block %llu - but the block did not exist", pointer.block_index);
-		}
-		auto &block = entry->second;
+		auto &block = blocks[UnsafeNumericCast<int64_t>(pointer.block_index)];
 #ifdef DEBUG
 		for (auto &free_block : block.free_blocks) {
 			if (free_block == pointer.index) {
@@ -276,18 +272,15 @@ void MetadataManager::Flush() {
 			}
 			continue;
 		}
-		auto block_handle = block.block;
-		auto handle = buffer_manager.Pin(block_handle);
+		auto handle = buffer_manager.Pin(block.block);
 		// zero-initialize the few leftover bytes
 		memset(handle.Ptr() + total_metadata_size, 0, block_manager.GetBlockSize() - total_metadata_size);
 		D_ASSERT(kv.first == block.block_id);
-		if (block_handle->BlockId() >= MAXIMUM_BLOCK) {
-			// Convert the temporary block to a persistent block.
-			// we cannot use ConvertToPersistent as another thread might still be reading the block
-			// so we use the safe version of ConvertToPersistent
-			auto new_block = block_manager.ConvertToPersistent(QueryContext(), kv.first, std::move(block_handle),
-			                                                   std::move(handle), ConvertToPersistentMode::THREAD_SAFE);
+		if (block.block->BlockId() >= MAXIMUM_BLOCK) {
+			auto new_block =
+			    block_manager.ConvertToPersistent(QueryContext(), kv.first, block.block, std::move(handle));
 
+			// Convert the temporary block to a persistent block.
 			guard.lock();
 			block.block = std::move(new_block);
 			guard.unlock();
@@ -373,7 +366,6 @@ void MetadataBlock::FreeBlocksFromInteger(idx_t free_list) {
 }
 
 void MetadataManager::MarkBlocksAsModified() {
-	unique_lock<mutex> guard(block_lock);
 	// for any blocks that were modified in the last checkpoint - set them to free blocks currently
 	for (auto &kv : modified_blocks) {
 		auto block_id = kv.first;
@@ -387,10 +379,7 @@ void MetadataManager::MarkBlocksAsModified() {
 		if (new_free_blocks == NumericLimits<idx_t>::Maximum()) {
 			// if new free_blocks is all blocks - mark entire block as modified
 			blocks.erase(entry);
-
-			guard.unlock();
 			block_manager.MarkBlockAsModified(block_id);
-			guard.lock();
 		} else {
 			// set the new set of free blocks
 			block.FreeBlocksFromInteger(new_free_blocks);
@@ -425,18 +414,6 @@ void MetadataManager::ClearModifiedBlocks(const vector<MetaBlockPointer> &pointe
 	}
 }
 
-bool MetadataManager::BlockHasBeenCleared(const MetaBlockPointer &pointer) {
-	unique_lock<mutex> guard(block_lock);
-	auto block_id = pointer.GetBlockId();
-	auto block_index = pointer.GetBlockIndex();
-	auto entry = modified_blocks.find(block_id);
-	if (entry == modified_blocks.end()) {
-		throw InternalException("BlockHasBeenCleared - Block id %llu not found in modified_blocks", block_id);
-	}
-	auto &modified_list = entry->second;
-	return (modified_list & (1ULL << block_index)) == 0ULL;
-}
-
 vector<MetadataBlockInfo> MetadataManager::GetMetadataInfo() const {
 	vector<MetadataBlockInfo> result;
 	unique_lock<mutex> guard(block_lock);
@@ -469,7 +446,7 @@ block_id_t MetadataManager::PeekNextBlockId() const {
 }
 
 block_id_t MetadataManager::GetNextBlockId() const {
-	return block_manager.GetFreeBlockIdForCheckpoint();
+	return block_manager.GetFreeBlockId();
 }
 
 } // namespace duckdb

@@ -15,41 +15,29 @@
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
-#include "duckdb/main/settings.hpp"
 
 namespace duckdb {
 
-static unique_ptr<Expression> CreateBoundStructExtract(ClientContext &context, unique_ptr<Expression> expr,
-                                                       const vector<string> &key_path, bool keep_parent_names) {
+unique_ptr<Expression> CreateBoundStructExtract(ClientContext &context, unique_ptr<Expression> expr, string key) {
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(expr));
-	arguments.push_back(make_uniq<BoundConstantExpression>(Value(key_path.back())));
+	arguments.push_back(make_uniq<BoundConstantExpression>(Value(key)));
 	auto extract_function = GetKeyExtractFunction();
-	auto bind_info = extract_function.GetBindCallback()(context, extract_function, arguments);
-	auto return_type = extract_function.GetReturnType();
+	auto bind_info = extract_function.bind(context, extract_function, arguments);
+	auto return_type = extract_function.return_type;
 	auto result = make_uniq<BoundFunctionExpression>(return_type, std::move(extract_function), std::move(arguments),
 	                                                 std::move(bind_info));
-
-	if (keep_parent_names) {
-		auto alias = StringUtil::Join(key_path, ".");
-		if (!alias.empty() && alias[0] == '.') {
-			alias = alias.substr(1);
-		}
-		result->SetAlias(alias);
-	} else {
-		result->SetAlias(key_path[0]);
-	}
+	result->SetAlias(std::move(key));
 	return std::move(result);
 }
 
-static unique_ptr<Expression> CreateBoundStructExtractIndex(ClientContext &context, unique_ptr<Expression> expr,
-                                                            idx_t key) {
+unique_ptr<Expression> CreateBoundStructExtractIndex(ClientContext &context, unique_ptr<Expression> expr, idx_t key) {
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(expr));
 	arguments.push_back(make_uniq<BoundConstantExpression>(Value::BIGINT(int64_t(key))));
 	auto extract_function = GetIndexExtractFunction();
-	auto bind_info = extract_function.GetBindCallback()(context, extract_function, arguments);
-	auto return_type = extract_function.GetReturnType();
+	auto bind_info = extract_function.bind(context, extract_function, arguments);
+	auto return_type = extract_function.return_type;
 	auto result = make_uniq<BoundFunctionExpression>(return_type, std::move(extract_function), std::move(arguments),
 	                                                 std::move(bind_info));
 	result->SetAlias("element" + to_string(key));
@@ -77,7 +65,7 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 
 	ErrorData error;
 	if (function.children.empty()) {
-		return BindResult(BinderException(function, "UNNEST() requires at lease one argument"));
+		return BindResult(BinderException(function, "UNNEST() requires a single argument"));
 	}
 	if (inside_window) {
 		return BindResult(BinderException(function, UnsupportedUnnestMessage()));
@@ -89,10 +77,13 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 	}
 
 	idx_t max_depth = 1;
-	bool keep_parent_names = false;
 	if (function.children.size() != 1) {
+		bool has_parameter = false;
 		bool supported_argument = false;
 		for (idx_t i = 1; i < function.children.size(); i++) {
+			if (has_parameter) {
+				return BindResult(BinderException(function, "UNNEST() only supports a single additional argument"));
+			}
 			if (function.children[i]->HasParameter()) {
 				throw ParameterNotAllowedException("Parameter not allowed in unnest parameter");
 			}
@@ -116,19 +107,17 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 				if (max_depth == 0) {
 					throw BinderException("UNNEST cannot have a max depth of 0");
 				}
-			} else if (alias == "keep_parent_names") {
-				keep_parent_names = value.GetValue<bool>();
 			} else if (!alias.empty()) {
 				throw BinderException("Unsupported parameter \"%s\" for unnest", alias);
 			} else {
 				break;
 			}
+			has_parameter = true;
 			supported_argument = true;
 		}
 		if (!supported_argument) {
-			return BindResult(BinderException(
-			    function, "UNNEST - unsupported extra argument, unnest only supports "
-			              "recursive := [true/false], max_depth := # or keep_parent_names := [true/false]"));
+			return BindResult(BinderException(function, "UNNEST - unsupported extra argument, unnest only supports "
+			                                            "recursive := [true/false] or max_depth := #"));
 		}
 	}
 	unnest_level++;
@@ -227,6 +216,7 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 	if (struct_unnests > 0) {
 		vector<unique_ptr<Expression>> struct_expressions;
 		struct_expressions.push_back(std::move(unnest_expr));
+
 		for (idx_t i = 0; i < struct_unnests; i++) {
 			vector<unique_ptr<Expression>> new_expressions;
 			// check if there are any structs left
@@ -242,14 +232,7 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 						}
 					} else {
 						for (auto &entry : child_types) {
-							vector<string> current_key_path;
-							// During recursive expansion, not all expressions are BoundFunctionExpression
-							if (keep_parent_names && expr->type == ExpressionType::BOUND_FUNCTION) {
-								current_key_path.push_back(expr->alias);
-							}
-							current_key_path.push_back(entry.first);
-							new_expressions.push_back(
-							    CreateBoundStructExtract(context, expr->Copy(), current_key_path, keep_parent_names));
+							new_expressions.push_back(CreateBoundStructExtract(context, expr->Copy(), entry.first));
 						}
 					}
 					has_structs = true;

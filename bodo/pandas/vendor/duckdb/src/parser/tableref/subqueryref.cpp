@@ -1,6 +1,8 @@
 #include "duckdb/parser/tableref/subqueryref.hpp"
 
 #include "duckdb/common/limits.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 

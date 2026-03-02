@@ -3,7 +3,6 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
-#include "duckdb/planner/binder.hpp"
 
 namespace duckdb {
 
@@ -30,9 +29,7 @@ vector<idx_t> LogicalDelete::GetTableIndex() const {
 
 vector<ColumnBinding> LogicalDelete::GetColumnBindings() {
 	if (return_chunk) {
-		// Include table columns + virtual columns (e.g., rowid)
-		auto virtual_columns = table.GetVirtualColumns();
-		return GenerateColumnBindings(table_index, table.GetTypes().size() + virtual_columns.size());
+		return GenerateColumnBindings(table_index, table.GetTypes().size());
 	}
 	return {ColumnBinding(0, 0)};
 }
@@ -40,11 +37,6 @@ vector<ColumnBinding> LogicalDelete::GetColumnBindings() {
 void LogicalDelete::ResolveTypes() {
 	if (return_chunk) {
 		types = table.GetTypes();
-		// Add virtual columns (e.g., rowid)
-		auto virtual_columns = table.GetVirtualColumns();
-		for (auto &entry : virtual_columns) {
-			types.push_back(entry.second.type);
-		}
 	} else {
 		types.emplace_back(LogicalType::BIGINT);
 	}

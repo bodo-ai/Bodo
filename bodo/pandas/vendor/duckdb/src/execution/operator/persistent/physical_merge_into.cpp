@@ -10,6 +10,7 @@ PhysicalMergeInto::PhysicalMergeInto(PhysicalPlan &physical_plan, vector<Logical
                                      bool return_chunk_p)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::MERGE_INTO, std::move(types), 1),
       row_id_index(row_id_index), source_marker(source_marker), parallel(parallel_p), return_chunk(return_chunk_p) {
+
 	map<MergeActionCondition, MergeActionRange> ranges;
 	for (auto &entry : actions_p) {
 		MergeActionRange range;
@@ -455,8 +456,8 @@ unique_ptr<LocalSourceState> PhysicalMergeInto::GetLocalSourceState(ExecutionCon
 	return make_uniq<MergeLocalSourceState>(context, *this, gstate.Cast<MergeGlobalSourceState>());
 }
 
-SourceResultType PhysicalMergeInto::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
-                                                    OperatorSourceInput &input) const {
+SourceResultType PhysicalMergeInto::GetData(ExecutionContext &context, DataChunk &chunk,
+                                            OperatorSourceInput &input) const {
 	auto &g = sink_state->Cast<MergeIntoGlobalState>();
 	if (!return_chunk) {
 		chunk.SetCardinality(1);
@@ -472,17 +473,10 @@ SourceResultType PhysicalMergeInto::GetDataInternal(ExecutionContext &context, D
 			// no action to scan from
 			continue;
 		}
-		// found a good one
-		break;
-	}
-	if (lstate.index < actions.size()) {
-		auto &action = *actions[lstate.index];
-
 		auto &child_gstate = *gstate.global_states[lstate.index];
 		auto &child_lstate = *lstate.local_states[lstate.index];
 		OperatorSourceInput source_input {child_gstate, child_lstate, input.interrupt_state};
 
-		lstate.scan_chunk.Reset();
 		auto result = action.op->GetData(context, lstate.scan_chunk, source_input);
 		if (lstate.scan_chunk.size() > 0) {
 			// construct the result chunk
@@ -511,13 +505,9 @@ SourceResultType PhysicalMergeInto::GetDataInternal(ExecutionContext &context, D
 
 		if (result != SourceResultType::FINISHED) {
 			return result;
-		} else {
-			lstate.index++;
-			if (lstate.index < actions.size()) {
-				return SourceResultType::HAVE_MORE_OUTPUT;
-			} else {
-				return SourceResultType::FINISHED;
-			}
+		}
+		if (chunk.size() != 0) {
+			return SourceResultType::HAVE_MORE_OUTPUT;
 		}
 	}
 	return SourceResultType::FINISHED;

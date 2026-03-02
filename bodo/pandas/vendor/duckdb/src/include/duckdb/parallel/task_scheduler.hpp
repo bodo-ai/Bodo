@@ -90,7 +90,7 @@ public:
 	static idx_t GetEstimatedCPUId();
 
 private:
-	void RelaunchThreadsInternal(int32_t n, bool destroy);
+	void RelaunchThreadsInternal(int32_t n);
 
 private:
 	DatabaseInstance &db;

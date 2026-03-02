@@ -1,5 +1,6 @@
 #include "duckdb/parser/statement/drop_statement.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/bound_tableref.hpp"
 #include "duckdb/planner/operator/logical_simple.hpp"
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/standard_entry.hpp"
@@ -23,7 +24,7 @@ BoundStatement Binder::Bind(DropStatement &stmt) {
 	case CatalogType::SCHEMA_ENTRY: {
 		// dropping a schema is never read-only because there are no temporary schemas
 		auto &catalog = Catalog::GetCatalog(context, stmt.info->catalog);
-		properties.RegisterDBModify(catalog, context, DatabaseModificationType::DROP_CATALOG_ENTRY);
+		properties.RegisterDBModify(catalog, context);
 		break;
 	}
 	case CatalogType::VIEW_ENTRY:
@@ -76,7 +77,7 @@ BoundStatement Binder::Bind(DropStatement &stmt) {
 		stmt.info->catalog = entry->ParentCatalog().GetName();
 		if (!entry->temporary) {
 			// we can only drop temporary schema entries in read-only mode
-			properties.RegisterDBModify(entry->ParentCatalog(), context, DatabaseModificationType::DROP_CATALOG_ENTRY);
+			properties.RegisterDBModify(entry->ParentCatalog(), context);
 		}
 		stmt.info->schema = entry->ParentSchema().name;
 		break;
@@ -93,7 +94,7 @@ BoundStatement Binder::Bind(DropStatement &stmt) {
 	result.names = {"Success"};
 	result.types = {LogicalType::BOOLEAN};
 
-	properties.output_type = QueryResultOutputType::FORCE_MATERIALIZED;
+	properties.allow_stream_result = false;
 	properties.return_type = StatementReturnType::NOTHING;
 	return result;
 }

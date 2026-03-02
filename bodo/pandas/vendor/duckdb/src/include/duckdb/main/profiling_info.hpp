@@ -23,7 +23,6 @@ struct yyjson_mut_val;
 } // namespace duckdb_yyjson
 
 namespace duckdb {
-enum class ProfilingParameterNames : uint8_t { FORMAT, COVERAGE, SAVE_LOCATION, MODE, METRICS };
 
 class ProfilingInfo {
 public:
@@ -33,6 +32,9 @@ public:
 	profiler_settings_t expanded_settings;
 	//! Contains all enabled metrics.
 	profiler_metrics_t metrics;
+	//! Additional metrics.
+	// FIXME: move to metrics.
+	InsertionOrderPreservingMap<string> extra_info;
 
 public:
 	ProfilingInfo() = default;
@@ -41,26 +43,30 @@ public:
 	ProfilingInfo &operator=(ProfilingInfo const &) = default;
 
 public:
-	void ResetMetrics();
-	//! Returns true, if the query profiler must collect this metric.
-	static bool Enabled(const profiler_settings_t &settings, const MetricType metric);
-	//! Expand metrics depending on the collection of other metrics.
-	static void Expand(profiler_settings_t &settings, const MetricType metric);
+	static profiler_settings_t DefaultSettings();
+	static profiler_settings_t DefaultRootSettings();
+	static profiler_settings_t DefaultOperatorSettings();
 
 public:
-	string GetMetricAsString(const MetricType metric) const;
-	void WriteMetricsToLog(ClientContext &context);
+	void ResetMetrics();
+	//! Returns true, if the query profiler must collect this metric.
+	static bool Enabled(const profiler_settings_t &settings, const MetricsType metric);
+	//! Expand metrics depending on the collection of other metrics.
+	static void Expand(profiler_settings_t &settings, const MetricsType metric);
+
+public:
+	string GetMetricAsString(const MetricsType metric) const;
 	void WriteMetricsToJSON(duckdb_yyjson::yyjson_mut_doc *doc, duckdb_yyjson::yyjson_mut_val *destination);
 
 public:
 	template <class METRIC_TYPE>
-	METRIC_TYPE GetMetricValue(const MetricType type) const {
+	METRIC_TYPE GetMetricValue(const MetricsType type) const {
 		auto val = metrics.at(type);
 		return val.GetValue<METRIC_TYPE>();
 	}
 
 	template <class METRIC_TYPE>
-	void MetricUpdate(const MetricType type, const Value &value,
+	void MetricUpdate(const MetricsType type, const Value &value,
 	                  const std::function<METRIC_TYPE(const METRIC_TYPE &, const METRIC_TYPE &)> &update_fun) {
 		if (metrics.find(type) == metrics.end()) {
 			metrics[type] = value;
@@ -71,52 +77,36 @@ public:
 	}
 
 	template <class METRIC_TYPE>
-	void MetricUpdate(const MetricType type, const METRIC_TYPE &value,
+	void MetricUpdate(const MetricsType type, const METRIC_TYPE &value,
 	                  const std::function<METRIC_TYPE(const METRIC_TYPE &, const METRIC_TYPE &)> &update_fun) {
 		auto new_value = Value::CreateValue(value);
 		MetricUpdate<METRIC_TYPE>(type, new_value, update_fun);
 	}
 
 	template <class METRIC_TYPE>
-	void MetricSum(const MetricType type, const Value &value) {
+	void MetricSum(const MetricsType type, const Value &value) {
 		MetricUpdate<METRIC_TYPE>(type, value, [](const METRIC_TYPE &old_value, const METRIC_TYPE &new_value) {
 			return old_value + new_value;
 		});
 	}
 
 	template <class METRIC_TYPE>
-	void MetricSum(const MetricType type, const METRIC_TYPE &value) {
+	void MetricSum(const MetricsType type, const METRIC_TYPE &value) {
 		auto new_value = Value::CreateValue(value);
 		return MetricSum<METRIC_TYPE>(type, new_value);
 	}
 
 	template <class METRIC_TYPE>
-	void MetricMax(const MetricType type, const Value &value) {
+	void MetricMax(const MetricsType type, const Value &value) {
 		MetricUpdate<METRIC_TYPE>(type, value, [](const METRIC_TYPE &old_value, const METRIC_TYPE &new_value) {
 			return MaxValue(old_value, new_value);
 		});
 	}
-
 	template <class METRIC_TYPE>
-	void MetricMax(const MetricType type, const METRIC_TYPE &value) {
+	void MetricMax(const MetricsType type, const METRIC_TYPE &value) {
 		auto new_value = Value::CreateValue(value);
 		return MetricMax<METRIC_TYPE>(type, new_value);
 	}
 };
 
-// Specialization for InsertionOrderPreservingMap<string>
-template <>
-inline InsertionOrderPreservingMap<string>
-ProfilingInfo::GetMetricValue<InsertionOrderPreservingMap<string>>(const MetricType type) const {
-	auto val = metrics.at(type);
-	InsertionOrderPreservingMap<string> result;
-	auto children = MapValue::GetChildren(val);
-	for (auto &child : children) {
-		auto struct_children = StructValue::GetChildren(child);
-		auto key = struct_children[0].GetValue<string>();
-		auto value = struct_children[1].GetValue<string>();
-		result.insert(key, value);
-	}
-	return result;
-}
 } // namespace duckdb

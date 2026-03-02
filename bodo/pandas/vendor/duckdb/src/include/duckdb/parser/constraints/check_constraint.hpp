@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/parser/constraint.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 

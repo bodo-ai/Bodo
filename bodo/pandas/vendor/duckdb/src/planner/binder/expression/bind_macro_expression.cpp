@@ -11,6 +11,7 @@ namespace duckdb {
 
 void ExpressionBinder::ReplaceMacroParametersInLambda(FunctionExpression &function,
                                                       vector<unordered_set<string>> &lambda_params) {
+
 	for (auto &child : function.children) {
 		if (child->GetExpressionClass() != ExpressionClass::LAMBDA) {
 			ReplaceMacroParameters(child, lambda_params);
@@ -46,6 +47,7 @@ void ExpressionBinder::ReplaceMacroParametersInLambda(FunctionExpression &functi
 
 void ExpressionBinder::ReplaceMacroParameters(unique_ptr<ParsedExpression> &expr,
                                               vector<unordered_set<string>> &lambda_params) {
+
 	switch (expr->GetExpressionClass()) {
 	case ExpressionClass::COLUMN_REF: {
 		// If the expression is a column reference, we replace it with its argument.
@@ -96,7 +98,6 @@ void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, Scala
 	// validate the arguments and separate positional and default arguments
 	vector<unique_ptr<ParsedExpression>> positional_arguments;
 	InsertionOrderPreservingMap<unique_ptr<ParsedExpression>> named_arguments;
-	binder.lambda_bindings = lambda_bindings;
 	auto bind_result = MacroFunction::BindMacroFunction(binder, macro_func.macros, macro_func.name, function,
 	                                                    positional_arguments, named_arguments, depth);
 	if (!bind_result.error.empty()) {

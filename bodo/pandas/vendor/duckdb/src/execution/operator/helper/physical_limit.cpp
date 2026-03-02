@@ -8,8 +8,6 @@
 
 namespace duckdb {
 
-constexpr const idx_t PhysicalLimit::MAX_LIMIT_VALUE;
-
 PhysicalLimit::PhysicalLimit(PhysicalPlan &physical_plan, vector<LogicalType> types, BoundLimitNode limit_val_p,
                              BoundLimitNode offset_val_p, idx_t estimated_cardinality)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::LIMIT, std::move(types), estimated_cardinality),
@@ -21,8 +19,7 @@ PhysicalLimit::PhysicalLimit(PhysicalPlan &physical_plan, vector<LogicalType> ty
 //===--------------------------------------------------------------------===//
 class LimitGlobalState : public GlobalSinkState {
 public:
-	explicit LimitGlobalState(ClientContext &context, const PhysicalLimit &op)
-	    : data(context, op.types, ColumnDataAllocatorType::BUFFER_MANAGER_ALLOCATOR) {
+	explicit LimitGlobalState(ClientContext &context, const PhysicalLimit &op) : data(context, op.types, true) {
 		limit = 0;
 		offset = 0;
 	}
@@ -36,7 +33,7 @@ public:
 class LimitLocalState : public LocalSinkState {
 public:
 	explicit LimitLocalState(ClientContext &context, const PhysicalLimit &op)
-	    : current_offset(0), data(context, op.types, ColumnDataAllocatorType::BUFFER_MANAGER_ALLOCATOR) {
+	    : current_offset(0), data(context, op.types, true) {
 		PhysicalLimit::SetInitialLimits(op.limit_val, op.offset_val, limit, offset);
 	}
 
@@ -111,6 +108,7 @@ bool PhysicalLimit::ComputeOffset(ExecutionContext &context, DataChunk &input, o
 }
 
 SinkResultType PhysicalLimit::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
+
 	D_ASSERT(chunk.size() > 0);
 	auto &state = input.local_state.Cast<LimitLocalState>();
 	auto &limit = state.limit;
@@ -167,8 +165,7 @@ unique_ptr<GlobalSourceState> PhysicalLimit::GetGlobalSourceState(ClientContext 
 	return make_uniq<LimitSourceState>();
 }
 
-SourceResultType PhysicalLimit::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
-                                                OperatorSourceInput &input) const {
+SourceResultType PhysicalLimit::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
 	auto &gstate = sink_state->Cast<LimitGlobalState>();
 	auto &state = input.global_state.Cast<LimitSourceState>();
 	while (state.current_offset < gstate.limit + gstate.offset) {
@@ -242,22 +239,6 @@ Value PhysicalLimit::GetDelimiter(ExecutionContext &context, DataChunk &input, c
 	input.SetCardinality(input_size);
 	auto limit_value = limit_chunk.GetValue(0, 0);
 	return limit_value;
-}
-
-InsertionOrderPreservingMap<string> PhysicalLimit::ParamsToString() const {
-	InsertionOrderPreservingMap<string> result;
-	if (limit_val.Type() == LimitNodeType::CONSTANT_VALUE) {
-		result["Limit"] = to_string(limit_val.GetConstantValue());
-	} else if (limit_val.Type() == LimitNodeType::CONSTANT_PERCENTAGE) {
-		result["Limit"] = to_string(limit_val.GetConstantPercentage()) + "%";
-	}
-	if (offset_val.Type() == LimitNodeType::CONSTANT_VALUE) {
-		auto offset = offset_val.GetConstantValue();
-		if (offset > 0) {
-			result["Offset"] = to_string(offset);
-		}
-	}
-	return result;
 }
 
 } // namespace duckdb

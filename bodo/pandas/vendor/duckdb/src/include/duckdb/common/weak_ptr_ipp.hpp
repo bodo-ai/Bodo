@@ -1,7 +1,3 @@
-#pragma once
-
-#include "duckdb/common/shared_ptr_ipp.hpp"
-
 namespace duckdb {
 
 template <typename T, bool SAFE>
@@ -117,8 +113,5 @@ public:
 		return internal >= other.internal;
 	}
 };
-
-template <typename T>
-using unsafe_weak_ptr = weak_ptr<T, false>;
 
 } // namespace duckdb

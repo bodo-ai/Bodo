@@ -52,7 +52,7 @@ private:
 	MetadataManager &manager;
 	BlockReaderType type;
 	MetadataHandle block;
-	MetaBlockPointer next_pointer;
+	MetadataPointer next_pointer;
 	bool has_next_block;
 	optional_ptr<vector<MetaBlockPointer>> read_pointers;
 	idx_t index;

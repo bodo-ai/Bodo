@@ -5,7 +5,6 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "duckdb/main/settings.hpp"
 #include "duckdb/common/local_file_system.hpp"
 
 namespace duckdb {
@@ -64,7 +63,7 @@ bool LogManager::CanScan(LoggingTargetTable table) {
 	return log_storage->CanScan(table);
 }
 
-LogManager::LogManager(DatabaseInstance &db, LogConfig config_p) : config(std::move(config_p)), db_instance(db) {
+LogManager::LogManager(DatabaseInstance &db, LogConfig config_p) : config(std::move(config_p)) {
 	log_storage = make_uniq<InMemoryLogStorage>(db);
 }
 
@@ -96,12 +95,8 @@ RegisteredLoggingContext LogManager::RegisterLoggingContextInternal(LoggingConte
 
 void LogManager::WriteLogEntry(timestamp_t timestamp, const char *log_type, LogLevel log_level, const char *log_message,
                                const RegisteredLoggingContext &context) {
-	if (log_level == LogLevel::LOG_WARNING && Settings::Get<WarningsAsErrorsSetting>(db_instance)) {
-		throw InvalidInputException(log_message);
-	} else {
-		unique_lock<mutex> lck(lock);
-		log_storage->WriteLogEntry(timestamp, log_level, log_type, log_message, context);
-	}
+	unique_lock<mutex> lck(lock);
+	log_storage->WriteLogEntry(timestamp, log_level, log_type, log_message, context);
 }
 
 void LogManager::FlushCachedLogEntries(DataChunk &chunk, const RegisteredLoggingContext &context) {
@@ -210,7 +205,7 @@ void LogManager::SetEnableStructuredLoggers(vector<string> &enabled_logger_types
 			throw InvalidInputException("Unknown log type: '%s'", enabled_logger_type);
 		}
 
-		new_config.enabled_log_types.insert(lookup->name);
+		new_config.enabled_log_types.insert(enabled_logger_type);
 
 		min_log_level = MinValue(min_log_level, lookup->level);
 	}
@@ -272,7 +267,6 @@ void LogManager::RegisterDefaultLogTypes() {
 	//RegisterLogType(make_uniq<HTTPLogType>());
 	RegisterLogType(make_uniq<QueryLogType>());
 	RegisterLogType(make_uniq<PhysicalOperatorLogType>());
-	RegisterLogType(make_uniq<MetricsLogType>());
 }
 
 } // namespace duckdb
