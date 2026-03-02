@@ -1223,8 +1223,8 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         # datetime.date needs to be converted to a date literal
         # Just return the string wrapped in quotes.
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
-        return (
-            lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
+        return lambda filter_value: (
+            f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
     elif filter_type == bodo.types.datetime64ns:
         # datetime64 needs to be a Timestamp literal

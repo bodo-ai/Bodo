@@ -2529,8 +2529,8 @@ def overload_dataframe_drop_duplicates(
 
     # handle empty dataframe corner case
     if n_cols == 0:
-        return (
-            lambda df, subset=None, keep="first", inplace=False, ignore_index=False: df
+        return lambda df, subset=None, keep="first", inplace=False, ignore_index=False: (
+            df
         )  # pragma: no cover
 
     subset_args = [f"data_{i}" for i in subset_idx]
@@ -2626,8 +2626,8 @@ def create_dataframe_mask_where_overload(func_name):
             other_str = lambda i: "other"
         elif other.ndim == 2:
             if isinstance(other, DataFrameType):
-                other_str = (
-                    lambda i: f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other.column_index[df.columns[i]]})"
+                other_str = lambda i: (
+                    f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other.column_index[df.columns[i]]})"
                     if df.columns[i] in other.column_index
                     else "None"
                 )
@@ -3294,8 +3294,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         saved__disallow_scalar_only_bool_ops = (
             pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
         )
-        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-            lambda self: None
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: (
+            None
         )
 
         try:
@@ -6392,8 +6392,8 @@ def _parse_query_expr(
         pandas.core.computation.ops.MathCall.__str__ = math__str__
         pandas.core.computation.ops.Op.__str__ = op__str__
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-            lambda self: None
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: (
+            None
         )  # type: ignore
         parsed_expr = pandas.core.computation.expr.Expr(expr, env=env)
         parsed_expr_str = str(parsed_expr)
@@ -6575,9 +6575,10 @@ def iternext_itertuples(context, builder, sig, args, result):
                 getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
-                    lambda a,
-                    i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                        np.int64(a[i])
+                    lambda a, i: (
+                        bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                            np.int64(a[i])
+                        )
                     ),
                     getitem_sig,
                     [arr_ptr, index],
