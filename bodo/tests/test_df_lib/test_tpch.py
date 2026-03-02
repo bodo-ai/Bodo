@@ -87,6 +87,7 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
         assert np.isclose(pd_result, bd_result)
 
 
+@pytest.mark.gpu
 def test_tpch_q01():
     run_tpch_query_test(tpch.tpch_q01)
 

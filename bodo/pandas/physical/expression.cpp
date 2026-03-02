@@ -305,39 +305,10 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
         throw std::runtime_error(
             "do_arrow_compute left is neither array nor scalar.");
     }
+    arrow::Datum cmp_res =
+        do_arrow_compute_unary(src1, comparator, func_options);
 
-    // Special handling for is_not_null since it is not supported directly
-    // by Arrow compute.
-    if (comparator == "is_not_null") {
-        arrow::Result<arrow::Datum> is_null_res =
-            arrow::compute::CallFunction("is_null", {src1}, func_options);
-        if (!is_null_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_array_compute_unary: Error in Arrow compute: " +
-                is_null_res.status().message());
-        }
-
-        // Invert the boolean array
-        arrow::Result<arrow::Datum> invert_res =
-            arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
-        if (!invert_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_array_compute_unary: Error in Arrow compute Invert: " +
-                invert_res.status().message());
-        }
-        return arrow_array_to_bodo(invert_res.ValueOrDie().make_array(),
-                                   bodo::BufferPool::DefaultPtr());
-    }
-
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {src1}, func_options);
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_unary: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+    return arrow_array_to_bodo(cmp_res.make_array(),
                                bodo::BufferPool::DefaultPtr());
 }
 
@@ -391,10 +362,33 @@ arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
     return cmp_res.ValueOrDie();
 }
 
-arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
-                                    const std::string& comparator) {
+arrow::Datum do_arrow_compute_unary(
+    arrow::Datum src1, const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options) {
+    // Special handling for is_not_null since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_not_null") {
+        arrow::Result<arrow::Datum> is_null_res =
+            arrow::compute::CallFunction("is_null", {src1}, func_options);
+        if (!is_null_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute: " +
+                is_null_res.status().message());
+        }
+
+        // Invert the boolean array
+        arrow::Result<arrow::Datum> invert_res =
+            arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
+        if (!invert_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute Invert: " +
+                invert_res.status().message());
+        }
+        return invert_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {left_res});
+        arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_unary: Error in Arrow compute: " +
@@ -526,7 +520,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             size_t col_idx =
                 col_ref_map[{binding.table_index, binding.column_index}];
             return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalColumnRefExpression>(col_idx,
+                std::make_shared<PhysicalColumnRefExpression>(col_idx, binding,
                                                               bce.GetName()));
             // binding.table_index, binding.column_index));
         } break;  // suppress wrong fallthrough error
@@ -808,39 +802,7 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
     std::shared_ptr<array_info> result;
     time_pt start_init_time = start_timer();
-    if (scalar_func_data.arrow_func_name == "date") {
-        // The Arrow compute equivalent of Series.dt.date() is year_month_day,
-        // which returns a struct. To match the output dtype of Pandas, we Cast
-        // to Date32 instead.
-        result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
-    } else if (scalar_func_data.arrow_func_name == "match_substring_regex") {
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                "match_substring_regex args not a 1-element tuple.");
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject* py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                "match_substring_regex args element is not a Python string.");
-        }
-
-        // Convert to UTF‑8 C string
-        const char* c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                "match_substring_regex error extracting Python string.");
-        }
-
-        arrow::compute::MatchSubstringOptions opts(c_str);
-        result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name,
-                                        &opts);
-    } else {
-        result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
-    }
+    result = this->do_arrow_compute(res);
     this->metrics.arrow_compute_time += end_timer(start_init_time);
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }

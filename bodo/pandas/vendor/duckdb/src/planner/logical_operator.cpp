@@ -31,6 +31,19 @@ vector<ColumnBinding> LogicalOperator::GetColumnBindings() {
 	return {ColumnBinding(0, 0)};
 }
 
+idx_t LogicalOperator::GetRootIndex() {
+	auto bindings = GetColumnBindings();
+	if (bindings.empty()) {
+		throw InternalException("Empty bindings in GetRootIndex");
+	}
+	auto root_index = bindings[0].table_index;
+	for (idx_t i = 1; i < bindings.size(); i++) {
+		if (bindings[i].table_index != root_index) {
+			throw InternalException("GetRootIndex - multiple column bindings found");
+		}
+	}
+	return root_index;
+}
 void LogicalOperator::SetParamsEstimatedCardinality(InsertionOrderPreservingMap<string> &result) const {
 	if (has_estimated_cardinality) {
 		result[RenderTreeNode::ESTIMATED_CARDINALITY] = StringUtil::Format("%llu", estimated_cardinality);
@@ -165,7 +178,15 @@ void LogicalOperator::Verify(ClientContext &context) {
 		MemoryStream stream(Allocator::Get(context));
 		// We are serializing a query plan
 		try {
-			BinarySerializer::Serialize(*expressions[expr_idx], stream);
+			auto &config = DBConfig::GetConfig(context);
+			SerializationOptions options;
+			if (config.options.serialization_compatibility.manually_set) {
+				options.serialization_compatibility = config.options.serialization_compatibility;
+			} else {
+				options.serialization_compatibility = SerializationCompatibility::Latest();
+			}
+
+			BinarySerializer::Serialize(*expressions[expr_idx], stream, options);
 		} catch (NotImplementedException &ex) {
 			// ignore for now (FIXME)
 			continue;

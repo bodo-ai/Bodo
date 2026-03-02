@@ -18,12 +18,14 @@
 #include "duckdb/optimizer/filter_pullup.hpp"
 #include "duckdb/optimizer/filter_pushdown.hpp"
 #include "duckdb/optimizer/in_clause_rewriter.hpp"
+#include "duckdb/optimizer/join_elimination.hpp"
 #include "duckdb/optimizer/join_filter_pushdown_optimizer.hpp"
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
 #include "duckdb/optimizer/limit_pushdown.hpp"
 #include "duckdb/optimizer/regex_range_filter.hpp"
 #include "duckdb/optimizer/remove_duplicate_groups.hpp"
 #include "duckdb/optimizer/remove_unused_columns.hpp"
+#include "duckdb/optimizer/row_group_pruner.hpp"
 #include "duckdb/optimizer/rule/distinct_aggregate_optimizer.hpp"
 #include "duckdb/optimizer/rule/equal_or_null_simplification.hpp"
 #include "duckdb/optimizer/rule/in_clause_simplification.hpp"
@@ -33,14 +35,26 @@
 #include "duckdb/optimizer/statistics_propagator.hpp"
 #include "duckdb/optimizer/sum_rewriter.hpp"
 #include "duckdb/optimizer/topn_optimizer.hpp"
+#include "duckdb/optimizer/topn_window_elimination.hpp"
 #include "duckdb/optimizer/unnest_rewriter.hpp"
 #include "duckdb/optimizer/late_materialization.hpp"
+#include "duckdb/optimizer/common_subplan_optimizer.hpp"
+#include "duckdb/optimizer/window_self_join.hpp"
+// Bodo Chnage: Remove extension code
+//#include "duckdb/optimizer/optimizer_extension.hpp"
+#include "duckdb/optimizer/projection_pullup.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/planner.hpp"
 
 namespace duckdb {
 
 Optimizer::Optimizer(Binder &binder, ClientContext &context) : context(context), binder(binder), rewriter(context) {
+	// Bodo Change: Disable ConstantOrderNormalizationRule for now since it causes
+	// overflows to occur in some cases where it didn't before,
+	// constant int32 * (constant int32 * column int64) => (constant int32 * constant int32) * column int64
+	// which can overflow if the constants are large enough
+	// In upgrades we can check if this issue goes away
+	//rewriter.rules.push_back(make_uniq<ConstantOrderNormalizationRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<ConstantFoldingRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<DistributivityRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<ArithmeticSimplificationRule>(rewriter));
@@ -84,6 +98,10 @@ bool Optimizer::OptimizerDisabled(ClientContext &context_p, OptimizerType type) 
 }
 
 void Optimizer::RunOptimizer(OptimizerType type, const std::function<void()> &callback) {
+	if (context.IsInterrupted()) {
+		throw InterruptException();
+	}
+
 	if (OptimizerDisabled(type)) {
 		// optimizer is marked as disabled: skip
 		return;
@@ -176,11 +194,28 @@ void Optimizer::RunBuiltInOptimizers() {
 		plan = empty_result_pullup.Optimize(std::move(plan));
 	});
 
+	// Replaces some window computations with self-joins
+	RunOptimizer(OptimizerType::WINDOW_SELF_JOIN, [&]() {
+		WindowSelfJoinOptimizer window_self_join_optimizer(*this);
+		plan = window_self_join_optimizer.Optimize(std::move(plan));
+	});
+
+	// Pull up projection from joins
+	RunOptimizer(OptimizerType::PROJECTION_PULLUP, [&]() {
+		ProjectionPullup projection_pullup(*plan);
+		projection_pullup.Optimize(plan);
+	});
+
 	// then we perform the join ordering optimization
 	// this also rewrites cross products + filters into joins and performs filter pushdowns
 	RunOptimizer(OptimizerType::JOIN_ORDER, [&]() {
 		JoinOrderOptimizer optimizer(context);
 		plan = optimizer.Optimize(std::move(plan));
+	});
+
+	RunOptimizer(OptimizerType::JOIN_ELIMINATION, [&]() {
+		JoinElimination join_elimination;
+		plan = join_elimination.Optimize(std::move(plan));
 	});
 
 	// rewrites UNNESTs in DelimJoins by moving them to the projection
@@ -222,10 +257,21 @@ void Optimizer::RunBuiltInOptimizers() {
 		build_probe_side_optimizer.VisitOperator(*plan);
 	});
 
+	// convert common subplans into materialized CTEs
+	RunOptimizer(OptimizerType::COMMON_SUBPLAN, [&]() {
+		CommonSubplanOptimizer common_subplan_optimizer(*this);
+		plan = common_subplan_optimizer.Optimize(std::move(plan));
+	});
+
 	// pushes LIMIT below PROJECTION
 	RunOptimizer(OptimizerType::LIMIT_PUSHDOWN, [&]() {
 		LimitPushdown limit_pushdown;
 		plan = limit_pushdown.Optimize(std::move(plan));
+	});
+
+	RunOptimizer(OptimizerType::ROW_GROUP_PRUNER, [&]() {
+		RowGroupPruner row_group_pruner(context);
+		plan = row_group_pruner.Optimize(std::move(plan));
 	});
 
 	// perform sampling pushdown
@@ -252,6 +298,12 @@ void Optimizer::RunBuiltInOptimizers() {
 		StatisticsPropagator propagator(*this, *plan);
 		propagator.PropagateStatistics(plan);
 		statistics_map = propagator.GetStatisticsMap();
+	});
+
+	// rewrite row_number window function + filter on row_number to aggregate
+	RunOptimizer(OptimizerType::TOP_N_WINDOW_ELIMINATION, [&]() {
+		TopNWindowElimination topn_window_elimination(context, *this, &statistics_map);
+		plan = topn_window_elimination.Optimize(std::move(plan));
 	});
 
 	// remove duplicate aggregates
@@ -284,7 +336,27 @@ unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan
 
 	this->plan = std::move(plan_p);
 
+	// Bodo Change: Remove extension code
+	//for (auto &pre_optimizer_extension : OptimizerExtension::Iterate(context)) {
+	//	RunOptimizer(OptimizerType::EXTENSION, [&]() {
+	//		OptimizerExtensionInput input {GetContext(), *this, pre_optimizer_extension.optimizer_info.get()};
+	//		if (pre_optimizer_extension.pre_optimize_function) {
+	//			pre_optimizer_extension.pre_optimize_function(input, plan);
+	//		}
+	//	});
+	//}
+
 	RunBuiltInOptimizers();
+
+	// Bodo Change: Remove extension code
+	//for (auto &optimizer_extension : OptimizerExtension::Iterate(context)) {
+	//	RunOptimizer(OptimizerType::EXTENSION, [&]() {
+	//		OptimizerExtensionInput input {GetContext(), *this, optimizer_extension.optimizer_info.get()};
+	//		if (optimizer_extension.optimize_function) {
+	//			optimizer_extension.optimize_function(input, plan);
+	//		}
+	//	});
+	//}
 
 	Planner::VerifyPlan(context, plan);
 
