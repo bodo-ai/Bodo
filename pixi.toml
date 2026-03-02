@@ -270,6 +270,8 @@ numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
+[feature.cudf.pypi-dependencies]
+linetimer = "*"
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
