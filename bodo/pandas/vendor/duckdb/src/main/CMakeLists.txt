@@ -36,6 +36,7 @@ add_library_unity(
   error_manager.cpp
   # Bodo Change: Remove extension related files
   #extension.cpp
+  extension_callback_manager.cpp
   #extension_install_info.cpp
   #extension_manager.cpp
   materialized_query_result.cpp
@@ -43,9 +44,14 @@ add_library_unity(
   prepared_statement.cpp
   prepared_statement_data.cpp
   profiling_info.cpp
+  profiling_utils.cpp
+  # Bodo Change: Remove parser
+  #relation.cpp
   query_profiler.cpp
   query_result.cpp
+  result_set_manager.cpp
   stream_query_result.cpp
+  user_settings.cpp
   valid_checker.cpp)
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_main>

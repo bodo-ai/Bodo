@@ -85,8 +85,19 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
+    duckdb::shared_ptr<duckdb::ClientContext> client_context =
+        get_duckdb_context();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
         optimizer->Optimize(std::move(in_plan));
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+        started_transaction = false;
+    }
 
     // Insert and pushdown runtime join filters after optimization since they
     // aren't relational
@@ -278,7 +289,11 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
 
     duckdb::shared_ptr<duckdb::ClientContext> client_context =
         get_duckdb_context();
-    client_context->transaction.BeginTransaction();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -309,7 +324,9 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     bound_func_expr.bind_info =
         duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
 
-    client_context->transaction.ClearTransaction();
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+    }
     return result;
 }
 
@@ -325,7 +342,11 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
 
     duckdb::shared_ptr<duckdb::ClientContext> client_context =
         get_duckdb_context();
-    client_context->transaction.BeginTransaction();
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -352,7 +373,9 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
             "make_unaryop_expr BindScalarFunction did not return a "
             "BOUND_FUNCTION");
     }
-    client_context->transaction.ClearTransaction();
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+    }
     return result;
 }
 
@@ -1152,8 +1175,7 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
     auto new_table_index = get_duckdb_binder().get()->GenerateTableIndex();
     return duckdb::make_uniq<duckdb::LogicalCTERef>(
-        new_table_index, table_index, return_types, return_names,
-        duckdb::CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
+        new_table_index, table_index, return_types, return_names);
 }
 
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
@@ -1172,14 +1194,14 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 
     // Create join condition.
     for (std::pair<int, int> cond_pair : cond_vec) {
-        duckdb::JoinCondition cond;
-        cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
-        cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            lhs_duck->types[cond_pair.first],
-            lhs_duck->GetColumnBindings()[cond_pair.first]);
-        cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            rhs_duck->types[cond_pair.second],
-            rhs_duck->GetColumnBindings()[cond_pair.second]);
+        duckdb::JoinCondition cond(
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                lhs_duck->types[cond_pair.first],
+                lhs_duck->GetColumnBindings()[cond_pair.first]),
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                rhs_duck->types[cond_pair.second],
+                rhs_duck->GetColumnBindings()[cond_pair.second]),
+            duckdb::ExpressionType::COMPARE_EQUAL);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }

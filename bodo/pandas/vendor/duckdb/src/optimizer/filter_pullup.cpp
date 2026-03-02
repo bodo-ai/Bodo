@@ -6,6 +6,7 @@
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_cross_product.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
+#include "duckdb/planner/operator/logical_distinct.hpp"
 
 namespace duckdb {
 
@@ -26,6 +27,7 @@ unique_ptr<LogicalOperator> FilterPullup::Rewrite(unique_ptr<LogicalOperator> op
 	case LogicalOperatorType::LOGICAL_EXCEPT:
 		return PullupSetOperation(std::move(op));
 	case LogicalOperatorType::LOGICAL_DISTINCT:
+		return PullupDistinct(std::move(op));
 	case LogicalOperatorType::LOGICAL_ORDER_BY: {
 		// we can just pull directly through these operations without any rewriting
 		op->children[0] = Rewrite(std::move(op->children[0]));
@@ -84,8 +86,7 @@ unique_ptr<LogicalOperator> FilterPullup::PullupInnerJoin(unique_ptr<LogicalOper
 	case LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
 		auto &comp_join = op->Cast<LogicalComparisonJoin>();
 		for (auto &cond : comp_join.conditions) {
-			expressions.push_back(
-			    make_uniq<BoundComparisonExpression>(cond.comparison, std::move(cond.left), std::move(cond.right)));
+			expressions.push_back(JoinCondition::CreateExpression(std::move(cond)));
 		}
 		break;
 	}
@@ -113,6 +114,18 @@ unique_ptr<LogicalOperator> FilterPullup::PullupInnerJoin(unique_ptr<LogicalOper
 unique_ptr<LogicalOperator> FilterPullup::PullupCrossProduct(unique_ptr<LogicalOperator> op) {
 	D_ASSERT(op->type == LogicalOperatorType::LOGICAL_CROSS_PRODUCT);
 	return PullupBothSide(std::move(op));
+}
+
+unique_ptr<LogicalOperator> FilterPullup::PullupDistinct(unique_ptr<LogicalOperator> op) {
+	const auto &distinct = op->Cast<LogicalDistinct>();
+	if (distinct.distinct_type == DistinctType::DISTINCT) {
+		// Can pull up through a DISTINCT
+		op->children[0] = Rewrite(std::move(op->children[0]));
+		return op;
+	}
+	// Cannot pull up through a DISTINCT ON (see #19327)
+	D_ASSERT(distinct.distinct_type == DistinctType::DISTINCT_ON);
+	return FinishPullup(std::move(op));
 }
 
 unique_ptr<LogicalOperator> FilterPullup::GeneratePullupFilter(unique_ptr<LogicalOperator> child,
