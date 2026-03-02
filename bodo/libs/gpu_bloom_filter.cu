@@ -2,14 +2,27 @@
 //#include <thrust/transform.h>
 //#include <thrust/execution_policy.h>
 //#include <thrust/device_ptr.h>
+#include <cudf/column/column_factories.hpp>
+#include <cudf/detail/utilities/vector_factories.hpp>
 #include <cudf/hashing.hpp>
 #include <cudf/column/column_view.hpp>
+#include <cudf/stream_compaction.hpp>
 #include <cudf/strings/strings_column_view.hpp>
 #include <cudf/strings/utilities.hpp>
-#include <cudf/strings/detail/convert/convert_datetime.hpp>
-#include <cudf/strings/detail/utilities.hpp>
+#include <cudf/unary.hpp>
+//#include <cudf/strings/detail/convert/convert_datetime.hpp>
+//#include <cudf/strings/detail/utilities.hpp>
 #include <rmm/device_uvector.hpp>
 #include <cuda_runtime.h>
+
+#define CUDA_TRY(call)                                                     \
+  do {                                                                     \
+    cudaError_t const status = (call);                                     \
+    if (status != cudaSuccess) {                                           \
+      throw std::runtime_error(                                            \
+        std::string{"CUDA error: "} + cudaGetErrorString(status));         \
+    }                                                                      \
+  } while (0)
 
 // utility: compute m and k
 void compute_bloom_params(std::size_t n, double p, std::size_t &m_out, int &k_out) {
@@ -30,6 +43,7 @@ __device__ __forceinline__ uint64_t splitmix64(uint64_t x) {
   return x;
 }
 
+#if 0
 // Kernel to set bits for build hashes
 __global__ void set_bits_kernel(const uint64_t* hashes,
                                 std::size_t n,
@@ -50,6 +64,7 @@ __global__ void set_bits_kernel(const uint64_t* hashes,
     atomicOr(reinterpret_cast<unsigned long long*>(&bitset_words[word]), static_cast<unsigned long long>(mask));
   }
 }
+#endif
 
 // Kernel to test bits for probe hashes and produce boolean mask
 __global__ void test_bits_kernel(const uint64_t* hashes,
@@ -74,6 +89,34 @@ __global__ void test_bits_kernel(const uint64_t* hashes,
   out_mask[idx] = present ? 1 : 0;
 }
 
+// Device kernel: double hashing using 128-bit (low, high)
+__global__ void set_bits_kernel_doublehash(
+    const uint64_t* low_high_buf, // length = 2*n, low[0..n-1], high[0..n-1]
+    std::size_t n,
+    uint64_t* bitset,
+    std::size_t words,
+    std::size_t m_bits,
+    std::size_t k_hashes) {
+
+    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n) return;
+
+    uint64_t h1 = low_high_buf[idx];
+    uint64_t h2 = low_high_buf[idx + n];
+
+    // produce k_hashes using double hashing: h_i = h1 + i * h2 (mod 2^64)
+    for (std::size_t j = 0; j < k_hashes; ++j) {
+        uint64_t combined = h1 + j * h2;
+        // map to bit index in [0, m_bits)
+        uint64_t bit = combined % m_bits;
+        uint64_t word_idx = bit >> 6;            // /64
+        uint64_t bit_in_word = bit & 63;         // %64
+        uint64_t mask = uint64_t(1) << bit_in_word;
+        // atomic OR into bitset word
+        atomicOr(&bitset[word_idx], mask);
+    }
+}
+
 // Build bloom filter from keys (table_view of key columns)
 BloomFilter build_bloom_filter_from_table(
     cudf::table_view const& keys,
@@ -81,38 +124,68 @@ BloomFilter build_bloom_filter_from_table(
     double false_positive_rate,
     rmm::cuda_stream_view stream) {
 
-  BloomFilter bf;
-  bf.n_items = expected_items;
-  compute_bloom_params(expected_items, false_positive_rate, bf.m_bits, bf.k_hashes);
+    BloomFilter bf;
+    bf.n_items = expected_items;
+    compute_bloom_params(expected_items, false_positive_rate, bf.m_bits, bf.k_hashes);
 
-  // allocate bitset words
-  std::size_t words = (bf.m_bits + 63) / 64;
-  bf.bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
-  // zero initialize
-  CUDA_TRY(cudaMemsetAsync(bf.bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
+    // allocate bitset words
+    std::size_t words = (bf.m_bits + 63) / 64;
+    bf.bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
+    // zero initialize
+    CUDA_TRY(cudaMemsetAsync(bf.bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
 
-  // compute 64-bit hash for each row of keys
-  // cudf::hashing::hash returns a column of uint64_t (one per row)
-  auto hash_col = cudf::hashing::hash(keys, cudf::hash_id::HASH_MURMUR3, 0, stream);
-  auto hash_view = hash_col->view();
-  // copy hashes to device pointer (they already are device memory; get pointer)
-  const uint64_t* hashes = reinterpret_cast<const uint64_t*>(hash_view.data<uint64_t>());
+    // compute 64-bit hash for each row of keys
+    // cudf::hashing::hash returns a column of uint64_t (one per row)
+    auto hash_table = cudf::hashing::murmurhash3_x64_128(keys, 0, stream);
+    auto hash_table_view = hash_table->view();
+    if (hash_table_view.num_columns() != 2) {
+        throw std::runtime_error("murmurhash3_x64_128 did not return 2 columns");
+    }
 
-  // launch kernel to set bits
-  std::size_t n = hash_view.size();
-  if (n > 0) {
+    auto low_col = hash_table_view.column(0);
+    auto high_col = hash_table_view.column(1);
+    if (low_col.type().id() != cudf::type_id::UINT64 || high_col.type().id() != cudf::type_id::UINT64) {
+        throw std::runtime_error("murmurhash3_x64_128 returned unexpected column types");
+    }
+
+    std::size_t n = low_col.size();
+    if (n == 0) {
+        return bf;
+    }
+
+    // Allocate a single device buffer to own both low and high arrays:
+    // layout: [low0..low_{n-1}, high0..high_{n-1}] (length = 2*n uint64_t)
+    bf.hash_buffer = rmm::device_buffer(2 * n * sizeof(uint64_t), stream);
+    // Copy device->device: low -> buf[0..n-1], high -> buf[n..2n-1]
+    const uint64_t* low_dev_ptr = low_col.data<uint64_t>();
+    const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
+    uint64_t* dst_ptr = static_cast<uint64_t*>(bf.hash_buffer.data());
+
+    CUDA_TRY(cudaMemcpyAsync(
+              dst_ptr,
+              low_dev_ptr,
+              n * sizeof(uint64_t),
+              cudaMemcpyDeviceToDevice,
+              stream.value()));
+    CUDA_TRY(cudaMemcpyAsync(
+              dst_ptr + n,
+              high_dev_ptr,
+              n * sizeof(uint64_t),
+              cudaMemcpyDeviceToDevice,
+              stream.value()));
+
     int block = 256;
     int grid = static_cast<int>((n + block - 1) / block);
-    set_bits_kernel<<<grid, block, 0, stream.value()>>>(
-        hashes, n,
+    set_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
+        dst_ptr, n,
         reinterpret_cast<uint64_t*>(bf.bitset.data()),
         words, bf.m_bits, bf.k_hashes);
     CUDA_TRY(cudaGetLastError());
-  }
 
-  return bf;
+    return bf;
 }
 
+#if 0
 // Filter probe table using bloom filter on specified key indices
 std::unique_ptr<cudf::table> filter_table_with_bloom(
     cudf::table_view const& probe_table,
@@ -161,3 +234,4 @@ std::unique_ptr<cudf::table> filter_table_with_bloom(
   return result;
 }
 
+#endif

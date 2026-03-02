@@ -846,41 +846,7 @@ if(USE_CUDF)
   message(STATUS "Configuring for cudf.")
   enable_language(CUDA) # compile .cu with cuda toolchain
   find_package(CUDAToolkit REQUIRED)
-  set(cuda_sources_list
-      "bodo/libs/gpu_bloom_filter.cu"
-  )
-  add_library(gpu_kernels OBJECT ${cuda_sources_list})
-  set_target_properties(gpu_kernels PROPERTIES
-      POSITION_INDEPENDENT_CODE ON
-      CUDA_SEPARABLE_COMPILATION ON
-      CUDA_STANDARD 14
-      CUDA_STANDARD_REQUIRED ON
-  )
-  set_target_properties(gpu_kernels PROPERTIES
-      CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
-  )
-
-  target_include_directories(gpu_kernels BEFORE PRIVATE
-    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
-  )
-
-#      $<$<COMPILE_LANGUAGE:CUDA>:
-#      -Xcompiler=-fPIC
-#      >
-  target_compile_options(gpu_kernels PRIVATE
-      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}>
-      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}/cccl>
-      $<$<COMPILE_LANGUAGE:CUDA>:-I${PYLIBCUDF_BASE_DIR}>
-      $<$<COMPILE_LANGUAGE:CUDA>:-I${RMM_BASE_DIR}>
-  )
-
   execute_process( COMMAND "${Python_EXECUTABLE}" -c "import os, pathlib; \ root = os.environ.get('CONDA_PREFIX', ''); \ matches = list(pathlib.Path(root).rglob('cuda_runtime.h')); \ print(matches[0].parent if matches else '')" OUTPUT_VARIABLE CUDA_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-
-  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
-
-  target_include_directories(ext BEFORE PRIVATE
-    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
-  )
 
   # RMM library defines
   find_path(RMM_INCLUDE_DIR NAMES rmm/cuda_stream_view.hpp)
@@ -929,16 +895,60 @@ if(USE_CUDF)
   add_library(nccl SHARED IMPORTED)
   set_target_properties(nccl PROPERTIES IMPORTED_LOCATION "${NCCL_LIB}")
 
+  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
+  message(STATUS "Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
+  message(STATUS "Using RMM base dir: ${RMM_BASE_DIR}")
+
+  target_include_directories(ext BEFORE PRIVATE
+    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
+  )
+
   # RPATH
   set_target_properties(ext PROPERTIES
     BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
     INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBKVIKIO_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
   )
 
+  set(cuda_sources_list
+      "bodo/libs/gpu_bloom_filter.cu"
+  )
+  add_library(gpu_kernels OBJECT ${cuda_sources_list})
+  set_target_properties(gpu_kernels PROPERTIES
+      POSITION_INDEPENDENT_CODE ON
+      CUDA_SEPARABLE_COMPILATION ON
+      CUDA_STANDARD 20
+      CUDA_STANDARD_REQUIRED ON
+  )
+  set_target_properties(gpu_kernels PROPERTIES
+      CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
+  )
+
+  message(STATUS "Before gpu_kernels Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
+  message(STATUS "Before gpu_kernels Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
+  message(STATUS "Before gpu_kernels Using RMM base dir: ${RMM_BASE_DIR}")
+
+  target_compile_definitions(gpu_kernels PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
+  target_include_directories(gpu_kernels BEFORE PRIVATE
+      ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR} ${RAPIDS_INCLUDE_DIR}
+  )
+
+#      $<$<COMPILE_LANGUAGE:CUDA>:
+#      -Xcompiler=-fPIC
+#      >
+  target_compile_options(gpu_kernels PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}/cccl>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${LIBCUDF_INCLUDE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:--diag-suppress=20012>
+      #$<$<COMPILE_LANGUAGE:CUDA>:-I${RAPIDS_INCLUDE_DIR}>
+      #      $<$<COMPILE_LANGUAGE:CUDA>:-I${RMM_BASE_DIR}>
+  )
+
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
+  target_sources(ext PRIVATE $<TARGET_OBJECTS:gpu_kernels>)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl gpu_kernels
   # Force the linker to include libkvikio even if no symbols are used directly
       "-Wl,--no-as-needed"
       libkvikio
