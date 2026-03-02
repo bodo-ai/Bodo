@@ -986,10 +986,8 @@ def overload_alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):
     if typ == bodo.types.bytes_type:
         return lambda typ, kind, length, is_ascii=0: np.empty(length, np.uint8)
     if typ == string_type:
-        return (
-            lambda typ, kind, length, is_ascii=0: numba.cpython.unicode._empty_string(
-                kind, length, is_ascii
-            )
+        return lambda typ, kind, length, is_ascii=0: (
+            numba.cpython.unicode._empty_string(kind, length, is_ascii)
         )  # pragma: no cover
     raise BodoError(f"Internal Error: Expected Bytes or String type, found {typ}")
 
