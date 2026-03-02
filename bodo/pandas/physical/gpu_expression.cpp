@@ -1068,48 +1068,56 @@ void duckdbValuetoCudfLiteral(
                     filter_scalars.back().get())));
             return;
         }
-        // case duckdb::LogicalTypeId::TIMESTAMP_MS: {
-        //     // Define a timestamp type with millisecond precision
-        //     auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MILLI);
-        //     duckdb::timestamp_ms_t extracted =
-        //         value.GetValue<duckdb::timestamp_ms_t>();
-        //     // Create a TimestampScalar with millisecond value
-        //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
-        //                                                     timestamp_type);
-        // } break;
-        // case duckdb::LogicalTypeId::TIMESTAMP_SEC: {
-        //     // Define a timestamp type with second precision
-        //     auto timestamp_type = arrow::timestamp(arrow::TimeUnit::SECOND);
-        //     duckdb::timestamp_sec_t extracted =
-        //         value.GetValue<duckdb::timestamp_sec_t>();
-        //     // Create a TimestampScalar with second value
-        //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
-        //                                                     timestamp_type);
-        // } break;
-        // case duckdb::LogicalTypeId::TIMESTAMP_NS: {
-        //     // Define a timestamp type with nanosecond precision
-        //     auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);
-        //     duckdb::timestamp_ns_t extracted =
-        //         value.GetValue<duckdb::timestamp_ns_t>();
-        //     // Create a TimestampScalar with nanosecond value
-        //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
-        //                                                     timestamp_type);
-        // } break;
-        // case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
-        //     // Define a timestamp type with microsecond precision and
-        //     timezone
-        //     // UTC.
-        //     // DuckDB will drop the nanoseconds from timestamps with
-        //     timezone,
-        //     // so the result from filtering a timezone aware column might be
-        //     // different than Pandas if constant uses nanoseconds.
-        //     auto timestamp_type =
-        //         arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
-        //     duckdb::timestamp_tz_t extracted =
-        //         value.GetValue<duckdb::timestamp_tz_t>();
-        //     return std::make_shared<arrow::TimestampScalar>(extracted.value,
-        //                                                     timestamp_type);
-        // } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_MS: {
+            // Define a timestamp type with millisecond precision
+            duckdb::timestamp_ms_t extracted =
+                value.GetValue<duckdb::timestamp_ms_t>();
+            // Create a TimestampScalar with millisecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                    cudf::timestamp_ms{
+                        cuda::std::chrono::milliseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_ms>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP_SEC: {
+            // Define a timestamp type with millisecond precision
+            duckdb::timestamp_sec_t extracted =
+                value.GetValue<duckdb::timestamp_sec_t>();
+            // Create a TimestampScalar with second value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_s>>(
+                    cudf::timestamp_s{
+                        cuda::std::chrono::seconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_s>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        case duckdb::LogicalTypeId::TIMESTAMP_NS: {
+            // Define a timestamp type with nanosecond precision
+            duckdb::timestamp_ns_t extracted =
+                value.GetValue<duckdb::timestamp_ns_t>();
+            // Create a TimestampScalar with nanosecond value
+            auto literal_value =
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                    cudf::timestamp_ns{
+                        cuda::std::chrono::nanoseconds{extracted.value}},
+                    !value.IsNull());
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(cudf::ast::literal(
+                *static_cast<cudf::timestamp_scalar<cudf::timestamp_ns>*>(
+                    filter_scalars.back().get())));
+            return;
+        }
+        // TODO(ehsan): support TIMESTAMP_TZ which is not trivial since cudf
+        // types don't have timezones
         case duckdb::LogicalTypeId::DATE: {
             // Define a date type
             duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
