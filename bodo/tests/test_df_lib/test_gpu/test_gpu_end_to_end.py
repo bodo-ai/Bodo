@@ -67,20 +67,21 @@ def test_project_filter1(datapath):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
 
-    def merge_impl(df1_df, out_path):
+    def merge_impl(df1_df, out_path, check_gpu_plan):
         proj_df = df1_df[["B", "D"]]
         filt_df = proj_df[proj_df.D > 30]
+        if check_gpu_plan:
+            assert is_gpu_plan(filt_df), "Expected entire plan to run on GPU"
         filt_df.to_parquet(out_path)
 
     with tempfile.TemporaryDirectory() as tmp:
-        # TODO: Check that entire pipeline is being executed on GPU.
         df1_bodo = bd.read_parquet(df1_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        merge_impl(df1_bodo, out_path_bodo)
+        merge_impl(df1_bodo, out_path_bodo, True)
 
         df1_pd = pd.read_parquet(df1_path)
         out_path_pd = os.path.join(tmp, "out_pd.pq")
-        merge_impl(df1_pd, out_path_pd)
+        merge_impl(df1_pd, out_path_pd, False)
 
         result_bodo = pd.read_parquet(out_path_bodo)
         result_pd = pd.read_parquet(out_path_pd)
@@ -107,13 +108,15 @@ def test_groupby_agg(datapath, func):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
 
-    def merge_impl(df1_df, out_path):
+    def merge_impl(df1_df, out_path, check_gpu_plan):
         if func == "distinct":
             df1_agg = df1_df.drop_duplicates()
         else:
             df1_agg = getattr(
                 df1_df.groupby("D", as_index=False, sort=False)["A"], func
             )()
+        if check_gpu_plan:
+            assert is_gpu_plan(df1_agg), "Expected entire plan to run on GPU"
 
         df1_agg.to_parquet(out_path)
 
@@ -121,11 +124,11 @@ def test_groupby_agg(datapath, func):
         # TODO: Check that entire pipeline is being executed on GPU.
         df1_bodo = bd.read_parquet(df1_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        merge_impl(df1_bodo, out_path_bodo)
+        merge_impl(df1_bodo, out_path_bodo, True)
 
         df1_pd = pd.read_parquet(df1_path)
         out_path_pd = os.path.join(tmp, "out_pd.pq")
-        merge_impl(df1_pd, out_path_pd)
+        merge_impl(df1_pd, out_path_pd, False)
 
         result_bodo = pd.read_parquet(out_path_bodo)
         result_pd = pd.read_parquet(out_path_pd)
