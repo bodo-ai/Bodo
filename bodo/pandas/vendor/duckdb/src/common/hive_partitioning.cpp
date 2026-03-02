@@ -126,7 +126,7 @@ std::map<string, string> HivePartitioning::Parse(const string &filename) {
 Value HivePartitioning::GetValue(ClientContext &context, const string &key, const string &str_val,
                                  const LogicalType &type) {
 	// Handle nulls
-	if (StringUtil::CIEquals(str_val, "NULL")) {
+	if (StringUtil::CIEquals(str_val, "NULL") || str_val == "__HIVE_DEFAULT_PARTITION__") {
 		return Value(type);
 	}
 	if (type.id() == LogicalTypeId::VARCHAR) {
@@ -153,7 +153,6 @@ void HivePartitioning::ApplyFiltersToFileList(ClientContext &context, vector<Ope
                                               vector<unique_ptr<Expression>> &filters,
                                               const HivePartitioningFilterInfo &filter_info,
                                               MultiFilePushdownInfo &info) {
-
 	vector<OpenFileInfo> pruned_files;
 	vector<bool> have_preserved_filter(filters.size(), false);
 	vector<unique_ptr<Expression>> pruned_filters;
@@ -245,26 +244,13 @@ static void TemplatedGetHivePartitionValues(Vector &input, vector<HivePartitionK
 
 	const auto &type = input.GetType();
 
-	const auto reinterpret = Value::CreateValue<T>(data[sel.get_index(0)]).GetTypeMutable() != type;
-	if (reinterpret) {
-		for (idx_t i = 0; i < count; i++) {
-			auto &key = keys[i];
-			const auto idx = sel.get_index(i);
-			if (validity.RowIsValid(idx)) {
-				key.values[col_idx] = GetHiveKeyValue(data[idx], type);
-			} else {
-				key.values[col_idx] = GetHiveKeyNullValue(type);
-			}
-		}
-	} else {
-		for (idx_t i = 0; i < count; i++) {
-			auto &key = keys[i];
-			const auto idx = sel.get_index(i);
-			if (validity.RowIsValid(idx)) {
-				key.values[col_idx] = GetHiveKeyValue(data[idx]);
-			} else {
-				key.values[col_idx] = GetHiveKeyNullValue(type);
-			}
+	for (idx_t i = 0; i < count; i++) {
+		auto &key = keys[i];
+		const auto idx = sel.get_index(i);
+		if (validity.RowIsValid(idx)) {
+			key.values[col_idx] = GetHiveKeyValue(data[idx], type);
+		} else {
+			key.values[col_idx] = GetHiveKeyNullValue(type);
 		}
 	}
 }

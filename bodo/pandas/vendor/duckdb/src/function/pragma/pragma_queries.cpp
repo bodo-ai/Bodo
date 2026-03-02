@@ -10,6 +10,7 @@
 #include "duckdb/parser/qualified_name.hpp"
 #include "duckdb/parser/statement/copy_statement.hpp"
 #include "duckdb/parser/statement/export_statement.hpp"
+#include "duckdb/parser/keyword_helper.hpp"
 
 namespace duckdb {
 
@@ -200,7 +201,7 @@ static string PragmaDatabaseSize(ClientContext &context, const FunctionParameter
 }
 
 static string PragmaStorageInfo(ClientContext &context, const FunctionParameters &parameters) {
-	return StringUtil::Format("SELECT * FROM pragma_storage_info('%s');", parameters.values[0].ToString());
+	return StringUtil::Format("SELECT * FROM pragma_storage_info(%s);", SQLString(parameters.values[0].ToString()));
 }
 
 static string PragmaMetadataInfo(ClientContext &context, const FunctionParameters &parameters) {
