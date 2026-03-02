@@ -697,6 +697,18 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     PhysicalJoinMetrics metrics;
 };
 
+/*
+ * @brief Set left/right side flags in the expression tree for column reference
+ * expressions based on whether they refer to the left or right table in the
+ * join. This is used for evaluating non-equi join conditions during the probe
+ * phase to determine which table's columns to pull from, the hash table vs the
+ * probe batch.
+ * @arg expr The root of the expression tree to set left/right flags in,
+ * modified in place.
+ * @arg left_col_ref_map A map of column bindings to column indices for the left
+ * table, used to determine if a column reference expression refers to the left
+ * or right table.
+ */
 void setExprTreeLeftRight(
     std::shared_ptr<PhysicalExpression> expr,
     const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
