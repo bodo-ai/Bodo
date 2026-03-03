@@ -181,19 +181,21 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     }
 
     std::vector<std::unique_ptr<cudf::table>> received_tables;
-    if (!this->inflight_shuffles.empty()) {
-        // Only progress the head of inflight_shuffles to ensure consistent
-        // ordering across ranks (required for NCCL).
-        auto progress_res = this->inflight_shuffles[0].progress();
+    while (!this->inflight_shuffles.empty()) {
+        auto progress_res = this->inflight_shuffles.front().progress();
         if (progress_res.has_value()) {
             received_tables.push_back(std::move(progress_res.value()));
         }
 
-        if (this->inflight_shuffles[0].send_state ==
+        if (this->inflight_shuffles.front().send_state ==
                 GpuShuffleState::COMPLETED &&
-            this->inflight_shuffles[0].recv_state ==
+            this->inflight_shuffles.front().recv_state ==
                 GpuShuffleState::COMPLETED) {
-            this->inflight_shuffles.erase(this->inflight_shuffles.begin());
+            this->inflight_shuffles.pop_front();
+        } else {
+            // Only progress one inflight_shuffle at a time to ensure consistent
+            // ordering across ranks (required for NCCL).
+            break;
         }
     }
     return received_tables;
