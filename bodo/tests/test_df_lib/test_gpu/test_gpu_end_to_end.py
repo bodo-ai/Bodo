@@ -71,7 +71,7 @@ def test_project_filter1(datapath):
         proj_df = df1_df[["B", "D"]]
         filt_df = proj_df[proj_df.D > 30]
         if check_gpu_plan:
-            assert is_gpu_plan(filt_df), "Expected entire plan to run on GPU"
+            assert is_gpu_plan(filt_df._plan), "Expected entire plan to run on GPU"
         filt_df.to_parquet(out_path)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -116,7 +116,7 @@ def test_groupby_agg(datapath, func):
                 df1_df.groupby("D", as_index=False, sort=False)["A"], func
             )()
         if check_gpu_plan:
-            assert is_gpu_plan(df1_agg), "Expected entire plan to run on GPU"
+            assert is_gpu_plan(df1_agg._plan), "Expected entire plan to run on GPU"
 
         df1_agg.to_parquet(out_path)
 
