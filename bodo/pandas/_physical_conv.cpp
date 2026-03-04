@@ -385,28 +385,6 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // Process the source of this join filter.
     this->Visit(*op.children[0]);
 
-#if 0
-#ifdef USE_CUDF
-    bool all_joins_on_gpu = true;
-    for (int filter_id : op.filter_ids) {
-        all_joins_on_gpu = all_joins_on_gpu && !(*join_on_gpu)[filter_id];
-    }
-    if (all_joins_on_gpu) {
-        // Don't need to add a pipeline stage if all joins will be
-        // run on GPU.
-        return;
-    }
-
-    bool run_on_gpu = node_run_on_gpu(op);
-    if (run_on_gpu) {
-        // If the planner wants this JoinFilter to run on GPU
-        // then we won't do join filtering even if the join itself
-        // is done on CPU.
-        return;
-    }
-#endif
-#endif
-
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
