@@ -99,11 +99,9 @@ void CudaHashJoin::build_hash_table(
 
     this->_join_handle = std::make_unique<cudf::hash_join>(
         build_view.select(this->build_key_indices), this->null_equality);
-    std::cout << "Before build bloom filter." << std::endl;
     this->_build_bloom_filter = build_bloom_filter_from_table(
-        build_view.select(this->build_key_indices), 0.05,
+        build_view.select(this->build_key_indices), 0.01,
         cudf::get_default_stream());
-    std::cout << "After build bloom filter." << std::endl;
 }
 
 void CudaHashJoin::runtime_filter(

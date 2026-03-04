@@ -3,7 +3,7 @@
 #include <cudf/column/column.hpp>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
-#include <cudf/hashing.hpp>  // for cudf::hashing::hash
+#include <cudf/hashing.hpp>
 #include <cudf/strings/strings_column_view.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
@@ -19,10 +19,29 @@ struct CudfBloomFilter {
     std::size_t n_items{0};
 };
 
+/*
+ * @brief Build bloom filter from keys (table_view of key columns)
+ *
+ * @param keys - table of the key columns
+ * @param false_positive_rate - the desired false positive rate
+ * @param stream - the stream to place operations on
+ */
 std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     cudf::table_view const& keys, double false_positive_rate,
     rmm::cuda_stream_view stream);
 
+/*
+ * @brief Updates prev_mask to indicate which rows are in the bloom filter.
+ *
+ * @param probe_table - the table to see which rows are in the bloom filter
+ * @param probe_key_indices - the column indices in probe_table that are checked
+ * in the bloom filter
+ * @param bf - the previously built bloom filter to use
+ * @param prev_mask - mask that says which rows are in the bloom filter.
+ *           If you pass an existing mask then the new mask and previous mask
+ * are OR'ed together.
+ * @param stream - the stream to place operations on
+ */
 void filter_table_with_bloom(
     cudf::table_view const& probe_table,
     std::vector<cudf::size_type> const& probe_key_indices,
