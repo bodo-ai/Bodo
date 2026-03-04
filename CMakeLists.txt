@@ -901,6 +901,9 @@ if(USE_CUDF)
   set_target_properties(ext PROPERTIES
     BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
     INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    LINKER_LANGUAGE CUDA
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
   )
 
   set(cuda_sources_list
@@ -912,8 +915,6 @@ if(USE_CUDF)
       CUDA_SEPARABLE_COMPILATION ON
       CUDA_STANDARD 20
       CUDA_STANDARD_REQUIRED ON
-  )
-  set_target_properties(gpu_kernels PROPERTIES
       CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
   )
 
@@ -938,10 +939,27 @@ if(USE_CUDF)
       #      $<$<COMPILE_LANGUAGE:CUDA>:-I${RMM_BASE_DIR}>
   )
 
-  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
+  # Path to the CUDA object produced by CMake
+  #set(GPU_BLOOM_O ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/gpu_kernels.dir/bodo/libs/gpu_bloom_filter.cu.o)
+
+  #set(GPU_BLOOM_DLINK_O ${CMAKE_CURRENT_BINARY_DIR}/gpu_bloom_filter_dlink.o)
+
+  #add_custom_command(
+  #  OUTPUT ${GPU_BLOOM_DLINK_O}
+  #  COMMAND ${CUDAToolkit_NVCC_EXECUTABLE}
+  #          -dlink ${GPU_BLOOM_O}
+  #          -o ${GPU_BLOOM_DLINK_O}
+  #          ${CMAKE_CUDA_FLAGS}
+  #  DEPENDS ${GPU_BLOOM_O}
+  #  COMMENT "Running CUDA device-link for gpu_bloom_filter.cu.o"
+  #)
+
+  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
   target_sources(ext PRIVATE $<TARGET_OBJECTS:gpu_kernels>)
+  #target_sources(ext PRIVATE $<TARGET_OBJECTS:gpu_kernels> ${cuda_sources_list})
+  #target_sources(ext PRIVATE ${GPU_BLOOM_DLINK_O}) # $<TARGET_OBJECTS:gpu_kernels>)
   target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl gpu_kernels)
 endif()
 

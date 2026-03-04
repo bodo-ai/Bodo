@@ -245,6 +245,15 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
         std::shared_ptr<cudf::table> incoming_tbl = input_batch.table;
         std::shared_ptr<arrow::Schema> incoming_schema = input_batch.schema;
+        if (input_batch.table->num_rows() == 0) {
+            if (prev_op_result == OperatorResult::FINISHED) {
+                finished = true;
+                cudaStreamSynchronize(se->stream);
+                return OperatorResult::FINISHED;
+            } else {
+                return OperatorResult::NEED_MORE_INPUT;
+            }
+        }
 
         // adopt or concatenate
         if (!buffer_table) {

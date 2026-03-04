@@ -20,9 +20,9 @@ struct CTEInfo {
 #ifdef USE_CUDF
     std::variant<std::shared_ptr<PhysicalCTE>, std::shared_ptr<PhysicalGPUCTE>>
         physical_node;
-#else
+#else   // USE_CUDF
     std::shared_ptr<PhysicalCTE> physical_node;
-#endif
+#endif  // USE_CUDF
     std::shared_ptr<Pipeline> cte_pipeline_root;
 };
 

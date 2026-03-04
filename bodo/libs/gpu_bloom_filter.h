@@ -11,7 +11,7 @@
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_buffer.hpp>
 
-struct BloomFilter {
+struct CudfBloomFilter {
     rmm::device_buffer bitset;  // holds (m_bits + 63)/64 words
     rmm::device_buffer hash_buffer;
     std::size_t m_bits{0};
@@ -19,12 +19,12 @@ struct BloomFilter {
     std::size_t n_items{0};
 };
 
-BloomFilter build_bloom_filter_from_table(cudf::table_view const& keys,
-                                          std::size_t expected_items,
-                                          double false_positive_rate,
-                                          rmm::cuda_stream_view stream);
+std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
+    cudf::table_view const& keys, double false_positive_rate,
+    rmm::cuda_stream_view stream);
 
-std::unique_ptr<cudf::table> filter_table_with_bloom(
+void filter_table_with_bloom(
     cudf::table_view const& probe_table,
     std::vector<cudf::size_type> const& probe_key_indices,
-    BloomFilter const& bf, rmm::cuda_stream_view stream);
+    CudfBloomFilter const& bf, std::unique_ptr<cudf::column>& prev_mask,
+    rmm::cuda_stream_view stream);

@@ -1,6 +1,7 @@
 #pragma once
 #include <arrow/scalar.h>
 #include "../_bodo_common.h"
+#include "../gpu_bloom_filter.h"
 #include "../gpu_utils.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
@@ -13,6 +14,7 @@ struct CudaHashJoin {
 
     // Store build chunks until FinalizeBuild is called
     std::vector<std::shared_ptr<cudf::table>> _build_chunks;
+    std::shared_ptr<CudfBloomFilter> _build_bloom_filter;
 
     // The hash map object (opaque handle to the GPU hash table)
     std::unique_ptr<cudf::hash_join> _join_handle;
@@ -79,6 +81,14 @@ struct CudaHashJoin {
     std::unique_ptr<cudf::table> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
         cuda_event_wrapper event, rmm::cuda_stream_view& stream);
+
+    /**
+     * @brief Add to the previous mask of rows.
+     */
+    void runtime_filter(cudf::table_view const& probe_table,
+                        std::vector<cudf::size_type> const& probe_key_indices,
+                        std::unique_ptr<cudf::column>& prev_mask,
+                        rmm::cuda_stream_view stream);
 
     /**
      * @brief Get the min-max statistics for runtime join filters
