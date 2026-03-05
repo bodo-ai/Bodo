@@ -79,7 +79,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-#Prevent symbol collisions
+add_compile_definitions(DUCKDB_STATIC_BUILD=1)
+# Prevent symbol collisions
 add_compile_definitions(duckdb=bododuckdb)
 FetchContent_Declare(
     duckdb
@@ -222,6 +223,7 @@ else()
     "-fwrapv"                     # Conda used to force-add. Its an optimization for integer overflow
   )
 endif()
+
 
 # Debug Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")

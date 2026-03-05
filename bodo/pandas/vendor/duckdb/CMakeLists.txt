@@ -39,7 +39,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MACOSX_RPATH 1)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+#set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # Bodo Change: Remove, setting ccache/sccache done in top level CMakeLists.txt
 #if(NOT DEFINED CMAKE_C_COMPILER_LAUNCHER)
