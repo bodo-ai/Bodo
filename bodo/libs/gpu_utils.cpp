@@ -84,8 +84,7 @@ void GpuShuffleManager::shuffle_table(
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.push_back(
-        ShuffleTableInfo(table, partition_indices, event));
+    this->tables_to_shuffle.emplace_back(table, partition_indices, event);
 }
 
 void GpuShuffleManager::do_shuffle() {

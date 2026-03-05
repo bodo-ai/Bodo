@@ -4,6 +4,7 @@
 #include <arrow/util/key_value_metadata.h>
 #include <cudf/ast/ast_operator.hpp>
 #include <cudf/ast/expressions.hpp>
+#include <cudf/io/datasource.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <memory>
 #include <utility>
@@ -58,6 +59,8 @@ static void ensure_pa_wrappers_imported() {
 #undef CHECK
 }
 
+const bool PARQUET_READ_ALL = true;
+
 struct FilePart {
     std::string path;
     int start_row_group;  // inclusive
@@ -66,6 +69,12 @@ struct FilePart {
 
 class RankBatchGenerator {
    public:
+    struct {
+        using time_t = MetricBase::TimerValue;
+        time_t cpu_read_time = 0;
+        time_t gpu_read_time = 0;
+    } metrics;
+
     RankBatchGenerator(PyObject *dataset_path,
                        duckdb::unique_ptr<duckdb::TableFilterSet> &filter_exprs,
                        std::size_t target_rows,
@@ -104,6 +113,42 @@ class RankBatchGenerator {
 
         current_part_idx_ = 0;
         current_rg_ = (parts_.empty() ? 0 : parts_[0].start_row_group);
+    }
+
+    // Read multiple parts at a time for better performance
+    // TODO: Use chunked reader for large datasets ?
+    std::pair<std::unique_ptr<cudf::table>, bool> read_all(
+        std::shared_ptr<StreamAndEvent> se) {
+        std::cout << " Reading dataset with " << parts_.size()
+                  << " parts assigned to this rank\n";
+        if (parts_.empty()) {
+            // nothing assigned to this rank
+            return {empty_table_from_arrow_schema(arrow_schema), true};
+        }
+
+        cudf::io::parquet_reader_options reader_opts;
+        // TODO: row_groups, other filesystems, batch size
+        if (parts_.size() == 1) {
+            cudf::io::source_info src_info(parts_[0].path);
+            reader_opts.set_source(src_info);
+        } else {
+            std::vector<std::string> paths;
+            for (const auto &part : parts_) {
+                paths.push_back(part.path);
+            }
+            cudf::io::source_info src_info(paths);
+            reader_opts.set_source(src_info);
+        }
+        reader_opts.set_columns(selected_columns);
+        if (filter_ast_tree.size() > 0) {
+            reader_opts.set_filter(filter_ast_tree.back());
+        }
+        std::cout << "  Performing read" << std::endl;
+        auto result = cudf::io::read_parquet(reader_opts, se->stream);
+
+        std::unique_ptr<cudf::table> tbl = std::move(result.tbl);
+        std::cout << "  Read complete" << std::endl;
+        return {std::move(tbl), true};
     }
 
     // next() returns a pair: (cudf::table, eof_flag)
@@ -158,6 +203,7 @@ class RankBatchGenerator {
             }
 
             // Use Arrow filesystem to read the file into a buffer
+            auto start_cpu_read = start_timer();
             std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
             CHECK_ARROW_AND_ASSIGN(
                 filesystem_->OpenInputFile(part.path),
@@ -169,6 +215,7 @@ class RankBatchGenerator {
                 arrow_file->ReadAt(0, arrow_file->GetSize().ValueOrDie()),
                 "Error reading file via Arrow filesystem: " + part.path,
                 file_buffer);
+            this->metrics.cpu_read_time += end_timer(start_cpu_read);
 
             cudf::host_span<const std::byte> host_data =
                 cudf::host_span<const std::byte>(
@@ -181,6 +228,8 @@ class RankBatchGenerator {
             // cuDF Build cudf::io::parquet_reader_options to request a single
             // row group.
             try {
+                auto start_gpu_read = start_timer();
+
                 cudf::io::parquet_reader_options reader_opts =
                     cudf::io::parquet_reader_options::builder(source_info)
                         .columns(selected_columns)
@@ -219,6 +268,8 @@ class RankBatchGenerator {
                     leftover_tbl = std::make_unique<cudf::table>(remain);
                     rows_accum = target_rows_;
                 }
+
+                this->metrics.gpu_read_time += end_timer(start_gpu_read);
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
                 throw std::runtime_error(
@@ -256,6 +307,13 @@ class RankBatchGenerator {
         }
 
         return {std::move(batch), eof};
+    }
+
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) {
+        metrics_out.emplace_back(
+            TimerMetric("cpu_read_time", this->metrics.cpu_read_time));
+        metrics_out.emplace_back(
+            TimerMetric("gpu_read_time", this->metrics.gpu_read_time));
     }
 
    private:
@@ -542,8 +600,12 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         time_pt start_produce = start_timer();
 
-        std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
-            batch_gen->next(se);
+        std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup;
+        if (PARQUET_READ_ALL) {
+            next_batch_tup = batch_gen->read_all(se);
+        } else {
+            next_batch_tup = batch_gen->next(se);
+        }
 
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
@@ -580,6 +642,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
+        this->batch_gen->ReportMetrics(metrics_out);
     }
 
     void init_batch_gen() {
