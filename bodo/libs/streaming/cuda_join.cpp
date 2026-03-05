@@ -99,9 +99,29 @@ void CudaHashJoin::build_hash_table(
 
     this->_join_handle = std::make_unique<cudf::hash_join>(
         build_view.select(this->build_key_indices), this->null_equality);
+
+    GpuMpiManager gather_blooms;
+    uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
+    // Generate local bloom filter.
     this->_build_bloom_filter = build_bloom_filter_from_table(
-        build_view.select(this->build_key_indices), 0.01,
+        build_view.select(this->build_key_indices), build_total_size, 0.01,
         cudf::get_default_stream());
+    // Get all GPU nodes' bloom filters.
+    std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
+        gather_blooms.all_gather_device_buffers(
+            this->_build_bloom_filter->bitset, cudf::get_default_stream());
+    // AtomicOR them all together.
+    for (auto& one_bloom : all_blooms) {
+        if (one_bloom) {
+            size_t one_bloom_size = one_bloom->size();
+            if (one_bloom_size % 8 != 0) {
+                throw std::runtime_error(
+                    "Received bloom filter that isn't a multiple of 64-bits");
+            }
+            mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
+                             cudf::get_default_stream());
+        }
+    }
 }
 
 void CudaHashJoin::runtime_filter(

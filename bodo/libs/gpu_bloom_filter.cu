@@ -78,11 +78,12 @@ __global__ void set_bits_kernel_doublehash(
 
 std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     cudf::table_view const& keys,
+    uint64_t total_size,
     double false_positive_rate,
     rmm::cuda_stream_view stream) {
 
     std::shared_ptr<CudfBloomFilter> bf = std::make_shared<CudfBloomFilter>();
-    bf->n_items = keys.num_rows();
+    bf->n_items = total_size;
     // Compute number of bits and hashes the bloom filter will use.
     compute_bloom_params(bf->n_items, false_positive_rate, bf->m_bits, bf->k_hashes);
 
@@ -131,7 +132,7 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
               cudaMemcpyDeviceToDevice,
               stream.value()));
 
-    int block = 256;
+    constexpr int block = 256;
     int grid = static_cast<int>((n + block - 1) / block);
     set_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
         dst_ptr, n,
@@ -245,7 +246,7 @@ void filter_table_with_bloom(
     // initialize mask to zero (optional)
     CUDA_TRY(cudaMemsetAsync(mask_ptr, 0, n * sizeof(uint8_t), stream.value()));
   
-    int block = 256;
+    constexpr int block = 256;
     int grid = static_cast<int>((n + block - 1) / block);
     test_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
         dst_ptr, n,
@@ -281,4 +282,29 @@ void filter_table_with_bloom(
     } else {
         prev_mask = std::move(bool_mask);
     }
+}
+
+__global__ void atomic_or_u64_kernel(uint64_t* dst, uint64_t const* src, size_t words) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < words) {
+        atomicOr(reinterpret_cast<unsigned long long*>(&dst[idx]), static_cast<unsigned long long>(src[idx]));
+    }
+}
+
+void mergeBloomBitset(rmm::device_buffer& dst, rmm::device_buffer const&src, cudaStream_t stream) {
+    if (dst.size() != src.size()) {
+        throw std::runtime_error("mergeBloomBitset buffers must be the same size.");
+    }
+
+    size_t bytes = dst.size();
+    if (bytes == 0) return;
+
+    void *dst_ptr = dst.data();
+    const void *src_ptr = src.data();
+
+    constexpr int block = 256;
+    size_t words = bytes / 8;
+    int grid = static_cast<int>((words + block - 1) / block);
+    atomic_or_u64_kernel<<<grid, block, 0, stream>>>(reinterpret_cast<uint64_t*>(dst_ptr), reinterpret_cast<uint64_t const*>(src_ptr), words);
+    CUDA_TRY(cudaGetLastError());
 }

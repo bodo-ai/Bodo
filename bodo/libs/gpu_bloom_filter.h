@@ -27,8 +27,8 @@ struct CudfBloomFilter {
  * @param stream - the stream to place operations on
  */
 std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
-    cudf::table_view const& keys, double false_positive_rate,
-    rmm::cuda_stream_view stream);
+    cudf::table_view const& keys, uint64_t total_size,
+    double false_positive_rate, rmm::cuda_stream_view stream);
 
 /*
  * @brief Updates prev_mask to indicate which rows are in the bloom filter.
@@ -47,3 +47,6 @@ void filter_table_with_bloom(
     std::vector<cudf::size_type> const& probe_key_indices,
     CudfBloomFilter const& bf, std::unique_ptr<cudf::column>& prev_mask,
     rmm::cuda_stream_view stream);
+
+void mergeBloomBitset(rmm::device_buffer& dst, rmm::device_buffer const& src,
+                      cudaStream_t stream);
