@@ -39,6 +39,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MACOSX_RPATH 1)
+# Bodo Change: Remove, setting static runtime library on windows so it doesn't conflict with Bodo's runtime library
 #set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # Bodo Change: Remove, setting ccache/sccache done in top level CMakeLists.txt
