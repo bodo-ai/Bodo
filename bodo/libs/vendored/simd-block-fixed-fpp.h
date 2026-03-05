@@ -33,6 +33,8 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+// Bodo Change: Add stdexcept for runtimer_error
+#include <stdexcept>
 
 #include "../_mpi.h"
 #include "../tracing.h"
