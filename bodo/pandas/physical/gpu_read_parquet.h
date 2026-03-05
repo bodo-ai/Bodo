@@ -33,6 +33,7 @@
 #include "../io/arrow_compat.h"
 
 #include <glob.h>
+#include <unistd.h>
 #include <cstddef>
 #include <iostream>
 #include <map>
@@ -59,7 +60,7 @@ static void ensure_pa_wrappers_imported() {
 #undef CHECK
 }
 
-const bool PARQUET_READ_ALL = true;
+const bool PARQUET_READ_ALL = false;
 
 struct FilePart {
     std::string path;
@@ -74,6 +75,18 @@ class RankBatchGenerator {
         time_t cpu_read_time = 0;
         time_t gpu_read_time = 0;
     } metrics;
+
+    // /**
+    //  * @brief How to read parquet dataset
+    //  *  1. READ_ALL (not used/baseline): Read all files at once
+    //  *  2. READ_CHUNKS: When dataset consists of multiple files
+    //  *  3.
+    //  */
+    // enum {
+    //     READ_ALL,
+    //     READ_CHUNKS,
+    //     READ_ROW_GROUPS
+    // } read_mode;
 
     RankBatchGenerator(PyObject *dataset_path,
                        duckdb::unique_ptr<duckdb::TableFilterSet> &filter_exprs,
@@ -95,7 +108,6 @@ class RankBatchGenerator {
         if (files_.empty() || comm == MPI_COMM_NULL) {
             // nothing to do
             parts_ = {};
-            current_part_idx_ = 0;
             return;
         }
 
@@ -106,13 +118,45 @@ class RankBatchGenerator {
             // single file -> partition by row groups
             parts_ =
                 partition_by_row_groups(files_[0], filesystem_, rank_, size_);
+
+            int start_row_group = parts_[0].start_row_group;
+            int end_row_group = parts_[0].end_row_group;
+            std::vector<int> single_file_row_groups(end_row_group -
+                                                    start_row_group);
+            std::iota(single_file_row_groups.begin(),
+                      single_file_row_groups.end(), start_row_group);
+            std::vector<std::vector<int>> row_groups;
+            row_groups.push_back(single_file_row_groups);
+            chunked_reader_opts.set_row_groups(row_groups);
         } else {
             // multi-file dataset -> partition by file (block partition)
             parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
+        // TODO partition by row groups case.
+        chunked_reader_stream = cudf::get_default_stream();
+        // TODO: Set limit based on batch_size, 0 = no limit (read entire table
+        // at once)
+        size_t chunked_reader_limit = 0;
+        std::vector<std::string> paths;
+        for (const auto &part : parts_) {
+            std::string path = part.path;
+            // Use KVIO for S3
+            // TODO: Custom data source for better performance (e.g. Arrow
+            // filesystem input stream) ?
+            if (filesystem_->type_name() == "s3") {
+                path = "s3://" + path;
+            }
+            paths.push_back(path);
+        }
+        cudf::io::source_info src_info(paths);
+        chunked_reader_opts.set_source(src_info);
 
-        current_part_idx_ = 0;
-        current_rg_ = (parts_.empty() ? 0 : parts_[0].start_row_group);
+        chunked_reader_opts.set_columns(selected_columns);
+        if (filter_ast_tree.size() > 0) {
+            chunked_reader_opts.set_filter(filter_ast_tree.back());
+        }
+        chunked_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
+            chunked_reader_limit, chunked_reader_opts, chunked_reader_stream);
     }
 
     // Read multiple parts at a time for better performance
@@ -128,17 +172,18 @@ class RankBatchGenerator {
 
         cudf::io::parquet_reader_options reader_opts;
         // TODO: row_groups, other filesystems, batch size
-        if (parts_.size() == 1) {
-            cudf::io::source_info src_info(parts_[0].path);
-            reader_opts.set_source(src_info);
-        } else {
-            std::vector<std::string> paths;
-            for (const auto &part : parts_) {
-                paths.push_back(part.path);
+        std::vector<std::string> paths;
+        for (const auto &part : parts_) {
+            std::string path = part.path;
+            // Use KVIO for S3 (TODO: KVIO too slow?)
+            if (filesystem_->type_name() == "s3") {
+                path = "s3://" + path;
             }
-            cudf::io::source_info src_info(paths);
-            reader_opts.set_source(src_info);
+            paths.push_back(path);
         }
+        cudf::io::source_info src_info(paths);
+        reader_opts.set_source(src_info);
+
         reader_opts.set_columns(selected_columns);
         if (filter_ast_tree.size() > 0) {
             reader_opts.set_filter(filter_ast_tree.back());
@@ -151,8 +196,11 @@ class RankBatchGenerator {
         return {std::move(tbl), true};
     }
 
-    // next() returns a pair: (cudf::table, eof_flag)
-    // If no data assigned to this rank, returns empty table and eof=true.
+    bool read_finished() {
+        return (!chunked_reader->has_next()) &&
+               (!leftover_tbl || leftover_tbl->num_rows() == 0);
+    }
+
     std::pair<std::unique_ptr<cudf::table>, bool> next(
         std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
@@ -160,16 +208,15 @@ class RankBatchGenerator {
             return {empty_table_from_arrow_schema(arrow_schema), true};
         }
 
-        // If we've exhausted all parts, signal EOF
-        if (current_part_idx_ >= static_cast<int>(parts_.size())) {
-            return {empty_table_from_arrow_schema(arrow_schema), true};
+        if (!this->chunked_reader) {
+            throw std::runtime_error("Chunked reader not initialized");
         }
 
         std::vector<std::unique_ptr<cudf::table>> gpu_tables;
-        std::size_t rows_accum = 0;
-
+        size_t rows_accum = 0;
         if (leftover_tbl) {
             std::size_t n = leftover_tbl->num_rows();
+            std::cout << " leftover table nrows " << n << std::endl;
             if (n <= target_rows_) {
                 rows_accum += n;
                 gpu_tables.emplace_back(std::move(leftover_tbl));
@@ -185,70 +232,18 @@ class RankBatchGenerator {
 
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
-            return {std::move(gpu_tables[0]), false};
+            std::cout << " returning leftover table rows | read finished = "
+                      << read_finished() << std::endl;
+            return {std::move(gpu_tables[0]), read_finished()};
         }
 
-        // accumulate whole row groups until target reached or parts exhausted
-        while (current_part_idx_ < static_cast<int>(parts_.size()) &&
-               rows_accum < target_rows_) {
-            const FilePart &part = parts_[current_part_idx_];
-
-            // If current_rg_ reached end of this part, advance to next part
-            if (current_rg_ >= part.end_row_group) {
-                ++current_part_idx_;
-                if (current_part_idx_ < static_cast<int>(parts_.size())) {
-                    current_rg_ = parts_[current_part_idx_].start_row_group;
-                }
-                continue;
-            }
-
-            // Use Arrow filesystem to read the file into a buffer
-            auto start_cpu_read = start_timer();
-            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
-            CHECK_ARROW_AND_ASSIGN(
-                filesystem_->OpenInputFile(part.path),
-                "Error opening file via Arrow filesystem: " + part.path,
-                arrow_file);
-
-            std::shared_ptr<arrow::Buffer> file_buffer;
-            CHECK_ARROW_AND_ASSIGN(
-                arrow_file->ReadAt(0, arrow_file->GetSize().ValueOrDie()),
-                "Error reading file via Arrow filesystem: " + part.path,
-                file_buffer);
-            this->metrics.cpu_read_time += end_timer(start_cpu_read);
-
-            cudf::host_span<const std::byte> host_data =
-                cudf::host_span<const std::byte>(
-                    reinterpret_cast<const std::byte *>(file_buffer->data()),
-                    file_buffer->size());
-
-            cudf::io::source_info source_info(host_data);
-
-            // Read whole row group current_rg_ from part.path into GPU using
-            // cuDF Build cudf::io::parquet_reader_options to request a single
-            // row group.
+        while (chunked_reader->has_next() && rows_accum < target_rows_) {
             try {
-                auto start_gpu_read = start_timer();
-
-                cudf::io::parquet_reader_options reader_opts =
-                    cudf::io::parquet_reader_options::builder(source_info)
-                        .columns(selected_columns)
-                        .row_groups(std::vector<std::vector<int>>{
-                            std::vector<int>{current_rg_}})
-                        .build();
-
-                if (filter_ast_tree.size() > 0) {
-                    reader_opts.set_filter(filter_ast_tree.back());
-                }
-
-                auto result = cudf::io::read_parquet(reader_opts, se->stream);
-
-                // result.tbl is typically a std::unique_ptr<cudf::table> or
-                // cudf::table Adjust the following to match your cuDF version:
-                std::unique_ptr<cudf::table> tbl = std::move(result.tbl);
-
-                // advance to next row group in this part
-                ++current_rg_;
+                auto table_and_metadata = chunked_reader->read_chunk();
+                auto tbl = std::move(table_and_metadata.tbl);
+                std::cout << "##### Read " << tbl->num_rows()
+                          << " rows from: " << parts_[0].path << "#####"
+                          << std::endl;
 
                 if (!tbl || tbl->num_rows() == 0) {
                     // no rows in this row group (rare) — advance
@@ -257,9 +252,14 @@ class RankBatchGenerator {
 
                 std::size_t tbl_n = tbl->num_rows();
                 if (rows_accum + tbl_n <= target_rows_) {
+                    std::cout
+                        << " Adding table to GPU tables until batch is filled "
+                        << std::endl;
                     rows_accum += tbl_n;
                     gpu_tables.push_back(std::move(tbl));
                 } else {
+                    std::cout << " Read too many rows, slicing tables"
+                              << std::endl;
                     std::size_t need = target_rows_ - rows_accum;
                     cudf::table_view tv = tbl->view();
                     auto batch = cudf::slice(tv, {0, (int)need})[0];
@@ -268,34 +268,33 @@ class RankBatchGenerator {
                     leftover_tbl = std::make_unique<cudf::table>(remain);
                     rows_accum = target_rows_;
                 }
-
-                this->metrics.gpu_read_time += end_timer(start_gpu_read);
             } catch (const std::exception &e) {
                 // reading failed: propagate or print and stop
                 throw std::runtime_error(
-                    "PhysicalGPUReadParquet(): read_parquet failed " +
-                    part.path + " " + std::string(e.what()));
+                    "PhysicalGPUReadParquet(): read_chunk failed " +
+                    parts_[0].path + " " + std::string(e.what()));
             }
         }
-
-        // Determine EOF: true if we've consumed all parts and current_rg_ >=
-        // end of last part
-        bool eof = (current_part_idx_ >= static_cast<int>(parts_.size()) &&
-                    (!leftover_tbl || leftover_tbl->num_rows() == 0));
 
         // If we collected no tables (e.g., parts exhausted), return EOF
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            return {std::make_unique<cudf::table>(cudf::table_view{}), eof};
+            std::cout << " No GPU tables read | read finished = "
+                      << read_finished() << std::endl;
+            return {std::make_unique<cudf::table>(cudf::table_view{}),
+                    read_finished()};
         }
 
         // Concatenate gpu_tables into a single cudf::table
         // Build vector of table_views
+        std::cout << "concatenating " << gpu_tables.size() << " GPU tables "
+                  << std::endl;
         std::vector<cudf::table_view> views;
         views.reserve(gpu_tables.size());
-        for (auto &tptr : gpu_tables)
+        for (auto &tptr : gpu_tables) {
             views.emplace_back(tptr->view());
+        }
 
         std::unique_ptr<cudf::table> batch;
         if (views.size() == 1) {
@@ -306,7 +305,9 @@ class RankBatchGenerator {
             batch = cudf::concatenate(views, se->stream);
         }
 
-        return {std::move(batch), eof};
+        std::cout << " read parquet returning batch | read finished =  "
+                  << read_finished() << std::endl;
+        return {std::move(batch), read_finished()};
     }
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
@@ -452,10 +453,9 @@ class RankBatchGenerator {
     std::vector<FilePart> parts_;
     const std::vector<std::string> &selected_columns;
     std::shared_ptr<arrow::Schema> arrow_schema;
-
-    // current position
-    int current_part_idx_{0};
-    int current_rg_{0};
+    std::unique_ptr<cudf::io::chunked_parquet_reader> chunked_reader;
+    cudaStream_t chunked_reader_stream;
+    cudf::io::parquet_reader_options chunked_reader_opts;
 
     // leftover rows from previous oversized row-group read
     std::unique_ptr<cudf::table> leftover_tbl;
