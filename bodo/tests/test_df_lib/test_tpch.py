@@ -104,6 +104,7 @@ def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
 
+@pytest.mark.gpu
 def test_tpch_q05():
     run_tpch_query_test(tpch.tpch_q05)
 

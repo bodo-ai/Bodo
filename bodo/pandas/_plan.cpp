@@ -1261,25 +1261,24 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
-    int prev_device = -1;
     rmm::cuda_device_id gpu_id = get_gpu_id();
+    std::optional<rmm::cuda_set_device_raii> device_guard;
     if (gpu_id.value() != -1) {
-        cudaGetDevice(&prev_device);
-        cudaSetDevice(gpu_id.value());
+        // Set device (resets to previous device when device_guard goes out of
+        // scope)
+        device_guard.emplace(gpu_id);
     }
 #endif
 
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    Executor executor(std::move(plan), out_schema);
-    std::variant<std::shared_ptr<table_info>, PyObject *> output =
-        executor.ExecutePipelines();
-
-#ifdef USE_CUDF
-    // Reset to previous cuda device
-    if (gpu_id.value() != -1) {
-        cudaSetDevice(prev_device);
+    std::variant<std::shared_ptr<table_info>, PyObject *> output;
+    // Ensure that executor is destroyed before device_guard goes out of scope,
+    // in case executor holds any GPU resources that need to be released before
+    // resetting the device.
+    {
+        Executor executor(std::move(plan), out_schema);
+        output = executor.ExecutePipelines();
     }
-#endif
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {

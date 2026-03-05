@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 extern bool g_use_async;
 
 #ifdef USE_CUDF
@@ -329,7 +330,7 @@ class GpuMpiManager {
  */
 class GpuShuffleManager : public GpuMpiManager {
    private:
-    std::vector<GpuShuffle> inflight_shuffles;
+    std::deque<GpuShuffle> inflight_shuffles;
 
     // Tag counter for shuffles, each shuffle uses 3 tags
     // and they can't overlap
