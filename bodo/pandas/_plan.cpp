@@ -1261,11 +1261,12 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
+    rmm::cuda_device_id gpu_id = get_gpu_id();
     std::optional<rmm::cuda_set_device_raii> device_guard;
-    if (is_gpu_rank()) {
+    if (gpu_id.value() != -1) {
         // Set device (resets to previous device when device_guard goes out of
         // scope)
-        device_guard.emplace(get_gpu_id());
+        device_guard.emplace(gpu_id);
     }
 #endif
 
