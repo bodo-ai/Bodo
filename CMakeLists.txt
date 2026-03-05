@@ -723,6 +723,11 @@ if (USE_CUDF)
     "bodo/pandas/physical/gpu_aggregate.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
+    "bodo/libs/gpu_bloom_filter.cu"
+    )
+
+    list(APPEND allow_implicit_fallthrough_list
+    "bodo/libs/gpu_bloom_filter.cu"
     )
 endif()
 
@@ -904,65 +909,24 @@ if(USE_CUDF)
     BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
     INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
     LINKER_LANGUAGE CUDA
+    POSITION_INDEPENDENT_CODE ON
     CUDA_SEPARABLE_COMPILATION ON
-    CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+    CUDA_ARCHITECTURES "89;90;100;120"
   )
 
-  set(cuda_sources_list
-      "bodo/libs/gpu_bloom_filter.cu"
-  )
-  add_library(gpu_kernels OBJECT ${cuda_sources_list})
-  set_target_properties(gpu_kernels PROPERTIES
-      POSITION_INDEPENDENT_CODE ON
-      CUDA_SEPARABLE_COMPILATION ON
-      CUDA_STANDARD 20
-      CUDA_STANDARD_REQUIRED ON
-      CUDA_ARCHITECTURES "80;86;90;89;100;120;75"
-  )
-
-  message(STATUS "Before gpu_kernels Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
-  message(STATUS "Before gpu_kernels Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
-  message(STATUS "Before gpu_kernels Using RMM base dir: ${RMM_BASE_DIR}")
-
-  target_compile_definitions(gpu_kernels PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
-  target_include_directories(gpu_kernels BEFORE PRIVATE
-      ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR} ${RAPIDS_INCLUDE_DIR}
-  )
-
-#      $<$<COMPILE_LANGUAGE:CUDA>:
-#      -Xcompiler=-fPIC
-#      >
-  target_compile_options(gpu_kernels PRIVATE
+  target_compile_options(ext PRIVATE
       $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}>
       $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}/cccl>
       $<$<COMPILE_LANGUAGE:CUDA>:-I${LIBCUDF_INCLUDE_DIR}>
       $<$<COMPILE_LANGUAGE:CUDA>:--diag-suppress=20012>
-      #$<$<COMPILE_LANGUAGE:CUDA>:-I${RAPIDS_INCLUDE_DIR}>
-      #      $<$<COMPILE_LANGUAGE:CUDA>:-I${RMM_BASE_DIR}>
   )
-
-  # Path to the CUDA object produced by CMake
-  #set(GPU_BLOOM_O ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/gpu_kernels.dir/bodo/libs/gpu_bloom_filter.cu.o)
-
-  #set(GPU_BLOOM_DLINK_O ${CMAKE_CURRENT_BINARY_DIR}/gpu_bloom_filter_dlink.o)
-
-  #add_custom_command(
-  #  OUTPUT ${GPU_BLOOM_DLINK_O}
-  #  COMMAND ${CUDAToolkit_NVCC_EXECUTABLE}
-  #          -dlink ${GPU_BLOOM_O}
-  #          -o ${GPU_BLOOM_DLINK_O}
-  #          ${CMAKE_CUDA_FLAGS}
-  #  DEPENDS ${GPU_BLOOM_O}
-  #  COMMENT "Running CUDA device-link for gpu_bloom_filter.cu.o"
-  #)
 
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_sources(ext PRIVATE $<TARGET_OBJECTS:gpu_kernels>)
-  #target_sources(ext PRIVATE $<TARGET_OBJECTS:gpu_kernels> ${cuda_sources_list})
-  #target_sources(ext PRIVATE ${GPU_BLOOM_DLINK_O}) # $<TARGET_OBJECTS:gpu_kernels>)
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl gpu_kernels)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl)
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
