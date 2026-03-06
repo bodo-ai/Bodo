@@ -105,26 +105,35 @@ class RankBatchGenerator {
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
 
+        std::cout << "Rank " << rank_ << "/" << size_
+                  << " initializing RankBatchGenerator with " << files_.size()
+                  << " files\n";
         auto start_partition_dataset = start_timer();
         if (files_.size() == 1) {
             // single file -> partition by row groups
             parts_ =
                 partition_by_row_groups(files_[0], filesystem_, rank_, size_);
-
-            int start_row_group = parts_[0].start_row_group;
-            int end_row_group = parts_[0].end_row_group;
-            std::vector<int> single_file_row_groups(end_row_group -
-                                                    start_row_group);
-            std::iota(single_file_row_groups.begin(),
-                      single_file_row_groups.end(), start_row_group);
-            std::vector<std::vector<int>> row_groups;
-            row_groups.push_back(single_file_row_groups);
-            chunked_reader_opts.set_row_groups(row_groups);
+            if (!parts_.empty()) {
+                int start_row_group = parts_[0].start_row_group;
+                int end_row_group = parts_[0].end_row_group;
+                std::vector<int> single_file_row_groups(end_row_group -
+                                                        start_row_group);
+                std::iota(single_file_row_groups.begin(),
+                          single_file_row_groups.end(), start_row_group);
+                std::vector<std::vector<int>> row_groups;
+                row_groups.push_back(single_file_row_groups);
+                chunked_reader_opts.set_row_groups(row_groups);
+            }
         } else {
             // multi-file dataset -> partition by file (block partition)
             parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
         this->metrics.partition_file_time += end_timer(start_partition_dataset);
+
+        if (parts_.empty()) {
+            // nothing assigned to this rank
+            return;
+        }
 
         chunked_reader_stream = cudf::get_default_stream();
         size_t total_rows = 0;
