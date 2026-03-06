@@ -21,6 +21,10 @@
     }                                                                      \
   } while (0)
 
+// Multiple of warp size.  Common value that is typically a good balance between
+// occupancy and warp scheduling.  May be tuned later.
+constexpr int block = 256;
+
 /*
  * @brief Compute number of words and hashes for given table size and false position percentage.
  *
@@ -48,7 +52,8 @@ void compute_bloom_params(std::size_t n, double p, std::size_t &m_out, int &k_ou
  * @param k_hashes - number of hashes to use
  */
 __global__ void set_bits_kernel_doublehash(
-    const uint64_t* low_high_buf,
+    const uint64_t* low_buf,
+    const uint64_t* high_buf,
     std::size_t n,
     uint64_t* bitset,
     std::size_t m_bits,
@@ -59,8 +64,8 @@ __global__ void set_bits_kernel_doublehash(
     if (idx >= n) return;
 
     // Get first and second hash value for that input key.
-    uint64_t h1 = low_high_buf[idx];
-    uint64_t h2 = low_high_buf[idx + n];
+    uint64_t h1 = low_buf[idx];
+    uint64_t h2 = high_buf[idx];
 
     // Produce k_hashes using double hashing: h_i = h1 + i * h2 (mod 2^64)
     for (std::size_t j = 0; j < k_hashes; ++j) {
@@ -111,31 +116,12 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
         return bf;
     }
 
-    // Allocate a single device buffer to own both low and high arrays:
-    // layout: [low0..low_{n-1}, high0..high_{n-1}] (length = 2*n uint64_t)
-    bf->hash_buffer = rmm::device_buffer(2 * n * sizeof(uint64_t), stream);
-    // Copy device->device: low -> buf[0..n-1], high -> buf[n..2n-1]
     const uint64_t* low_dev_ptr = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
-    uint64_t* dst_ptr = static_cast<uint64_t*>(bf->hash_buffer.data());
 
-    CUDA_TRY(cudaMemcpyAsync(
-              dst_ptr,
-              low_dev_ptr,
-              n * sizeof(uint64_t),
-              cudaMemcpyDeviceToDevice,
-              stream.value()));
-    CUDA_TRY(cudaMemcpyAsync(
-              dst_ptr + n,
-              high_dev_ptr,
-              n * sizeof(uint64_t),
-              cudaMemcpyDeviceToDevice,
-              stream.value()));
-
-    constexpr int block = 256;
     int grid = static_cast<int>((n + block - 1) / block);
     set_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
-        dst_ptr, n,
+        low_dev_ptr, high_dev_ptr, n,
         reinterpret_cast<uint64_t*>(bf->bitset.data()),
         bf->m_bits, bf->k_hashes);
     CUDA_TRY(cudaGetLastError());
@@ -155,7 +141,8 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
  * @param mask_out - the bitmask to indicate if a given index is in the bloom filter
  */
 __global__ void test_bits_kernel_doublehash(
-    const uint64_t* low_high_buf, // length = 2*n: low[0..n-1], high[0..n-1]
+    const uint64_t* low_buf,
+    const uint64_t* high_buf,
     std::size_t n,
     const uint64_t * bitset,
     std::size_t m_bits,
@@ -166,8 +153,8 @@ __global__ void test_bits_kernel_doublehash(
     std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= n) return;
   
-    uint64_t h1 = low_high_buf[idx];
-    uint64_t h2 = low_high_buf[idx + n];
+    uint64_t h1 = low_buf[idx];
+    uint64_t h2 = high_buf[idx];
   
     bool maybe_in = true;
     for (std::size_t j = 0; j < k_hashes; ++j) {
@@ -218,38 +205,18 @@ void filter_table_with_bloom(
         return;
     }
   
-    // allocate device buffer to own both low and high arrays:
-    // layout: [low0..low_{n-1}, high0..high_{n-1}] (length = 2*n uint64_t)
-    rmm::device_buffer hashes_buf(2 * n * sizeof(uint64_t), stream);
-    uint64_t* dst_ptr = static_cast<uint64_t*>(hashes_buf.data());
-  
     // copy device->device: low -> dst[0..n-1], high -> dst[n..2n-1]
     const uint64_t* low_dev_ptr  = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
-  
-    CUDA_TRY(cudaMemcpyAsync(
-        dst_ptr,
-        low_dev_ptr,
-        n * sizeof(uint64_t),
-        cudaMemcpyDeviceToDevice,
-        stream.value()));
-  
-    CUDA_TRY(cudaMemcpyAsync(
-        dst_ptr + n,
-        high_dev_ptr,
-        n * sizeof(uint64_t),
-        cudaMemcpyDeviceToDevice,
-        stream.value()));
   
     rmm::device_buffer mask_buf(n * sizeof(uint8_t), stream);
     uint8_t* mask_ptr = static_cast<uint8_t*>(mask_buf.data());
     // initialize mask to zero (optional)
     CUDA_TRY(cudaMemsetAsync(mask_ptr, 0, n * sizeof(uint8_t), stream.value()));
   
-    constexpr int block = 256;
     int grid = static_cast<int>((n + block - 1) / block);
     test_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
-        dst_ptr, n,
+        low_dev_ptr, high_dev_ptr, n,
         reinterpret_cast<const uint64_t*>(bf.bitset.data()),
         bf.m_bits, bf.k_hashes,
         mask_ptr);
@@ -284,10 +251,10 @@ void filter_table_with_bloom(
     }
 }
 
-__global__ void atomic_or_u64_kernel(uint64_t* dst, uint64_t const* src, size_t words) {
+__global__ void or_u64_kernel(uint64_t* dst, uint64_t const* src, size_t words) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < words) {
-        atomicOr(reinterpret_cast<unsigned long long*>(&dst[idx]), static_cast<unsigned long long>(src[idx]));
+        dst[idx] |= src[idx];
     }
 }
 
@@ -302,9 +269,8 @@ void mergeBloomBitset(rmm::device_buffer& dst, rmm::device_buffer const&src, cud
     void *dst_ptr = dst.data();
     const void *src_ptr = src.data();
 
-    constexpr int block = 256;
     size_t words = bytes / 8;
     int grid = static_cast<int>((words + block - 1) / block);
-    atomic_or_u64_kernel<<<grid, block, 0, stream>>>(reinterpret_cast<uint64_t*>(dst_ptr), reinterpret_cast<uint64_t const*>(src_ptr), words);
+    or_u64_kernel<<<grid, block, 0, stream>>>(reinterpret_cast<uint64_t*>(dst_ptr), reinterpret_cast<uint64_t const*>(src_ptr), words);
     CUDA_TRY(cudaGetLastError());
 }

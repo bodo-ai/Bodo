@@ -13,7 +13,6 @@
 
 struct CudfBloomFilter {
     rmm::device_buffer bitset;  // holds (m_bits + 63)/64 words
-    rmm::device_buffer hash_buffer;
     std::size_t m_bits{0};
     int k_hashes{0};
     std::size_t n_items{0};

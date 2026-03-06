@@ -732,6 +732,7 @@ if (USE_CUDF)
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
+target_sources(ext PRIVATE ${sources_list})
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
