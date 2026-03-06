@@ -732,6 +732,7 @@ if (USE_CUDF)
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
+# This seems necessary for the .cu files for some reason but doesn't hurt the others.
 target_sources(ext PRIVATE ${sources_list})
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
