@@ -185,6 +185,10 @@ std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     rmm::cuda_stream_view& output_stream) {
     out_is_last = true;
 
+    if (accumulation == nullptr) {
+        return empty_table_from_arrow_schema(output_schema);
+    }
+
     // accumulation is guaranteed here to have all the merged data from
     // all the other nodes.  If there are any final merges to collapse
     // multiple columns back down to one then run them here.
