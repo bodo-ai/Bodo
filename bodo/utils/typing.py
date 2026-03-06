@@ -2898,6 +2898,7 @@ def _check_objmode_type(val, typ):
             f"Invalid Python output data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
         )
 
+    print(val)
     return val
 
 
