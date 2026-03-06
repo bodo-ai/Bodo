@@ -210,7 +210,7 @@ def test_gpu_join_bloom_filter(datapath):
         # Select only a couple keys that can't be filtered out by row-group so that
         # bloom filter has something to do.
         cust_filt = cust_df[(cust_df["C_CUSTKEY"] == 3) | (cust_df["C_CUSTKEY"] == 37)]
-        orders_df["bal2"] = orders_df["C_ACCTBAL"] * 2.0
+        orders_df["price2"] = orders_df["O_TOTALPRICE"] * 2.0
         return cust_filt.merge(
             orders_df, how="inner", left_on=["C_CUSTKEY"], right_on=["O_CUSTKEY"]
         )
