@@ -77,15 +77,14 @@ void GpuShuffleManager::initialize_nccl() {
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
-    cuda_event_wrapper event) {
+    std::shared_ptr<StreamAndEvent> se) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.push_back(
-        ShuffleTableInfo(table, partition_indices, event));
+    this->tables_to_shuffle.emplace_back(table, partition_indices, se->event);
 }
 
 void GpuShuffleManager::do_shuffle() {
@@ -535,6 +534,11 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
         return MPI_COMM_NULL;
     }
     return gpu_comm;
+}
+
+bool is_gpu_rank() {
+    static bool is_gpu_rank = (get_gpu_id().value() != -1);
+    return is_gpu_rank;
 }
 
 #endif  // USE_CUDF
