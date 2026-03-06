@@ -9,7 +9,8 @@
 #include "duckdb/main/settings.hpp"
 // Bodo Change: Remove encryption files
 // #include "duckdb/common/encryption_functions.hpp"
-#include "zstd.h"
+// Bodo Change: Remove compression files
+// #include "zstd.h"
 
 namespace duckdb {
 
