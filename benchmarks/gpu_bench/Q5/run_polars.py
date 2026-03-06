@@ -40,12 +40,33 @@ def q(root) -> pl.LazyFrame:
         order by
     revenue desc;
     """
-    region = pl.scan_parquet(f"{root}/region.pq")
-    nation = pl.scan_parquet(f"{root}/nation.pq")
-    customer = pl.scan_parquet(f"{root}/customer.pq")
-    orders = pl.scan_parquet(f"{root}/orders.pq")
-    lineitem = pl.scan_parquet(f"{root}/lineitem.pq")
-    supplier = pl.scan_parquet(f"{root}/supplier.pq")
+    if root.startswith("s3://"):
+        storage_options = {
+            "aws_region": "us-east-2",
+            "aws_allow_http": "false",
+            "aws_skip_signature": "true",  # anonymous access
+        }
+        customer = pl.scan_parquet(
+            f"{root}/customer.pq/*.pq", storage_options=storage_options
+        )
+        orders = pl.scan_parquet(
+            f"{root}/orders.pq/*.pq", storage_options=storage_options
+        )
+        lineitem = pl.scan_parquet(
+            f"{root}/lineitem.pq/*.pq", storage_options=storage_options
+        )
+        supplier = pl.scan_parquet(
+            f"{root}/supplier.pq", storage_options=storage_options
+        )
+        region = pl.scan_parquet(f"{root}/region.pq", storage_options=storage_options)
+        nation = pl.scan_parquet(f"{root}/nation.pq", storage_options=storage_options)
+    else:
+        customer = pl.scan_parquet(f"{root}/customer.pq")
+        orders = pl.scan_parquet(f"{root}/orders.pq")
+        lineitem = pl.scan_parquet(f"{root}/lineitem.pq")
+        supplier = pl.scan_parquet(f"{root}/supplier.pq")
+        region = pl.scan_parquet(f"{root}/region.pq")
+        nation = pl.scan_parquet(f"{root}/nation.pq")
 
     var1 = "ASIA"
     var2 = date(1996, 1, 1)

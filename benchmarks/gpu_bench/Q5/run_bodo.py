@@ -32,9 +32,22 @@ def q(root, pd):
         order by
     revenue desc;
     """
-    lineitem = pd.read_parquet(f"{root}/lineitem.pq")
-    orders = pd.read_parquet(f"{root}/orders.pq")
-    customer = pd.read_parquet(f"{root}/customer.pq")
+    if pd.__name__ == "bodo.pandas":
+        lineitem = pd.read_parquet(f"{root}/lineitem.pq")
+        orders = pd.read_parquet(f"{root}/orders.pq")
+        customer = pd.read_parquet(f"{root}/customer.pq")
+    else:
+        # Cudf doesn't have column pruning
+        lineitem = pd.read_parquet(
+            f"{root}/lineitem.pq",
+            columns=["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SUPPKEY"],
+        )
+        orders = pd.read_parquet(
+            f"{root}/orders.pq", columns=["O_ORDERKEY", "O_CUSTKEY", "O_ORDERDATE"]
+        )
+        customer = pd.read_parquet(
+            f"{root}/customer.pq", columns=["C_CUSTKEY", "C_NATIONKEY"]
+        )
     nation = pd.read_parquet(f"{root}/nation.pq")
     region = pd.read_parquet(f"{root}/region.pq")
     supplier = pd.read_parquet(f"{root}/supplier.pq")
@@ -45,6 +58,7 @@ def q(root, pd):
 
     jn1 = customer.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
     jn2 = jn1.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+
     jn3 = jn2.merge(
         supplier,
         left_on=["L_SUPPKEY", "C_NATIONKEY"],
@@ -58,6 +72,7 @@ def q(root, pd):
     jn5["REVENUE"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
 
     gb = jn5.groupby("N_NAME", as_index=False)["REVENUE"].sum()
+    result_df = gb
     result_df = gb.sort_values("REVENUE", ascending=False)
 
     return result_df
@@ -88,6 +103,30 @@ def main():
         choices=["bodo", "cudf"],
     )
 
+    # Bodo Config
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=32768 * 10,
+    )
+    parser.add_argument(
+        "--no_parallel",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--dump_plan",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--use_async",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--tracedir",
+        type=str,
+        default=None,
+    )
+
     args = parser.parse_args()
 
     if args.log_timings and not os.path.exists(args.log_timings):
@@ -105,10 +144,32 @@ def main():
 
         pd_impl = cudf
     else:
+        # Bodo envs (set prior to importing bodo.pandas)
+        # os.environ["KVIKIO_COMPAT_MODE"] = os.environ.get("KVIKIO_COMPAT_MODE", "on")
+        # os.environ["KVIKIO_NTHREADS"] = os.environ.get("KVIKIO_NTHREADS", "1")
+        os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
+        os.environ["BODO_GPU_STREAMING_BATCH_SIZE"] = str(args.batch_size)
+        os.environ["BODO_GPU_ASYNC"] = "1" if args.use_async else "0"
+        os.environ["BODO_DATAFRAME_LIBRARY_DUMP_PLANS"] = "1" if args.dump_plan else "0"
+        os.environ["BODO_DATAFRAME_LIBRARY_RUN_PARALLEL"] = (
+            "0" if args.no_parallel else "1"
+        )
+        if args.tracedir:
+            os.environ["BODO_TRACING_LEVEL"] = "1"
+            # os.environ["BODO_DATAFRAME_LIBRARY_PROFILE"] = "1"
+            os.environ["BODO_TRACING_OUTPUT_DIR"] = args.tracedir
+
         import bodo.pandas as pd
 
         pd_impl = pd
-        os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
+
+        print("Bodo Config:")
+        print(f"  Number of Workers: {args.n_workers}")
+        print(f"  Streaming Batch Size: {args.batch_size}")
+        print(f"  Run Parallel: {not args.no_parallel}")
+        print(f"  Use Async: {args.use_async}")
+        print(f"  Dump Plan: {args.dump_plan}")
+        print(f"  Trace Dir: {args.tracedir}")
 
     for i in range(args.n_iters):
         try:
