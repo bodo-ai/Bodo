@@ -74,11 +74,13 @@ struct GPU_DATA {
     std::shared_ptr<arrow::Schema> schema;
     std::shared_ptr<StreamAndEvent> stream_event;
 
-    GPU_DATA() {}
+    GPU_DATA() = default;
 
     GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s,
              std::shared_ptr<StreamAndEvent> se)
-        : table(t), schema(s), stream_event(se) {}
+        : table(std::move(t)),
+          schema(std::move(s)),
+          stream_event(std::move(se)) {}
 };
 
 /**
@@ -189,10 +191,12 @@ class GPUtoCPUExchange : public RankDataExchange {
      * is finished on all ranks.
      */
     std::tuple<std::shared_ptr<table_info>, OperatorResult> operator()(
-        std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result);
+        std::shared_ptr<table_info> input_batch,
+        std::shared_ptr<arrow::Schema> table_schema,
+        OperatorResult prev_op_result);
 
    private:
-    void Initialize(table_info* input_batch);
+    void Initialize(std::shared_ptr<arrow::Schema> table_schema);
 
     std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
