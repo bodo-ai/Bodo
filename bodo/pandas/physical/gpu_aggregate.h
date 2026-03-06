@@ -77,9 +77,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->initKeysAndSchema(col_ref_map, op.groups, in_table_schema, keys);
 
         std::optional<bool> dropna = std::nullopt;
-        for (size_t i = 0; i < op.expressions.size(); i++) {
-            const auto& expr = op.expressions[i];
-
+        for (const auto& expr : op.expressions) {
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
                 throw std::runtime_error(
                     "Aggregate expression is not a bound aggregate: " +
@@ -227,9 +225,14 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         time_pt start_produce = start_timer();
         std::unique_ptr<cudf::table> next_batch;
 
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
+                    OperatorResult::FINISHED};
+        }
+
         if (!leftover_tbl) {
-            leftover_tbl = std::move(groupby_state->produce_output_batch(
-                out_is_last /* output */, true, se->stream));
+            leftover_tbl = groupby_state->produce_output_batch(
+                out_is_last /* output */, true, se->stream);
         }
 
         std::size_t n = leftover_tbl->num_rows();

@@ -126,17 +126,23 @@ void CudaGroupbyState::build_consume_batch(
     // During the phase where all_complete() is not true, we'll get
     // blank tables, on which we don't need to run the first groupby
     // pass.
+
+    if (!is_gpu_rank()) {
+        merge_shuffler.progress();
+        return;
+    }
+
     if (input_table->view().num_rows() != 0) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
-        std::shared_ptr<cudf::table> new_data = std::move(
+        std::shared_ptr<cudf::table> new_data =
             do_groupby(input_table->view(), key_indices, column_indices,
                        aggregation_requests, aggregation_fns, post_agg_fns,
-                       pre_agg_table_fns, local_groupby_se->stream));
+                       pre_agg_table_fns, local_groupby_se->stream);
         local_groupby_se->event.record(local_groupby_se->stream);
         merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
-                                     local_groupby_se->event);
+                                     local_groupby_se);
     }
 
     // Give shuffler a chance to receive chunks.
@@ -168,21 +174,16 @@ void CudaGroupbyState::build_consume_batch(
     // Make one table out of all the views.
     auto combined = cudf::concatenate(views, output_stream);
     // Do the groupby on the combined table.
-    accumulation = std::move(
+    accumulation =
         do_groupby(combined->view(), merge_key_indices, merge_column_indices,
                    merge_aggregation_requests, merge_aggregation_fns,
-                   post_merge_agg_fns, pre_merge_agg_table_fns, output_stream));
+                   post_merge_agg_fns, pre_merge_agg_table_fns, output_stream);
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(
     bool& out_is_last, bool produce_output,
     rmm::cuda_stream_view& output_stream) {
     out_is_last = true;
-
-    // Will happen on non-GPU ranks.
-    if (accumulation == nullptr) {
-        return empty_table_from_arrow_schema(output_schema);
-    }
 
     // accumulation is guaranteed here to have all the merged data from
     // all the other nodes.  If there are any final merges to collapse
