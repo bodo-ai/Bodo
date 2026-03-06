@@ -100,7 +100,6 @@ void CudaHashJoin::build_hash_table(
     this->_join_handle = std::make_unique<cudf::hash_join>(
         build_view.select(this->build_key_indices), this->null_equality);
 
-    GpuMpiManager gather_blooms;
     uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
     // Generate local bloom filter.
     this->_build_bloom_filter = build_bloom_filter_from_table(
