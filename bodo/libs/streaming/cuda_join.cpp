@@ -99,6 +99,38 @@ void CudaHashJoin::build_hash_table(
 
     this->_join_handle = std::make_unique<cudf::hash_join>(
         build_view.select(this->build_key_indices), this->null_equality);
+
+    uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
+    // Generate local bloom filter.
+    this->_build_bloom_filter = build_bloom_filter_from_table(
+        build_view.select(this->build_key_indices), build_total_size, 0.01,
+        cudf::get_default_stream());
+    // Get all GPU nodes' bloom filters.
+    std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
+        gather_blooms.all_gather_device_buffers(
+            this->_build_bloom_filter->bitset, cudf::get_default_stream());
+    // AtomicOR them all together.
+    for (auto& one_bloom : all_blooms) {
+        if (one_bloom) {
+            size_t one_bloom_size = one_bloom->size();
+            if (one_bloom_size % 8 != 0) {
+                throw std::runtime_error(
+                    "Received bloom filter that isn't a multiple of 64-bits");
+            }
+            mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
+                             cudf::get_default_stream());
+        }
+    }
+}
+
+void CudaHashJoin::runtime_filter(
+    cudf::table_view const& probe_table,
+    std::vector<cudf::size_type> const& probe_key_indices,
+    std::unique_ptr<cudf::column>& prev_mask, rmm::cuda_stream_view stream) {
+    if (_build_bloom_filter) {
+        filter_table_with_bloom(probe_table, probe_key_indices,
+                                *_build_bloom_filter, prev_mask, stream);
+    }
 }
 
 void CudaHashJoin::FinalizeBuild() {

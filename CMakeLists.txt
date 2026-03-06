@@ -723,10 +723,16 @@ if (USE_CUDF)
     "bodo/pandas/physical/gpu_aggregate.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
+    "bodo/libs/gpu_bloom_filter.cu"
+    )
+
+    list(APPEND allow_implicit_fallthrough_list
+    "bodo/libs/gpu_bloom_filter.cu"
     )
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
+target_sources(ext PRIVATE ${sources_list})
 
 # Dependency Includes Are `-isystem` to Suppress Warnings
 target_include_directories(ext SYSTEM PRIVATE ${BASE_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
@@ -846,13 +852,9 @@ endif()
 
 if(USE_CUDF)
   message(STATUS "Configuring for cudf.")
+  enable_language(CUDA) # compile .cu with cuda toolchain
+  find_package(CUDAToolkit REQUIRED)
   execute_process( COMMAND "${Python_EXECUTABLE}" -c "import os, pathlib; \ root = os.environ.get('CONDA_PREFIX', ''); \ matches = list(pathlib.Path(root).rglob('cuda_runtime.h')); \ print(matches[0].parent if matches else '')" OUTPUT_VARIABLE CUDA_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE )
-
-  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
-
-  target_include_directories(ext BEFORE PRIVATE
-    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
-  )
 
   # RMM library defines
   find_path(RMM_INCLUDE_DIR NAMES rmm/cuda_stream_view.hpp)
@@ -895,17 +897,37 @@ if(USE_CUDF)
   add_library(nccl SHARED IMPORTED)
   set_target_properties(nccl PROPERTIES IMPORTED_LOCATION "${NCCL_LIB}")
 
+  message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
+  message(STATUS "Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
+  message(STATUS "Using RMM base dir: ${RMM_BASE_DIR}")
+
+  target_include_directories(ext BEFORE PRIVATE
+    ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
+  )
+
   # RPATH
   set_target_properties(ext PROPERTIES
     BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
     INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    LINKER_LANGUAGE CUDA
+    POSITION_INDEPENDENT_CODE ON
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+    CUDA_ARCHITECTURES "89;90;100;120"
   )
 
-  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1)
+  target_compile_options(ext PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${CUDA_INCLUDE_DIR}/cccl>
+      $<$<COMPILE_LANGUAGE:CUDA>:-I${LIBCUDF_INCLUDE_DIR}>
+      $<$<COMPILE_LANGUAGE:CUDA>:--diag-suppress=20012>
+  )
+
+  target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl
-      "-Wl,--as-needed")
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl)
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy

@@ -22,8 +22,7 @@ bool g_use_async = false;
 #include "_utils.h"
 #include "cuda_runtime_api.h"
 
-GpuShuffleManager::GpuShuffleManager()
-    : gpu_id(get_gpu_id()), MAX_TAG_VAL(get_max_allowed_tag_value()) {
+GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
@@ -41,7 +40,7 @@ GpuShuffleManager::GpuShuffleManager()
     initialize_nccl();
 }
 
-GpuShuffleManager::~GpuShuffleManager() {
+GpuMpiManager::~GpuMpiManager() {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
@@ -58,7 +57,7 @@ GpuShuffleManager::~GpuShuffleManager() {
     MPI_Comm_free(&mpi_comm);
 }
 
-void GpuShuffleManager::initialize_nccl() {
+void GpuMpiManager::initialize_nccl() {
     ncclUniqueId nccl_id;
 
     if (rank == 0) {
@@ -73,6 +72,9 @@ void GpuShuffleManager::initialize_nccl() {
     // Initialize NCCL communicator
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
+
+GpuShuffleManager::GpuShuffleManager()
+    : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
@@ -535,6 +537,69 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
         return MPI_COMM_NULL;
     }
     return gpu_comm;
+}
+
+std::vector<std::unique_ptr<rmm::device_buffer>>
+GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
+                                         cudaStream_t stream) {
+    // 1) Exchange sizes (uint64_t)
+    uint64_t local_size = static_cast<uint64_t>(local_buf.size());
+    std::vector<uint64_t> all_sizes(static_cast<size_t>(n_ranks), 0);
+    CHECK_MPI(MPI_Allgather(&local_size, 1, MPI_UINT64_T, all_sizes.data(), 1,
+                            MPI_UINT64_T, mpi_comm),
+              "allgather_device_buffers_across_ranks: MPI_Allgather failed:");
+
+    // 2) Allocate receive buffers for each rank (on device, using provided
+    // stream)
+    std::vector<std::unique_ptr<rmm::device_buffer>> recv_buffers;
+    recv_buffers.reserve(static_cast<size_t>(n_ranks));
+    for (int i = 0; i < n_ranks; ++i) {
+        uint64_t sz = all_sizes[static_cast<size_t>(i)];
+        if (sz == 0) {
+            recv_buffers.push_back(nullptr);
+        } else {
+            // allocate device buffer on the provided stream
+            recv_buffers.push_back(
+                std::make_unique<rmm::device_buffer>(sz, stream));
+        }
+    }
+
+    // 3) Post NCCL receives and sends inside a group
+    // Post receives first (deterministic ordering)
+    CHECK_NCCL(ncclGroupStart());
+    for (int src = 0; src < n_ranks; ++src) {
+        uint64_t sz = all_sizes[static_cast<size_t>(src)];
+        if (sz == 0) {
+            continue;
+        }
+        void* dst_ptr = recv_buffers[static_cast<size_t>(src)]->data();
+        // ncclRecv expects int count; we cast because we already validated
+        // sizes fit in memory
+        CHECK_NCCL(ncclRecv(dst_ptr, static_cast<int>(sz), ncclChar, src,
+                            nccl_comm, stream));
+    }
+
+    // Post sends: send this rank's buffer to every rank (including self)
+    if (local_size > 0) {
+        for (int dst = 0; dst < n_ranks; ++dst) {
+            CHECK_NCCL(ncclSend(local_buf.data(), static_cast<int>(local_size),
+                                ncclChar, dst, nccl_comm, stream));
+        }
+    }
+    CHECK_NCCL(ncclGroupEnd());
+
+    // 4) Wait for NCCL transfers to complete on the provided stream
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+
+    return recv_buffers;
+}
+
+uint64_t GpuMpiManager::allreduce(uint64_t local) {
+    uint64_t allsum = 0;
+    CHECK_MPI(MPI_Allreduce(&local, &allsum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
+                            mpi_comm),
+              "GpuMpiManager::allreduce: MPI error on MPI_Allreduce:");
+    return allsum;
 }
 
 #endif  // USE_CUDF

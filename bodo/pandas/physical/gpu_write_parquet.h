@@ -239,7 +239,6 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         prev_batch_se = se;
 
         if (finished) {
-            cudaStreamSynchronize(se->stream);
             return OperatorResult::FINISHED;
         }
 

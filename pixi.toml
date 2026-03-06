@@ -262,6 +262,7 @@ channels = ["rapidsai", "nvidia", "conda-forge"]
 [feature.cudf.dependencies]
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
+cuda-nvcc = "13.*"
 rmm = ">=25.12"
 librmm = ">=25.12"
 cudf = ">=25.12"
