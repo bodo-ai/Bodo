@@ -263,8 +263,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		// Note: We allow all optimizations (join column replacement, column pruning) to run below ROLLUP
 		// The duplicate groups optimizer will be responsible for not breaking ROLLUP by skipping when
 		// multiple grouping sets are present
-        // Bodo Change: pass "pass" to all sub-passes
-		RemoveUnusedColumns remove(binder, context,pass, everything_referenced );
+        // Bodo Change: pass "pass" to all sub-passes and set is_root based on grouping_set size to allow
+		// column pruning below the aggregate when grouping sets are not present
+		RemoveUnusedColumns remove(binder, context,pass, aggr.grouping_sets.size() > 1);
         // Bodo Change End
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
