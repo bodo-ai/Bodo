@@ -367,7 +367,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        local_count += input_batch.table->num_rows();
+        local_count += input_batch.table ? input_batch.table->num_rows() : 0;
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -384,6 +384,11 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, out_schema->ToArrowSchema(), se),
+                    OperatorResult::FINISHED};
+        }
+
         cudf::numeric_scalar<uint64_t> s(global_count, true);
         auto col = cudf::make_column_from_scalar(s, 1, se->stream);
         std::vector<std::unique_ptr<cudf::column>> cols;
