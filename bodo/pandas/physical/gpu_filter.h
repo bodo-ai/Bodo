@@ -5,6 +5,7 @@
 #include <utility>
 #include "../../libs/_query_profile_collector.h"
 #include "../libs/_array_utils.h"
+#include "duckdb/planner/operator/logical_filter.hpp"
 #include "gpu_expression.h"
 #include "operator.h"
 
@@ -102,6 +103,13 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
+                    prev_op_result == OperatorResult::FINISHED
+                        ? OperatorResult::FINISHED
+                        : OperatorResult::NEED_MORE_INPUT};
+        }
+
         this->metrics.input_row_count += input_batch.table->num_rows();
         time_pt start_expr_eval = start_timer();
         std::shared_ptr<cudf::table> filtered_table;
@@ -132,8 +140,8 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
 
             start_filtering = start_timer();
             // Apply the bitmask to the input_batch to do row filtering.
-            filtered_table = std::move(cudf::apply_boolean_mask(
-                input_batch.table->view(), bitmask->view(), se->stream));
+            filtered_table = cudf::apply_boolean_mask(
+                input_batch.table->view(), bitmask->view(), se->stream);
         }
 
         if (has_projection_map) {
