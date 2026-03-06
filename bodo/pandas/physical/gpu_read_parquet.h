@@ -33,6 +33,7 @@
 #include "../io/arrow_compat.h"
 
 #include <glob.h>
+#include <parquet/metadata.h>
 #include <unistd.h>
 #include <cstddef>
 #include <iostream>
@@ -66,27 +67,17 @@ struct FilePart {
     std::string path;
     int start_row_group;  // inclusive
     int end_row_group;    // exclusive
+    size_t total_bytes;   // Total number of uncompressed bytes
+    size_t total_rows;
 };
 
 class RankBatchGenerator {
    public:
     struct {
         using time_t = MetricBase::TimerValue;
-        time_t cpu_read_time = 0;
-        time_t gpu_read_time = 0;
+        time_t get_dataset_time = 0;
+        time_t partition_file_time = 0;
     } metrics;
-
-    // /**
-    //  * @brief How to read parquet dataset
-    //  *  1. READ_ALL (not used/baseline): Read all files at once
-    //  *  2. READ_CHUNKS: When dataset consists of multiple files
-    //  *  3.
-    //  */
-    // enum {
-    //     READ_ALL,
-    //     READ_CHUNKS,
-    //     READ_ROW_GROUPS
-    // } read_mode;
 
     RankBatchGenerator(PyObject *dataset_path,
                        duckdb::unique_ptr<duckdb::TableFilterSet> &filter_exprs,
@@ -114,6 +105,7 @@ class RankBatchGenerator {
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
 
+        auto start_partition_dataset = start_timer();
         if (files_.size() == 1) {
             // single file -> partition by row groups
             parts_ =
@@ -132,14 +124,16 @@ class RankBatchGenerator {
             // multi-file dataset -> partition by file (block partition)
             parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
-        // TODO partition by row groups case.
+        this->metrics.partition_file_time += end_timer(start_partition_dataset);
+
         chunked_reader_stream = cudf::get_default_stream();
-        // TODO: Set limit based on batch_size, 0 = no limit (read entire table
-        // at once)
-        size_t chunked_reader_limit = 0;
+        size_t total_rows = 0;
+        size_t total_bytes = 0;
         std::vector<std::string> paths;
         for (const auto &part : parts_) {
             std::string path = part.path;
+            total_rows += part.total_rows;
+            total_bytes += part.total_bytes;
             // Use KVIO for S3
             // TODO: Custom data source for better performance (e.g. Arrow
             // filesystem input stream) ?
@@ -148,6 +142,12 @@ class RankBatchGenerator {
             }
             paths.push_back(path);
         }
+        // Estimate bytes per row
+        // TODO: better estimate or use row_group selector + read_parquet
+        // The 2x multiple accounts for GPU expansion factor.
+        size_t chunked_reader_limit =
+            2 * (total_bytes / total_rows) * target_rows_;
+        std::cout << "Limit : " << chunked_reader_limit << std::endl;
         cudf::io::source_info src_info(paths);
         chunked_reader_opts.set_source(src_info);
 
@@ -160,7 +160,6 @@ class RankBatchGenerator {
     }
 
     // Read multiple parts at a time for better performance
-    // TODO: Use chunked reader for large datasets ?
     std::pair<std::unique_ptr<cudf::table>, bool> read_all(
         std::shared_ptr<StreamAndEvent> se) {
         std::cout << " Reading dataset with " << parts_.size()
@@ -171,7 +170,6 @@ class RankBatchGenerator {
         }
 
         cudf::io::parquet_reader_options reader_opts;
-        // TODO: row_groups, other filesystems, batch size
         std::vector<std::string> paths;
         for (const auto &part : parts_) {
             std::string path = part.path;
@@ -311,10 +309,12 @@ class RankBatchGenerator {
     }
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
+        std::string prefix = "gpu_read_parquet_batch_generator";
+        metrics_out.emplace_back(TimerMetric(prefix + "_get_dataset_time",
+                                             this->metrics.get_dataset_time));
         metrics_out.emplace_back(
-            TimerMetric("cpu_read_time", this->metrics.cpu_read_time));
-        metrics_out.emplace_back(
-            TimerMetric("gpu_read_time", this->metrics.gpu_read_time));
+            TimerMetric(prefix + "_partition_file_time",
+                        this->metrics.partition_file_time));
     }
 
    private:
@@ -322,6 +322,8 @@ class RankBatchGenerator {
      * filesystem_.
      */
     void get_dataset() {
+        auto start_get_dataset = start_timer();
+
         // import bodo.io.parquet_pio
         PyObjectPtr pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
@@ -366,6 +368,28 @@ class RankBatchGenerator {
             Py_DECREF(piece);
         }
         Py_DECREF(iterator);
+
+        this->metrics.get_dataset_time += end_timer(start_get_dataset);
+    }
+
+    /**
+     * @brief
+     *
+     */
+    static std::tuple<size_t, size_t> get_num_rows_bytes(
+        const parquet::FileMetaData &metadata, int start_row_group,
+        int end_row_group) {
+        size_t total_rows = 0;
+        size_t total_bytes = 0;
+
+        for (int i = start_row_group; i < end_row_group; i++) {
+            std::unique_ptr<parquet::RowGroupMetaData> rg_meta =
+                metadata.RowGroup(i);
+            total_rows += rg_meta->num_rows();
+            total_bytes += rg_meta->total_byte_size();
+        }
+
+        return {total_rows, total_bytes};
     }
 
     // Partition a single file by row groups into contiguous chunks for each
@@ -376,16 +400,18 @@ class RankBatchGenerator {
         std::vector<FilePart> result;
         // Use Arrow/Parquet to get num_row_groups cheaply
         int total_rg = 0;
+        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+        std::unique_ptr<parquet::ParquetFileReader> pf;
+        std::shared_ptr<parquet::FileMetaData> metadata;
         try {
             // Use Arrow filesystem to read the file into a buffer
-            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
             CHECK_ARROW_AND_ASSIGN(
                 filesystem->OpenInputFile(file),
                 "Error opening file via Arrow filesystem: " + file, arrow_file);
 
-            std::unique_ptr<parquet::ParquetFileReader> pf =
-                parquet::ParquetFileReader::Open(arrow_file);
-            total_rg = pf->metadata()->num_row_groups();
+            pf = parquet::ParquetFileReader::Open(arrow_file);
+            metadata = pf->metadata();
+            total_rg = metadata->num_row_groups();
         } catch (const std::exception &e) {
             std::cerr << "Failed to read parquet metadata for " << file << ": "
                       << e.what() << "\n";
@@ -399,8 +425,14 @@ class RankBatchGenerator {
         if (start >= end) {
             return result;
         }
-        result.push_back(FilePart{
-            .path = file, .start_row_group = start, .end_row_group = end});
+        auto num_rows_bytes = get_num_rows_bytes(*metadata, start, end);
+        size_t part_num_rows = std::get<0>(num_rows_bytes);
+        size_t part_num_bytes = std::get<1>(num_rows_bytes);
+        result.push_back(FilePart{.path = file,
+                                  .start_row_group = start,
+                                  .end_row_group = end,
+                                  .total_bytes = part_num_bytes,
+                                  .total_rows = part_num_rows});
         return result;
     }
 
@@ -417,6 +449,8 @@ class RankBatchGenerator {
         for (int i = start; i < end; ++i) {
             const std::string &f = files[i];
             int num_rg = 0;
+            size_t num_rows = 0;
+            size_t num_bytes = 0;
             try {
                 std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
                 CHECK_ARROW_AND_ASSIGN(
@@ -425,14 +459,22 @@ class RankBatchGenerator {
                     arrow_file);
                 std::unique_ptr<parquet::ParquetFileReader> pf =
                     parquet::ParquetFileReader::Open(arrow_file);
-                num_rg = pf->metadata()->num_row_groups();
+                std::shared_ptr<parquet::FileMetaData> metadata =
+                    pf->metadata();
+                num_rg = metadata->num_row_groups();
+                auto num_rows_bytes = get_num_rows_bytes(*metadata, 0, num_rg);
+                num_rows = std::get<0>(num_rows_bytes);
+                num_bytes = std::get<1>(num_rows_bytes);
             } catch (const std::exception &e) {
                 std::cerr << "Failed to read parquet metadata for " << f << ": "
                           << e.what() << "\n";
                 continue;
             }
-            result.push_back(FilePart{
-                .path = f, .start_row_group = 0, .end_row_group = num_rg});
+            result.push_back(FilePart{.path = f,
+                                      .start_row_group = 0,
+                                      .end_row_group = num_rg,
+                                      .total_bytes = num_bytes,
+                                      .total_rows = num_rows});
         }
         return result;
     }

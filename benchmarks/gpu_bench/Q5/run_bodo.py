@@ -34,13 +34,8 @@ def q(root, pd):
     """
     if pd.__name__ == "bodo.pandas":
         lineitem = pd.read_parquet(f"{root}/lineitem.pq")
-        lineitem = lineitem[
-            ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SUPPKEY"]
-        ]
         orders = pd.read_parquet(f"{root}/orders.pq")
-        orders = orders[["O_ORDERKEY", "O_CUSTKEY", "O_ORDERDATE"]]
         customer = pd.read_parquet(f"{root}/customer.pq")
-        customer = customer[["C_CUSTKEY", "C_NATIONKEY"]]
     else:
         # Cudf doesn't have column pruning
         lineitem = pd.read_parquet(
@@ -64,7 +59,6 @@ def q(root, pd):
     jn1 = customer.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
     jn2 = jn1.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
 
-    # jn1_2 = orders.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
     jn3 = jn2.merge(
         supplier,
         left_on=["L_SUPPKEY", "C_NATIONKEY"],
@@ -80,15 +74,6 @@ def q(root, pd):
     gb = jn5.groupby("N_NAME", as_index=False)["REVENUE"].sum()
     result_df = gb
     result_df = gb.sort_values("REVENUE", ascending=False)
-
-    # result_df = jn1
-    # result_df.to_parquet(f"{pd.__name__}_res.pq")
-    # result_df = jn2
-    # result_df.to_parquet(f"{pd.__name__}_res.pq")
-    # result_df = jn3
-    # result_df.to_parquet(f"{pd.__name__}_res.pq")
-    # result_df = jn1_2
-    # result_df.to_parquet(f"{pd.__name__}_res.pq")
 
     return result_df
 
