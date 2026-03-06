@@ -145,6 +145,8 @@ def main():
         pd_impl = cudf
     else:
         # Bodo envs (set prior to importing bodo.pandas)
+        # os.environ["KVIKIO_COMPAT_MODE"] = os.environ.get("KVIKIO_COMPAT_MODE", "on")
+        # os.environ["KVIKIO_NTHREADS"] = os.environ.get("KVIKIO_NTHREADS", "1")
         os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
         os.environ["BODO_GPU_STREAMING_BATCH_SIZE"] = str(args.batch_size)
         os.environ["BODO_GPU_ASYNC"] = "1" if args.use_async else "0"
