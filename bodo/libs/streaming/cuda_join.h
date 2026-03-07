@@ -45,6 +45,8 @@ struct CudaHashJoin {
 
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
+    bool is_broadcast_join;
+
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
                  std::vector<cudf::size_type> probe_keys,
@@ -53,7 +55,8 @@ struct CudaHashJoin {
                  std::vector<int64_t> build_kept_cols,
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
-                 cudf::null_equality null_eq = cudf::null_equality::EQUAL)
+                 cudf::null_equality null_eq = cudf::null_equality::EQUAL,
+                 bool is_broadcast = false)
         : output_schema(std::move(output_schema)),
           build_key_indices(std::move(build_keys)),
           probe_key_indices(std::move(probe_keys)),
@@ -61,18 +64,23 @@ struct CudaHashJoin {
           probe_kept_cols(std::move(probe_kept_cols)),
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
-          null_equality(null_eq) {}
+          null_equality(null_eq),
+          is_broadcast_join(is_broadcast) {}
+
     CudaHashJoin() = default;
+
     /**
      * @brief Finalize the build phase by constructing the hash table
      * and collecting statistics
      */
     void FinalizeBuild();
+
     /**
      * @brief Process input tables to build side of join
      */
     void BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                           cuda_event_wrapper event);
+                           std::shared_ptr<StreamAndEvent> input_stream_event);
+
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe

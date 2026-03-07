@@ -189,17 +189,23 @@ void CudaHashJoin::FinalizeBuild() {
     this->_build_chunks.clear();
 }
 
-void CudaHashJoin::BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                                     cuda_event_wrapper event) {
-    // TODO: remove unused columns before shuffling to save network bandwidth
-    // and GPU memory.
-    // Store the incoming build chunk for later finalization
-    this->build_shuffle_manager.shuffle_table(build_chunk,
-                                              this->build_key_indices, event);
-    std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-        build_shuffle_manager.progress();
-    for (auto& chunk : shuffled_build_chunks) {
-        this->_build_chunks.emplace_back(std::move(chunk));
+void CudaHashJoin::BuildConsumeBatch(
+    std::shared_ptr<cudf::table> build_chunk,
+    std::shared_ptr<StreamAndEvent> input_stream_event) {
+    if (is_broadcast_join) {
+        // No shuffling in broadcast join mode.
+        this->_build_chunks.emplace_back(std::move(build_chunk));
+    } else {
+        // TODO: remove unused columns before shuffling to save network
+        // bandwidth and GPU memory. Store the incoming build chunk for later
+        // finalization
+        this->build_shuffle_manager.shuffle_table(
+            build_chunk, this->build_key_indices, input_stream_event);
+        std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
+            build_shuffle_manager.progress();
+        for (auto& chunk : shuffled_build_chunks) {
+            this->_build_chunks.emplace_back(std::move(chunk));
+        }
     }
 }
 
