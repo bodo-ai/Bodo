@@ -67,19 +67,18 @@ void GpuMpiManager::initialize_nccl() {
 
     // Broadcast the unique ID to all ranks
     CHECK_MPI(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm),
-              "GpuShuffleManager::initialize_nccl: MPI_Bcast failed:");
+              "GpuTableManager::initialize_nccl: MPI_Bcast failed:");
 
     // Initialize NCCL communicator
     CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
 
-GpuShuffleManager::GpuShuffleManager()
-    : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
+GpuTableManager::GpuTableManager() : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
-void GpuShuffleManager::shuffle_table(
+void GpuTableManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
-    cuda_event_wrapper event) {
+    std::shared_ptr<StreamAndEvent> se) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
@@ -87,10 +86,10 @@ void GpuShuffleManager::shuffle_table(
         return;
     }
     this->tables_to_shuffle.push_back(
-        ShuffleTableInfo(table, partition_indices, event));
+        ShuffleTableInfo(table, partition_indices, se->event));
 }
 
-void GpuShuffleManager::do_shuffle() {
+void GpuTableManager::do_shuffle() {
     std::vector<cudf::packed_table> packed_tables;
     if (data_ready_to_send()) {
         ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
@@ -140,7 +139,7 @@ void GpuShuffleManager::do_shuffle() {
     this->curr_tag = (this->curr_tag + 3) % MAX_TAG_VAL;
 }
 
-std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
+std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress() {
     // If complete has been signaled and there are no inflight shuffles or
     // tables to shuffle, we can start the global completion barrier. This needs
     // to be called on all ranks even without GPUs assigned so they know when
@@ -149,7 +148,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
         tables_to_shuffle.empty() &&
         global_completion_req == MPI_REQUEST_NULL && !global_completion) {
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
-                  "GpuShuffleManager::complete: MPI_Ibarrier failed:");
+                  "GpuTableManager::complete: MPI_Ibarrier failed:");
     }
 
     if (mpi_comm == MPI_COMM_NULL || this->all_complete()) {
@@ -166,12 +165,12 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,
                            &this->shuffle_coordination.req),
-            "GpuShuffleManager::progress: MPI_Iallreduce failed:");
+            "GpuTableManager::progress: MPI_Iallreduce failed:");
     } else {
         int coordination_finished;
         CHECK_MPI(MPI_Test(&this->shuffle_coordination.req,
                            &coordination_finished, MPI_STATUS_IGNORE),
-                  "GpuShuffleManager::progress: MPI_Test failed:");
+                  "GpuTableManager::progress: MPI_Test failed:");
         if (coordination_finished) {
             if (this->shuffle_coordination.has_data) {
                 // If a shuffle is needed, start it
@@ -455,20 +454,20 @@ void GpuShuffle::progress_sending_data() {
     }
 }
 
-void GpuShuffleManager::complete() { this->complete_signaled = true; }
+void GpuTableManager::complete() { this->complete_signaled = true; }
 
-bool GpuShuffleManager::all_complete() {
+bool GpuTableManager::all_complete() {
     if (global_completion_req != MPI_REQUEST_NULL) {
         CHECK_MPI(MPI_Test(&global_completion_req, &this->global_completion,
                            MPI_STATUS_IGNORE),
-                  "GpuShuffleManager::all_complete: MPI_Test failed:");
+                  "GpuTableManager::all_complete: MPI_Test failed:");
         if (global_completion) {
             // If global completion is reached, we can cancel any inflight
             // shuffle coordination since we know all data has been sent
             if (this->shuffle_coordination.req != MPI_REQUEST_NULL) {
                 // CHECK_MPI(
                 //     MPI_Cancel(&this->shuffle_coordination.req),
-                //     "GpuShuffleManager::all_complete: MPI_Cancel failed:");
+                //     "GpuTableManager::all_complete: MPI_Cancel failed:");
             }
             this->shuffle_coordination.req = MPI_REQUEST_NULL;
             this->global_completion_req = MPI_REQUEST_NULL;

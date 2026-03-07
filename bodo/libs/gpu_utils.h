@@ -328,7 +328,7 @@ class GpuMpiManager {
 /**
  * @brief Class for managing async shuffle of cudf::tables using NCCL
  */
-class GpuShuffleManager : public GpuMpiManager {
+class GpuTableManager : public GpuMpiManager {
    private:
     std::deque<GpuShuffle> inflight_shuffles;
 
@@ -360,7 +360,7 @@ class GpuShuffleManager : public GpuMpiManager {
     }
 
    public:
-    GpuShuffleManager();
+    GpuTableManager();
 
     /**
      * @brief Shuffle a cudf table across all ranks
@@ -369,7 +369,7 @@ class GpuShuffleManager : public GpuMpiManager {
      */
     void shuffle_table(std::shared_ptr<cudf::table> table,
                        const std::vector<cudf::size_type>& partition_indices,
-                       cuda_event_wrapper event);
+                       std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Progress any inflight shuffles
@@ -388,7 +388,10 @@ class GpuShuffleManager : public GpuMpiManager {
      * @brief Idempotent call to signify that this rank has no more data to send
      */
     void complete();
+};
 
+class GpuShuffleManager : public GpuTableManager {
+   public:
     bool is_available() const { return true; }
 };
 
@@ -445,7 +448,7 @@ allgather_device_buffers_across_ranks(ncclComm_t nccl_comm, cudaStream_t stream,
 // Empty implementation when CUDF is not available
 class GpuShuffleManager {
    public:
-    explicit GpuShuffleManager() = default;
+    explicit GpuTableManager() = default;
     bool is_available() const { return false; }
 };
 #endif

@@ -88,7 +88,8 @@ struct CudaHashJoin {
      */
     std::unique_ptr<cudf::table> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
-        cuda_event_wrapper event, rmm::cuda_stream_view& stream);
+        std::shared_ptr<StreamAndEvent> input_stream_event,
+        rmm::cuda_stream_view& stream);
 
     /**
      * @brief Add to the previous mask of rows.

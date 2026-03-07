@@ -210,12 +210,13 @@ void CudaHashJoin::BuildConsumeBatch(
 }
 
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
-    const std::shared_ptr<cudf::table>& probe_chunk, cuda_event_wrapper event,
+    const std::shared_ptr<cudf::table>& probe_chunk,
+    std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
-                                        event);
+                                        input_stream_event);
 
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
