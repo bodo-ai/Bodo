@@ -346,30 +346,17 @@ class GpuTableManager : public GpuMpiManager {
     int global_completion = false;
     bool complete_signaled = false;
 
-    std::vector<ShuffleTableInfo> tables_to_shuffle;
-
     /**
      * @brief Once we've determined we will shuffle, start the shuffle by
      * partitioning the table and posting sends/receives
      */
     void do_shuffle();
 
-    bool data_ready_to_send() {
-        return !this->tables_to_shuffle.empty() &&
-               this->tables_to_shuffle.back().event.ready();
-    }
+   protected:
+    virtual std::vector<cudf::packed_table> getNextPerRankTables() = 0;
 
    public:
     GpuTableManager();
-
-    /**
-     * @brief Shuffle a cudf table across all ranks
-     * @param table Input table to shuffle
-     * @param partition_indices Column indices to use for partitioning
-     */
-    void shuffle_table(std::shared_ptr<cudf::table> table,
-                       const std::vector<cudf::size_type>& partition_indices,
-                       std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Progress any inflight shuffles
@@ -391,7 +378,26 @@ class GpuTableManager : public GpuMpiManager {
 };
 
 class GpuShuffleManager : public GpuTableManager {
+   private:
+    std::vector<ShuffleTableInfo> tables_to_shuffle;
+
+    bool data_ready_to_send() {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
+
+    std::vector<cudf::packed_table> getNextPerRankTables();
+
    public:
+    /**
+     * @brief Shuffle a cudf table across all ranks
+     * @param table Input table to shuffle
+     * @param partition_indices Column indices to use for partitioning
+     */
+    void shuffle_table(std::shared_ptr<cudf::table> table,
+                       const std::vector<cudf::size_type>& partition_indices,
+                       std::shared_ptr<StreamAndEvent> se);
+
     bool is_available() const { return true; }
 };
 

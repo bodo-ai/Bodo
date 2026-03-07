@@ -75,7 +75,7 @@ void GpuMpiManager::initialize_nccl() {
 
 GpuTableManager::GpuTableManager() : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
-void GpuTableManager::shuffle_table(
+void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
     std::shared_ptr<StreamAndEvent> se) {
@@ -89,7 +89,7 @@ void GpuTableManager::shuffle_table(
         ShuffleTableInfo(table, partition_indices, se->event));
 }
 
-void GpuTableManager::do_shuffle() {
+std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables() {
     std::vector<cudf::packed_table> packed_tables;
     if (data_ready_to_send()) {
         ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
@@ -123,7 +123,11 @@ void GpuTableManager::do_shuffle() {
             packed_tables.push_back(std::move(empty_packed_table));
         }
     }
+    return packed_tables;
+}
 
+void GpuTableManager::do_shuffle() {
+    std::vector<cudf::packed_table> packed_tables = getNextPerRankTables();
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
