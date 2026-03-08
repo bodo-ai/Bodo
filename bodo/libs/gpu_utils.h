@@ -175,7 +175,7 @@ struct GpuShuffle {
     // packed_columns. Indexed by destination rank
     std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
-    GpuShuffle(std::vector<cudf::packed_table> packed_tables,
+    GpuShuffle(std::vector<std::shared_ptr<cudf::packed_table>> packed_tables,
                MPI_Comm mpi_comm_, ncclComm_t nccl_comm_, cudaStream_t stream_,
                int n_ranks, int start_tag)
         : mpi_comm(mpi_comm_),
@@ -207,7 +207,7 @@ struct GpuShuffle {
           n_ranks(n_ranks) {
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {
-            cudf::packed_table& table = packed_tables[dest_rank];
+            cudf::packed_table& table = *packed_tables[dest_rank];
             // Prepare send buffers
             packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
             metadata_send_buffers[dest_rank] =
@@ -266,6 +266,16 @@ class ShuffleTableInfo {
                      const std::vector<cudf::size_type>& v,
                      cuda_event_wrapper e)
         : table(t), partition_indices(v), event(e) {}
+};
+
+class BroadcastTableInfo {
+   public:
+    std::shared_ptr<cudf::table> table;
+    cuda_event_wrapper event;
+
+    BroadcastTableInfo(std::shared_ptr<cudf::table> t,
+                     cuda_event_wrapper e)
+        : table(t), event(e) {}
 };
 
 /**
@@ -353,7 +363,9 @@ class GpuTableManager : public GpuMpiManager {
     void do_shuffle();
 
    protected:
-    virtual std::vector<cudf::packed_table> getNextPerRankTables() = 0;
+    virtual std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables() = 0;
+    virtual bool hasMoreTables() = 0;
+    virtual bool tableReadyToSend() = 0;
 
    public:
     GpuTableManager();
@@ -381,12 +393,16 @@ class GpuShuffleManager : public GpuTableManager {
    private:
     std::vector<ShuffleTableInfo> tables_to_shuffle;
 
-    bool data_ready_to_send() {
+    bool tableReadyToSend() {
         return !this->tables_to_shuffle.empty() &&
                this->tables_to_shuffle.back().event.ready();
     }
 
-    std::vector<cudf::packed_table> getNextPerRankTables();
+    std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
+
+    bool hasMoreTables() {
+        return tables_to_shuffle.empty();
+    }
 
    public:
     /**
@@ -396,6 +412,28 @@ class GpuShuffleManager : public GpuTableManager {
      */
     void shuffle_table(std::shared_ptr<cudf::table> table,
                        const std::vector<cudf::size_type>& partition_indices,
+                       std::shared_ptr<StreamAndEvent> se);
+
+    bool is_available() const { return true; }
+};
+
+class GpuTableBroadcastManager : public GpuTableManager {
+   private:
+    std::vector<BroadcastTableInfo> tables_to_broadcast;
+
+    bool tableReadyToSend() {
+        return !this->tables_to_broadcast.empty() &&
+               this->tables_to_broadcast.back().event.ready();
+    }
+
+    std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
+
+    bool hasMoreTables() {
+        return tables_to_broadcast.empty();
+    }
+
+   public:
+    void broadcast_table(std::shared_ptr<cudf::table> table,
                        std::shared_ptr<StreamAndEvent> se);
 
     bool is_available() const { return true; }

@@ -115,6 +115,7 @@ struct CudaHashJoin {
     GpuShuffleManager build_shuffle_manager;
     GpuShuffleManager probe_shuffle_manager;
     GpuMpiManager gather_blooms;
+    GpuTableBroadcastManager build_broadcast_manager;
 };
 #else
 struct CudaHashJoin {};
