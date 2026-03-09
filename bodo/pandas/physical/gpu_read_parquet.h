@@ -66,7 +66,8 @@ const bool PARQUET_READ_ALL = false;
 // single chunked reader This is a soft limit applied to multi-part datasets.
 const int64_t CHUNKED_READER_BYTES_LIMIT = 4LL * 1024 * 1024 * 1024;  // 4GB
 
-const bool USE_ARROW_SOURCE = true;
+const bool USE_ARROW_SOURCE = false;
+const bool USE_KVIKIO_REMOTE_SOURCE = true;
 
 struct FilePart {
     std::string path;
@@ -79,37 +80,50 @@ struct FilePart {
 class arrow_file_datasource : public cudf::io::datasource {
    public:
     explicit arrow_file_datasource(
-        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file)
-        : file_(std::move(arrow_file)) {
-        // Cache buffer for subsequent reads.
-        file_buffer_ =
-            file_->ReadAt(0, file_->GetSize().ValueOrDie()).ValueOrDie();
-    }
+        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file,
+        arrow::Future<std::shared_ptr<arrow::Buffer>> file_buffer_future)
+        : arrow_file_(std::move(arrow_file)),
+          file_buffer_future_(std::move(file_buffer_future)) {}
 
     std::unique_ptr<buffer> host_read(size_t offset, size_t size) override {
-        auto ptr =
-            reinterpret_cast<uint8_t const *>(file_buffer_->data()) + offset;
+        ensure_buffer();
+
+        auto ptr = reinterpret_cast<const uint8_t *>(buffer_->data()) + offset;
+
         return std::make_unique<datasource::non_owning_buffer>(ptr, size);
     }
 
     size_t host_read(size_t offset, size_t size, uint8_t *dst) override {
-        auto ptr =
-            reinterpret_cast<uint8_t const *>(file_buffer_->data()) + offset;
+        ensure_buffer();
+
+        auto ptr = reinterpret_cast<const uint8_t *>(buffer_->data()) + offset;
+
         memcpy(dst, ptr, size);
         return size;
     }
 
     std::future<std::unique_ptr<buffer>> host_read_async(size_t offset,
                                                          size_t size) override {
-        return std::async(std::launch::deferred,
-                          [&] { return host_read(offset, size); });
+        return std::async(std::launch::deferred, [this, offset, size] {
+            return host_read(offset, size);
+        });
     }
 
-    size_t size() const override { return file_->GetSize().ValueOrDie(); }
+    size_t size() const override { return arrow_file_->GetSize().ValueOrDie(); }
 
    private:
-    std::shared_ptr<arrow::io::RandomAccessFile> file_;
-    std::shared_ptr<arrow::Buffer> file_buffer_;
+    void ensure_buffer() {
+        std::call_once(buffer_init_, [&] {
+            buffer_ = file_buffer_future_.result().ValueOrDie();
+        });
+    }
+
+    std::shared_ptr<arrow::io::RandomAccessFile> arrow_file_;
+
+    arrow::Future<std::shared_ptr<arrow::Buffer>> file_buffer_future_;
+
+    std::shared_ptr<arrow::Buffer> buffer_;
+    std::once_flag buffer_init_;
 };
 
 class RankBatchGenerator {
@@ -161,6 +175,12 @@ class RankBatchGenerator {
         }
         std::cout << " Done partitioning dataset " << std::endl;
         this->metrics.partition_file_time += end_timer(start_partition_dataset);
+
+        // Configure parquet options that are reused for each reader.
+        chunked_reader_opts.set_columns(selected_columns);
+        if (filter_ast_tree.size() > 0) {
+            chunked_reader_opts.set_filter(filter_ast_tree.back());
+        }
     }
 
     // Read multiple parts at a time for better performance
@@ -346,6 +366,11 @@ class RankBatchGenerator {
                 (!leftover_tbl || leftover_tbl->num_rows() == 0));
     }
 
+    bool use_arrow_source() {
+        return USE_ARROW_SOURCE ||
+               (!USE_KVIKIO_REMOTE_SOURCE && filesystem_->type_name() == "s3");
+    }
+
     std::unique_ptr<cudf::io::chunked_parquet_reader> next_reader() {
         if (next_part_idx >= parts_.size()) {
             // No parts assigned to this rank
@@ -371,7 +396,43 @@ class RankBatchGenerator {
         size_t total_bytes = 0;
         size_t curr_part_idx = next_part_idx;
         // Accumulate parts until CHUNKED_READER_BYTES_LIMIT is exceeded.
-        if (!USE_ARROW_SOURCE) {
+        if (use_arrow_source()) {
+            std::cout << "Using arrow datasource" << std::endl;
+            std::vector<std::unique_ptr<cudf::io::datasource>> sources;
+            while (total_bytes <= CHUNKED_READER_BYTES_LIMIT &&
+                   curr_part_idx < parts_.size()) {
+                const auto &part = parts_[curr_part_idx];
+                total_bytes += part.total_bytes;
+                total_rows += part.total_rows;
+
+                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
+                    filesystem_->OpenInputFile(part.path).ValueOrDie();
+                auto file_buffer_future = arrow_file->ReadAsync(
+                    0, arrow_file->GetSize().ValueOrDie());
+                sources.push_back(cudf::io::datasource::create(
+                    new arrow_file_datasource(arrow_file, file_buffer_future)));
+                curr_part_idx++;
+            }
+            next_part_idx = curr_part_idx;
+
+            std::vector<cudf::io::parquet::FileMetaData> metadata;
+
+            // Estimate bytes per row and set chunked reader limit to target
+            // rows * bytes per row
+            size_t chunked_reader_limit =
+                (total_bytes / total_rows) * target_rows_;
+            std::cout << " Total bytes in chunked reader: " << total_bytes
+                      << std::endl;
+            std::cout << "Limit : " << chunked_reader_limit << std::endl;
+
+            std::cout << " Creating chunked reader " << std::endl;
+            return std::make_unique<cudf::io::chunked_parquet_reader>(
+                chunked_reader_limit, std::move(sources), std::move(metadata),
+                chunked_reader_opts, chunked_reader_stream);
+
+        } else {
+            // Use kvikio_source
+            std::cout << "Using default datasource" << std::endl;
             std::vector<std::string> paths;
             while (total_bytes <= CHUNKED_READER_BYTES_LIMIT &&
                    curr_part_idx < parts_.size()) {
@@ -397,51 +458,10 @@ class RankBatchGenerator {
             cudf::io::source_info src_info(paths);
             chunked_reader_opts.set_source(src_info);
 
-            chunked_reader_opts.set_columns(selected_columns);
-            if (filter_ast_tree.size() > 0) {
-                chunked_reader_opts.set_filter(filter_ast_tree.back());
-            }
             std::cout << " Creating chunked reader " << std::endl;
             return std::make_unique<cudf::io::chunked_parquet_reader>(
                 chunked_reader_limit, chunked_reader_opts,
                 chunked_reader_stream);
-        } else {
-            std::vector<std::unique_ptr<cudf::io::datasource>> sources;
-            std::cout << " Creating datasources ... " << std::endl;
-            // arrow::io::IOContext ctx;
-
-            while (total_bytes <= CHUNKED_READER_BYTES_LIMIT &&
-                   curr_part_idx < parts_.size()) {
-                const auto &part = parts_[curr_part_idx];
-                total_bytes += part.total_bytes;
-                total_rows += part.total_rows;
-                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
-                    filesystem_->OpenInputFile(part.path).ValueOrDie();
-                sources.push_back(cudf::io::datasource::create(
-                    new arrow_file_datasource(arrow_file)));
-                curr_part_idx++;
-            }
-            std::cout << " Done creating datasources ... " << std::endl;
-            next_part_idx = curr_part_idx;
-
-            std::vector<cudf::io::parquet::FileMetaData> metadata;
-
-            // Estimate bytes per row and set chunked reader limit to target
-            // rows * bytes per row
-            size_t chunked_reader_limit =
-                (total_bytes / total_rows) * target_rows_;
-            std::cout << " Total bytes in chunked reader: " << total_bytes
-                      << std::endl;
-            std::cout << "Limit : " << chunked_reader_limit << std::endl;
-
-            chunked_reader_opts.set_columns(selected_columns);
-            if (filter_ast_tree.size() > 0) {
-                chunked_reader_opts.set_filter(filter_ast_tree.back());
-            }
-            std::cout << " Creating chunked reader " << std::endl;
-            return std::make_unique<cudf::io::chunked_parquet_reader>(
-                chunked_reader_limit, std::move(sources), std::move(metadata),
-                chunked_reader_opts, chunked_reader_stream);
         }
     }
 
