@@ -227,8 +227,6 @@ void filter_table_with_bloom(
     const uint64_t* low_dev_ptr  = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
   
-    // initialize mask to zero (optional)
-  
     auto mask_column = cudf::make_numeric_column(
         cudf::data_type{cudf::type_id::UINT8}, n,
         cudf::mask_state::UNALLOCATED, stream);
@@ -241,14 +239,6 @@ void filter_table_with_bloom(
         bf.m_bits, bf.k_hashes,
         mask_mut_view.data<uint8_t>());
     CUDA_TRY(cudaGetLastError());
-  
-    // copy mask_buf into mask_column's data (device->device on same stream)
-    CUDA_TRY(cudaMemcpyAsync(
-        mask_mut_view.data<uint8_t>(),
-        mask_ptr,
-        n * sizeof(uint8_t),
-        cudaMemcpyDeviceToDevice,
-        stream.value()));
   
     // convert uint8 mask to bool column (0/1 -> false/true)
     std::unique_ptr<cudf::column> bool_mask = cudf::cast(mask_mut_view, cudf::data_type{cudf::type_id::BOOL8}, stream);
