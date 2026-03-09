@@ -81,6 +81,24 @@ __global__ void set_bits_kernel_doublehash(
     }
 }
 
+std::shared_ptr<CudfBloomFilter> build_empty_bloom_filter(
+    uint64_t total_size,
+    double false_positive_rate,
+    rmm::cuda_stream_view stream) {
+
+    std::shared_ptr<CudfBloomFilter> bf = std::make_shared<CudfBloomFilter>();
+    bf->n_items = total_size;
+    // Compute number of bits and hashes the bloom filter will use.
+    compute_bloom_params(bf->n_items, false_positive_rate, bf->m_bits, bf->k_hashes);
+
+    // allocate bitset words
+    std::size_t words = (bf->m_bits + 63) / 64;
+    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
+    // zero initialize
+    CUDA_TRY(cudaMemsetAsync(bf->bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
+    return bf;
+}
+
 std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     cudf::table_view const& keys,
     uint64_t total_size,
@@ -98,6 +116,10 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     // zero initialize
     CUDA_TRY(cudaMemsetAsync(bf->bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
 
+    if (keys.num_rows() == 0) {
+        return bf;
+    }
+
     // compute two 64-bit hashes for each row of keys
     auto hash_table = cudf::hashing::murmurhash3_x64_128(keys, 0, stream);
     auto hash_table_view = hash_table->view();
@@ -112,10 +134,6 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     }
 
     std::size_t n = low_col.size();
-    if (n == 0) {
-        return bf;
-    }
-
     const uint64_t* low_dev_ptr = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
 

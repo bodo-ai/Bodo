@@ -89,7 +89,7 @@ void CudaHashJoin::build_hash_table(
     if (this->_build_table->num_rows() == 0) {
         // If we don't have chunks we don't need a build table, we won't match
         // anything
-        return;
+        //        return;
     }
 
     // 2. Create the hash_join object
@@ -97,21 +97,35 @@ void CudaHashJoin::build_hash_table(
     //    We maintain ownership of _join_handle to reuse it for probing.
     cudf::table_view build_view = _build_table->view();
 
-    this->_join_handle = std::make_unique<cudf::hash_join>(
-        build_view.select(this->build_key_indices), this->null_equality);
+    if (build_view.num_rows() != 0) {
+        std::cout << "todd -1 " << gather_blooms.get_rank() << std::endl;
+        this->_join_handle = std::make_unique<cudf::hash_join>(
+            build_view.select(this->build_key_indices), this->null_equality);
+    }
 
+    std::cout << "todd 0 " << gather_blooms.get_rank() << std::endl;
     uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
+    std::cout << "todd 1 " << gather_blooms.get_rank() << std::endl;
     // Generate local bloom filter.
-    this->_build_bloom_filter = build_bloom_filter_from_table(
-        build_view.select(this->build_key_indices), build_total_size, 0.01,
-        cudf::get_default_stream());
+    if (build_view.num_rows() != 0) {
+        this->_build_bloom_filter = build_bloom_filter_from_table(
+            build_view.select(this->build_key_indices), build_total_size, 0.01,
+            cudf::get_default_stream());
+    } else {
+        this->_build_bloom_filter = build_empty_bloom_filter(
+            build_total_size, 0.01, cudf::get_default_stream());
+    }
+    std::cout << "todd 2 " << gather_blooms.get_rank() << std::endl;
     // Get all GPU nodes' bloom filters.
     std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
         gather_blooms.all_gather_device_buffers(
             this->_build_bloom_filter->bitset, cudf::get_default_stream());
+    std::cout << "todd 3 " << gather_blooms.get_rank() << std::endl;
     // AtomicOR them all together.
     for (auto& one_bloom : all_blooms) {
+        std::cout << "todd 3.1 " << gather_blooms.get_rank() << std::endl;
         if (one_bloom) {
+            std::cout << "todd 3.2 " << gather_blooms.get_rank() << std::endl;
             size_t one_bloom_size = one_bloom->size();
             if (one_bloom_size % 8 != 0) {
                 throw std::runtime_error(
@@ -121,16 +135,21 @@ void CudaHashJoin::build_hash_table(
                              cudf::get_default_stream());
         }
     }
+    std::cout << "todd 4 " << gather_blooms.get_rank() << std::endl;
 }
 
 void CudaHashJoin::runtime_filter(
     cudf::table_view const& probe_table,
     std::vector<cudf::size_type> const& probe_key_indices,
     std::unique_ptr<cudf::column>& prev_mask, rmm::cuda_stream_view stream) {
+    std::cout << "rf 0" << gather_blooms.get_rank() << std::endl;
     if (_build_bloom_filter) {
+        std::cout << "rf 1" << gather_blooms.get_rank() << std::endl;
         filter_table_with_bloom(probe_table, probe_key_indices,
                                 *_build_bloom_filter, prev_mask, stream);
+        std::cout << "rf 2" << gather_blooms.get_rank() << std::endl;
     }
+    std::cout << "rf 3" << gather_blooms.get_rank() << std::endl;
 }
 
 void CudaHashJoin::FinalizeBuild() {

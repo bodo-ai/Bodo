@@ -301,6 +301,8 @@ class GpuMpiManager {
     GpuMpiManager();
     ~GpuMpiManager();
 
+    int get_rank() const { return rank; }
+
     /**
      * @brief Get the underlying NCCL communicator
      * @return ncclComm_t
