@@ -352,11 +352,17 @@ uint64_t Pipeline::Execute() {
                         batch = RetrieveTable(x, std::vector<int64_t>());
                     } else {
 #ifdef USE_CUDF
-                        auto empty_se = make_stream_and_event(g_use_async);
-                        x.stream_event->event.wait(empty_se->stream);
-                        batch = GPU_DATA(make_empty_like(x.table, empty_se),
-                                         x.schema, empty_se);
-                        empty_se->event.record(empty_se->stream);
+                        if (is_gpu_rank()) {
+                            auto empty_se = make_stream_and_event(g_use_async);
+                            x.stream_event->event.wait(empty_se->stream);
+                            batch = GPU_DATA(make_empty_like(x.table, empty_se),
+                                             x.schema, empty_se);
+                            empty_se->event.record(empty_se->stream);
+                        } else {
+                            // Non-GPU ranks return nullptr so just pass it
+                            // along
+                            batch = x;
+                        }
 #endif
                     }
                 },

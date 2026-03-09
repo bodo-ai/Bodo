@@ -221,8 +221,9 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
     size_t row_size_bytes(const cudf::table_view &tv,
                           std::shared_ptr<StreamAndEvent> se) {
-        if (tv.num_rows() == 0)
+        if (tv.num_rows() == 0) {
             return 0;
+        }
         return table_bytes(tv, se) / tv.num_rows();
     }
 
@@ -230,6 +231,14 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            if (prev_op_result == OperatorResult::FINISHED) {
+                finished = true;
+            }
+            return finished ? OperatorResult::FINISHED
+                            : OperatorResult::NEED_MORE_INPUT;
+        }
+
         if (prev_batch_se) {
             // Write batches to file in pipeline order.
             // Wait for last write pipeline batch to finish before running

@@ -371,7 +371,7 @@ class GpuShuffleManager : public GpuMpiManager {
      */
     void shuffle_table(std::shared_ptr<cudf::table> table,
                        const std::vector<cudf::size_type>& partition_indices,
-                       cuda_event_wrapper event);
+                       std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Progress any inflight shuffles
@@ -442,6 +442,13 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 std::vector<std::unique_ptr<rmm::device_buffer>>
 allgather_device_buffers_across_ranks(ncclComm_t nccl_comm, cudaStream_t stream,
                                       rmm::device_buffer const& local_buf);
+
+/**
+ * @brief Return whether the current rank has a GPU assigned (i.e. should
+ * participate in GPU compute)
+ *
+ */
+bool is_gpu_rank();
 
 #else
 // Empty implementation when CUDF is not available

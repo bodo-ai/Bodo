@@ -32,7 +32,9 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        collected_rows.push_back(input_batch);
+        if (is_gpu_rank()) {
+            collected_rows.push_back(input_batch);
+        }
         return (prev_op_result == OperatorResult::FINISHED)
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -66,6 +68,11 @@ class PhysicalGPUCTERef : public PhysicalGPUSource {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, cte->arrow_output_schema, se),
+                    OperatorResult::FINISHED};
+        }
+
         GPU_DATA next_batch;
         if (next_index >= cte->collected_rows.size()) {
             next_batch.table =

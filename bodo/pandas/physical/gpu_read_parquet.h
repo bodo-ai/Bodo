@@ -83,7 +83,7 @@ class RankBatchGenerator {
         get_dataset();
 
         // Only assign parts to GPU-pinned ranks
-        if (files_.empty() || comm == MPI_COMM_NULL) {
+        if (files_.empty() || !is_gpu_rank()) {
             // nothing to do
             parts_ = {};
             current_part_idx_ = 0;
@@ -538,6 +538,12 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             time_pt start_init = start_timer();
             init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
+        }
+
+        // Non-GPU ranks return nullptr to avoid any GPU work
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_schema, se),
+                    OperatorResult::FINISHED};
         }
 
         time_pt start_produce = start_timer();

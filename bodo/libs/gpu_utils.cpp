@@ -79,15 +79,14 @@ GpuShuffleManager::GpuShuffleManager()
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
-    cuda_event_wrapper event) {
+    std::shared_ptr<StreamAndEvent> se) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.push_back(
-        ShuffleTableInfo(table, partition_indices, event));
+    this->tables_to_shuffle.emplace_back(table, partition_indices, se->event);
 }
 
 void GpuShuffleManager::do_shuffle() {
@@ -600,6 +599,11 @@ uint64_t GpuMpiManager::allreduce(uint64_t local) {
                             mpi_comm),
               "GpuMpiManager::allreduce: MPI error on MPI_Allreduce:");
     return allsum;
+}
+
+bool is_gpu_rank() {
+    static bool is_gpu_rank = (get_gpu_id().value() != -1);
+    return is_gpu_rank;
 }
 
 #endif  // USE_CUDF

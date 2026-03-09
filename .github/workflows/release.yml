@@ -29,8 +29,6 @@ jobs:
       arm: false
     secrets: inherit
   bodo-conda-linux-arm:
-    # Don't publish linux arm until we can get nightly fixed
-    if: false
     strategy:
       # Don't cancel other jobs if one fails
       fail-fast: false
@@ -78,9 +76,7 @@ jobs:
     secrets: inherit
 
   docker-img:
-    # Don't publish linux arm until we can get nightly fixed
-    #needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda]
-    needs: [bodo-conda-linux-x86, iceberg-conda, bodosql-conda]
+    needs: [bodo-conda-linux-x86, bodo-conda-linux-arm, iceberg-conda, bodosql-conda]
     uses: ./.github/workflows/docker_build_and_publish.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
