@@ -47,6 +47,19 @@ struct CudaHashJoin {
 
     bool is_broadcast_join;
 
+    std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
+    std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
+    std::shared_ptr<GpuMpiManager> gather_blooms;
+    std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
+
+    bool hasComm() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->get_mpi_comm() != MPI_COMM_NULL;
+        } else {
+            return build_shuffle_manager->get_mpi_comm() != MPI_COMM_NULL;
+        }
+    }
+
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
                  std::vector<cudf::size_type> probe_keys,
@@ -65,7 +78,15 @@ struct CudaHashJoin {
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
           null_equality(null_eq),
-          is_broadcast_join(is_broadcast) {}
+          is_broadcast_join(is_broadcast) {
+        if (is_broadcast_join) {
+            build_broadcast_manager =
+                std::make_shared<GpuTableBroadcastManager>();
+        } else {
+            build_shuffle_manager = std::make_shared<GpuShuffleManager>();
+            probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+        }
+    }
 
     CudaHashJoin() = default;
 
@@ -110,12 +131,47 @@ struct CudaHashJoin {
         return min_max_stats;
     }
 
-    // Public so PhysicalGPUJoin can access to determine if there are pending
-    // shuffles
-    GpuShuffleManager build_shuffle_manager;
-    GpuShuffleManager probe_shuffle_manager;
-    GpuMpiManager gather_blooms;
-    GpuTableBroadcastManager build_broadcast_manager;
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    void build_complete() {
+        if (is_broadcast_join) {
+            build_broadcast_manager->complete();
+        } else {
+            build_shuffle_manager->complete();
+        }
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_all_build_complete() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->all_complete();
+        } else {
+            return build_shuffle_manager->all_complete();
+        }
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    void probe_complete() {
+        if (!is_broadcast_join) {
+            probe_shuffle_manager->complete();
+        }
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_all_probe_complete() {
+        if (is_broadcast_join) {
+            return true;
+        } else {
+            return probe_shuffle_manager->all_complete();
+        }
+    }
 };
 #else
 struct CudaHashJoin {};

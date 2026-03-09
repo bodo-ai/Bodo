@@ -86,11 +86,6 @@ void CudaHashJoin::build_hash_table(
         build_views.push_back(chunk->view());
     }
     this->_build_table = cudf::concatenate(build_views);
-    if (this->_build_table->num_rows() == 0) {
-        // If we don't have chunks we don't need a build table, we won't match
-        // anything
-        //        return;
-    }
 
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
@@ -102,7 +97,8 @@ void CudaHashJoin::build_hash_table(
             build_view.select(this->build_key_indices), this->null_equality);
     }
 
-    uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
+    gather_blooms = std::make_shared<GpuMpiManager>();
+    uint64_t build_total_size = gather_blooms->allreduce(build_view.num_rows());
     // Generate local bloom filter.
     if (build_view.num_rows() != 0) {
         this->_build_bloom_filter = build_bloom_filter_from_table(
@@ -116,7 +112,7 @@ void CudaHashJoin::build_hash_table(
     if (!is_broadcast_join) {
         // Get all GPU nodes' bloom filters.
         std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
-            gather_blooms.all_gather_device_buffers(
+            gather_blooms->all_gather_device_buffers(
                 this->_build_bloom_filter->bitset, cudf::get_default_stream());
         // AtomicOR them all together.
         for (auto& one_bloom : all_blooms) {
@@ -145,7 +141,7 @@ void CudaHashJoin::runtime_filter(
 }
 
 void CudaHashJoin::FinalizeBuild() {
-    if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
+    if (hasComm()) {
         this->build_hash_table(this->_build_chunks);
     }
 
@@ -154,8 +150,7 @@ void CudaHashJoin::FinalizeBuild() {
 
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
-        if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL &&
-            this->_build_table->num_rows()) {
+        if (hasComm() && this->_build_table->num_rows()) {
             auto [min, max] =
                 cudf::minmax(this->_build_table->get_column(col_idx).view());
             std::vector<std::unique_ptr<cudf::column>> columns;
@@ -207,10 +202,10 @@ void CudaHashJoin::BuildConsumeBatch(
     std::shared_ptr<cudf::table> build_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event) {
     if (is_broadcast_join) {
-        this->build_broadcast_manager.broadcast_table(build_chunk,
-                                                      input_stream_event);
+        this->build_broadcast_manager->broadcast_table(build_chunk,
+                                                       input_stream_event);
         std::vector<std::unique_ptr<cudf::table>> received_build_chunks =
-            build_broadcast_manager.progress();
+            build_broadcast_manager->progress();
         for (auto& chunk : received_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
         }
@@ -218,10 +213,10 @@ void CudaHashJoin::BuildConsumeBatch(
         // TODO: remove unused columns before shuffling to save network
         // bandwidth and GPU memory. Store the incoming build chunk for later
         // finalization
-        this->build_shuffle_manager.shuffle_table(
+        this->build_shuffle_manager->shuffle_table(
             build_chunk, this->build_key_indices, input_stream_event);
         std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-            build_shuffle_manager.progress();
+            build_shuffle_manager->progress();
         for (auto& chunk : shuffled_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
         }
@@ -282,12 +277,12 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     } else {
         // TODO: remove unused columns before shuffling to save network
         // bandwidth and GPU memory Send local data to appropriate ranks
-        probe_shuffle_manager.shuffle_table(
+        probe_shuffle_manager->shuffle_table(
             probe_chunk, this->probe_key_indices, input_stream_event);
 
         // Receive data destined for this rank
         std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
-            probe_shuffle_manager.progress();
+            probe_shuffle_manager->progress();
         if (!is_gpu_rank()) {
             return nullptr;
         }

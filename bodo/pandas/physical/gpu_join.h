@@ -69,8 +69,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
-          is_broadcast_join(doBroadcastJoin(*logical_join.children[0],
-                                            *logical_join.children[1])) {
+          is_broadcast_join(doBroadcastJoin(*logical_join.children[1],
+                                            *logical_join.children[0])) {
         assert(logical_join.join_type == duckdb::JoinType::INNER);
     }
 
@@ -78,8 +78,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                     const std::shared_ptr<bodo::Schema> build_table_schema,
                     const std::shared_ptr<bodo::Schema> probe_table_schema)
         : has_non_equi_cond(false),
-          is_broadcast_join(doBroadcastJoin(*logical_join.children[0],
-                                            *logical_join.children[1])) {
+          is_broadcast_join(doBroadcastJoin(*logical_join.children[1],
+                                            *logical_join.children[0])) {
         throw std::runtime_error("Not implemented.");
     }
 
@@ -237,10 +237,10 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
-            cuda_join->build_shuffle_manager.complete();
+            cuda_join->build_complete();
         }
         return prev_op_result == OperatorResult::FINISHED &&
-                       cuda_join->build_shuffle_manager.all_complete()
+                       cuda_join->is_all_build_complete()
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
     }
@@ -266,15 +266,14 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
-            cuda_join->probe_shuffle_manager.complete();
+            cuda_join->probe_complete();
         }
 
-        return {
-            output_gpu_data,
-            local_finished && cuda_join->probe_shuffle_manager.all_complete()
-                ? OperatorResult::FINISHED
-                : (local_finished ? OperatorResult::HAVE_MORE_OUTPUT
-                                  : OperatorResult::NEED_MORE_INPUT)};
+        return {output_gpu_data,
+                local_finished && cuda_join->is_all_probe_complete()
+                    ? OperatorResult::FINISHED
+                    : (local_finished ? OperatorResult::HAVE_MORE_OUTPUT
+                                      : OperatorResult::NEED_MORE_INPUT)};
     }
 
     /**
