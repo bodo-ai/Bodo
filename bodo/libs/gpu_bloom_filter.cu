@@ -227,24 +227,21 @@ void filter_table_with_bloom(
     const uint64_t* low_dev_ptr  = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
   
-    rmm::device_buffer mask_buf(n * sizeof(uint8_t), stream);
-    uint8_t* mask_ptr = static_cast<uint8_t*>(mask_buf.data());
     // initialize mask to zero (optional)
-    CUDA_TRY(cudaMemsetAsync(mask_ptr, 0, n * sizeof(uint8_t), stream.value()));
   
+    auto mask_column = cudf::make_numeric_column(
+        cudf::data_type{cudf::type_id::UINT8}, n,
+        cudf::mask_state::UNALLOCATED, stream);
+    auto mask_mut_view = mask_column->mutable_view();
+
     int grid = static_cast<int>((n + block - 1) / block);
     test_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
         low_dev_ptr, high_dev_ptr, n,
         reinterpret_cast<const uint64_t*>(bf.bitset.data()),
         bf.m_bits, bf.k_hashes,
-        mask_ptr);
+        mask_mut_view.data<uint8_t>());
     CUDA_TRY(cudaGetLastError());
   
-    // convert mask to cudf::column (boolean)
-    auto mask_column = cudf::make_numeric_column(
-        cudf::data_type{cudf::type_id::UINT8}, n,
-        cudf::mask_state::UNALLOCATED, stream);
-    auto mask_mut_view = mask_column->mutable_view();
     // copy mask_buf into mask_column's data (device->device on same stream)
     CUDA_TRY(cudaMemcpyAsync(
         mask_mut_view.data<uint8_t>(),
