@@ -62,8 +62,9 @@ static void ensure_pa_wrappers_imported() {
 }
 
 const bool PARQUET_READ_ALL = false;
-// TODO: dynamically decide based on filesizes
-const int CHUNKED_READER_PARTS_PER_READER = 100;
+// Limit the total number of uncompressed bytes that can be processed by a
+// single chunked reader This is a soft limit applied to multi-part datasets.
+const int64_t CHUNKED_READER_BYTES_LIMIT = 4LL * 1024 * 1024 * 1024;  // 4GB
 
 struct FilePart {
     std::string path;
@@ -195,7 +196,7 @@ class RankBatchGenerator {
         }
 
         if (!curr_reader && has_next_reader()) {
-            initialize_chunked_reader();
+            curr_reader = next_reader();
         }
 
         while (curr_reader && rows_accum < target_rows_) {
@@ -245,7 +246,7 @@ class RankBatchGenerator {
                 // read from it again
                 curr_reader.reset();
                 if (has_next_reader()) {
-                    initialize_chunked_reader();
+                    curr_reader = next_reader();
                 }
             }
         }
@@ -305,15 +306,15 @@ class RankBatchGenerator {
    private:
     bool has_next_reader() { return next_part_idx < parts_.size(); }
 
-    void initialize_chunked_reader() {
-        int parts_to_allocate_for = 0;
+    std::unique_ptr<cudf::io::chunked_parquet_reader> next_reader() {
         if (next_part_idx >= parts_.size()) {
             // No parts assigned to this rank
             // Or we exhausted all parts already
-            return;
+            return nullptr;
         } else if (parts_.size() == 1) {
             // Row group partition case
-            parts_to_allocate_for = parts_.size();
+            // TODO: break up single file larger than chunked reader limit into
+            // multiple readers.
             int start_row_group = parts_[0].start_row_group;
             int end_row_group = parts_[0].end_row_group;
             std::vector<int> single_file_row_groups(end_row_group -
@@ -329,21 +330,22 @@ class RankBatchGenerator {
         size_t total_rows = 0;
         size_t total_bytes = 0;
         std::vector<std::string> paths;
-        parts_to_allocate_for = std::min(CHUNKED_READER_PARTS_PER_READER,
-                                         (int)(parts_.size() - next_part_idx));
-        for (int i = 0; i < parts_to_allocate_for; ++i) {
-            const auto &part = parts_[next_part_idx + i];
-            std::string path = part.path;
-            total_rows += part.total_rows;
+        size_t curr_part_idx = next_part_idx;
+        // Accumulate parts until CHUNKED_READER_BYTES_LIMIT is exceeded.
+        while (total_bytes <= CHUNKED_READER_BYTES_LIMIT &&
+               curr_part_idx < parts_.size()) {
+            const auto &part = parts_[curr_part_idx];
             total_bytes += part.total_bytes;
-            // Use KVIO for S3
-            // TODO: Custom data source for better performance (e.g. Arrow
-            // filesystem input stream) ?
+            total_rows += part.total_rows;
+            std::string path = part.path;
             if (filesystem_->type_name() == "s3") {
                 path = "s3://" + path;
             }
             paths.push_back(path);
+            curr_part_idx++;
         }
+        next_part_idx = curr_part_idx;
+
         // Estimate bytes per row and set chunked reader limit to target rows *
         // bytes per row
         size_t chunked_reader_limit = (total_bytes / total_rows) * target_rows_;
@@ -358,10 +360,8 @@ class RankBatchGenerator {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
         }
         std::cout << " Creating chunked reader " << std::endl;
-        curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
+        return std::make_unique<cudf::io::chunked_parquet_reader>(
             chunked_reader_limit, chunked_reader_opts, chunked_reader_stream);
-        std::cout << " Done creating chunked reader " << std::endl;
-        next_part_idx += parts_to_allocate_for;
     }
 
     /** Get PyArrow parquet dataset from path and populate files_ and
