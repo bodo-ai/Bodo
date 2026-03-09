@@ -311,6 +311,8 @@ struct Calibration {
 
 static Calibration g_calib;
 
+#ifndef ALWAYS_RUN_ON_GPU
+
 static std::string get_calib_path() {
     std::string ret = get_cache_dir() + "/.bodo_gpu_calibration.txt";
 #ifdef DEBUG_GPU_SELECTOR
@@ -571,6 +573,7 @@ static void run_calibration(Calibration &c) {
         save_calibration(c);
     }
 }
+#endif
 
 static bool g_calib_initialized = false;
 
@@ -584,7 +587,9 @@ static void init_cost_model() {
     if (g_calib_initialized) {
         return;
     }
+#ifndef ALWAYS_RUN_ON_GPU
     run_calibration(g_calib);
+#endif
     g_calib_initialized = true;
 
     PCIe_BW = g_calib.pcie_bw;
