@@ -135,7 +135,7 @@ static bodo::tests::suite tests([] {
 
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-            manager.shuffle_table(input_ptr, {0}, se->event);
+            manager.shuffle_table(input_ptr, {0}, se);
             manager.complete();
 
             std::vector<std::unique_ptr<cudf::table>> received_tables;
@@ -203,7 +203,7 @@ static bodo::tests::suite tests([] {
 
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-            manager.shuffle_table(input_ptr, {0}, se->event);
+            manager.shuffle_table(input_ptr, {0}, se);
             manager.complete();
 
             std::vector<std::unique_ptr<cudf::table>> received_tables;

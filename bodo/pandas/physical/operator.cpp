@@ -143,18 +143,20 @@ GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
 
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
-    auto cpu_batch = convertGPUToTable(input_batch);
+    std::shared_ptr<table_info> cpu_batch =
+        is_gpu_rank() ? convertGPUToTable(input_batch) : nullptr;
     auto [cpu_batch_fragment, exchange_result] =
-        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+        gpu_to_cpu_exchange(cpu_batch, input_batch.schema, prev_op_result);
     return ConsumeBatch(cpu_batch_fragment, exchange_result);
 }
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
                                    OperatorResult prev_op_result) {
-    auto cpu_batch = convertGPUToTable(input_batch);
+    std::shared_ptr<table_info> cpu_batch =
+        is_gpu_rank() ? convertGPUToTable(input_batch) : nullptr;
     auto [cpu_batch_fragment, exchange_result] =
-        gpu_to_cpu_exchange(cpu_batch, prev_op_result);
+        gpu_to_cpu_exchange(cpu_batch, input_batch.schema, prev_op_result);
     return ProcessBatch(cpu_batch_fragment, exchange_result);
 }
 
@@ -169,7 +171,9 @@ OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
                                              OperatorResult prev_op_result) {
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
     // Wait until previous GPU pipeline processing is done.
-    input_batch.stream_event->event.wait(se->stream);
+    if (input_batch.stream_event) {
+        input_batch.stream_event->event.wait(se->stream);
+    }
     auto gpu_result = ConsumeBatchGPU(input_batch, prev_op_result, se);
     se->event.record(se->stream);
     return gpu_result;
@@ -190,7 +194,9 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     GPU_DATA input_batch, OperatorResult prev_op_result) {
     std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
     // Wait until previous GPU pipeline processing is done.
-    input_batch.stream_event->event.wait(se->stream);
+    if (input_batch.stream_event) {
+        input_batch.stream_event->event.wait(se->stream);
+    }
     auto gpu_result = ProcessBatchGPU(input_batch, prev_op_result, se);
     se->event.record(se->stream);
     return gpu_result;
@@ -463,6 +469,7 @@ RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
 
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
 GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
+                             std::shared_ptr<arrow::Schema> input_schema,
                              OperatorResult prev_op_result) {
     if (finished) {
         if (input_batch && input_batch->nrows() > 0) {
@@ -474,12 +481,15 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
     }
 
     if (!this->shuffle_state) {
-        Initialize(input_batch.get());
+        Initialize(input_schema);
     }
 
     // Shuffle data to all ranks and append result to output builder
-    std::vector<bool> append_rows(input_batch->nrows(), true);
-    this->shuffle_state->AppendBatch(input_batch, append_rows);
+    if (input_batch) {
+        std::vector<bool> append_rows(input_batch->nrows(), true);
+        this->shuffle_state->AppendBatch(input_batch, append_rows);
+    }
+
     auto result = this->shuffle_state->ShuffleIfRequired(true);
     if (result.has_value()) {
         std::shared_ptr<table_info> shuffled_table = result.value();
@@ -511,16 +521,17 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
                                            : OperatorResult::HAVE_MORE_OUTPUT));
 }
 
-void GPUtoCPUExchange::Initialize(table_info *input_batch) {
-    std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+void GPUtoCPUExchange::Initialize(std::shared_ptr<arrow::Schema> table_schema) {
+    std::shared_ptr<bodo::Schema> bodo_schema =
+        bodo::Schema::FromArrowSchema(table_schema);
     ctb_state = std::make_unique<ChunkedTableBuilderState>(
-        input_batch->schema(), get_streaming_batch_size());
+        bodo_schema, get_streaming_batch_size());
 
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
     this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
-        input_batch->schema(), ctb_state->dict_builders, gpu_ranks, cpu_ranks,
-        curr_iter, sync_freq, this->op_id);
+        bodo_schema, ctb_state->dict_builders, gpu_ranks, cpu_ranks, curr_iter,
+        sync_freq, this->op_id);
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
 

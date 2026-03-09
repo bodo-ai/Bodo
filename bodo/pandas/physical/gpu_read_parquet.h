@@ -98,7 +98,7 @@ class RankBatchGenerator {
         get_dataset();
 
         // Only assign parts to GPU-pinned ranks
-        if (files_.empty() || comm == MPI_COMM_NULL) {
+        if (files_.empty() || !is_gpu_rank()) {
             // nothing to do
             parts_ = {};
             return;
@@ -158,7 +158,7 @@ class RankBatchGenerator {
     }
 
     bool read_finished() {
-        return ((!chunked_reader && curr_part_idx >= parts_.size()) &&
+        return ((!curr_reader && !has_next_reader()) &&
                 (!leftover_tbl || leftover_tbl->num_rows() == 0));
     }
 
@@ -173,7 +173,7 @@ class RankBatchGenerator {
         size_t rows_accum = 0;
         if (leftover_tbl) {
             std::size_t n = leftover_tbl->num_rows();
-            std::cout << " leftover table nrows " << n << std::endl;
+            // std::cout << " leftover table nrows " << n << std::endl;
             if (n <= target_rows_) {
                 rows_accum += n;
                 gpu_tables.emplace_back(std::move(leftover_tbl));
@@ -189,112 +189,108 @@ class RankBatchGenerator {
 
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
-            std::cout << " returning leftover table rows | read finished = "
-                      << read_finished() << std::endl;
+            // std::cout << " returning leftover table rows | read finished = "
+            //           << read_finished() << std::endl;
             return {std::move(gpu_tables[0]), read_finished()};
         }
 
-        // Initialize new chunked reader if we are starting a new chunk-group.
-        if (!this->chunked_reader) {
+        if (!curr_reader && has_next_reader()) {
             initialize_chunked_reader();
         }
 
-        if (!chunked_reader) {
-            // We exhausted all parts already
-            return {empty_table_from_arrow_schema(arrow_schema), true};
-        }
+        while (curr_reader && rows_accum < target_rows_) {
+            while (curr_reader->has_next() && rows_accum < target_rows_) {
+                try {
+                    auto table_and_metadata = curr_reader->read_chunk();
+                    auto tbl = std::move(table_and_metadata.tbl);
+                    // std::cout << "##### Read " << tbl->num_rows()
+                    //         << " rows from: " << parts_[0].path << "#####"
+                    //         << std::endl;
 
-        if (chunked_reader->has_next()) {
-            auto table_and_metadata = chunked_reader->read_chunk();
-            // std::cout << " Read chunk with " <<
-            // table_and_metadata.tbl->num_rows()
-            //           << " rows | read finished = " << read_finished()
-            //           << std::endl;
-            if (!table_and_metadata.tbl) {
-                throw std::runtime_error("Chunked reader returned null table");
+                    if (!tbl || tbl->num_rows() == 0) {
+                        // no rows in this row group (rare) — advance
+                        continue;
+                    }
+
+                    std::size_t tbl_n = tbl->num_rows();
+                    if (rows_accum + tbl_n <= target_rows_) {
+                        // std::cout << " Adding table to GPU tables until batch
+                        // is filled"
+                        //     << std::endl;
+                        rows_accum += tbl_n;
+                        gpu_tables.push_back(std::move(tbl));
+                    } else {
+                        // std::cout << " Read too many rows, slicing tables"
+                        //         << std::endl;
+                        std::size_t need = target_rows_ - rows_accum;
+                        cudf::table_view tv = tbl->view();
+                        auto batch = cudf::slice(tv, {0, (int)need})[0];
+                        auto remain =
+                            cudf::slice(tv, {(int)need, (int)tbl_n})[0];
+                        gpu_tables.push_back(
+                            std::make_unique<cudf::table>(batch));
+                        leftover_tbl = std::make_unique<cudf::table>(remain);
+                        rows_accum = target_rows_;
+                    }
+                } catch (const std::exception &e) {
+                    // reading failed: propagate or print and stop
+                    throw std::runtime_error(
+                        "PhysicalGPUReadParquet(): read_chunk failed " +
+                        parts_[0].path + " " + std::string(e.what()));
+                }
             }
-            return {std::move(table_and_metadata.tbl), false};
+
+            if (!curr_reader->has_next()) {
+                // Free the chunked reader memory as soon as we know we won't
+                // read from it again
+                curr_reader.reset();
+                if (has_next_reader()) {
+                    initialize_chunked_reader();
+                }
+            }
         }
-        // Free the chunked reader memory as soon as we know we won't read from
-        // it again
-        chunked_reader.reset();
-        return {empty_table_from_arrow_schema(arrow_schema), false};
 
-        // while (chunked_reader->has_next() && rows_accum < target_rows_) {
-        //     try {
-        //         auto table_and_metadata = chunked_reader->read_chunk();
-        //         auto tbl = std::move(table_and_metadata.tbl);
-        //         std::cout << "##### Read " << tbl->num_rows()
-        //                   << " rows from: " << parts_[0].path << "#####"
-        //                   << std::endl;
+        // If we collected no tables (e.g., parts exhausted), return EOF
+        if (gpu_tables.empty()) {
+            // If we've exhausted all parts, EOF true; otherwise false but no
+            // data (shouldn't happen)
+            if (!read_finished()) {
+                std::cout << " no tables read, returning EOF = "
+                          << read_finished() << std::endl;
+                std::cout << " curr_reader: " << (bool)curr_reader << std::endl;
+                std::cout << " Next part idx" << next_part_idx
+                          << " total parts " << parts_.size() << std::endl;
+                std::cout << " leftover table" << (bool)leftover_tbl
+                          << " total parts " << parts_.size() << std::endl;
+                throw std::runtime_error(
+                    "No gpu tables read but not EOF, unexpected state");
+            }
+            return {empty_table_from_arrow_schema(arrow_schema),
+                    read_finished()};
+        }
 
-        //         if (!tbl || tbl->num_rows() == 0) {
-        //             // no rows in this row group (rare) — advance
-        //             continue;
-        //         }
-
-        //         std::size_t tbl_n = tbl->num_rows();
-        //         if (rows_accum + tbl_n <= target_rows_) {
-        //             std::cout
-        //                 << " Adding table to GPU tables until batch is filled
-        //                 "
-        //                 << std::endl;
-        //             rows_accum += tbl_n;
-        //             gpu_tables.push_back(std::move(tbl));
-        //         } else {
-        //             std::cout << " Read too many rows, slicing tables"
-        //                       << std::endl;
-        //             std::size_t need = target_rows_ - rows_accum;
-        //             cudf::table_view tv = tbl->view();
-        //             auto batch = cudf::slice(tv, {0, (int)need})[0];
-        //             auto remain = cudf::slice(tv, {(int)need,
-        //             (int)tbl_n})[0];
-        //             gpu_tables.push_back(std::make_unique<cudf::table>(batch));
-        //             leftover_tbl = std::make_unique<cudf::table>(remain);
-        //             rows_accum = target_rows_;
-        //         }
-        //     } catch (const std::exception &e) {
-        //         // reading failed: propagate or print and stop
-        //         throw std::runtime_error(
-        //             "PhysicalGPUReadParquet(): read_chunk failed " +
-        //             parts_[0].path + " " + std::string(e.what()));
-        //     }
-        // }
-        // if (!chunked_reader->has_next()) {
-        //     // Free the chunked reader memory as soon as we know we won't
-        //     read from it again chunked_reader.reset();
-        // }
-
-        // // If we collected no tables (e.g., parts exhausted), return EOF
-        // if (gpu_tables.empty()) {
-        //     // If we've exhausted all parts, EOF true; otherwise false but no
-        //     // data (shouldn't happen)
-        //     throw std::runtime_error("No gpu tables read but not EOF,
-        //     unexpected state");
-        // }
-
-        // // Concatenate gpu_tables into a single cudf::table
-        // // Build vector of table_views
+        // Concatenate gpu_tables into a single cudf::table
+        // Build vector of table_views
         // std::cout << "concatenating " << gpu_tables.size() << " GPU tables "
         //           << std::endl;
-        // std::vector<cudf::table_view> views;
-        // views.reserve(gpu_tables.size());
-        // for (auto &tptr : gpu_tables) {
-        //     views.emplace_back(tptr->view());
-        // }
+        std::vector<cudf::table_view> views;
+        views.reserve(gpu_tables.size());
+        for (auto &tptr : gpu_tables) {
+            views.emplace_back(tptr->view());
+        }
 
-        // std::unique_ptr<cudf::table> batch;
-        // if (views.size() == 1) {
-        //     // move the single table out
-        //     batch = std::move(gpu_tables[0]);
-        // } else {
-        //     // concatenate returns a std::unique_ptr<cudf::table>
-        //     batch = cudf::concatenate(views, se->stream);
-        // }
+        std::unique_ptr<cudf::table> batch;
+        if (views.size() == 1) {
+            // move the single table out
+            batch = std::move(gpu_tables[0]);
+        } else {
+            // concatenate returns a std::unique_ptr<cudf::table>
+            batch = cudf::concatenate(views, se->stream);
+        }
 
         // std::cout << " read parquet returning batch | read finished =  "
         //           << read_finished() << std::endl;
-        // return {std::move(batch), read_finished()};
+        return {std::move(batch), read_finished()};
     }
 
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
@@ -307,9 +303,11 @@ class RankBatchGenerator {
     }
 
    private:
+    bool has_next_reader() { return next_part_idx < parts_.size(); }
+
     void initialize_chunked_reader() {
         int parts_to_allocate_for = 0;
-        if (curr_part_idx >= parts_.size()) {
+        if (next_part_idx >= parts_.size()) {
             // No parts assigned to this rank
             // Or we exhausted all parts already
             return;
@@ -332,9 +330,9 @@ class RankBatchGenerator {
         size_t total_bytes = 0;
         std::vector<std::string> paths;
         parts_to_allocate_for = std::min(CHUNKED_READER_PARTS_PER_READER,
-                                         (int)(parts_.size() - curr_part_idx));
+                                         (int)(parts_.size() - next_part_idx));
         for (int i = 0; i < parts_to_allocate_for; ++i) {
-            const auto &part = parts_[curr_part_idx + i];
+            const auto &part = parts_[next_part_idx + i];
             std::string path = part.path;
             total_rows += part.total_rows;
             total_bytes += part.total_bytes;
@@ -346,10 +344,11 @@ class RankBatchGenerator {
             }
             paths.push_back(path);
         }
-        // Estimate bytes per row
-        // TODO: better estimate or use row_group selector + read_parquet
-        // The 2x multiple accounts for GPU expansion factor.
+        // Estimate bytes per row and set chunked reader limit to target rows *
+        // bytes per row
         size_t chunked_reader_limit = (total_bytes / total_rows) * target_rows_;
+        std::cout << " Total bytes in chunked reader: " << total_bytes
+                  << std::endl;
         std::cout << "Limit : " << chunked_reader_limit << std::endl;
         cudf::io::source_info src_info(paths);
         chunked_reader_opts.set_source(src_info);
@@ -358,10 +357,11 @@ class RankBatchGenerator {
         if (filter_ast_tree.size() > 0) {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
         }
-        chunked_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
+        std::cout << " Creating chunked reader " << std::endl;
+        curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
             chunked_reader_limit, chunked_reader_opts, chunked_reader_stream);
-
-        curr_part_idx += parts_to_allocate_for;
+        std::cout << " Done creating chunked reader " << std::endl;
+        next_part_idx += parts_to_allocate_for;
     }
 
     /** Get PyArrow parquet dataset from path and populate files_ and
@@ -543,14 +543,14 @@ class RankBatchGenerator {
     std::shared_ptr<arrow::Schema> arrow_schema;
     // We chunk files based on estimated bytes
     // Chunked reader allocates everything upfront so we have to be careful.
-    std::unique_ptr<cudf::io::chunked_parquet_reader> chunked_reader;
+    std::unique_ptr<cudf::io::chunked_parquet_reader> curr_reader;
     cudaStream_t chunked_reader_stream;
     cudf::io::parquet_reader_options chunked_reader_opts;
 
     // leftover rows from previous oversized row-group read
     std::unique_ptr<cudf::table> leftover_tbl;
     // Keep track of which part we're processing for chunked reader
-    size_t curr_part_idx = 0;
+    size_t next_part_idx = 0;
 };
 
 struct PhysicalGPUReadParquetMetrics {
@@ -688,6 +688,12 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             time_pt start_init = start_timer();
             init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
+        }
+
+        // Non-GPU ranks return nullptr to avoid any GPU work
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_schema, se),
+                    OperatorResult::FINISHED};
         }
 
         time_pt start_produce = start_timer();
