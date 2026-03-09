@@ -31,7 +31,12 @@ uint64_t getBatchRows(T &t) {
                 ret = vt->nrows();
             } else if constexpr (std::is_same_v<U, GPU_DATA>) {
 #ifdef USE_CUDF
-                ret = vt.table->num_rows();
+                // Non-GPU ranks return nullptr
+                if (vt.table == nullptr) {
+                    ret = 0;
+                } else {
+                    ret = vt.table->num_rows();
+                }
 #endif
             } else {
                 throw std::runtime_error("Unexpected type in getBatchRows");

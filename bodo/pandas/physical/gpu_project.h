@@ -9,6 +9,7 @@
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
 #include "gpu_expression.h"
 #include "operator.h"
 #include "project_utils.h"
@@ -86,6 +87,13 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
+                    prev_op_result == OperatorResult::FINISHED
+                        ? OperatorResult::FINISHED
+                        : OperatorResult::NEED_MORE_INPUT};
+        }
+
         std::vector<GPU_COLUMN> out_cols;
 
         time_pt start_process_exprs = start_timer();

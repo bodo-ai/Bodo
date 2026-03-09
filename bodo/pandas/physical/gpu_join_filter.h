@@ -83,12 +83,14 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
         if (std::ranges::all_of(this->can_apply_bloom_filters,
                                 [](bool v) { return !v; }) ||
             input_batch.table->num_rows() == 0) {
+            std::cout << "GJF 1" << std::endl;
             GPU_DATA out_table_info(std::move(input_batch.table),
                                     input_batch.schema, se);
             return {out_table_info, prev_op_result == OperatorResult::FINISHED
                                         ? OperatorResult::FINISHED
                                         : OperatorResult::NEED_MORE_INPUT};
         }
+        std::cout << "GJF 2" << std::endl;
 
         time_pt start_filtering = start_timer();
 
@@ -114,20 +116,34 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
                 },
                 join_state_);
         }
+        std::cout << "GJF 3 " << std::endl;
 
         std::shared_ptr<cudf::table> result;
         if (row_bitmask) {
+            std::cout << "GJF 3.1 " << (bool)row_bitmask << std::endl;
             result = cudf::apply_boolean_mask(input_batch.table->view(),
                                               *row_bitmask, se->stream);
         } else {
+            std::cout << "GJF 3.2 " << (bool)row_bitmask << std::endl;
             result = input_batch.table;
         }
 
+        std::cout << "GJF 4 " << result->num_rows() << std::endl;
         this->metrics.filtering_time += end_timer(start_filtering);
         this->metrics.output_row_count += result->num_rows();
 
         GPU_DATA out_table_info(std::move(result), input_batch.schema, se);
 
+        std::cout << "GJF 5" << std::endl;
+#if 0
+	{
+            GPU_DATA out_table_info(std::move(input_batch.table),
+                                    input_batch.schema, se);
+            return {out_table_info, prev_op_result == OperatorResult::FINISHED
+                                        ? OperatorResult::FINISHED
+                                        : OperatorResult::NEED_MORE_INPUT};
+	}
+#endif
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
         return {out_table_info, prev_op_result == OperatorResult::FINISHED

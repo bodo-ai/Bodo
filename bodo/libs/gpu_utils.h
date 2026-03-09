@@ -273,8 +273,7 @@ class BroadcastTableInfo {
     std::shared_ptr<cudf::table> table;
     cuda_event_wrapper event;
 
-    BroadcastTableInfo(std::shared_ptr<cudf::table> t,
-                     cuda_event_wrapper e)
+    BroadcastTableInfo(std::shared_ptr<cudf::table> t, cuda_event_wrapper e)
         : table(t), event(e) {}
 };
 
@@ -310,6 +309,8 @@ class GpuMpiManager {
    public:
     GpuMpiManager();
     ~GpuMpiManager();
+
+    int get_rank() const { return rank; }
 
     /**
      * @brief Get the underlying NCCL communicator
@@ -363,7 +364,8 @@ class GpuTableManager : public GpuMpiManager {
     void do_shuffle();
 
    protected:
-    virtual std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables() = 0;
+    virtual std::vector<std::shared_ptr<cudf::packed_table>>
+    getNextPerRankTables() = 0;
     virtual bool hasMoreTables() = 0;
     virtual bool tableReadyToSend() = 0;
 
@@ -400,9 +402,7 @@ class GpuShuffleManager : public GpuTableManager {
 
     std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
 
-    bool hasMoreTables() {
-        return tables_to_shuffle.empty();
-    }
+    bool hasMoreTables() { return tables_to_shuffle.empty(); }
 
    public:
     /**
@@ -428,13 +428,11 @@ class GpuTableBroadcastManager : public GpuTableManager {
 
     std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
 
-    bool hasMoreTables() {
-        return tables_to_broadcast.empty();
-    }
+    bool hasMoreTables() { return tables_to_broadcast.empty(); }
 
    public:
     void broadcast_table(std::shared_ptr<cudf::table> table,
-                       std::shared_ptr<StreamAndEvent> se);
+                         std::shared_ptr<StreamAndEvent> se);
 
     bool is_available() const { return true; }
 };
@@ -487,6 +485,13 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 std::vector<std::unique_ptr<rmm::device_buffer>>
 allgather_device_buffers_across_ranks(ncclComm_t nccl_comm, cudaStream_t stream,
                                       rmm::device_buffer const& local_buf);
+
+/**
+ * @brief Return whether the current rank has a GPU assigned (i.e. should
+ * participate in GPU compute)
+ *
+ */
+bool is_gpu_rank();
 
 #else
 // Empty implementation when CUDF is not available

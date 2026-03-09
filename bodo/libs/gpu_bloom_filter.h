@@ -30,6 +30,16 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
     double false_positive_rate, rmm::cuda_stream_view stream);
 
 /*
+ * @brief Build bloom filter from size
+ *
+ * @param false_positive_rate - the desired false positive rate
+ * @param stream - the stream to place operations on
+ */
+std::shared_ptr<CudfBloomFilter> build_empty_bloom_filter(
+    uint64_t total_size, double false_positive_rate,
+    rmm::cuda_stream_view stream);
+
+/*
  * @brief Updates prev_mask to indicate which rows are in the bloom filter.
  *
  * @param probe_table - the table to see which rows are in the bloom filter

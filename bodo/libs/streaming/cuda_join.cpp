@@ -89,7 +89,7 @@ void CudaHashJoin::build_hash_table(
     if (this->_build_table->num_rows() == 0) {
         // If we don't have chunks we don't need a build table, we won't match
         // anything
-        return;
+        //        return;
     }
 
     // 2. Create the hash_join object
@@ -97,14 +97,21 @@ void CudaHashJoin::build_hash_table(
     //    We maintain ownership of _join_handle to reuse it for probing.
     cudf::table_view build_view = _build_table->view();
 
-    this->_join_handle = std::make_unique<cudf::hash_join>(
-        build_view.select(this->build_key_indices), this->null_equality);
+    if (build_view.num_rows() != 0) {
+        this->_join_handle = std::make_unique<cudf::hash_join>(
+            build_view.select(this->build_key_indices), this->null_equality);
+    }
 
     uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
     // Generate local bloom filter.
-    this->_build_bloom_filter = build_bloom_filter_from_table(
-        build_view.select(this->build_key_indices), build_total_size, 0.01,
-        cudf::get_default_stream());
+    if (build_view.num_rows() != 0) {
+        this->_build_bloom_filter = build_bloom_filter_from_table(
+            build_view.select(this->build_key_indices), build_total_size, 0.01,
+            cudf::get_default_stream());
+    } else {
+        this->_build_bloom_filter = build_empty_bloom_filter(
+            build_total_size, 0.01, cudf::get_default_stream());
+    }
 
     if (!is_broadcast_join) {
         // Get all GPU nodes' bloom filters.
@@ -117,7 +124,8 @@ void CudaHashJoin::build_hash_table(
                 size_t one_bloom_size = one_bloom->size();
                 if (one_bloom_size % 8 != 0) {
                     throw std::runtime_error(
-                        "Received bloom filter that isn't a multiple of 64-bits");
+                        "Received bloom filter that isn't a multiple of "
+                        "64-bits");
                 }
                 mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
                                  cudf::get_default_stream());
@@ -199,8 +207,8 @@ void CudaHashJoin::BuildConsumeBatch(
     std::shared_ptr<cudf::table> build_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event) {
     if (is_broadcast_join) {
-        this->build_broadcast_manager.broadcast_table(
-            build_chunk, input_stream_event);
+        this->build_broadcast_manager.broadcast_table(build_chunk,
+                                                      input_stream_event);
         std::vector<std::unique_ptr<cudf::table>> received_build_chunks =
             build_broadcast_manager.progress();
         for (auto& chunk : received_build_chunks) {
@@ -225,6 +233,10 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream) {
     if (is_broadcast_join) {
+        if (!is_gpu_rank()) {
+            return nullptr;
+        }
+
         auto [probe_indices, build_indices] = _join_handle->inner_join(
             probe_chunk->select(this->probe_key_indices), {}, stream);
 
@@ -268,16 +280,18 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
 
         return std::make_unique<cudf::table>(std::move(final_columns));
     } else {
-        // TODO: remove unused columns before shuffling to save network bandwidth
-        // and GPU memory Send local data to appropriate ranks
-        probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
-                                            input_stream_event);
+        // TODO: remove unused columns before shuffling to save network
+        // bandwidth and GPU memory Send local data to appropriate ranks
+        probe_shuffle_manager.shuffle_table(
+            probe_chunk, this->probe_key_indices, input_stream_event);
 
-        //    Receive data destined for this rank
+        // Receive data destined for this rank
         std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
             probe_shuffle_manager.progress();
-        if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr ||
-            this->probe_shuffle_manager.get_mpi_comm() == MPI_COMM_NULL) {
+        if (!is_gpu_rank()) {
+            return nullptr;
+        }
+        if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr) {
             return empty_table_from_arrow_schema(
                 this->output_schema->ToArrowSchema());
         }

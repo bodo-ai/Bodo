@@ -232,6 +232,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se) override {
         cuda_join->BuildConsumeBatch(input_batch.table,
                                      input_batch.stream_event);
+
         if (prev_op_result == OperatorResult::FINISHED) {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
@@ -256,8 +257,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table,
                                          input_batch.stream_event, se->stream);
-        GPU_DATA output_gpu_data = {std::move(output_table), this->arrow_schema,
-                                    se};
+        GPU_DATA output_gpu_data = {
+            output_table != nullptr ? std::move(output_table) : nullptr,
+            this->arrow_schema, se};
 
         bool local_finished = prev_op_result == OperatorResult::FINISHED;
         if (local_finished) {

@@ -85,26 +85,22 @@ void GpuShuffleManager::shuffle_table(
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_shuffle.push_back(
-        ShuffleTableInfo(table, partition_indices, se->event));
+    this->tables_to_shuffle.emplace_back(table, partition_indices, se->event);
 }
 
 void GpuTableBroadcastManager::broadcast_table(
-    std::shared_ptr<cudf::table> table,
-    std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<cudf::table> table, std::shared_ptr<StreamAndEvent> se) {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
     if (table->num_rows() == 0) {
         return;
     }
-    this->tables_to_broadcast.push_back(
-        BroadcastTableInfo(table, se->event));
+    this->tables_to_broadcast.emplace_back(table, se->event);
 }
 
-std::vector<std::shared_ptr<cudf::packed_table>>
-to_shared_ptr_vector(std::vector<cudf::packed_table>&& splits)
-{
+std::vector<std::shared_ptr<cudf::packed_table>> to_shared_ptr_vector(
+    std::vector<cudf::packed_table>&& splits) {
     std::vector<std::shared_ptr<cudf::packed_table>> out;
     out.reserve(splits.size());
 
@@ -116,7 +112,8 @@ to_shared_ptr_vector(std::vector<cudf::packed_table>&& splits)
     return out;
 }
 
-std::vector<std::shared_ptr<cudf::packed_table>> GpuShuffleManager::getNextPerRankTables() {
+std::vector<std::shared_ptr<cudf::packed_table>>
+GpuShuffleManager::getNextPerRankTables() {
     std::vector<std::shared_ptr<cudf::packed_table>> packed_tables;
     if (tableReadyToSend()) {
         ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
@@ -133,8 +130,8 @@ std::vector<std::shared_ptr<cudf::packed_table>> GpuShuffleManager::getNextPerRa
         std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
             partition_start_rows.begin() + 1, partition_start_rows.end());
         // Pack the tables for sending
-        packed_tables =
-            to_shared_ptr_vector(cudf::contiguous_split(partitioned_table->view(), splits, stream));
+        packed_tables = to_shared_ptr_vector(
+            cudf::contiguous_split(partitioned_table->view(), splits, stream));
     } else {
         // If we have no data to shuffle, we still need to create empty packed
         // tables for each rank so that the shuffle can proceed without special
@@ -147,36 +144,39 @@ std::vector<std::shared_ptr<cudf::packed_table>> GpuShuffleManager::getNextPerRa
                 cudf::pack(empty_table.view(), stream);
             cudf::packed_table empty_packed_table(
                 empty_table.view(), std::move(empty_packed_columns));
-            packed_tables.push_back(std::make_shared<cudf::packed_table>(std::move(empty_packed_table)));
+            packed_tables.push_back(std::make_shared<cudf::packed_table>(
+                std::move(empty_packed_table)));
         }
     }
     return packed_tables;
 }
 
 std::vector<std::shared_ptr<cudf::packed_table>> make_replicas(
-    cudf::table_view const& t,
-    std::size_t N,
-    rmm::cuda_stream_view stream) {
+    cudf::table_view const& t, std::size_t N, rmm::cuda_stream_view stream) {
     // pack once
-    std::shared_ptr<cudf::packed_table> p = std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream));
+    std::shared_ptr<cudf::packed_table> p =
+        std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream));
 
     // replicate N times
     std::vector<std::shared_ptr<cudf::packed_table>> out;
     out.reserve(N);
     for (std::size_t i = 0; i < N; ++i) {
-        out.push_back(p);   // deep copy of metadata + device buffer
+        out.push_back(p);  // deep copy of metadata + device buffer
     }
 
     return out;
 }
 
-std::vector<std::shared_ptr<cudf::packed_table>> GpuTableBroadcastManager::getNextPerRankTables() {
+std::vector<std::shared_ptr<cudf::packed_table>>
+GpuTableBroadcastManager::getNextPerRankTables() {
     std::vector<std::shared_ptr<cudf::packed_table>> packed_tables;
     if (tableReadyToSend()) {
-        BroadcastTableInfo broadcast_table_info = this->tables_to_broadcast.back();
+        BroadcastTableInfo broadcast_table_info =
+            this->tables_to_broadcast.back();
         this->tables_to_broadcast.pop_back();
 
-        packed_tables = make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
+        packed_tables =
+            make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
     } else {
         // If we have no data to shuffle, we still need to create empty packed
         // tables for each rank so that the shuffle can proceed without special
@@ -189,14 +189,16 @@ std::vector<std::shared_ptr<cudf::packed_table>> GpuTableBroadcastManager::getNe
                 cudf::pack(empty_table.view(), stream);
             cudf::packed_table empty_packed_table(
                 empty_table.view(), std::move(empty_packed_columns));
-            packed_tables.push_back(std::make_shared<cudf::packed_table>(std::move(empty_packed_table)));
+            packed_tables.push_back(std::make_shared<cudf::packed_table>(
+                std::move(empty_packed_table)));
         }
     }
     return packed_tables;
 }
 
 void GpuTableManager::do_shuffle() {
-    std::vector<std::shared_ptr<cudf::packed_table>> packed_tables = getNextPerRankTables();
+    std::vector<std::shared_ptr<cudf::packed_table>> packed_tables =
+        getNextPerRankTables();
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
@@ -218,8 +220,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress() {
     // to be called on all ranks even without GPUs assigned so they know when
     // they can exit the pipeline.
     if (this->complete_signaled && inflight_shuffles.empty() &&
-        hasMoreTables() &&
-        global_completion_req == MPI_REQUEST_NULL && !global_completion) {
+        hasMoreTables() && global_completion_req == MPI_REQUEST_NULL &&
+        !global_completion) {
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
                   "GpuTableManager::complete: MPI_Ibarrier failed:");
     }
@@ -232,8 +234,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress() {
         // Coordinate when to shuffle by doing an allreduce, ranks with data
         // send 1, ranks without data send 0, this way all ranks will know when
         // a shuffle is needed and can call progress to start it
-        this->shuffle_coordination.has_data =
-            this->tableReadyToSend() ? 1 : 0;
+        this->shuffle_coordination.has_data = this->tableReadyToSend() ? 1 : 0;
         CHECK_MPI(
             MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
                            1, MPI_INT, MPI_MAX, mpi_comm,
@@ -672,6 +673,11 @@ uint64_t GpuMpiManager::allreduce(uint64_t local) {
                             mpi_comm),
               "GpuMpiManager::allreduce: MPI error on MPI_Allreduce:");
     return allsum;
+}
+
+bool is_gpu_rank() {
+    static bool is_gpu_rank = (get_gpu_id().value() != -1);
+    return is_gpu_rank;
 }
 
 #endif  // USE_CUDF
