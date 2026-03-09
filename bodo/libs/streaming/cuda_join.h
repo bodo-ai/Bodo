@@ -49,7 +49,7 @@ struct CudaHashJoin {
 
     std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
     std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
-    std::shared_ptr<GpuMpiManager> gather_blooms;
+    GpuMpiManager gather_blooms;
     std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
 
     bool hasComm() {

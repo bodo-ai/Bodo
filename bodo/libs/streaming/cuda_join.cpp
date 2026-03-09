@@ -97,8 +97,7 @@ void CudaHashJoin::build_hash_table(
             build_view.select(this->build_key_indices), this->null_equality);
     }
 
-    gather_blooms = std::make_shared<GpuMpiManager>();
-    uint64_t build_total_size = gather_blooms->allreduce(build_view.num_rows());
+    uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
     // Generate local bloom filter.
     if (build_view.num_rows() != 0) {
         this->_build_bloom_filter = build_bloom_filter_from_table(
@@ -112,7 +111,7 @@ void CudaHashJoin::build_hash_table(
     if (!is_broadcast_join) {
         // Get all GPU nodes' bloom filters.
         std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
-            gather_blooms->all_gather_device_buffers(
+            gather_blooms.all_gather_device_buffers(
                 this->_build_bloom_filter->bitset, cudf::get_default_stream());
         // AtomicOR them all together.
         for (auto& one_bloom : all_blooms) {
