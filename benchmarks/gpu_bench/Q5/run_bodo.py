@@ -144,6 +144,16 @@ def main():
 
         pd_impl = cudf
     else:
+        import boto3
+
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
+        os.environ["AWS_REGION"] = "us-east-2"
         # Bodo envs (set prior to importing bodo.pandas)
         # os.environ["KVIKIO_COMPAT_MODE"] = os.environ.get("KVIKIO_COMPAT_MODE", "on")
         # os.environ["KVIKIO_NTHREADS"] = os.environ.get("KVIKIO_NTHREADS", "1")
