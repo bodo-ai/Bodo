@@ -533,6 +533,9 @@ def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
+@pytest.mark.skip(
+    reason="TODO[BSE-5340]: Recreate Snowflake Iceberg AWS bucket and re-enable tests"
+)
 @temp_env_override({"AWS_REGION": "us-east-1", "BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize(
     "use_iceberg, table_1, table_2, log_message",
@@ -609,6 +612,9 @@ def test_timestamp_ntz_key_join(
         check_logger_msg(stream, log_message)
 
 
+@pytest.mark.skip(
+    reason="TODO[BSE-5340]: Recreate Snowflake Iceberg AWS bucket and re-enable tests"
+)
 @temp_env_override({"AWS_REGION": "us-east-1", "BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize(
     "use_iceberg, table_1, table_2, log_message",
