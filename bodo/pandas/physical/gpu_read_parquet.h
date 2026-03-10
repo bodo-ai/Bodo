@@ -413,7 +413,13 @@ class RankBatchGenerator {
      * appropriate chunk sizes for the chunked reader.
      */
     void estimate_parquet_metadata() {
+        if (parts_.empty()) {
+            // nothing assigned to this rank
+            return;
+        }
+
         auto start_estimate_parquet_metadata = start_timer();
+
         std::mt19937 rng(PARQUET_SAMPLING_RANDOM_SEED);
         std::uniform_int_distribution<size_t> dist(0, parts_.size() - 1);
         int num_samples = std::min(static_cast<int>(parts_.size()),
@@ -422,6 +428,7 @@ class RankBatchGenerator {
         std::ranges::sample(parts_.begin(), parts_.end(),
                             std::back_inserter(sampled_parts), num_samples,
                             rng);
+
         int64_t total_sample_rows = 0;
         int64_t total_sample_bytes = 0;
         for (const auto &part : sampled_parts) {
@@ -443,9 +450,11 @@ class RankBatchGenerator {
                 total_sample_bytes += rg_meta->total_byte_size();
             }
         }
+
         bytes_per_part_estimate = total_sample_bytes / sampled_parts.size();
         chunked_reader_limit =
             (total_sample_bytes / total_sample_rows) * target_rows_;
+
         this->metrics.estimate_parquet_metadata_time +=
             end_timer(start_estimate_parquet_metadata);
         this->metrics.bytes_per_part_estimate = bytes_per_part_estimate;
@@ -581,8 +590,8 @@ class RankBatchGenerator {
     std::vector<FilePart> parts_;
     const std::vector<std::string> &selected_columns;
     std::shared_ptr<arrow::Schema> arrow_schema;
-    // We chunk files based on estimated bytes
-    // Chunked reader allocates everything upfront so we have to be careful.
+    // Current chunked reader responsible for reading a subset of parts assigned
+    // to this rank.
     std::unique_ptr<cudf::io::chunked_parquet_reader> curr_reader;
     std::shared_ptr<StreamAndEvent> chunked_reader_se;
     cudf::io::parquet_reader_options chunked_reader_opts;
