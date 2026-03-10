@@ -57,5 +57,13 @@ void filter_table_with_bloom(
     CudfBloomFilter const& bf, std::unique_ptr<cudf::column>& prev_mask,
     rmm::cuda_stream_view stream);
 
+/*
+ * @brief Merges the local bloom filter with the ones from other ranks to
+ *        make a global bloom filter.
+ *
+ * @param dst - the bloom filter to merge into
+ * @param src - the bloom filter to merge from
+ * @param stream - the stream to place operations on
+ */
 void mergeBloomBitset(rmm::device_buffer& dst, rmm::device_buffer const& src,
                       cudaStream_t stream);

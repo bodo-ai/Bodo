@@ -321,9 +321,20 @@ class GpuMpiManager {
      */
     MPI_Comm get_mpi_comm() const { return mpi_comm; }
 
+    /**
+     * @brief All GPU ranks send a device buffer to all other GPU ranks
+     * @param local_buf - the local device buffer to send to all GPU ranks
+     * @param stream - stream to perform the operations on
+     * @return number of GPU rank length vector of their device_buffers
+     */
     std::vector<std::unique_ptr<rmm::device_buffer>> all_gather_device_buffers(
         rmm::device_buffer const& local_buf, cudaStream_t stream);
 
+    /**
+     * @brief Sum all the local values from the GPU ranks
+     * @param local - the local value to be added to the sum
+     * @return the sum
+     */
     uint64_t allreduce(uint64_t local);
 };
 

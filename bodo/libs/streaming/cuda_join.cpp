@@ -10,6 +10,8 @@
 #include "../_utils.h"
 #include "_util.h"
 
+constexpr float FALSE_POSITIVE_RATE = 0.01;
+
 std::shared_ptr<arrow::Table> SyncAndReduceGlobalStats(
     std::shared_ptr<arrow::Table> local_stats) {
     // Serialize local stats to bytes
@@ -86,11 +88,6 @@ void CudaHashJoin::build_hash_table(
         build_views.push_back(chunk->view());
     }
     this->_build_table = cudf::concatenate(build_views);
-    if (this->_build_table->num_rows() == 0) {
-        // If we don't have chunks we don't need a build table, we won't match
-        // anything
-        //        return;
-    }
 
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
@@ -106,11 +103,11 @@ void CudaHashJoin::build_hash_table(
     // Generate local bloom filter.
     if (build_view.num_rows() != 0) {
         this->_build_bloom_filter = build_bloom_filter_from_table(
-            build_view.select(this->build_key_indices), build_total_size, 0.01,
-            cudf::get_default_stream());
+            build_view.select(this->build_key_indices), build_total_size,
+            FALSE_POSITIVE_RATE, cudf::get_default_stream());
     } else {
         this->_build_bloom_filter = build_empty_bloom_filter(
-            build_total_size, 0.01, cudf::get_default_stream());
+            build_total_size, FALSE_POSITIVE_RATE, cudf::get_default_stream());
     }
     // Get all GPU nodes' bloom filters.
     std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
