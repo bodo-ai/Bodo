@@ -10,6 +10,7 @@
 #include <cudf/unary.hpp>
 #include <rmm/device_uvector.hpp>
 #include <cuda_runtime.h>
+#include <bit>
 #include <bitset>
 
 #define CUDA_TRY(call)                                                     \
@@ -34,9 +35,14 @@ constexpr int block = 256;
  * @param k_out - the number of hashes to be used
  */
 void compute_bloom_params(std::size_t n, double p, std::size_t &m_out, int &k_out) {
-  if (n == 0) { m_out = 1; k_out = 1; return; }
+  if (n == 0) {
+      m_out = 1;
+      k_out = 1;
+      return;
+  }
   double m = -static_cast<double>(n) * std::log(p) / (std::log(2.0) * std::log(2.0));
   std::size_t m_bits = static_cast<std::size_t>(std::ceil(m));
+  m_bits = std::bit_ceil(m_bits);  // round up to nearest power of 2
   int k = std::max(1, static_cast<int>(std::round((m / static_cast<double>(n)) * std::log(2.0))));
   m_out = m_bits;
   k_out = k;
@@ -71,7 +77,7 @@ __global__ void set_bits_kernel_doublehash(
     for (std::size_t j = 0; j < k_hashes; ++j) {
         uint64_t combined = h1 + j * h2;
         // map to bit index in [0, m_bits)
-        uint64_t bit = combined % m_bits;
+        uint64_t bit = combined & (m_bits - 1); // relies on m_bits being power of 2
         uint64_t word_idx = bit >> 6;            // /64
         uint64_t bit_in_word = bit & 63;         // %64
         uint64_t mask = uint64_t(1) << bit_in_word;
@@ -177,7 +183,7 @@ __global__ void test_bits_kernel_doublehash(
     bool maybe_in = true;
     for (std::size_t j = 0; j < k_hashes; ++j) {
         uint64_t combined = h1 + j * h2; // double hashing
-        uint64_t bit = combined % m_bits;
+        uint64_t bit = combined & (m_bits - 1); // relies on m_bits being power of 2
         uint64_t word_idx = bit >> 6;
         uint64_t bit_in_word = bit & 63;
         uint64_t mask = uint64_t(1) << bit_in_word;
