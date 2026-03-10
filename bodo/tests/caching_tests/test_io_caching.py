@@ -203,6 +203,9 @@ def test_read_json_cache_fname_arg(
     check_caching(impl2, (fname2,), is_cached, fn_distribution, py_output=py_out)
 
 
+@pytest.mark.skip(
+    reason="TODO[BSE-5338]: Replace AWS SQL database test setup and re-enable tests"
+)
 def test_cache_sql_hardcoded_aws(fn_distribution, is_cached, memory_leak_check):
     """This test caching a hardcoded request and connection"""
 

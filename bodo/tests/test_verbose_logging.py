@@ -12,6 +12,7 @@ import io
 import os
 
 import pandas as pd
+import pytest
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -88,6 +89,9 @@ def test_csv_iterator_column_pruning(datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D']")
 
 
+@pytest.mark.skip(
+    reason="TODO[BSE-5338]: Replace AWS SQL database test setup and re-enable tests"
+)
 def test_sql_column_pruning(memory_leak_check):
     """
     Tests that column pruning is logged with sql.
