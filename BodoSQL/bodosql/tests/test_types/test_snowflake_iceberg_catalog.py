@@ -27,7 +27,8 @@ from bodo.tests.utils import (
 )
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
 
-pytestmark = [pytest.mark.iceberg] + pytest_snowflake
+# TODO[BSE-5340]: Recreate Snowflake Iceberg AWS bucket and re-enable tests
+pytestmark = [pytest.mark.iceberg, pytest.mark.skip] + pytest_snowflake
 
 
 @pytest.fixture
