@@ -63,8 +63,9 @@ static void ensure_pa_wrappers_imported() {
 }
 
 // Limit the total number of uncompressed bytes that can be processed by a
-// single chunked reader This is a soft limit applied to multi-part datasets.
-const int64_t CHUNKED_READER_BYTES_LIMIT = 4LL * 1024 * 1024 * 1024;  // 4GB
+// single chunked reader. This is a soft limit applied to multi-part datasets.
+const int64_t CHUNKED_READER_TOTAL_BYTES_LIMIT =
+    4LL * 1024 * 1024 * 1024;  // 4GB
 
 // Whether to use libkvikio for S3 reads (better for large reads) but off by
 // default for now since it requires setting a lot of extra environment
@@ -75,13 +76,10 @@ const bool USE_KVIKIO_REMOTE_SOURCE = false;
 // estimates.
 const int PARQUET_SAMPLING_RANDOM_SEED = 42;
 
-struct FilePart {
-    std::string path;
-    int start_row_group;               // inclusive
-    std::optional<int> end_row_group;  // exclusive (if nullopt, read all row
-                                       // groups in the file)
-};
-
+/**
+ * @brief A datasource implementation for reading from Arrow files.
+ *
+ */
 class arrow_file_datasource : public cudf::io::datasource {
    public:
     explicit arrow_file_datasource(
@@ -110,13 +108,6 @@ class arrow_file_datasource : public cudf::io::datasource {
         return size;
     }
 
-    std::future<std::unique_ptr<buffer>> host_read_async(size_t offset,
-                                                         size_t size) override {
-        return std::async(std::launch::deferred, [this, offset, size] {
-            return host_read(offset, size);
-        });
-    }
-
     size_t size() const override { return arrow_file_->GetSize().ValueOrDie(); }
 
    private:
@@ -132,6 +123,13 @@ class arrow_file_datasource : public cudf::io::datasource {
 
     std::shared_ptr<arrow::Buffer> buffer_;
     std::once_flag buffer_init_;
+};
+
+struct FilePart {
+    std::string path;
+    int start_row_group;               // inclusive
+    std::optional<int> end_row_group;  // exclusive (if nullopt, read all row
+                                       // groups in the file)
 };
 
 class RankBatchGenerator {
@@ -168,11 +166,7 @@ class RankBatchGenerator {
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
 
-        std::cout << "Rank " << rank_ << "/" << size_
-                  << " initializing RankBatchGenerator with " << files_.size()
-                  << " files\n";
         auto start_partition_dataset = start_timer();
-        std::cout << " Partitioning dataset " << std::endl;
         if (files_.size() == 1) {
             // single file -> partition by row groups
             parts_ =
@@ -181,7 +175,6 @@ class RankBatchGenerator {
             // multi-file dataset -> partition by file (block partition)
             parts_ = partition_by_files(files_, filesystem_, rank_, size_);
         }
-        std::cout << " Done partitioning dataset " << std::endl;
         this->metrics.partition_file_time += end_timer(start_partition_dataset);
 
         estimate_parquet_metadata();
@@ -204,7 +197,6 @@ class RankBatchGenerator {
         size_t rows_accum = 0;
         if (leftover_tbl) {
             std::size_t n = leftover_tbl->num_rows();
-            // std::cout << " leftover table nrows " << n << std::endl;
             if (n <= target_rows_) {
                 rows_accum += n;
                 gpu_tables.emplace_back(std::move(leftover_tbl));
@@ -220,8 +212,6 @@ class RankBatchGenerator {
 
         // If leftover satisfied the batch, return early
         if (rows_accum >= target_rows_) {
-            // std::cout << " returning leftover table rows | read finished = "
-            //           << read_finished() << std::endl;
             return {std::move(gpu_tables[0]), read_finished()};
         }
 
@@ -234,9 +224,6 @@ class RankBatchGenerator {
                 try {
                     auto table_and_metadata = curr_reader->read_chunk();
                     auto tbl = std::move(table_and_metadata.tbl);
-                    // std::cout << "##### Read " << tbl->num_rows()
-                    //         << " rows from: " << parts_[0].path << "#####"
-                    //         << std::endl;
 
                     if (!tbl || tbl->num_rows() == 0) {
                         // no rows in this row group (rare) — advance
@@ -245,14 +232,9 @@ class RankBatchGenerator {
 
                     std::size_t tbl_n = tbl->num_rows();
                     if (rows_accum + tbl_n <= target_rows_) {
-                        // std::cout << " Adding table to GPU tables until batch
-                        // is filled"
-                        //     << std::endl;
                         rows_accum += tbl_n;
                         gpu_tables.push_back(std::move(tbl));
                     } else {
-                        // std::cout << " Read too many rows, slicing tables"
-                        //         << std::endl;
                         std::size_t need = target_rows_ - rows_accum;
                         cudf::table_view tv = tbl->view();
                         auto batch = cudf::slice(tv, {0, (int)need})[0];
@@ -285,25 +267,12 @@ class RankBatchGenerator {
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            if (!read_finished()) {
-                std::cout << " no tables read, returning EOF = "
-                          << read_finished() << std::endl;
-                std::cout << " curr_reader: " << (bool)curr_reader << std::endl;
-                std::cout << " Next part idx" << next_part_idx
-                          << " total parts " << parts_.size() << std::endl;
-                std::cout << " leftover table" << (bool)leftover_tbl
-                          << " total parts " << parts_.size() << std::endl;
-                throw std::runtime_error(
-                    "No gpu tables read but not EOF, unexpected state");
-            }
             return {empty_table_from_arrow_schema(arrow_schema),
                     read_finished()};
         }
 
         // Concatenate gpu_tables into a single cudf::table
         // Build vector of table_views
-        // std::cout << "concatenating " << gpu_tables.size() << " GPU tables "
-        //           << std::endl;
         std::vector<cudf::table_view> views;
         views.reserve(gpu_tables.size());
         for (auto &tptr : gpu_tables) {
@@ -319,8 +288,6 @@ class RankBatchGenerator {
             batch = cudf::concatenate(views, se->stream);
         }
 
-        // std::cout << " read parquet returning batch | read finished =  "
-        //           << read_finished() << std::endl;
         return {std::move(batch), read_finished()};
     }
 
@@ -352,8 +319,8 @@ class RankBatchGenerator {
         } else if (parts_.size() == 1 && parts_[0].end_row_group.has_value()) {
             // Partition row groups case:
             // TODO: break up single file with multiple row groups that are, all
-            // together, larger than CHUNKED_READER_BYTES_LIMIT into multiple
-            // readers.
+            // together, larger than CHUNKED_READER_TOTAL_BYTES_LIMIT into
+            // multiple readers.
             int start_row_group = parts_[0].start_row_group;
             int end_row_group = parts_[0].end_row_group.value();
             std::vector<int> single_file_row_groups(end_row_group -
@@ -367,14 +334,11 @@ class RankBatchGenerator {
 
         chunked_reader_stream = cudf::get_default_stream();
 
-        std::cout << "Using arrow datasource" << std::endl;
-
-        size_t num_parts =
-            std::min(parts_.size() - next_part_idx,
-                     (size_t)std::ceil((double)CHUNKED_READER_BYTES_LIMIT /
-                                       bytes_per_part_estimate));
+        size_t num_parts = std::min(
+            parts_.size() - next_part_idx,
+            (size_t)std::ceil((double)CHUNKED_READER_TOTAL_BYTES_LIMIT /
+                              bytes_per_part_estimate));
         std::vector<std::unique_ptr<cudf::io::datasource>> sources;
-
         for (size_t i = 0; i < num_parts; i++) {
             const auto &part = parts_[next_part_idx + i];
             if (use_arrow_source()) {
@@ -396,10 +360,6 @@ class RankBatchGenerator {
         }
         next_part_idx = next_part_idx + num_parts;
 
-        size_t chunked_reader_limit = (bytes_per_row_estimate * target_rows_);
-
-        std::cout << "Limit : " << chunked_reader_limit << std::endl;
-        std::cout << " Creating chunked reader " << std::endl;
         // Parquet metadata will be populated by cudf.
         std::vector<cudf::io::parquet::FileMetaData> metadata;
         return std::make_unique<cudf::io::chunked_parquet_reader>(
@@ -442,13 +402,9 @@ class RankBatchGenerator {
                 total_sample_bytes += rg_meta->total_byte_size();
             }
         }
-        bytes_per_row_estimate = total_sample_bytes / total_sample_rows;
         bytes_per_part_estimate = total_sample_bytes / sampled_parts.size();
-
-        std::cout << "Estimating Parquet Dataset size: " << std::endl;
-        std::cout << " Sampled " << sampled_parts.size() << " parts, "
-                  << total_sample_rows << " rows, " << total_sample_bytes
-                  << " bytes" << std::endl;
+        chunked_reader_limit =
+            (total_sample_bytes / total_sample_rows) * target_rows_;
     }
 
     /** Get PyArrow parquet dataset from path and populate files_ and
@@ -505,26 +461,6 @@ class RankBatchGenerator {
         this->metrics.get_dataset_time += end_timer(start_get_dataset);
     }
 
-    /**
-     * @brief
-     *
-     */
-    static std::tuple<size_t, size_t> get_num_rows_bytes(
-        const parquet::FileMetaData &metadata, int start_row_group,
-        int end_row_group) {
-        size_t total_rows = 0;
-        size_t total_bytes = 0;
-
-        for (int i = start_row_group; i < end_row_group; i++) {
-            std::unique_ptr<parquet::RowGroupMetaData> rg_meta =
-                metadata.RowGroup(i);
-            total_rows += rg_meta->num_rows();
-            total_bytes += rg_meta->total_byte_size();
-        }
-
-        return {total_rows, total_bytes};
-    }
-
     // Partition a single file by row groups into contiguous chunks for each
     // rank
     static std::vector<FilePart> partition_by_row_groups(
@@ -558,13 +494,8 @@ class RankBatchGenerator {
         if (start >= end) {
             return result;
         }
-        // auto num_rows_bytes = get_num_rows_bytes(*metadata, start, end);
-        // size_t part_num_rows = std::get<0>(num_rows_bytes);
-        // size_t part_num_bytes = std::get<1>(num_rows_bytes);
         result.push_back(FilePart{
             .path = file, .start_row_group = start, .end_row_group = end});
-        //   .total_bytes = part_num_bytes,
-        //   .total_rows = part_num_rows});
         return result;
     }
 
@@ -580,33 +511,9 @@ class RankBatchGenerator {
         int end = start + base + (rank < rem ? 1 : 0);
         for (int i = start; i < end; ++i) {
             const std::string &f = files[i];
-            // size_t num_rows = 0;
-            // size_t num_bytes = 0;
-            // try {
-            //     std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
-            //     CHECK_ARROW_AND_ASSIGN(
-            //         filesystem->OpenInputFile(f),
-            //         "Error opening file via Arrow filesystem: " + f,
-            //         arrow_file);
-            //     std::unique_ptr<parquet::ParquetFileReader> pf =
-            //         parquet::ParquetFileReader::Open(arrow_file);
-            //     std::shared_ptr<parquet::FileMetaData> metadata =
-            //         pf->metadata();
-            //     num_rg = metadata->num_row_groups();
-            //     auto num_rows_bytes = get_num_rows_bytes(*metadata, 0,
-            //     num_rg); num_rows = std::get<0>(num_rows_bytes); num_bytes =
-            //     std::get<1>(num_rows_bytes);
-            // } catch (const std::exception &e) {
-            //     std::cerr << "Failed to read parquet metadata for " << f <<
-            //     ": "
-            //               << e.what() << "\n";
-            //     continue;
-            // }
             result.push_back(FilePart{.path = f,
                                       .start_row_group = 0,
                                       .end_row_group = std::nullopt});
-            //   .total_bytes = num_bytes,
-            //   .total_rows = num_rows});
         }
         return result;
     }
@@ -638,8 +545,10 @@ class RankBatchGenerator {
     // Keep track of which part we're processing for chunked reader
     size_t next_part_idx = 0;
 
-    int64_t bytes_per_row_estimate = 0;
+    // Estimate of bytes per row and bytes per part for setting chunked reader
+    // limits.
     int64_t bytes_per_part_estimate = 0;
+    size_t chunked_reader_limit = 0;
 };
 
 struct PhysicalGPUReadParquetMetrics {
