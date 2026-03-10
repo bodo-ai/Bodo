@@ -10,6 +10,7 @@
 #include <cudf/transform.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_buffer.hpp>
+#include "gpu_utils.h"
 
 struct CudfBloomFilter {
     rmm::device_buffer bitset;  // holds (m_bits + 63)/64 words
