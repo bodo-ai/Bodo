@@ -1642,7 +1642,6 @@ def test_read_nested_in_map_col(memory_leak_check):
         impl,
         (queryC, conn),
         py_output=py_output,
-        convert_columns_to_pandas=True,
         # Necessary because Snowflake can output fields in struct in any
         # order, and structs with different fields in different order are different
         # TODO: Make this more robust by either:
