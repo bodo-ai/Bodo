@@ -153,15 +153,11 @@ GpuShuffleManager::getNextPerRankTables() {
 
 std::vector<std::shared_ptr<cudf::packed_table>> make_replicas(
     cudf::table_view const& t, std::size_t N, rmm::cuda_stream_view stream) {
-    // pack once
-    std::shared_ptr<cudf::packed_table> p =
-        std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream));
-
     // replicate N times
     std::vector<std::shared_ptr<cudf::packed_table>> out;
     out.reserve(N);
     for (std::size_t i = 0; i < N; ++i) {
-        out.push_back(p);  // deep copy of metadata + device buffer
+        out.push_back(std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream)));
     }
 
     return out;
@@ -328,6 +324,7 @@ void GpuShuffle::send_sizes() {
                   "GpuShuffle::send_sizes: MPI_Isend failed:");
     }
 }
+
 void GpuShuffle::recv_sizes() {
     for (size_t src_rank = 0; src_rank < metadata_recv_buffers.size();
          src_rank++) {
