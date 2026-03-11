@@ -13,45 +13,45 @@
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_CONTENTS(rank, pipelines, out)                     \
-    do {                                                             \
-        out << "Rank " << rank << " ExecutePipelines with "    \
-                  << pipelines.size() << " pipelines." << std::endl; \
-        for (size_t i = 0; i < pipelines.size(); ++i) {              \
-            out << "Rank " << rank << " ------ Pipeline " << i \
-                      << " ------" << std::endl;                     \
-            pipelines[i]->printPipeline(out);                           \
-            out << "Rank " << rank << " ------ Pipeline " << i \
-                      << " ------" << std::endl;                     \
-        }                                                            \
+#define DEBUG_PIPELINE_CONTENTS(rank, pipelines, out)                       \
+    do {                                                                    \
+        out << "Rank " << rank << " ExecutePipelines with "                 \
+            << pipelines.size() << " pipelines." << std::endl;              \
+        for (size_t i = 0; i < pipelines.size(); ++i) {                     \
+            out << "Rank " << rank << " ------ Pipeline " << i << " ------" \
+                << std::endl;                                               \
+            pipelines[i]->printPipeline(out);                               \
+            out << "Rank " << rank << " ------ Pipeline " << i << " ------" \
+                << std::endl;                                               \
+        }                                                                   \
     } while (0)
 #else
 #define DEBUG_PIPELINE_CONTENTS(rank, pipelines, out) \
-    do {                                         \
+    do {                                              \
     } while (0)
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out)                                 \
-    do {                                                                 \
+#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out)                      \
+    do {                                                           \
         out << "Rank " << rank << " Before execute pipeline " << i \
-                  << std::endl;                                          \
+            << std::endl;                                          \
     } while (0)
 #else
 #define DEBUG_PIPELINE_PRE_EXECUTE(rank, out) \
-    do {                                 \
+    do {                                      \
     } while (0)
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_POST_EXECUTE(rank, out)                               \
-    do {                                                                \
+#define DEBUG_PIPELINE_POST_EXECUTE(rank, out)                    \
+    do {                                                          \
         out << "Rank " << rank << " After execute pipeline " << i \
-                  << std::endl;                                         \
+            << std::endl;                                         \
     } while (0)
 #else
 #define DEBUG_PIPELINE_POST_EXECUTE(rank, out) \
-    do {                                  \
+    do {                                       \
     } while (0)
 #endif
 
