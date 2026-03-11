@@ -228,7 +228,6 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream) {
-
     if (is_broadcast_join) {
         if (!is_gpu_rank()) {
             return nullptr;

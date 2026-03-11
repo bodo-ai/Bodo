@@ -106,11 +106,9 @@ class Pipeline {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        out << "Rank " << rank << " " << getNodeString(source)
-                  << std::endl;
+        out << "Rank " << rank << " " << getNodeString(source) << std::endl;
         for (auto &op : between_ops) {
-            out << "Rank " << rank << " " << getNodeString(op)
-                      << std::endl;
+            out << "Rank " << rank << " " << getNodeString(op) << std::endl;
         }
         out << "Rank " << rank << " " << getNodeString(sink) << std::endl;
     }
