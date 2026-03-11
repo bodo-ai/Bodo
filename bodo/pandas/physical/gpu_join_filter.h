@@ -77,14 +77,15 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+
         if (!is_gpu_rank()) {
-            GPU_DATA out_table_info(input_batch.table, input_batch.schema, se);
-            return {out_table_info, prev_op_result == OperatorResult::FINISHED
-                                        ? OperatorResult::FINISHED
-                                        : OperatorResult::NEED_MORE_INPUT};
+            return {GPU_DATA(nullptr, input_batch.schema, se),
+                    prev_op_result == OperatorResult::FINISHED
+                        ? OperatorResult::FINISHED
+                        : OperatorResult::NEED_MORE_INPUT};
         }
 
-        this->metrics.input_row_count += input_batch.table->num_rows();
+        this->metrics.input_row_count += input_batch.table ? input_batch.table->num_rows() : 0;
 
         // No filters can be applied, just pass through
         if (std::ranges::all_of(this->can_apply_bloom_filters,

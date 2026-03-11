@@ -10,6 +10,7 @@
 #include <cudf/unary.hpp>
 #include <rmm/device_uvector.hpp>
 #include <cuda_runtime.h>
+#include <bit>
 #include <bitset>
 
 #define CUDA_TRY(call)                                                     \
@@ -34,9 +35,14 @@ constexpr int block = 256;
  * @param k_out - the number of hashes to be used
  */
 void compute_bloom_params(std::size_t n, double p, std::size_t &m_out, int &k_out) {
-  if (n == 0) { m_out = 1; k_out = 1; return; }
+  if (n == 0) {
+      m_out = 1;
+      k_out = 1;
+      return;
+  }
   double m = -static_cast<double>(n) * std::log(p) / (std::log(2.0) * std::log(2.0));
   std::size_t m_bits = static_cast<std::size_t>(std::ceil(m));
+  m_bits = std::bit_ceil(m_bits);  // round up to nearest power of 2
   int k = std::max(1, static_cast<int>(std::round((m / static_cast<double>(n)) * std::log(2.0))));
   m_out = m_bits;
   k_out = k;
@@ -71,7 +77,7 @@ __global__ void set_bits_kernel_doublehash(
     for (std::size_t j = 0; j < k_hashes; ++j) {
         uint64_t combined = h1 + j * h2;
         // map to bit index in [0, m_bits)
-        uint64_t bit = combined % m_bits;
+        uint64_t bit = combined & (m_bits - 1); // relies on m_bits being power of 2
         uint64_t word_idx = bit >> 6;            // /64
         uint64_t bit_in_word = bit & 63;         // %64
         uint64_t mask = uint64_t(1) << bit_in_word;
@@ -177,7 +183,7 @@ __global__ void test_bits_kernel_doublehash(
     bool maybe_in = true;
     for (std::size_t j = 0; j < k_hashes; ++j) {
         uint64_t combined = h1 + j * h2; // double hashing
-        uint64_t bit = combined % m_bits;
+        uint64_t bit = combined & (m_bits - 1); // relies on m_bits being power of 2
         uint64_t word_idx = bit >> 6;
         uint64_t bit_in_word = bit & 63;
         uint64_t mask = uint64_t(1) << bit_in_word;
@@ -227,31 +233,18 @@ void filter_table_with_bloom(
     const uint64_t* low_dev_ptr  = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
   
-    rmm::device_buffer mask_buf(n * sizeof(uint8_t), stream);
-    uint8_t* mask_ptr = static_cast<uint8_t*>(mask_buf.data());
-    // initialize mask to zero (optional)
-    CUDA_TRY(cudaMemsetAsync(mask_ptr, 0, n * sizeof(uint8_t), stream.value()));
-  
+    auto mask_column = cudf::make_numeric_column(
+        cudf::data_type{cudf::type_id::UINT8}, n,
+        cudf::mask_state::UNALLOCATED, stream);
+    auto mask_mut_view = mask_column->mutable_view();
+
     int grid = static_cast<int>((n + block - 1) / block);
     test_bits_kernel_doublehash<<<grid, block, 0, stream.value()>>>(
         low_dev_ptr, high_dev_ptr, n,
         reinterpret_cast<const uint64_t*>(bf.bitset.data()),
         bf.m_bits, bf.k_hashes,
-        mask_ptr);
+        mask_mut_view.data<uint8_t>());
     CUDA_TRY(cudaGetLastError());
-  
-    // convert mask to cudf::column (boolean)
-    auto mask_column = cudf::make_numeric_column(
-        cudf::data_type{cudf::type_id::UINT8}, n,
-        cudf::mask_state::UNALLOCATED, stream);
-    auto mask_mut_view = mask_column->mutable_view();
-    // copy mask_buf into mask_column's data (device->device on same stream)
-    CUDA_TRY(cudaMemcpyAsync(
-        mask_mut_view.data<uint8_t>(),
-        mask_ptr,
-        n * sizeof(uint8_t),
-        cudaMemcpyDeviceToDevice,
-        stream.value()));
   
     // convert uint8 mask to bool column (0/1 -> false/true)
     std::unique_ptr<cudf::column> bool_mask = cudf::cast(mask_mut_view, cudf::data_type{cudf::type_id::BOOL8}, stream);
