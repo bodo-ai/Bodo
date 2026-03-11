@@ -1769,18 +1769,9 @@ def test_batched_write_agg(
     ],
 )
 @pytest.mark.parametrize(
-    "df, expected_df, column_type",
+    "df, column_type",
     [
         (  # array item array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [np.arange(5)] * 10,
-                        dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
-                    ),
-                }
-            ),
             pd.DataFrame(
                 {
                     "a": np.arange(10),
@@ -1814,58 +1805,9 @@ def test_batched_write_agg(
                     ),
                 }
             ),
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [
-                            {"W": 1, "X": "AB", "Y": 1.100000000000000e00, "Z": i}
-                            for i in range(10)
-                        ],
-                        dtype=pd.ArrowDtype(
-                            pa.struct(
-                                [
-                                    pa.field("W", pa.int64()),
-                                    pa.field("X", pa.string()),
-                                    pa.field("Z", pa.int64()),
-                                    pa.field("Y", pa.float64()),
-                                ]
-                            )
-                        ),
-                    ),
-                }
-            ),
             "object",
         ),
         (  # map array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [{"2": 4.1, "1": 5.1}, {"3": 100.38}] * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.float64())),
-                    ),
-                    "c": pd.Series(
-                        [{"a": "a", "b": "b"}, {"c": "c"}] * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
-                    ),
-                    "d": pd.Series(
-                        [
-                            {
-                                "a": pd.Timestamp("2000-01-01"),
-                                "b": pd.Timestamp("2000-01-02"),
-                            },
-                            {"c": pd.Timestamp("2000-01-03")},
-                        ]
-                        * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.timestamp("ns"))),
-                    ),
-                    "e": pd.Series(
-                        [{"a": datetime.date(2010, 1, 10)}] * 10,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.date32())),
-                    ),
-                }
-            ),
             pd.DataFrame(
                 {
                     "a": np.arange(10),
@@ -1905,7 +1847,7 @@ def test_batched_write_agg(
 )
 @pytest.mark.parametrize("write_type", ["append", "replace"])
 def test_batched_write_nested_array(
-    df, expected_df, column_type, is_variant, write_type, memory_leak_check
+    df, column_type, is_variant, write_type, memory_leak_check
 ):
     """
     Test writing a table with a column of nested arrays to Snowflake
@@ -1998,11 +1940,10 @@ def test_batched_write_nested_array(
         check_func(
             read_impl,
             (conn,),
-            py_output=expected_df,
+            py_output=df,
             sort_output=True,
             reset_index=True,
             only_1DVar=True,
-            convert_columns_to_pandas=True,
         )
 
 
