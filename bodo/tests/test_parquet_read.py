@@ -43,6 +43,7 @@ pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "fname",
     [
