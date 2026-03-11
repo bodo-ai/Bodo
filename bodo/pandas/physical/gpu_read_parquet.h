@@ -92,7 +92,9 @@ class arrow_file_datasource : public cudf::io::datasource {
         std::shared_ptr<arrow::io::RandomAccessFile> arrow_file)
         : arrow_file_(std::move(arrow_file)) {
         // Start read immediately using the file's IO context and save the
-        // result.
+        // result for better performance. This can potentially consume a lot of
+        // CPU memory if file sizes are large, though the number of files read
+        // at once is limited by CHUNKED_READER_TOTAL_BYTES_LIMIT.
         file_buffer_future_ =
             arrow_file_->ReadAsync(0, arrow_file_->GetSize().ValueOrDie());
     }
@@ -212,6 +214,7 @@ class RankBatchGenerator {
             if (n <= target_rows_) {
                 rows_accum += n;
                 gpu_tables.emplace_back(std::move(leftover_tbl));
+                leftover_tbl = nullptr;
             } else {
                 cudf::table_view tv = leftover_tbl->view();
                 auto batch = cudf::slice(tv, {0, (int)target_rows_},
@@ -354,7 +357,8 @@ class RankBatchGenerator {
      * @return false Let libcudf decide what datasource to use based on path.
      */
     bool use_arrow_source() {
-        return (!USE_KVIKIO_REMOTE_SOURCE && filesystem_->type_name() == "s3");
+        return (filesystem_->type_name() != "local") &&
+               !(USE_KVIKIO_REMOTE_SOURCE && filesystem_->type_name() == "s3");
     }
 
     std::unique_ptr<cudf::io::chunked_parquet_reader> next_reader() {
