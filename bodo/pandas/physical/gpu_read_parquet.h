@@ -75,8 +75,7 @@ const bool USE_KVIKIO_REMOTE_SOURCE = false;
 // Parquet metadata estimation parameters.
 const int PARQUET_SAMPLING_RANDOM_SEED =
     42;  // Seed to control random sampling of parquet files for bytes/row and
-         // bytes/file
-// estimates.
+         // bytes/file estimates.
 const double PARQUET_SAMPLING_FRACTION =
     0.001;  // Sample 0.1% of files in the dataset for metadata estimation
 const size_t PARQUET_SAMPLING_MIN_FILES =
@@ -190,7 +189,7 @@ class RankBatchGenerator {
 
         estimate_parquet_metadata();
 
-        // Configure common parquet options.
+        // Set common parquet reader options.
         chunked_reader_opts.set_columns(selected_columns);
         if (filter_ast_tree.size() > 0) {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
