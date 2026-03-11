@@ -212,7 +212,6 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream) {
-
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
@@ -244,10 +243,11 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
             this->output_schema->ToArrowSchema());
     }
 
-    cudf::table_view selected = coalesced_probe->select(this->probe_key_indices);
+    cudf::table_view selected =
+        coalesced_probe->select(this->probe_key_indices);
 
-    auto [probe_indices, build_indices] = _join_handle->inner_join(
-        selected, {}, stream);
+    auto [probe_indices, build_indices] =
+        _join_handle->inner_join(selected, {}, stream);
 
     if (probe_indices->size() == 0) {
         return empty_table_from_arrow_schema(
