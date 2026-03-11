@@ -157,7 +157,8 @@ std::vector<std::shared_ptr<cudf::packed_table>> make_replicas(
     std::vector<std::shared_ptr<cudf::packed_table>> out;
     out.reserve(N);
     for (std::size_t i = 0; i < N; ++i) {
-        out.push_back(std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream)));
+        out.push_back(
+            std::make_shared<cudf::packed_table>(t, cudf::pack(t, stream)));
     }
 
     return out;
