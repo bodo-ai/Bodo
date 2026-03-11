@@ -197,7 +197,7 @@ class RankBatchGenerator {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
         }
         // Disable Pandas metadata to avoid reordering the index columns.
-        // chunked_reader_opts.enable_use_pandas_metadata(false);
+        chunked_reader_opts.enable_use_pandas_metadata(false);
 
         chunked_reader_se = make_stream_and_event(g_use_async);
     }
