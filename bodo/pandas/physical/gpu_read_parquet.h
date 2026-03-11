@@ -72,9 +72,16 @@ const int64_t CHUNKED_READER_TOTAL_BYTES_LIMIT =
 // variables.
 const bool USE_KVIKIO_REMOTE_SOURCE = false;
 
-// Seed to control random sampling of parquet files for bytes/row and bytes/file
+// Parquet metadata estimation parameters.
+const int PARQUET_SAMPLING_RANDOM_SEED =
+    42;  // Seed to control random sampling of parquet files for bytes/row and
+         // bytes/file
 // estimates.
-const int PARQUET_SAMPLING_RANDOM_SEED = 42;
+const double PARQUET_SAMPLING_FRACTION =
+    0.001;  // Sample 0.1% of files in the dataset for metadata estimation
+const size_t PARQUET_SAMPLING_MIN_FILES =
+    3;  // Minimum number of parquet files to sample from (if <3 parts in the
+        // dataset, all files will be read).
 
 /**
  * @brief A datasource implementation for reading from Arrow files.
@@ -183,7 +190,7 @@ class RankBatchGenerator {
 
         estimate_parquet_metadata();
 
-        // Configure parquet options that are reused for each reader.
+        // Configure common parquet options.
         chunked_reader_opts.set_columns(selected_columns);
         if (filter_ast_tree.size() > 0) {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
@@ -373,10 +380,14 @@ class RankBatchGenerator {
 
         this->metrics.num_readers++;
 
-        size_t num_parts = std::min(
-            parts_.size() - next_part_idx,
-            (size_t)std::ceil((double)CHUNKED_READER_TOTAL_BYTES_LIMIT /
-                              bytes_per_part_estimate));
+        size_t remaining_parts = parts_.size() - next_part_idx;
+        size_t num_parts =
+            bytes_per_part_estimate > 0
+                ? std::min(remaining_parts,
+                           (size_t)std::ceil(
+                               (double)CHUNKED_READER_TOTAL_BYTES_LIMIT /
+                               bytes_per_part_estimate))
+                : remaining_parts;
         std::vector<std::unique_ptr<cudf::io::datasource>> sources;
         for (size_t i = 0; i < num_parts; i++) {
             const auto &part = parts_[next_part_idx + i];
@@ -413,17 +424,14 @@ class RankBatchGenerator {
      * appropriate chunk sizes for the chunked reader.
      */
     void estimate_parquet_metadata() {
-        if (parts_.empty()) {
-            // nothing assigned to this rank
-            return;
-        }
-
         auto start_estimate_parquet_metadata = start_timer();
 
         std::mt19937 rng(PARQUET_SAMPLING_RANDOM_SEED);
         std::uniform_int_distribution<size_t> dist(0, parts_.size() - 1);
-        int num_samples = std::min(static_cast<int>(parts_.size()),
-                                   std::max(3, (int)(parts_.size() * 0.001)));
+        size_t num_samples = std::min(
+            parts_.size(),
+            std::max(PARQUET_SAMPLING_MIN_FILES,
+                     (size_t)(parts_.size() * PARQUET_SAMPLING_FRACTION)));
         std::vector<FilePart> sampled_parts;
         std::ranges::sample(parts_.begin(), parts_.end(),
                             std::back_inserter(sampled_parts), num_samples,
@@ -451,9 +459,14 @@ class RankBatchGenerator {
             }
         }
 
-        bytes_per_part_estimate = total_sample_bytes / sampled_parts.size();
+        bytes_per_part_estimate =
+            (sampled_parts.size() > 0)
+                ? total_sample_bytes / sampled_parts.size()
+                : 0;
         chunked_reader_limit =
-            (total_sample_bytes / total_sample_rows) * target_rows_;
+            (total_sample_rows > 0)
+                ? (total_sample_bytes / total_sample_rows) * target_rows_
+                : 0;
 
         this->metrics.estimate_parquet_metadata_time +=
             end_timer(start_estimate_parquet_metadata);
@@ -523,18 +536,16 @@ class RankBatchGenerator {
         std::vector<FilePart> result;
         // Use Arrow/Parquet to get num_row_groups cheaply
         int total_rg = 0;
-        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
-        std::unique_ptr<parquet::ParquetFileReader> pf;
-        std::shared_ptr<parquet::FileMetaData> metadata;
         try {
             // Use Arrow filesystem to read the file into a buffer
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
             CHECK_ARROW_AND_ASSIGN(
                 filesystem->OpenInputFile(file),
                 "Error opening file via Arrow filesystem: " + file, arrow_file);
 
-            pf = parquet::ParquetFileReader::Open(arrow_file);
-            metadata = pf->metadata();
-            total_rg = metadata->num_row_groups();
+            std::unique_ptr<parquet::ParquetFileReader> pf =
+                parquet::ParquetFileReader::Open(arrow_file);
+            total_rg = pf->metadata()->num_row_groups();
         } catch (const std::exception &e) {
             std::cerr << "Failed to read parquet metadata for " << file << ": "
                       << e.what() << "\n";
@@ -601,9 +612,11 @@ class RankBatchGenerator {
     // Keep track of which part we're processing for chunked reader
     size_t next_part_idx = 0;
 
-    // Estimate of bytes per row and bytes per part for setting chunked reader
-    // limits.
+    // Estimate of bytes per row and bytes per part for determining how many
+    // parts can be read by a single chunked reader while respecting the
+    // CHUNKED_READER_TOTAL_BYTES_LIMIT.
     int64_t bytes_per_part_estimate = 0;
+    // Limit for each chunk read by a single chunked reader.
     size_t chunked_reader_limit = 0;
 };
 
