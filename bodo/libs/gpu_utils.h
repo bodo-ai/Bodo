@@ -131,7 +131,6 @@ struct GpuShuffle {
     GpuShuffleState send_state = GpuShuffleState::SIZES_INFLIGHT;
     GpuShuffleState recv_state = GpuShuffleState::SIZES_INFLIGHT;
     MPI_Comm mpi_comm = MPI_COMM_NULL;
-    ncclComm_t nccl_comm = nullptr;
     cudaStream_t stream = nullptr;
     // These need to be unique_ptrs to vectors to guarantee they don't
     // move if GpuShuffle is moved
@@ -179,10 +178,9 @@ struct GpuShuffle {
     std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
     GpuShuffle(std::vector<cudf::packed_table> packed_tables,
-               MPI_Comm mpi_comm_, ncclComm_t nccl_comm_, cudaStream_t stream_,
-               int n_ranks, int start_tag)
+               MPI_Comm mpi_comm_, cudaStream_t stream_, int n_ranks,
+               int start_tag)
         : mpi_comm(mpi_comm_),
-          nccl_comm(nccl_comm_),
           stream(stream_),
           gpu_sizes_recv_reqs(
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
@@ -278,9 +276,6 @@ class ShuffleTableInfo {
  */
 class GpuShuffleManager {
    private:
-    // NCCL communicator
-    ncclComm_t nccl_comm = nullptr;
-
     // MPI communicator for CPU communication between ranks
     // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
@@ -350,12 +345,6 @@ class GpuShuffleManager {
      * received.
      */
     std::vector<std::unique_ptr<cudf::table>> progress();
-
-    /**
-     * @brief Get the underlying NCCL communicator
-     * @return ncclComm_t
-     */
-    ncclComm_t get_nccl_comm() const { return nccl_comm; }
 
     /**
      * @brief Get the underlying CUDA stream

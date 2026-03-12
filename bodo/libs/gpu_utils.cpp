@@ -103,8 +103,7 @@ void GpuShuffleManager::do_shuffle() {
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
-                                         nccl_comm, stream, this->n_ranks,
-                                         this->curr_tag);
+                                         stream, this->n_ranks, this->curr_tag);
 
     // Each shuffle will use 3 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
@@ -332,8 +331,6 @@ void GpuShuffle::progress_waiting_for_sizes() {
         this->recv_metadata();
         this->recv_data();
         this->send_data();
-        this->nccl_recv_event.record(this->stream);
-        this->nccl_send_event.record(this->stream);
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
@@ -346,16 +343,12 @@ GpuShuffle::progress_waiting_for_data() {
     int all_metadata_received;
     CHECK_MPI_TEST_ALL(
         (*this->metadata_recv_reqs), all_metadata_received,
-        "GpuShuffle::progress_waiting_for_data: MPI_Test failed:");
-    // Check if NCCL event has completed, this will return cudaSuccess if the
-    // event has completed, cudaErrorNotReady if not yet completed,
-    // or another error code if an error occurred.
-    cudaError_t event_status = nccl_recv_event.query();
-    // Check for errors
-    if (event_status != cudaErrorNotReady) {
-        CHECK_CUDA(event_status);
-    }
-    bool gpu_data_received = (event_status == cudaSuccess);
+        "GpuShuffle::progress_waiting_for_data: MPI_Test for metadata failed:");
+
+    bool gpu_data_received;
+    CHECK_MPI_TEST_ALL(
+        (*this->data_recv_reqs), gpu_data_received,
+        "GpuShuffle::progress_waiting_for_data: MPI_Test for data failed:");
 
     if (all_metadata_received && gpu_data_received) {
         // Unpack received tables
@@ -393,8 +386,9 @@ void GpuShuffle::progress_sending_sizes() {
                        all_metadata_sizes_sent,
                        "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
     int all_gpu_sizes_sent;
-    CHECK_MPI_TEST_ALL((*this->gpu_sizes_send_reqs), all_gpu_sizes_sent,
-                       "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL(
+        (*this->gpu_sizes_send_reqs), all_gpu_sizes_sent,
+        "GpuShuffle::progress_sending_sizes: MPI_Test for GPU sizes failed:");
     if (all_metadata_sizes_sent && all_gpu_sizes_sent &&
         this->recv_state != GpuShuffleState::SIZES_INFLIGHT) {
         // Deallocate all size data
@@ -410,17 +404,13 @@ void GpuShuffle::progress_sending_sizes() {
 void GpuShuffle::progress_sending_data() {
     assert(this->send_state == GpuShuffleState::DATA_INFLIGHT);
     int all_metadata_sent;
-    CHECK_MPI_TEST_ALL((*this->metadata_send_reqs), all_metadata_sent,
-                       "GpuShuffle::progress_sending_data: MPI_Test failed:");
-    // Check if NCCL event has completed, this will return cudaSuccess if the
-    // event has completed, cudaErrorNotReady if not yet completed,
-    // or another error code if an error occurred.
-    cudaError_t event_status = nccl_send_event.query();
-    // Check for errors
-    if (event_status != cudaErrorNotReady) {
-        CHECK_CUDA(event_status);
-    }
-    bool gpu_data_sent = (event_status == cudaSuccess);
+    CHECK_MPI_TEST_ALL(
+        (*this->metadata_send_reqs), all_metadata_sent,
+        "GpuShuffle::progress_sending_data: MPI_Test for metadata failed:");
+    int gpu_data_sent;
+    CHECK_MPI_TEST_ALL(
+        (*this->data_send_reqs), gpu_data_sent,
+        "GpuShuffle::progress_sending_data: MPI_Test for GPU data failed:");
 
     if (all_metadata_sent && gpu_data_sent) {
         // Deallocate all send data
