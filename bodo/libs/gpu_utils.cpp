@@ -271,9 +271,6 @@ void GpuShuffle::recv_metadata() {
 void GpuShuffle::send_data() {
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
-        if (packed_send_buffers[dest_rank]->size() == 0) {
-            continue;
-        }
         CHECK_MPI(MPI_Isend(packed_send_buffers[dest_rank]->data(),
                             packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
                             dest_rank, this->start_tag + 3, mpi_comm,
@@ -285,9 +282,6 @@ void GpuShuffle::send_data() {
 void GpuShuffle::recv_data() {
     for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
          src_rank++) {
-        if (packed_recv_buffers[src_rank]->size() == 0) {
-            continue;
-        }
         CHECK_MPI(MPI_Irecv(packed_recv_buffers[src_rank]->data(),
                             packed_recv_buffers[src_rank]->size(), MPI_UINT8_T,
                             src_rank, this->start_tag + 3, mpi_comm,
