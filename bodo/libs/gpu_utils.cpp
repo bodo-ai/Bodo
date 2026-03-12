@@ -368,6 +368,7 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_buffers.clear();
         this->packed_recv_buffers.clear();
         this->metadata_recv_reqs->clear();
+        this->data_recv_reqs->clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
 
@@ -417,6 +418,7 @@ void GpuShuffle::progress_sending_data() {
         this->metadata_send_buffers.clear();
         this->packed_send_buffers.clear();
         this->metadata_send_reqs->clear();
+        this->data_send_reqs->clear();
         // Move to completed state
         this->send_state = GpuShuffleState::COMPLETED;
     }
