@@ -153,10 +153,13 @@ struct GpuShuffle {
     // MPI_Requests for metadata transfers to other ranks
     // Indexed by destination rank
     std::unique_ptr<std::vector<MPI_Request>> metadata_send_reqs;
-    // Event markers for all nccl operations needed for this shuffle.
-    // When this is finished all GPU buffers are in the correct place.
-    cuda_event_wrapper nccl_send_event;
-    cuda_event_wrapper nccl_recv_event;
+    // MPI_Requests for data transfers from other ranks
+    // Indexed by sending rank
+    std::unique_ptr<std::vector<MPI_Request>> data_send_reqs;
+    // MPI_Requests for data transfers to other ranks
+    // Indexed by destination rank
+    std::unique_ptr<std::vector<MPI_Request>> data_recv_reqs;
+
     // We need to keep sizes around while the transfers are inflight
     std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
     std::unique_ptr<std::vector<uint64_t>> recv_metadata_sizes;
@@ -193,6 +196,8 @@ struct GpuShuffle {
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
           metadata_send_reqs(
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          data_send_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          data_recv_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks)),
           send_metadata_sizes(
               std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
           recv_metadata_sizes(

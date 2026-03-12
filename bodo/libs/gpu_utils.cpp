@@ -275,9 +275,11 @@ void GpuShuffle::send_data() {
         if (packed_send_buffers[dest_rank]->size() == 0) {
             continue;
         }
-        CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
-                            packed_send_buffers[dest_rank]->size(), ncclChar,
-                            dest_rank, this->nccl_comm, this->stream));
+        CHECK_MPI(MPI_Isend(packed_send_buffers[dest_rank]->data(),
+                            packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
+                            dest_rank, this->start_tag + 3, mpi_comm,
+                            &(*this->data_send_reqs)[dest_rank]),
+                  "GpuShuffle::send_data: MPI_Isend failed:");
     }
 }
 
@@ -287,9 +289,11 @@ void GpuShuffle::recv_data() {
         if (packed_recv_buffers[src_rank]->size() == 0) {
             continue;
         }
-        CHECK_NCCL(ncclRecv(packed_recv_buffers[src_rank]->data(),
-                            packed_recv_buffers[src_rank]->size(), ncclChar,
-                            src_rank, this->nccl_comm, this->stream));
+        CHECK_MPI(MPI_Irecv(packed_recv_buffers[src_rank]->data(),
+                            packed_recv_buffers[src_rank]->size(), MPI_UINT8_T,
+                            src_rank, this->start_tag + 3, mpi_comm,
+                            &(*this->data_recv_reqs)[src_rank]),
+                  "GpuShuffle::recv_data: MPI_Irecv failed:");
     }
 }
 
