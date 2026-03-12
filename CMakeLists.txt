@@ -930,6 +930,12 @@ if(USE_CUDF)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
   target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl)
+
+  get_target_property(EXT_LINKER_LANG ext LINKER_LANGUAGE)
+  message(STATUS "ext LINKER_LANGUAGE = ${EXT_LINKER_LANG}")
+  message(STATUS "CMAKE_CXX_LINK_EXECUTABLE = ${CMAKE_CXX_LINK_EXECUTABLE}")
+  message(STATUS "CMAKE_CUDA_LINK_EXECUTABLE = ${CMAKE_CUDA_LINK_EXECUTABLE}")
+  message(STATUS "CMAKE_LINKER = ${CMAKE_LINKER}")
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
