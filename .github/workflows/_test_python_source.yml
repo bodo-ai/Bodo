@@ -83,6 +83,10 @@ jobs:
           if: ${{ inputs.test-type == 'NARWHALS' }}
           run: |
             pip install hypothesis polars sqlframe ibis-framework pyarrow-hotfix
+        - name: Dump GPU Info
+          if: ${{ inputs.test-type == 'DF_LIB_GPU' }}
+          run: |
+            nvidia-smi
 
         # Run Tests
         - name: Run Tests
