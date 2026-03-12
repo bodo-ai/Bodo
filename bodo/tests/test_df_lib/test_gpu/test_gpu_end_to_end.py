@@ -189,7 +189,6 @@ def test_gpu_to_cpu_exchange(datapath):
     # Case 1: GPU (read parquet) -> CPU process batch (UDF)
     bdf["F"] = bdf["F"].map(lambda x: str(x), engine="python")
     assert count_gpu_plan_nodes(bdf._plan) == 1, "Expected GPU node for reading parquet"
-    print(bdf)
 
     pdf = pd.read_parquet(path)
     pdf["F"] = pdf["F"].map(lambda x: str(x))

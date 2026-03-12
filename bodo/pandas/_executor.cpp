@@ -964,7 +964,7 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 }
 
 /**
- * @brief Return true if CPU fallback is disabled via environment variable.
+ * @brief True if CPU fallback is disabled via environment variable.
  *
  */
 bool cpu_fallback_disabled() {
@@ -973,13 +973,10 @@ bool cpu_fallback_disabled() {
 }
 
 /**
- * @brief Determine whether it is ok to ignore the operator running on CPU when
+ * @brief True if it is ok to ignore the operator running on CPU when
  * CPU fallback is disabled. This is intended for common operators used in
  * testing utilities that are not currently supported on GPU.
  *
- * @param op the logical operator
- * @return true If it is ok to ignore the operator running on CPU, false
- * otherwise.
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
     // Only explicitly allow fallback for DataFrame source and sort.
