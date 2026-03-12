@@ -294,13 +294,14 @@ void GpuShuffle::progress_waiting_for_sizes() {
     // Check if all sizes have been received
     assert(this->recv_state == GpuShuffleState::SIZES_INFLIGHT);
     int all_metadata_sizes_received;
-    CHECK_MPI_TEST_ALL(
-        (*this->metadata_sizes_recv_reqs), all_metadata_sizes_received,
-        "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL((*this->metadata_sizes_recv_reqs),
+                       all_metadata_sizes_received,
+                       "GpuShuffle::progress_waiting_for_sizes: MPI_Test for "
+                       "metadata sizes failed:");
     int all_gpu_sizes_received;
-    CHECK_MPI_TEST_ALL(
-        (*this->gpu_sizes_recv_reqs), all_gpu_sizes_received,
-        "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL((*this->gpu_sizes_recv_reqs), all_gpu_sizes_received,
+                       "GpuShuffle::progress_waiting_for_sizes: MPI_Test for "
+                       "recv sizes failed:");
     if (all_metadata_sizes_received && all_gpu_sizes_received) {
         // Allocate receive buffers based on received sizes
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
