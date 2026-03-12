@@ -970,6 +970,8 @@ def verbose_mode_on():
 
 @pytest.fixture(autouse=True)
 def gpu_disable_cpu_fallback(request, monkeypatch):
+    """Disable CPU fallback for GPU tests unless explicitly allowed (throws an error if
+    any operator falls back to CPU unexpectedly)."""
     marker = request.node.get_closest_marker("gpu")
     if marker:
         kws = marker.kwargs
