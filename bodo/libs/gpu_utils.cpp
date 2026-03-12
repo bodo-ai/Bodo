@@ -36,18 +36,12 @@ GpuShuffleManager::GpuShuffleManager()
 
     // Create CUDA stream
     CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
-
-    // Initialize NCCL
-    initialize_nccl();
 }
 
 GpuShuffleManager::~GpuShuffleManager() {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
-
-    // Destroy NCCL communicator
-    ncclCommDestroy(nccl_comm);
 
     // Destroy CUDA stream
     if (stream) {
@@ -56,22 +50,6 @@ GpuShuffleManager::~GpuShuffleManager() {
 
     // Free MPI communicator
     MPI_Comm_free(&mpi_comm);
-}
-
-void GpuShuffleManager::initialize_nccl() {
-    ncclUniqueId nccl_id;
-
-    if (rank == 0) {
-        // Generate unique ID on root rank
-        CHECK_NCCL(ncclGetUniqueId(&nccl_id));
-    }
-
-    // Broadcast the unique ID to all ranks
-    CHECK_MPI(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm),
-              "GpuShuffleManager::initialize_nccl: MPI_Bcast failed:");
-
-    // Initialize NCCL communicator
-    CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
 
 void GpuShuffleManager::shuffle_table(
@@ -348,10 +326,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
-        CHECK_NCCL(ncclGroupStart());
         this->recv_data();
         this->send_data();
-        CHECK_NCCL(ncclGroupEnd());
         this->nccl_recv_event.record(this->stream);
         this->nccl_send_event.record(this->stream);
 
