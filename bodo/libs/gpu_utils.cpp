@@ -170,7 +170,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
             this->inflight_shuffles.pop_front();
         } else {
             // Only progress one inflight_shuffle at a time to ensure consistent
-            // ordering across ranks (required for NCCL).
+            // ordering across ranks (TODO(ehsan): update since we replaced NCCL
+            // with MPI?).
             break;
         }
     }

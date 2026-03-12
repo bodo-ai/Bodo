@@ -5,19 +5,9 @@ extern bool g_use_async;
 
 #ifdef USE_CUDF
 #include <mpi.h>
-#include <nccl.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
 
-// Error checking macros for NCCL
-#define CHECK_NCCL(call)                                                       \
-    do {                                                                       \
-        ncclResult_t result = call;                                            \
-        if (result != ncclSuccess) {                                           \
-            throw std::runtime_error("NCCL error: " +                          \
-                                     std::string(ncclGetErrorString(result))); \
-        }                                                                      \
-    } while (0)
 #define CHECK_CUDA(call)                                                    \
     do {                                                                    \
         cudaError_t err = call;                                             \
@@ -272,7 +262,7 @@ class ShuffleTableInfo {
 };
 
 /**
- * @brief Class for managing async shuffle of cudf::tables using NCCL
+ * @brief Class for managing async shuffle of cudf::tables using MPI
  */
 class GpuShuffleManager {
    private:
@@ -309,11 +299,6 @@ class GpuShuffleManager {
     bool complete_signaled = false;
 
     std::vector<ShuffleTableInfo> tables_to_shuffle;
-
-    /**
-     * @brief Initialize NCCL communicator
-     */
-    void initialize_nccl();
 
     /**
      * @brief Once we've determined we will shuffle, start the shuffle by
