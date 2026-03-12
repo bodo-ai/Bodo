@@ -28,7 +28,6 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/io/file.h>
 #include <arrow/python/api.h>
-#include <mpi_proto.h>
 #include <parquet/arrow/reader.h>  // parquet::ParquetFileReader or parquet::arrow::FileReader
 #include <parquet/exception.h>
 #include "../io/arrow_compat.h"
