@@ -8,7 +8,9 @@
 #include <variant>
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_join.h"
+#ifdef USE_CUDF
 #include "../libs/streaming/cuda_join.h"
+#endif
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/planner/column_binding.hpp"
