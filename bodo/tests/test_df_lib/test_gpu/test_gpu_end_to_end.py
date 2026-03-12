@@ -180,6 +180,7 @@ def test_cpu_to_gpu_exchange(datapath):
         )
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_gpu_to_cpu_exchange(datapath):
     """Test pipelines that transfer data between GPU and CPU"""
     path = datapath("dataframe_library/df1.parquet")
@@ -188,6 +189,7 @@ def test_gpu_to_cpu_exchange(datapath):
     # Case 1: GPU (read parquet) -> CPU process batch (UDF)
     bdf["F"] = bdf["F"].map(lambda x: str(x), engine="python")
     assert count_gpu_plan_nodes(bdf._plan) == 1, "Expected GPU node for reading parquet"
+    print(bdf)
 
     pdf = pd.read_parquet(path)
     pdf["F"] = pdf["F"].map(lambda x: str(x))

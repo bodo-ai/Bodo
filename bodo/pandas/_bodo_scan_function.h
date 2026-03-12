@@ -10,6 +10,8 @@
 #include "optimizer/runtime_join_filter.h"
 #include "physical/operator.h"
 
+enum class BodoScanFunctionType { PARQUET_SCAN, DATAFRAME_SCAN, ICEBERG_SCAN };
+
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
  *
@@ -46,6 +48,11 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
     std::optional<JoinFilterProgramState> rtjf_state_map = std::nullopt;
 
     virtual bool canRunOnGPU(bool has_filters, bool has_limit) { return false; }
+
+    BodoScanFunctionType getScanFunctionType() { return scan_function_type; }
+
+   protected:
+    BodoScanFunctionType scan_function_type;
 };
 
 /**
@@ -80,6 +87,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         : path(path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {
+        scan_function_type = BodoScanFunctionType::PARQUET_SCAN;
         Py_INCREF(pyarrow_schema);
         Py_INCREF(storage_options);
         Py_INCREF(path);
@@ -136,6 +144,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
     BodoDataFrameSeqScanFunctionData(
         PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
         : df(df), arrow_schema(std::move(arrow_schema)) {
+        scan_function_type = BodoScanFunctionType::DATAFRAME_SCAN;
         Py_INCREF(df);
     }
     ~BodoDataFrameSeqScanFunctionData() override { Py_DECREF(df); }
@@ -166,7 +175,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
     BodoDataFrameParallelScanFunctionData(
         std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
         : result_id(std::move(result_id)),
-          arrow_schema(std::move(arrow_schema)) {}
+          arrow_schema(std::move(arrow_schema)) {
+        scan_function_type = BodoScanFunctionType::DATAFRAME_SCAN;
+    }
     ~BodoDataFrameParallelScanFunctionData() override = default;
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -220,6 +231,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
           iceberg_schema(_iceberg_schema),
           table_id(_table_id),
           snapshot_id(_snapshot_id) {
+        scan_function_type = BodoScanFunctionType::ICEBERG_SCAN;
         Py_INCREF(this->catalog);
         Py_INCREF(this->iceberg_filter);
         Py_INCREF(this->iceberg_schema);

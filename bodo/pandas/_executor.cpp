@@ -3,6 +3,7 @@
 #include <fstream>
 #include "_bodo_scan_function.h"
 #include "duckdb/planner/logical_operator.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
 
 #ifdef USE_CUDF
 #include <cuda_runtime.h>
@@ -962,6 +963,35 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
     }
 }
 
+/**
+ * @brief Check if CPU fallback is disabled via environment variable.
+ *
+ * @return true if CPU fallback is disabled, false otherwise.
+ */
+bool cpu_fallback_disabled() {
+    char *env_str = std::getenv("BODO_GPU_DISABLE_CPU_FALLBACK");
+    return env_str != nullptr;
+}
+
+/**
+ * @brief Determine whether it is ok to ignore the operator running on CPU when
+ * CPU fallback is disabled. This is intended for common operators used in
+ * testing utilities that are not currently supported on GPU.
+ *
+ * @param op the logical operator
+ * @return true If it is ok to ignore the operator running on CPU, false
+ * otherwise.
+ */
+bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
+    if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
+        duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
+        return get_op.bind_data->Cast<BodoScanFunctionData>()
+                   .getScanFunctionType() ==
+               BodoScanFunctionType::DATAFRAME_SCAN;
+    }
+    return false;
+}
+
 #endif  // USE_CUDF
 
 void partition_internal(duckdb::LogicalOperator &op,
@@ -987,6 +1017,22 @@ void partition_internal(duckdb::LogicalOperator &op,
         dp_compute(root, dp_cache);
         // Fill out the run_on_gpu map.
         assign_devices(root, dp_cache, run_on_gpu);
+
+        if (cpu_fallback_disabled()) {
+            for (const auto [op_ptr, is_gpu] : run_on_gpu) {
+                if (!(is_gpu || ignore_cpu_fallback(*op_ptr))) {
+                    std::cout
+                        << root->getOp().ToString(
+                               duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
+                        << std::endl;
+                    throw std::runtime_error(
+                        "BODO_GPU_DISABLE_CPU_FALLBACK is set but partitioning "
+                        "algorithm selected CPU for operator: \n" +
+                        root->getOp().ToString(duckdb::ExplainFormat::DEFAULT,
+                                               &run_on_gpu));
+                }
+            }
+        }
 
         if (get_dump_plans()) {
             int myrank;
