@@ -969,7 +969,7 @@ def verbose_mode_on():
 
 
 @pytest.fixture(autouse=True)
-def set_env_for_marker(request, monkeypatch):
+def gpu_disable_cpu_fallback(request, monkeypatch):
     marker = request.node.get_closest_marker("gpu")
     if marker:
         kws = marker.kwargs
