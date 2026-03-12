@@ -199,8 +199,6 @@ class RankBatchGenerator {
         chunked_reader_opts.enable_use_pandas_metadata(false);
 
         chunked_reader_se = make_stream_and_event(g_use_async);
-
-        std::cout << "Parquet Read is happening on the GPU" << std::endl;
     }
 
     std::pair<std::unique_ptr<cudf::table>, bool> next(

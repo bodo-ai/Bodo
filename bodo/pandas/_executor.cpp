@@ -964,9 +964,8 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
 }
 
 /**
- * @brief Check if CPU fallback is disabled via environment variable.
+ * @brief Return true if CPU fallback is disabled via environment variable.
  *
- * @return true if CPU fallback is disabled, false otherwise.
  */
 bool cpu_fallback_disabled() {
     char *env_str = std::getenv("BODO_GPU_DISABLE_CPU_FALLBACK");
@@ -983,13 +982,14 @@ bool cpu_fallback_disabled() {
  * otherwise.
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
+    // Only explicitly allow fallback for DataFrame source and sort.
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
         duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
         return get_op.bind_data->Cast<BodoScanFunctionData>()
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return false;
+    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
 }
 
 #endif  // USE_CUDF
@@ -1021,10 +1021,6 @@ void partition_internal(duckdb::LogicalOperator &op,
         if (cpu_fallback_disabled()) {
             for (const auto [op_ptr, is_gpu] : run_on_gpu) {
                 if (!(is_gpu || ignore_cpu_fallback(*op_ptr))) {
-                    std::cout
-                        << root->getOp().ToString(
-                               duckdb::ExplainFormat::DEFAULT, &run_on_gpu)
-                        << std::endl;
                     throw std::runtime_error(
                         "BODO_GPU_DISABLE_CPU_FALLBACK is set but partitioning "
                         "algorithm selected CPU for operator: \n" +
