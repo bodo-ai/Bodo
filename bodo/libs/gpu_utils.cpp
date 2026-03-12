@@ -111,7 +111,7 @@ void GpuShuffleManager::do_shuffle() {
         throw std::runtime_error(
             "Exceeded maximum number of inflight shuffles");
     }
-    this->curr_tag = (this->curr_tag + 3) % MAX_TAG_VAL;
+    this->curr_tag = (this->curr_tag + 4) % MAX_TAG_VAL;
 }
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
