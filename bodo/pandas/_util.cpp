@@ -970,7 +970,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
                 return std::make_optional<col_min_max_t>(min_scalar,
                                                          max_scalar);
             }
-#endif USE_CUDF
+#endif  // USE_CUDF
         },
         join_state);
 }
@@ -1461,4 +1461,4 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
-#endif
+#endif  // USE_CUDF
