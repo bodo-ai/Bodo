@@ -345,7 +345,7 @@ GpuShuffle::progress_waiting_for_data() {
         (*this->metadata_recv_reqs), all_metadata_received,
         "GpuShuffle::progress_waiting_for_data: MPI_Test for metadata failed:");
 
-    bool gpu_data_received;
+    int gpu_data_received;
     CHECK_MPI_TEST_ALL(
         (*this->data_recv_reqs), gpu_data_received,
         "GpuShuffle::progress_waiting_for_data: MPI_Test for data failed:");
