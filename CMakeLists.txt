@@ -936,6 +936,15 @@ if(USE_CUDF)
   message(STATUS "CMAKE_CXX_LINK_EXECUTABLE = ${CMAKE_CXX_LINK_EXECUTABLE}")
   message(STATUS "CMAKE_CUDA_LINK_EXECUTABLE = ${CMAKE_CUDA_LINK_EXECUTABLE}")
   message(STATUS "CMAKE_LINKER = ${CMAKE_LINKER}")
+
+  add_custom_command(
+    TARGET ext
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Checking CUDA registration symbols in ext.so ==="
+    COMMAND nm -D $<TARGET_FILE:ext> | grep __cudaRegisterLinkedBinary || true
+    COMMAND cuobjdump --dump-elf $<TARGET_FILE:ext> | grep fatbin || true
+)
+
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy
