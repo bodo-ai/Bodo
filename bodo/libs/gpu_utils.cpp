@@ -36,18 +36,12 @@ GpuShuffleManager::GpuShuffleManager()
 
     // Create CUDA stream
     CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
-
-    // Initialize NCCL
-    initialize_nccl();
 }
 
 GpuShuffleManager::~GpuShuffleManager() {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
-
-    // Destroy NCCL communicator
-    ncclCommDestroy(nccl_comm);
 
     // Destroy CUDA stream
     if (stream) {
@@ -56,22 +50,6 @@ GpuShuffleManager::~GpuShuffleManager() {
 
     // Free MPI communicator
     MPI_Comm_free(&mpi_comm);
-}
-
-void GpuShuffleManager::initialize_nccl() {
-    ncclUniqueId nccl_id;
-
-    if (rank == 0) {
-        // Generate unique ID on root rank
-        CHECK_NCCL(ncclGetUniqueId(&nccl_id));
-    }
-
-    // Broadcast the unique ID to all ranks
-    CHECK_MPI(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm),
-              "GpuShuffleManager::initialize_nccl: MPI_Bcast failed:");
-
-    // Initialize NCCL communicator
-    CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
 }
 
 void GpuShuffleManager::shuffle_table(
@@ -125,16 +103,15 @@ void GpuShuffleManager::do_shuffle() {
     assert(packed_tables.size() == static_cast<size_t>(n_ranks));
 
     this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
-                                         nccl_comm, stream, this->n_ranks,
-                                         this->curr_tag);
+                                         stream, this->n_ranks, this->curr_tag);
 
-    // Each shuffle will use 3 tags for shuffling metadata/gpu data
+    // Each shuffle will use 4 tags for shuffling metadata/gpu data
     // sizes and metadata buffers
-    if (inflight_shuffles.size() * 3 > static_cast<size_t>(MAX_TAG_VAL)) {
+    if (inflight_shuffles.size() * 4 > static_cast<size_t>(MAX_TAG_VAL)) {
         throw std::runtime_error(
             "Exceeded maximum number of inflight shuffles");
     }
-    this->curr_tag = (this->curr_tag + 3) % MAX_TAG_VAL;
+    this->curr_tag = (this->curr_tag + 4) % MAX_TAG_VAL;
 }
 
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
@@ -193,7 +170,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
             this->inflight_shuffles.pop_front();
         } else {
             // Only progress one inflight_shuffle at a time to ensure consistent
-            // ordering across ranks (required for NCCL).
+            // ordering across ranks (TODO(ehsan): update since we replaced NCCL
+            // with MPI?).
             break;
         }
     }
@@ -236,20 +214,21 @@ void GpuShuffle::send_sizes() {
          dest_rank++) {
         (*this->send_metadata_sizes)[dest_rank] =
             this->metadata_send_buffers[dest_rank]->size();
-        CHECK_MPI(MPI_Isend(&(*this->send_metadata_sizes)[dest_rank], 1,
-                            MPI_UINT64_T, dest_rank, this->start_tag, mpi_comm,
-                            &(*this->metadata_sizes_send_reqs)[dest_rank]),
-                  "GpuShuffle::send_sizes: MPI_Isend failed:");
+        CHECK_MPI(MPI_Issend(&(*this->send_metadata_sizes)[dest_rank], 1,
+                             MPI_UINT64_T, dest_rank, this->start_tag, mpi_comm,
+                             &(*this->metadata_sizes_send_reqs)[dest_rank]),
+                  "GpuShuffle::send_sizes: MPI_Issend failed:");
     }
     // Send GPU data sizes
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         (*this->send_gpu_sizes)[dest_rank] =
             packed_send_buffers[dest_rank]->size();
-        CHECK_MPI(MPI_Isend(&(*this->send_gpu_sizes)[dest_rank], 1,
-                            MPI_UINT64_T, dest_rank, this->start_tag + 1,
-                            mpi_comm, &(*this->gpu_sizes_send_reqs)[dest_rank]),
-                  "GpuShuffle::send_sizes: MPI_Isend failed:");
+        CHECK_MPI(
+            MPI_Issend(&(*this->send_gpu_sizes)[dest_rank], 1, MPI_UINT64_T,
+                       dest_rank, this->start_tag + 1, mpi_comm,
+                       &(*this->gpu_sizes_send_reqs)[dest_rank]),
+            "GpuShuffle::send_sizes: MPI_Issend failed:");
     }
 }
 void GpuShuffle::recv_sizes() {
@@ -272,11 +251,11 @@ void GpuShuffle::recv_sizes() {
 void GpuShuffle::send_metadata() {
     for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
          dest_rank++) {
-        CHECK_MPI(MPI_Isend(this->metadata_send_buffers[dest_rank]->data(),
-                            this->metadata_send_buffers[dest_rank]->size(),
-                            MPI_UINT8_T, dest_rank, this->start_tag + 2,
-                            mpi_comm, &(*this->metadata_send_reqs)[dest_rank]),
-                  "GpuShuffle::send_metadata: MPI_Isend failed:");
+        CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
+                             this->metadata_send_buffers[dest_rank]->size(),
+                             MPI_UINT8_T, dest_rank, this->start_tag + 2,
+                             mpi_comm, &(*this->metadata_send_reqs)[dest_rank]),
+                  "GpuShuffle::send_metadata: MPI_Issend failed:");
     }
 }
 
@@ -294,24 +273,22 @@ void GpuShuffle::recv_metadata() {
 void GpuShuffle::send_data() {
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
-        if (packed_send_buffers[dest_rank]->size() == 0) {
-            continue;
-        }
-        CHECK_NCCL(ncclSend(packed_send_buffers[dest_rank]->data(),
-                            packed_send_buffers[dest_rank]->size(), ncclChar,
-                            dest_rank, this->nccl_comm, this->stream));
+        CHECK_MPI(MPI_Issend(packed_send_buffers[dest_rank]->data(),
+                             packed_send_buffers[dest_rank]->size(),
+                             MPI_UINT8_T, dest_rank, this->start_tag + 3,
+                             mpi_comm, &(*this->data_send_reqs)[dest_rank]),
+                  "GpuShuffle::send_data: MPI_Issend failed:");
     }
 }
 
 void GpuShuffle::recv_data() {
     for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
          src_rank++) {
-        if (packed_recv_buffers[src_rank]->size() == 0) {
-            continue;
-        }
-        CHECK_NCCL(ncclRecv(packed_recv_buffers[src_rank]->data(),
-                            packed_recv_buffers[src_rank]->size(), ncclChar,
-                            src_rank, this->nccl_comm, this->stream));
+        CHECK_MPI(MPI_Irecv(packed_recv_buffers[src_rank]->data(),
+                            packed_recv_buffers[src_rank]->size(), MPI_UINT8_T,
+                            src_rank, this->start_tag + 3, mpi_comm,
+                            &(*this->data_recv_reqs)[src_rank]),
+                  "GpuShuffle::recv_data: MPI_Irecv failed:");
     }
 }
 
@@ -319,13 +296,14 @@ void GpuShuffle::progress_waiting_for_sizes() {
     // Check if all sizes have been received
     assert(this->recv_state == GpuShuffleState::SIZES_INFLIGHT);
     int all_metadata_sizes_received;
-    CHECK_MPI_TEST_ALL(
-        (*this->metadata_sizes_recv_reqs), all_metadata_sizes_received,
-        "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL((*this->metadata_sizes_recv_reqs),
+                       all_metadata_sizes_received,
+                       "GpuShuffle::progress_waiting_for_sizes: MPI_Test for "
+                       "metadata sizes failed:");
     int all_gpu_sizes_received;
-    CHECK_MPI_TEST_ALL(
-        (*this->gpu_sizes_recv_reqs), all_gpu_sizes_received,
-        "GpuShuffle::progress_waiting_for_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL((*this->gpu_sizes_recv_reqs), all_gpu_sizes_received,
+                       "GpuShuffle::progress_waiting_for_sizes: MPI_Test for "
+                       "recv sizes failed:");
     if (all_metadata_sizes_received && all_gpu_sizes_received) {
         // Allocate receive buffers based on received sizes
         for (size_t src_rank = 0; src_rank < packed_recv_buffers.size();
@@ -348,12 +326,8 @@ void GpuShuffle::progress_waiting_for_sizes() {
 
         // Start receiving metadata and data and send gpu data
         this->recv_metadata();
-        CHECK_NCCL(ncclGroupStart());
         this->recv_data();
         this->send_data();
-        CHECK_NCCL(ncclGroupEnd());
-        this->nccl_recv_event.record(this->stream);
-        this->nccl_send_event.record(this->stream);
 
         // Move to next state
         this->recv_state = GpuShuffleState::DATA_INFLIGHT;
@@ -366,16 +340,12 @@ GpuShuffle::progress_waiting_for_data() {
     int all_metadata_received;
     CHECK_MPI_TEST_ALL(
         (*this->metadata_recv_reqs), all_metadata_received,
-        "GpuShuffle::progress_waiting_for_data: MPI_Test failed:");
-    // Check if NCCL event has completed, this will return cudaSuccess if the
-    // event has completed, cudaErrorNotReady if not yet completed,
-    // or another error code if an error occurred.
-    cudaError_t event_status = nccl_recv_event.query();
-    // Check for errors
-    if (event_status != cudaErrorNotReady) {
-        CHECK_CUDA(event_status);
-    }
-    bool gpu_data_received = (event_status == cudaSuccess);
+        "GpuShuffle::progress_waiting_for_data: MPI_Test for metadata failed:");
+
+    int gpu_data_received;
+    CHECK_MPI_TEST_ALL(
+        (*this->data_recv_reqs), gpu_data_received,
+        "GpuShuffle::progress_waiting_for_data: MPI_Test for data failed:");
 
     if (all_metadata_received && gpu_data_received) {
         // Unpack received tables
@@ -395,6 +365,7 @@ GpuShuffle::progress_waiting_for_data() {
         this->metadata_recv_buffers.clear();
         this->packed_recv_buffers.clear();
         this->metadata_recv_reqs->clear();
+        this->data_recv_reqs->clear();
         // Move to completed state
         this->recv_state = GpuShuffleState::COMPLETED;
 
@@ -413,8 +384,9 @@ void GpuShuffle::progress_sending_sizes() {
                        all_metadata_sizes_sent,
                        "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
     int all_gpu_sizes_sent;
-    CHECK_MPI_TEST_ALL((*this->gpu_sizes_send_reqs), all_gpu_sizes_sent,
-                       "GpuShuffle::progress_sending_sizes: MPI_Test failed:");
+    CHECK_MPI_TEST_ALL(
+        (*this->gpu_sizes_send_reqs), all_gpu_sizes_sent,
+        "GpuShuffle::progress_sending_sizes: MPI_Test for GPU sizes failed:");
     if (all_metadata_sizes_sent && all_gpu_sizes_sent &&
         this->recv_state != GpuShuffleState::SIZES_INFLIGHT) {
         // Deallocate all size data
@@ -430,23 +402,20 @@ void GpuShuffle::progress_sending_sizes() {
 void GpuShuffle::progress_sending_data() {
     assert(this->send_state == GpuShuffleState::DATA_INFLIGHT);
     int all_metadata_sent;
-    CHECK_MPI_TEST_ALL((*this->metadata_send_reqs), all_metadata_sent,
-                       "GpuShuffle::progress_sending_data: MPI_Test failed:");
-    // Check if NCCL event has completed, this will return cudaSuccess if the
-    // event has completed, cudaErrorNotReady if not yet completed,
-    // or another error code if an error occurred.
-    cudaError_t event_status = nccl_send_event.query();
-    // Check for errors
-    if (event_status != cudaErrorNotReady) {
-        CHECK_CUDA(event_status);
-    }
-    bool gpu_data_sent = (event_status == cudaSuccess);
+    CHECK_MPI_TEST_ALL(
+        (*this->metadata_send_reqs), all_metadata_sent,
+        "GpuShuffle::progress_sending_data: MPI_Test for metadata failed:");
+    int gpu_data_sent;
+    CHECK_MPI_TEST_ALL(
+        (*this->data_send_reqs), gpu_data_sent,
+        "GpuShuffle::progress_sending_data: MPI_Test for GPU data failed:");
 
     if (all_metadata_sent && gpu_data_sent) {
         // Deallocate all send data
         this->metadata_send_buffers.clear();
         this->packed_send_buffers.clear();
         this->metadata_send_reqs->clear();
+        this->data_send_reqs->clear();
         // Move to completed state
         this->send_state = GpuShuffleState::COMPLETED;
     }
@@ -471,7 +440,8 @@ bool GpuShuffleManager::all_complete() {
             this->global_completion_req = MPI_REQUEST_NULL;
         }
     }
-    return this->global_completion;
+    return this->global_completion && inflight_shuffles.empty() &&
+           tables_to_shuffle.empty();
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>

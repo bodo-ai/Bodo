@@ -14,7 +14,7 @@ platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],    
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
+default-cuda =      { features = ["py313", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
@@ -270,6 +270,17 @@ numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
+
+
+[feature.open-mpi.dependencies]
+openmpi = { version = "*" }
+
+[feature.rcpp-openmpi.dependencies]
+zstd = "*"
+boost-cpp = "*"
+aws-sdk-cpp = "*"
+hdf5 = { version = "*", build = "*mpi_openmpi_*" }
+
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
