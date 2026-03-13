@@ -262,13 +262,10 @@ class ShuffleTableInfo {
 };
 
 /**
- * @brief Class for handling nccl communication between GPU nodes.
+ * @brief Class for handling mpi communication between GPU nodes.
  */
 class GpuMpiManager {
    protected:
-    // GPU device ID
-    rmm::cuda_device_id gpu_id;
-
     // MPI communicator for CPU communication between ranks
     // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
@@ -282,25 +279,14 @@ class GpuMpiManager {
     // Stream for CUDA operations
     cudaStream_t stream = nullptr;
 
-    // NCCL communicator
-    ncclComm_t nccl_comm = nullptr;
-
-    /**
-     * @brief Initialize NCCL communicator
-     */
-    void initialize_nccl();
+    // GPU device ID
+    rmm::cuda_device_id gpu_id;
 
    public:
     GpuMpiManager();
     ~GpuMpiManager();
 
     int get_rank() const { return rank; }
-
-    /**
-     * @brief Get the underlying NCCL communicator
-     * @return ncclComm_t
-     */
-    ncclComm_t get_nccl_comm() const { return nccl_comm; }
 
     /**
      * @brief Get the underlying CUDA stream

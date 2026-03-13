@@ -51,22 +51,6 @@ GpuMpiManager::~GpuMpiManager() {
     MPI_Comm_free(&mpi_comm);
 }
 
-void GpuMpiManager::initialize_nccl() {
-    ncclUniqueId nccl_id;
-
-    if (rank == 0) {
-        // Generate unique ID on root rank
-        CHECK_NCCL(ncclGetUniqueId(&nccl_id));
-    }
-
-    // Broadcast the unique ID to all ranks
-    CHECK_MPI(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, mpi_comm),
-              "GpuShuffleManager::initialize_nccl: MPI_Bcast failed:");
-
-    // Initialize NCCL communicator
-    CHECK_NCCL(ncclCommInitRank(&nccl_comm, n_ranks, nccl_id, rank));
-}
-
 GpuShuffleManager::GpuShuffleManager()
     : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
