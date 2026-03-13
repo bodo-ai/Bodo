@@ -318,7 +318,7 @@ class GpuMpiManager {
 };
 
 /**
- * @brief Class for managing async shuffle of cudf::tables using NCCL
+ * @brief Class for managing async shuffle of cudf::tables using MPI
  */
 class GpuShuffleManager : public GpuMpiManager {
    private:
@@ -423,7 +423,7 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
  * @brief Allgather a device buffer from each GPU-enabled rank to every other
  * GPU-enabled rank.
  * @param nccl_comm: initialized nccl communicator for the same group.
- * @param stream: CUDA stream to perform NCCL operations on.
+ * @param stream: CUDA stream to perform operations on.
  * @param local_buf: device buffer owned by this rank to send (may be size 0).
  * @return vector of length comm_size where element i is a unique_ptr to the
  * buffer sent by rank i. If a rank sent size 0, the corresponding vector
