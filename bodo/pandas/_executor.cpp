@@ -969,7 +969,7 @@ void assign_devices(std::shared_ptr<DevicePlanNode> node, NodeCostMap &dp_cache,
  */
 bool cpu_fallback_disabled() {
     char *env_str = std::getenv("BODO_GPU_DISABLE_CPU_FALLBACK");
-    return env_str != nullptr;
+    return env_str != nullptr && std::string(env_str) != "0";
 }
 
 /**

@@ -109,6 +109,7 @@ def test_groupby_agg(datapath, func):
 
 
 @pytest.mark.skip(reason="TODO[BSE-5344]: Fix shuffle issues")
+@pytest.mark.gpu(allow_fallback=True)
 def test_cpu_to_gpu_exchange(datapath):
     """Test pipelines that transfer data between CPU and GPU"""
     path = datapath("dataframe_library/df1.parquet")
