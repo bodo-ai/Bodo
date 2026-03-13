@@ -907,7 +907,6 @@ if(USE_CUDF)
     ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
   )
 
-  set_property(TARGET ext PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
   set_property(TARGET ext PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
   set_source_files_properties(bodo/libs/gpu_bloom_filter.cu PROPERTIES CUDA_KEEP_DEVICE_FUNCTIONS ON)
 
@@ -941,6 +940,27 @@ if(USE_CUDF)
   message(STATUS "CMAKE_CUDA_LINK_EXECUTABLE = ${CMAKE_CUDA_LINK_EXECUTABLE}")
   message(STATUS "CMAKE_LINKER = ${CMAKE_LINKER}")
 
+  # After python_add_library(ext ...) and target_sources(ext ...)
+
+  # Find the object file for gpu_bloom_filter.cu
+  get_target_property(EXT_OBJECTS ext OBJECTS)
+
+  foreach(obj ${EXT_OBJECTS})
+      if(obj MATCHES "gpu_bloom_filter.cu.o$")
+          add_custom_command(
+              OUTPUT ${obj}.fatbin_check
+              DEPENDS ${obj}
+              COMMAND ${CMAKE_COMMAND} -E echo "=== cuobjdump for gpu_bloom_filter.cu.o ==="
+              COMMAND cuobjdump --dump-elf ${obj} | grep fatbin || true
+              COMMAND ${CMAKE_COMMAND} -E touch ${obj}.fatbin_check
+              COMMAND ${CMAKE_COMMAND} -E echo "=== cuobjdump done for gpu_bloom_filter.cu.o ==="
+          )
+          add_custom_target(check_gpu_bloom_filter_fatbin ALL
+              DEPENDS ${obj}.fatbin_check
+          )
+      endif()
+  endforeach()
+
   add_custom_command(
     TARGET ext
     POST_BUILD
@@ -949,10 +969,9 @@ if(USE_CUDF)
     COMMAND ${CMAKE_COMMAND} -E echo "=== Checking ext.so for fatbin ==="
     COMMAND cuobjdump --dump-elf $<TARGET_FILE:ext> | grep fatbin || true
     COMMAND ${CMAKE_COMMAND} -E echo "=== After checking ext.so for fatbin ==="
-    COMMAND cuobjdump --dump-elf CMakeFiles/ext.dir/bodo/libs/gpu_bloom_filter.cu.o | grep fatbin
-    COMMAND ${CMAKE_COMMAND} -E echo "=== After gpu_bloom_filter.cu.o for fatbin ==="
- 
-)
+    #    COMMAND cuobjdump --dump-elf CMakeFiles/ext.dir/bodo/libs/gpu_bloom_filter.cu.o | grep fatbin
+    #COMMAND ${CMAKE_COMMAND} -E echo "=== After gpu_bloom_filter.cu.o for fatbin ==="
+  )
 
 endif()
 
