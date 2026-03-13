@@ -949,11 +949,6 @@ if(USE_CUDF)
   add_custom_command(
     TARGET ext
     POST_BUILD
-  )
-
-  add_custom_command(
-    TARGET ext
-    POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "=== Checking CUDA registration symbols in ext.so ==="
     COMMAND nm -D $<TARGET_FILE:ext> | grep __cudaRegisterLinkedBinary || true
     COMMAND ${CMAKE_COMMAND} -E echo "=== Checking ext.so for fatbin ==="
