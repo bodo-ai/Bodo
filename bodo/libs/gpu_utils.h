@@ -422,7 +422,6 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 /**
  * @brief Allgather a device buffer from each GPU-enabled rank to every other
  * GPU-enabled rank.
- * @param nccl_comm: initialized nccl communicator for the same group.
  * @param stream: CUDA stream to perform operations on.
  * @param local_buf: device buffer owned by this rank to send (may be size 0).
  * @return vector of length comm_size where element i is a unique_ptr to the
@@ -430,8 +429,8 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
  * element will be nullptr.
  */
 std::vector<std::unique_ptr<rmm::device_buffer>>
-allgather_device_buffers_across_ranks(ncclComm_t nccl_comm, cudaStream_t stream,
-                                      rmm::device_buffer const& local_buf);
+allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
+                                      cudaStream_t stream);
 
 /**
  * @brief Return whether the current rank has a GPU assigned (i.e. should
