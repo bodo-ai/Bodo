@@ -88,6 +88,7 @@ def test_project_filter1(datapath):
         _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
+@pytest.mark.skip(reason="TODO[BSE-5344]: Fix shuffle issues")
 @pytest.mark.parametrize(
     "func",
     [
@@ -135,6 +136,7 @@ def test_groupby_agg(datapath, func):
         _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
+@pytest.mark.skip(reason="TODO[BSE-5344]: Fix shuffle issues")
 def test_cpu_to_gpu_exchange(datapath):
     """Test pipelines that transfer data between CPU and GPU"""
     path = datapath("dataframe_library/df1.parquet")

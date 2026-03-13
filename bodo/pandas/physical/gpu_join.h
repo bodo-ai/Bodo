@@ -1,6 +1,6 @@
 #pragma once
 
-#include <mpi_proto.h>
+#include <mpi.h>
 #include <algorithm>
 #include <cstdint>
 #include <cudf/types.hpp>

@@ -46,8 +46,6 @@ static bodo::tests::suite tests([] {
                 GpuShuffleManager manager;
 
                 if (device_id.value() < 0) {
-                    // If no GPU assigned, NCCL comm should be null
-                    bodo::tests::check(manager.get_nccl_comm() == nullptr);
                     bodo::tests::check(manager.get_stream() == nullptr);
                     bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
                 } else {
@@ -55,7 +53,6 @@ static bodo::tests::suite tests([] {
                     bodo::tests::check(manager.all_complete() == false);
 
                     // Check communicators exist
-                    bodo::tests::check(manager.get_nccl_comm() != nullptr);
                     bodo::tests::check(manager.get_stream() != nullptr);
                     bodo::tests::check(manager.get_mpi_comm() != MPI_COMM_NULL);
                 }

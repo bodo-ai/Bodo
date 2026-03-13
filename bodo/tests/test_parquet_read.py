@@ -43,6 +43,7 @@ pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "fname",
     [
@@ -62,19 +63,24 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
 @pytest.mark.parametrize(
     "fname",
     [
-        pytest.param("bool_nulls.pq", id="bool_with_nulls"),
+        pytest.param("bool_nulls.pq", id="bool_with_nulls", marks=pytest.mark.gpu),
         pytest.param("list_str_arr.pq", id="list_str_arr"),
         pytest.param("list_str_parts.pq", id="list_str_parts"),
-        pytest.param("decimal1.pq", id="decimal"),
-        pytest.param("date32_1.pq", id="date32"),
+        pytest.param("decimal1.pq", id="decimal", marks=pytest.mark.gpu),
+        pytest.param("date32_1.pq", id="date32", marks=pytest.mark.gpu),
         pytest.param(
             "small_strings.pq",
             id="processes_greater_than_string_rows",
+            marks=pytest.mark.gpu,
         ),
-        pytest.param("parquet_data_nonascii1.parquet", id="nonascii"),
-        pytest.param("nullable_float.pq", id="nullable_float"),
-        pytest.param("datetime64ns_1.pq", id="datetime64ns"),
-        pytest.param("datetime64ns_tz_1.pq", id="datetime64ns_tz"),
+        pytest.param(
+            "parquet_data_nonascii1.parquet", id="nonascii", marks=pytest.mark.gpu
+        ),
+        pytest.param("nullable_float.pq", id="nullable_float", marks=pytest.mark.gpu),
+        pytest.param("datetime64ns_1.pq", id="datetime64ns", marks=pytest.mark.gpu),
+        pytest.param(
+            "datetime64ns_tz_1.pq", id="datetime64ns_tz", marks=pytest.mark.gpu
+        ),
         pytest.param("struct_1.pq", id="struct"),
         pytest.param("map_1.pq", id="map"),
         pytest.param("dictionary_string_1.pq", id="dictionary_string"),
