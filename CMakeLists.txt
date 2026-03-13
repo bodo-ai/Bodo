@@ -280,7 +280,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDeb
       "-O3"
       "-ftree-vectorize"
       # Encourages LTO & increase obfuscations
-      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+      #      $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
     )
   endif()
 endif()
@@ -906,6 +906,10 @@ if(USE_CUDF)
   target_include_directories(ext BEFORE PRIVATE
     ${CUDA_INCLUDE_DIR} ${CUDA_INCLUDE_DIR}/cccl ${PYLIBCUDF_BASE_DIR} ${RMM_BASE_DIR}
   )
+
+  set_property(TARGET ext PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+  set_property(TARGET ext PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
+  set_source_files_properties(bodo/libs/gpu_bloom_filter.cu PROPERTIES CUDA_KEEP_DEVICE_FUNCTIONS ON)
 
   # RPATH
   set_target_properties(ext PROPERTIES
