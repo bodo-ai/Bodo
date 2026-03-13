@@ -954,7 +954,17 @@ if(USE_CUDF)
     COMMAND ${CMAKE_COMMAND} -E echo "=== Checking ext.so for fatbin ==="
     COMMAND cuobjdump --dump-elf $<TARGET_FILE:ext> | grep fatbin || true
     COMMAND ${CMAKE_COMMAND} -E echo "=== After checking ext.so for fatbin ==="
-    COMMAND cuobjdump --dump-elf $<TARGET_OBJECTS:ext> | grep gpu_bloom_filter || true
+    COMMAND /bin/sh -c '
+        for f in $<TARGET_OBJECTS:ext>; do
+            case "$f" in
+                *gpu_bloom_filter.cu.o)
+                    echo "Running cuobjdump on: $f"
+                    cuobjdump --dump-elf "$f" | grep fatbin || true
+                    echo "Done Running cuobjdump on: $f"
+                    ;;
+            esac
+        done
+    '
     COMMAND ${CMAKE_COMMAND} -E echo "=== cuobjdump: after checking gpu_bloom_filter.cu.o ==="
     #    COMMAND cuobjdump --dump-elf CMakeFiles/ext.dir/bodo/libs/gpu_bloom_filter.cu.o | grep fatbin
     #COMMAND ${CMAKE_COMMAND} -E echo "=== After gpu_bloom_filter.cu.o for fatbin ==="
