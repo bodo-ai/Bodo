@@ -942,7 +942,12 @@ if(USE_CUDF)
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "=== Checking CUDA registration symbols in ext.so ==="
     COMMAND nm -D $<TARGET_FILE:ext> | grep __cudaRegisterLinkedBinary || true
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Checking ext.so for fatbin ==="
     COMMAND cuobjdump --dump-elf $<TARGET_FILE:ext> | grep fatbin || true
+    COMMAND ${CMAKE_COMMAND} -E echo "=== After checking ext.so for fatbin ==="
+    COMMAND cuobjdump --dump-elf CMakeFiles/ext.dir/bodo/libs/gpu_bloom_filter.cu.o | grep fatbin
+    COMMAND ${CMAKE_COMMAND} -E echo "=== After gpu_bloom_filter.cu.o for fatbin ==="
+ 
 )
 
 endif()
