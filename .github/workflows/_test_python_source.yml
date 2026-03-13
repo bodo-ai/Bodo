@@ -87,8 +87,6 @@ jobs:
           if: ${{ inputs.test-type == 'DF_LIB_GPU' }}
           run: |
             nvidia-smi
-
-        # Run Tests
         - name: Run Tests
           run: |
             if [[ "$RUNNER_OS" == "Windows" ]]; then
