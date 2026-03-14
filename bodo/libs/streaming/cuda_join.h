@@ -2,10 +2,10 @@
 #include <arrow/scalar.h>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
-#include "../gpu_bloom_filter.h"
-#include "../gpu_utils.h"
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
+#include "../gpu_bloom_filter.h"
+#include "../gpu_utils.h"
 
 struct CudaHashJoin {
    private:
