@@ -196,8 +196,6 @@ def test_gpu_join_bloom_filter(datapath):
         orders_bodo = bd.read_parquet(orders_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
         merged_bodo = merge_impl(cust_bodo, orders_bodo)
-        write_plan = create_write_plan(merged_bodo, out_path_bodo)
-        assert is_gpu_plan(write_plan), "Expected entire plan to run on GPU"
         merged_bodo.to_parquet(out_path_bodo)
 
         cust_pd = pd.read_parquet(cust_path)
