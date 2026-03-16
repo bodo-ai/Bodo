@@ -6,6 +6,7 @@
 #include <cudf/table/table.hpp>
 #include "../gpu_bloom_filter.h"
 #include "../gpu_utils.h"
+#include "duckdb/common/enums/join_type.hpp"
 
 struct CudaHashJoin {
    private:
@@ -43,7 +44,10 @@ struct CudaHashJoin {
     std::shared_ptr<bodo::Schema> build_table_schema;
     std::shared_ptr<bodo::Schema> probe_table_schema;
 
+    duckdb::JoinType join_type;
+
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
+
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -53,6 +57,7 @@ struct CudaHashJoin {
                  std::vector<int64_t> build_kept_cols,
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
+                 duckdb::JoinType join_type,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL)
         : output_schema(std::move(output_schema)),
           build_key_indices(std::move(build_keys)),
@@ -61,7 +66,9 @@ struct CudaHashJoin {
           probe_kept_cols(std::move(probe_kept_cols)),
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
+          join_type(join_type),
           null_equality(null_eq) {}
+
     CudaHashJoin() = default;
     /**
      * @brief Finalize the build phase by constructing the hash table

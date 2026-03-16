@@ -6,9 +6,12 @@
 #include <cudf/copying.hpp>
 #include <cudf/reduction.hpp>
 #include <rmm/cuda_stream_view.hpp>
+#include <stdexcept>
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 #include "_util.h"
+#include "duckdb/common/enum_util.hpp"
+#include "fmt/core.h"
 
 constexpr float FALSE_POSITIVE_RATE = 0.01;
 
@@ -246,8 +249,24 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     cudf::table_view selected =
         coalesced_probe->select(this->probe_key_indices);
 
-    auto [probe_indices, build_indices] =
-        _join_handle->inner_join(selected, {}, stream);
+    std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices, build_indices;
+    switch (this->join_type) {
+        case duckdb::JoinType::INNER: {
+        std::tie(probe_indices, build_indices) = 
+            _join_handle->inner_join(selected, {}, stream);
+        } break;
+        case duckdb::JoinType::LEFT: {
+        std::tie(probe_indices, build_indices) = 
+            _join_handle->left_join(selected, {}, stream);
+        } break;
+        case duckdb::JoinType::OUTER: {
+        std::tie(probe_indices, build_indices) = 
+            _join_handle->full_join(selected, {}, stream);
+        } break;
+        default: {
+            throw std::runtime_error("Unsupported join type " + duckdb::EnumUtil::ToString(this->join_type));
+        }
+    }
 
     if (probe_indices->size() == 0) {
         return empty_table_from_arrow_schema(
