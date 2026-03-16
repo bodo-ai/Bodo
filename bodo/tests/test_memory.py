@@ -69,13 +69,13 @@ def test_default_buffer_pool_options():
     # env vars are set.
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
             "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": None,
             "BODO_BUFFER_POOL_DEBUG_MODE": None,
-            "BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MALLOC_FREE_TRIM_THRESHOLD_MiB": None,
         }
     ):
         options = BufferPoolOptions.defaults()
@@ -90,7 +90,7 @@ def test_default_buffer_pool_options():
     # expected.
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": "128",
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": "128",
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -106,7 +106,7 @@ def test_default_buffer_pool_options():
     # expected
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": "32",
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": "5",
@@ -121,7 +121,7 @@ def test_default_buffer_pool_options():
     # through env vars works as expected
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -134,7 +134,7 @@ def test_default_buffer_pool_options():
 
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -149,11 +149,11 @@ def test_default_buffer_pool_options():
     # through env vars works as expected
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
-            "BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB": "20",
+            "BODO_BUFFER_POOL_WORKER_MALLOC_FREE_TRIM_THRESHOLD_MiB": "20",
         }
     ):
         options = BufferPoolOptions.defaults()
@@ -170,7 +170,7 @@ def test_default_memory_options(tmp_path: Path):
     total_mem = 0
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": "100",
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -182,7 +182,7 @@ def test_default_memory_options(tmp_path: Path):
     # Now set it to 65 and verify that memory_size is 65% of total_mem.
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": "65",
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -199,7 +199,7 @@ def test_default_memory_options(tmp_path: Path):
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -214,7 +214,7 @@ def test_default_memory_options(tmp_path: Path):
     # Also check that the default min size class is 64KiB.
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -234,7 +234,7 @@ def test_default_memory_options(tmp_path: Path):
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -253,7 +253,7 @@ def test_default_memory_options(tmp_path: Path):
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -318,7 +318,7 @@ def test_default_memory_options(tmp_path: Path):
     for mem_percent in range(40, 150, 5):
         with temp_env_override(
             {
-                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+                "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
                 "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": str(mem_percent),
                 "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
                 "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -338,7 +338,7 @@ def test_default_memory_options(tmp_path: Path):
     for mem_percent in range(40, 150, 5):
         with temp_env_override(
             {
-                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+                "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
                 "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": str(mem_percent),
                 "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
                 "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -433,7 +433,7 @@ def test_default_storage_options(tmp_path: Path):
     # create a option in BufferPoolOptions
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -449,7 +449,7 @@ def test_default_storage_options(tmp_path: Path):
     # create a option in BufferPoolOptions
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
@@ -472,7 +472,7 @@ def test_default_storage_options(tmp_path: Path):
     # create a option in BufferPoolOptions
     with temp_env_override(
         {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": None,
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,

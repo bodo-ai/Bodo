@@ -730,7 +730,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
     // If env var is not set, we will get the memory
     // information from the OS.
     if (char* memory_size_env_ =
-            std::getenv("BODO_BUFFER_POOL_MEMORY_SIZE_MiB")) {
+            std::getenv("BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB")) {
         options.memory_size = std::stoi(memory_size_env_);
         // If user is setting the memory manually, we can allocate extra frames.
         options._allocate_extra_frames = true;
@@ -821,8 +821,8 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             !std::strcmp(enforce_max_limit_env_, "1");
     }
 
-    if (const char* malloc_free_trim_threshold_env_ =
-            std::getenv("BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB")) {
+    if (const char* malloc_free_trim_threshold_env_ = std::getenv(
+            "BODO_BUFFER_POOL_WORKER_MALLOC_FREE_TRIM_THRESHOLD_MiB")) {
         options.malloc_free_trim_threshold =
             std::stoi(malloc_free_trim_threshold_env_) * 1024 * 1024;
     }
