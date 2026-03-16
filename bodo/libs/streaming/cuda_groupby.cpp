@@ -119,7 +119,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
-void CudaGroupbyState::build_consume_batch(
+bool CudaGroupbyState::build_consume_batch(
     std::shared_ptr<cudf::table> input_table, bool is_last,
     rmm::cuda_stream_view& output_stream,
     std::shared_ptr<StreamAndEvent> input_se) {
@@ -127,12 +127,7 @@ void CudaGroupbyState::build_consume_batch(
     // blank tables, on which we don't need to run the first groupby
     // pass.
 
-    if (!is_gpu_rank()) {
-        merge_shuffler.progress();
-        return;
-    }
-
-    if (input_table->view().num_rows() != 0) {
+    if (is_gpu_rank() && (input_table->view().num_rows() != 0)) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
@@ -149,6 +144,13 @@ void CudaGroupbyState::build_consume_batch(
     std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
         merge_shuffler.progress();
 
+    bool global_is_last =
+        this->probe_shuffle_manager.sync_is_last(local_is_last);
+
+    if (!is_gpu_rank()) {
+        return global_is_last;
+    }
+
     std::vector<cudf::table_view> views;
 
     // Add all the shuffled chunks to the merge set.
@@ -162,7 +164,7 @@ void CudaGroupbyState::build_consume_batch(
 
     if (views.size() == 0) {
         // If there is no received data to merge then no state changes.
-        return;
+        return global_is_last;
     }
 
     // If we have already accumulated on this node then add the result
@@ -178,6 +180,7 @@ void CudaGroupbyState::build_consume_batch(
         do_groupby(combined->view(), merge_key_indices, merge_column_indices,
                    merge_aggregation_requests, merge_aggregation_fns,
                    post_merge_agg_fns, pre_merge_agg_table_fns, output_stream);
+    return global_is_last;
 }
 
 std::unique_ptr<cudf::table> CudaGroupbyState::produce_output_batch(

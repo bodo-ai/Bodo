@@ -433,7 +433,7 @@ class CudaGroupbyState {
      * regular groupby, this should always be true. We only call FinalizeBuild
      * in the last pipeline.
      */
-    void build_consume_batch(std::shared_ptr<cudf::table> input_table,
+    bool build_consume_batch(std::shared_ptr<cudf::table> input_table,
                              bool is_last, rmm::cuda_stream_view &output_stream,
                              std::shared_ptr<StreamAndEvent> input_se);
 
