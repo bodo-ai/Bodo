@@ -346,6 +346,8 @@ class GpuShuffleManager : public GpuMpiManager {
                this->tables_to_shuffle.back().event.ready();
     }
 
+    void shuffle_irecv();
+
    public:
     GpuShuffleManager();
 

@@ -158,6 +158,40 @@ bool GpuShuffleManager::sync_is_last(bool local_is_last) {
     }
 }
 
+// Similar to the CPU version here:
+// https://github.com/bodo-ai/Bodo/blob/b5f3663d4744982528c91d06bb437713a1d707b1/bodo/libs/streaming/_shuffle.cpp#L613
+void GpuShuffleManager::shuffle_irecv() {
+    while (true) {
+        int flag;
+        MPI_Status status;
+
+        // NOTE: We use Improbe instead of Iprobe intentionally. Iprobe can
+        // return true for the same message even when an Irecv for the message
+        // has been posted (until the receive has actually begun). This can
+        // cause hangs since we could end up posting two Irecvs for the same
+        // message. Therefore, for robustness, we use Improbe, which returns a
+        // message handle directly and exactly once.
+        // 'PostLensRecv' uses `Imrecv` which will start receive on the
+        // message using the message handle returned by Improbe.
+        // Reference:
+        // https://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node70.htm which
+        // states that "Unlike MPI_IPROBE, no other probe or receive operation
+        // may match the message returned by MPI_IMPROBE.".
+        MPI_Message m;
+        CHECK_MPI(MPI_Improbe(MPI_ANY_SOURCE, SHUFFLE_METADATA_MSG_TAG,
+                              this->mpi_comm, &flag, &m, &status),
+                  "GpuShuffleManager::shuffle_irecv: MPI error on MPI_Improbe:")
+        if (!flag) {
+            break;
+        }
+        recv_states.emplace_back(status, m);
+    }
+
+    for (auto& recv_state : recv_states) {
+        recv_state.TryRecvMetadataAndAllocArrs(shuffle_comm);
+    }
+}
+
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {
