@@ -365,7 +365,16 @@ class GpuShuffleManager : public GpuMpiManager {
      * @return Optional vector of tables received from all ranks if any were
      * received.
      */
-    std::vector<std::unique_ptr<cudf::table>> progress();
+    std::vector<std::unique_ptr<cudf::table>> progress(const bool is_last);
+
+    bool SendRecvEmpty();
+
+    /**
+     * @brief TODO(ehsan): Return true if send/recv buffer sizes are over a
+     threshold and this rank shouldn't get more input data to avoid potential
+     OOM.
+     */
+    bool BuffersFull() { return false; }
 
     /**
      * @brief Sync local is_last flags across ranks to determine if all ranks

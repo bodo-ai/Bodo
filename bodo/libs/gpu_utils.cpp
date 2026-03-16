@@ -116,67 +116,35 @@ void GpuShuffleManager::do_shuffle() {
     this->curr_tag = (this->curr_tag + 4) % MAX_TAG_VAL;
 }
 
+// Similar to CPU version here:
+// https://github.com/bodo-ai/Bodo/blob/5be77dc4ee731f674f679a4ff6f60ac2f231d326/bodo/libs/streaming/_shuffle.cpp#L688
 std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
-    // If complete has been signaled and there are no inflight shuffles or
-    // tables to shuffle, we can start the global completion barrier. This needs
-    // to be called on all ranks even without GPUs assigned so they know when
-    // they can exit the pipeline.
-    if (this->complete_signaled && inflight_shuffles.empty() &&
-        tables_to_shuffle.empty() &&
-        global_completion_req == MPI_REQUEST_NULL && !global_completion) {
-        CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
-                  "GpuShuffleManager::complete: MPI_Ibarrier failed:");
-    }
-
     if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
         return {};
     }
 
-    if (this->shuffle_coordination.req == MPI_REQUEST_NULL) {
-        // Coordinate when to shuffle by doing an allreduce, ranks with data
-        // send 1, ranks without data send 0, this way all ranks will know when
-        // a shuffle is needed and can call progress to start it
-        this->shuffle_coordination.has_data =
-            this->data_ready_to_send() ? 1 : 0;
-        CHECK_MPI(
-            MPI_Iallreduce(MPI_IN_PLACE, &this->shuffle_coordination.has_data,
-                           1, MPI_INT, MPI_MAX, mpi_comm,
-                           &this->shuffle_coordination.req),
-            "GpuShuffleManager::progress: MPI_Iallreduce failed:");
-    } else {
-        int coordination_finished;
-        CHECK_MPI(MPI_Test(&this->shuffle_coordination.req,
-                           &coordination_finished, MPI_STATUS_IGNORE),
-                  "GpuShuffleManager::progress: MPI_Test failed:");
-        if (coordination_finished) {
-            if (this->shuffle_coordination.has_data) {
-                // If a shuffle is needed, start it
-                this->do_shuffle();
-            }
-            // Reset coordination for next shuffle
-            this->shuffle_coordination.req = MPI_REQUEST_NULL;
-        }
+    // recv data first, but avoid receiving too much data at once
+    if ((this->recv_states.size() == 0) || !this->BuffersFull()) {
+        this->shuffle_irecv();
     }
 
-    std::vector<std::unique_ptr<cudf::table>> received_tables;
-    while (!this->inflight_shuffles.empty()) {
-        auto progress_res = this->inflight_shuffles.front().progress();
-        if (progress_res.has_value()) {
-            received_tables.push_back(std::move(progress_res.value()));
-        }
+    std::vector<std::unique_ptr<cudf::table>> received_tables =
+        this->consume_completed_recvs();
 
-        if (this->inflight_shuffles.front().send_state ==
-                GpuShuffleState::COMPLETED &&
-            this->inflight_shuffles.front().recv_state ==
-                GpuShuffleState::COMPLETED) {
-            this->inflight_shuffles.pop_front();
-        } else {
-            // Only progress one inflight_shuffle at a time to ensure consistent
-            // ordering across ranks (TODO(ehsan): update since we replaced NCCL
-            // with MPI?).
-            break;
+    // Remove send state if recv done
+    std::erase_if(this->send_states, [&](GpuShuffleSendState& s) {
+        bool done = s.sendDone();
+        if (done) {
+            inflight_tags.erase(s.get_starting_msg_tag());
         }
+        return done;
+    });
+
+    // TODO(ehsan): decide when to shuffle based on buffer size
+    if (this->data_ready_to_send()) {
+        this->do_shuffle();
     }
+
     return received_tables;
 }
 
