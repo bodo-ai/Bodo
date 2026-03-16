@@ -50,7 +50,7 @@ static bodo::tests::suite tests([] {
                     bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
                 } else {
                     // Should be empty on init
-                    bodo::tests::check(manager.all_complete() == false);
+                    bodo::tests::check(manager.global_is_last == false);
 
                     // Check communicators exist
                     bodo::tests::check(manager.get_stream() != nullptr);
@@ -133,12 +133,11 @@ static bodo::tests::suite tests([] {
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
             manager.append_batch(input_ptr, {0}, se);
-            manager.complete();
 
             std::vector<std::unique_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.all_complete()) {
+            while (!manager.global_is_last) {
                 auto out_batch = manager.progress();
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
@@ -201,12 +200,11 @@ static bodo::tests::suite tests([] {
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
             manager.append_batch(input_ptr, {0}, se);
-            manager.complete();
 
             std::vector<std::unique_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.all_complete()) {
+            while (!manager.global_is_last) {
                 auto out_batch = manager.progress();
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {

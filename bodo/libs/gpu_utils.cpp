@@ -128,7 +128,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
                   "GpuShuffleManager::complete: MPI_Ibarrier failed:");
     }
 
-    if (mpi_comm == MPI_COMM_NULL || this->all_complete()) {
+    if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
         return {};
     }
 
@@ -451,29 +451,6 @@ void GpuShuffle::progress_sending_data() {
         // Move to completed state
         this->send_state = GpuShuffleState::COMPLETED;
     }
-}
-
-void GpuShuffleManager::complete() { this->complete_signaled = true; }
-
-bool GpuShuffleManager::all_complete() {
-    if (global_completion_req != MPI_REQUEST_NULL) {
-        CHECK_MPI(MPI_Test(&global_completion_req, &this->global_completion,
-                           MPI_STATUS_IGNORE),
-                  "GpuShuffleManager::all_complete: MPI_Test failed:");
-        if (global_completion) {
-            // If global completion is reached, we can cancel any inflight
-            // shuffle coordination since we know all data has been sent
-            if (this->shuffle_coordination.req != MPI_REQUEST_NULL) {
-                // CHECK_MPI(
-                //     MPI_Cancel(&this->shuffle_coordination.req),
-                //     "GpuShuffleManager::all_complete: MPI_Cancel failed:");
-            }
-            this->shuffle_coordination.req = MPI_REQUEST_NULL;
-            this->global_completion_req = MPI_REQUEST_NULL;
-        }
-    }
-    return this->global_completion && inflight_shuffles.empty() &&
-           tables_to_shuffle.empty();
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>

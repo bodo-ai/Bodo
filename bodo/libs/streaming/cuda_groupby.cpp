@@ -123,7 +123,7 @@ bool CudaGroupbyState::build_consume_batch(
     std::shared_ptr<cudf::table> input_table, bool is_last,
     rmm::cuda_stream_view& output_stream,
     std::shared_ptr<StreamAndEvent> input_se) {
-    // During the phase where all_complete() is not true, we'll get
+    // During the phase where global_is_last is not true, we'll get
     // blank tables, on which we don't need to run the first groupby
     // pass.
 

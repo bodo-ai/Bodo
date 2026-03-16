@@ -322,8 +322,6 @@ class GpuMpiManager {
  */
 class GpuShuffleManager : public GpuMpiManager {
    private:
-    MPI_Comm mpi_comm = MPI_COMM_NULL;
-
     // IBarrier to know when all ranks are fully done
     bool global_is_last = false;
     bool is_last_barrier_started = false;
@@ -375,17 +373,6 @@ class GpuShuffleManager : public GpuMpiManager {
      *
      */
     bool sync_is_last(bool local_is_last);
-
-    /**
-     * @brief Check if there are any inflight shuffles
-     * @return true if there are inflight shuffles, false otherwise
-     */
-    bool all_complete();
-
-    /**
-     * @brief Idempotent call to signify that this rank has no more data to send
-     */
-    void complete();
 
     bool is_available() const { return true; }
 };
