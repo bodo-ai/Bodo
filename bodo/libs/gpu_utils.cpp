@@ -68,52 +68,32 @@ void GpuShuffleManager::append_batch(
 }
 
 void GpuShuffleManager::do_shuffle() {
-    std::vector<cudf::packed_table> packed_tables;
-    if (data_ready_to_send()) {
-        ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
-        this->tables_to_shuffle.pop_back();
+    ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
+    this->tables_to_shuffle.pop_back();
 
-        // Hash partition the table
-        auto [partitioned_table, partition_start_rows] = hash_partition_table(
-            shuffle_table_info.table, shuffle_table_info.partition_indices,
-            n_ranks, this->stream);
+    // Hash partition the table
+    auto [partitioned_table, partition_start_rows] = hash_partition_table(
+        shuffle_table_info.table, shuffle_table_info.partition_indices, n_ranks,
+        this->stream);
 
-        assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
-        // Contiguous splits requires the split indices excluding the first 0
-        // So we create a new vector from partition_start_rows[1..end]
-        std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
-            partition_start_rows.begin() + 1, partition_start_rows.end());
-        // Pack the tables for sending
-        packed_tables =
-            cudf::contiguous_split(partitioned_table->view(), splits, stream);
-    } else {
-        // If we have no data to shuffle, we still need to create empty packed
-        // tables for each rank so that the shuffle can proceed without special
-        // casing empty sends/receives
-        cudf::table empty_table(
-            cudf::table_view(std::vector<cudf::column_view>{}));
+    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+    // Contiguous splits requires the split indices excluding the first 0
+    // So we create a new vector from partition_start_rows[1..end]
+    std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
+        partition_start_rows.begin() + 1, partition_start_rows.end());
+    // Pack the tables for sending
+    std::vector<cudf::packed_table> packed_tables =
+        cudf::contiguous_split(partitioned_table->view(), splits, stream);
 
-        for (int i = 0; i < n_ranks; i++) {
-            cudf::packed_columns empty_packed_columns =
-                cudf::pack(empty_table.view(), stream);
-            cudf::packed_table empty_packed_table(
-                empty_table.view(), std::move(empty_packed_columns));
-            packed_tables.push_back(std::move(empty_packed_table));
-        }
-    }
-
-    assert(packed_tables.size() == static_cast<size_t>(n_ranks));
-
-    this->inflight_shuffles.emplace_back(std::move(packed_tables), mpi_comm,
-                                         stream, this->n_ranks, this->curr_tag);
-
-    // Each shuffle will use 4 tags for shuffling metadata/gpu data
-    // sizes and metadata buffers
-    if (inflight_shuffles.size() * 4 > static_cast<size_t>(MAX_TAG_VAL)) {
+    int start_tag = get_next_available_tag(this->inflight_tags);
+    if (start_tag == -1) {
         throw std::runtime_error(
-            "Exceeded maximum number of inflight shuffles");
+            "[GpuShuffleManager::do_shuffle] Unable to get "
+            "available MPI tag for shuffle send. All tags are inflight.");
     }
-    this->curr_tag = (this->curr_tag + 4) % MAX_TAG_VAL;
+    this->send_states.push_back(
+        this->shuffle_issend(std::move(packed_tables), start_tag));
+    this->inflight_tags.insert(start_tag);
 }
 
 // Similar to CPU version here:
