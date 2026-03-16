@@ -922,6 +922,8 @@ class IncrementalShuffleState {
                 this->shuffle_threshold);
     }
 
+    virtual ~IncrementalShuffleState() = default;
+
    protected:
     // Keep track of inflight tags to avoid tag collisions. See:
     // https://github.com/bodo-ai/Bodo/blob/3d5621629e95486bbc9bd4e6b45f85f22835f515/bodo/libs/streaming/_sort.cpp#L1633
