@@ -180,6 +180,36 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
     return received_tables;
 }
 
+// Similar to the CPU version here:
+// https://github.com/bodo-ai/Bodo/blob/8706d2d4b4f957023090834b430682c09a275012/bodo/libs/streaming/_join.cpp#L3092
+bool GpuShuffleManager::sync_is_last(bool local_is_last) {
+    if (this->global_is_last) {
+        return true;
+    }
+
+    local_is_last&& = this->SendRecvEmpty();
+
+    if (!local_is_last) {
+        return false;
+    }
+
+    if (!this->is_last_barrier_started) {
+        CHECK_MPI(
+            MPI_Ibarrier(this->mpi_comm, &this->is_last_request),
+            "GpuShuffleManager::sync_is_last: MPI error on MPI_Ibarrier:");
+        this->is_last_barrier_started = true;
+        return false;
+    } else {
+        int flag = 0;
+        CHECK_MPI(MPI_Test(&this->is_last_request, &flag, MPI_STATUS_IGNORE),
+                  "GpuShuffleManager::sync_is_last: MPI error on MPI_Test:");
+        if (flag) {
+            this->global_is_last = true;
+        }
+        return flag;
+    }
+}
+
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {

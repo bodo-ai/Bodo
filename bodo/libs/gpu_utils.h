@@ -322,6 +322,13 @@ class GpuMpiManager {
  */
 class GpuShuffleManager : public GpuMpiManager {
    private:
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+
+    // IBarrier to know when all ranks are fully done
+    bool global_is_last = false;
+    bool is_last_barrier_started = false;
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+
     std::deque<GpuShuffle> inflight_shuffles;
 
     // Tag counter for shuffles, each shuffle uses 3 tags
@@ -329,14 +336,6 @@ class GpuShuffleManager : public GpuMpiManager {
     int curr_tag = 0;
 
     const int MAX_TAG_VAL;
-
-    // This is used to coordinate the start of shuffles across ranks
-    DoShuffleCoordination shuffle_coordination;
-
-    // IBarrier to know when all ranks are done sending data
-    MPI_Request global_completion_req = MPI_REQUEST_NULL;
-    int global_completion = false;
-    bool complete_signaled = false;
 
     std::vector<ShuffleTableInfo> tables_to_shuffle;
 
@@ -369,6 +368,13 @@ class GpuShuffleManager : public GpuMpiManager {
      * received.
      */
     std::vector<std::unique_ptr<cudf::table>> progress();
+
+    /**
+     * @brief Sync local is_last flags across ranks to determine if all ranks
+     * are fully done.
+     *
+     */
+    bool sync_is_last(bool local_is_last);
 
     /**
      * @brief Check if there are any inflight shuffles
