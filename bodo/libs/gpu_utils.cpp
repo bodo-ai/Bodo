@@ -192,6 +192,19 @@ void GpuShuffleManager::shuffle_irecv() {
     }
 }
 
+std::vector<std::unique_ptr<cudf::table>>
+GpuShuffleManager::consume_completed_recvs() {
+    std::vector<std::unique_ptr<cudf::table>> out_tables;
+    std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
+        auto [done, table] = s.recvDone(dict_builders, shuffle_comm, metrics);
+        if (done) {
+            out_tables.push_back(std::move(table));
+        }
+        return done;
+    });
+    return out_tables;
+}
+
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
     switch (this->send_state) {
         case GpuShuffleState::SIZES_INFLIGHT: {

@@ -348,6 +348,8 @@ class GpuShuffleManager : public GpuMpiManager {
 
     void shuffle_irecv();
 
+    std::vector<std::unique_ptr<cudf::table>> consume_completed_recvs();
+
    public:
     GpuShuffleManager();
 
