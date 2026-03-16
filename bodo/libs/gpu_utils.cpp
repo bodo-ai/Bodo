@@ -22,8 +22,7 @@ bool g_use_async = false;
 #include "_utils.h"
 #include "cuda_runtime_api.h"
 
-GpuShuffleManager::GpuShuffleManager()
-    : gpu_id(get_gpu_id()), MAX_TAG_VAL(get_max_allowed_tag_value()) {
+GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);
     if (mpi_comm == MPI_COMM_NULL) {
@@ -38,7 +37,7 @@ GpuShuffleManager::GpuShuffleManager()
     CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
 }
 
-GpuShuffleManager::~GpuShuffleManager() {
+GpuMpiManager::~GpuMpiManager() {
     if (mpi_comm == MPI_COMM_NULL) {
         return;
     }
@@ -51,6 +50,9 @@ GpuShuffleManager::~GpuShuffleManager() {
     // Free MPI communicator
     MPI_Comm_free(&mpi_comm);
 }
+
+GpuShuffleManager::GpuShuffleManager()
+    : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
 void GpuShuffleManager::shuffle_table(
     std::shared_ptr<cudf::table> table,
@@ -504,6 +506,83 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
         return MPI_COMM_NULL;
     }
     return gpu_comm;
+}
+
+std::vector<std::unique_ptr<rmm::device_buffer>>
+GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
+                                         cudaStream_t stream) {
+    // Exchange sizes (uint64_t)
+    uint64_t local_size = static_cast<uint64_t>(local_buf.size());
+    std::vector<uint64_t> all_sizes(static_cast<size_t>(n_ranks), 0);
+    CHECK_MPI(MPI_Allgather(&local_size, 1, MPI_UINT64_T, all_sizes.data(), 1,
+                            MPI_UINT64_T, mpi_comm),
+              "allgather_device_buffers_across_ranks: MPI_Allgather failed:");
+
+    // Allocate receive buffers for each rank (on device, using provided stream)
+    std::vector<std::unique_ptr<rmm::device_buffer>> recv_buffers;
+    recv_buffers.reserve(static_cast<size_t>(n_ranks));
+    for (int i = 0; i < n_ranks; ++i) {
+        uint64_t sz = all_sizes[static_cast<size_t>(i)];
+        if (sz == 0) {
+            recv_buffers.push_back(nullptr);
+        } else {
+            // allocate device buffer on the provided stream
+            recv_buffers.push_back(
+                std::make_unique<rmm::device_buffer>(sz, stream));
+        }
+    }
+
+    // Wait for buffers to be ready.
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+
+    std::vector<MPI_Request> recv_reqs(n_ranks, MPI_REQUEST_NULL);
+
+    for (int src = 0; src < n_ranks; ++src) {
+        uint64_t sz = all_sizes[static_cast<size_t>(src)];
+        if (sz == 0) {
+            continue;
+        }
+        void* dst_ptr = recv_buffers[static_cast<size_t>(src)]->data();
+        CHECK_MPI(MPI_Irecv(dst_ptr, static_cast<int>(sz), MPI_BYTE, src,
+                            /*tag=*/0, mpi_comm, &recv_reqs[src]),
+                  "MPI_Irecv failed:");
+    }
+
+    std::vector<MPI_Request> send_reqs(n_ranks, MPI_REQUEST_NULL);
+
+    // Post sends: send this rank's buffer to every rank (including self)
+    if (local_size > 0) {
+        for (int dst = 0; dst < n_ranks; ++dst) {
+            CHECK_MPI(
+                MPI_Issend(local_buf.data(), static_cast<int>(local_size),
+                           MPI_BYTE, dst, /*tag=*/0, mpi_comm, &send_reqs[dst]),
+                "MPI_Issend failed:");
+        }
+    }
+
+    std::vector<MPI_Request> all_reqs;
+    all_reqs.reserve(2 * n_ranks);
+
+    for (auto& r : recv_reqs)
+        if (r != MPI_REQUEST_NULL)
+            all_reqs.push_back(r);
+    for (auto& r : send_reqs)
+        if (r != MPI_REQUEST_NULL)
+            all_reqs.push_back(r);
+
+    CHECK_MPI(MPI_Waitall(static_cast<int>(all_reqs.size()), all_reqs.data(),
+                          MPI_STATUSES_IGNORE),
+              "MPI_Waitall failed:");
+
+    return recv_buffers;
+}
+
+uint64_t GpuMpiManager::allreduce(uint64_t local) {
+    uint64_t allsum = 0;
+    CHECK_MPI(MPI_Allreduce(&local, &allsum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
+                            mpi_comm),
+              "GpuMpiManager::allreduce: MPI error on MPI_Allreduce:");
+    return allsum;
 }
 
 bool is_gpu_rank() {

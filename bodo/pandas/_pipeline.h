@@ -10,6 +10,11 @@
 
 // enable and build to print debug info on the pipeline
 // #define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds data
+
+// comment out to generate separate rank<N> debug file per rank
+// requires DEBUG_PIPELINE above to be enabled
+#define DEBUG_CONSOLIDATED
+
 #ifdef DEBUG_PIPELINE
 #include <iostream>
 #endif
@@ -68,7 +73,7 @@ class Pipeline {
      */
     bool midPipelineExecute(
         unsigned idx, std::variant<std::shared_ptr<table_info>, GPU_DATA> batch,
-        OperatorResult prev_op_result, int rank);
+        OperatorResult prev_op_result, int rank, std::ostream &out);
 
     friend class PipelineBuilder;
 
@@ -77,7 +82,7 @@ class Pipeline {
      * @brief Execute the pipeline and return the result (placeholder for now).
      * @return - number of batches processed
      */
-    uint64_t Execute();
+    uint64_t Execute(int rank, std::ostream &out);
 
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write
@@ -97,17 +102,15 @@ class Pipeline {
     }
 
 #ifdef DEBUG_PIPELINE
-    void printPipeline(void) {
+    void printPipeline(std::ostream &out) {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        std::cout << "Rank " << rank << " " << getNodeString(source)
-                  << std::endl;
+        out << "Rank " << rank << " " << getNodeString(source) << std::endl;
         for (auto &op : between_ops) {
-            std::cout << "Rank " << rank << " " << getNodeString(op)
-                      << std::endl;
+            out << "Rank " << rank << " " << getNodeString(op) << std::endl;
         }
-        std::cout << "Rank " << rank << " " << getNodeString(sink) << std::endl;
+        out << "Rank " << rank << " " << getNodeString(sink) << std::endl;
     }
 #endif
 

@@ -248,36 +248,42 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         prev_batch_se = se;
 
         if (finished) {
-            cudaStreamSynchronize(se->stream);
             return OperatorResult::FINISHED;
         }
 
-        std::shared_ptr<cudf::table> incoming_tbl = input_batch.table;
+        std::shared_ptr<cudf::table> incoming_table = input_batch.table;
         std::shared_ptr<arrow::Schema> incoming_schema = input_batch.schema;
 
-        // adopt or concatenate
-        if (!buffer_table) {
-            // adopt incoming shared_ptr directly
-            buffer_table = incoming_tbl;
-            buffer_rows = buffer_table
-                              ? static_cast<int64_t>(buffer_table->num_rows())
-                              : 0;
-        } else if (incoming_tbl && incoming_tbl->num_rows() > 0) {
-            // concatenate: build views, get unique_ptr result
-            std::vector<cudf::table_view> views{buffer_table->view(),
-                                                incoming_tbl->view()};
-            std::unique_ptr<cudf::table> concat_uptr =
-                cudf::concatenate(views, se->stream);
+        if (incoming_table && incoming_table->num_rows() > 0) {
+            // adopt or concatenate
+            if (!buffer_table) {
+                // adopt incoming shared_ptr directly
+                buffer_table = incoming_table;
+                buffer_rows = static_cast<int64_t>(buffer_table->num_rows());
+            } else {
+                // concatenate: build views, get unique_ptr result
+                std::vector<cudf::table_view> views{buffer_table->view(),
+                                                    incoming_table->view()};
+                std::unique_ptr<cudf::table> concat_uptr =
+                    cudf::concatenate(views, se->stream);
 
-            // convert unique_ptr -> shared_ptr by moving ownership
-            buffer_table = std::shared_ptr<cudf::table>(std::move(concat_uptr));
-            buffer_rows = static_cast<int64_t>(buffer_table->num_rows());
+                // convert unique_ptr -> shared_ptr by moving ownership
+                buffer_table =
+                    std::shared_ptr<cudf::table>(std::move(concat_uptr));
+                buffer_rows = static_cast<int64_t>(buffer_table->num_rows());
+            }
         }
 
         // decide flush by rows
         bool is_last = (prev_op_result == OperatorResult::FINISHED);
-        size_t row_size = row_size_bytes(buffer_table->view(), se);
-        size_t buffer_bytes = buffer_rows * row_size;
+        size_t buffer_bytes;
+        if (buffer_rows > 0) {
+            size_t row_size = row_size_bytes(buffer_table->view(), se);
+            buffer_bytes = buffer_rows * row_size;
+        } else {
+            buffer_bytes = 0;
+        }
+
         bool should_flush = is_last || (buffer_bytes >= chunk_bytes);
 
         if (should_flush && buffer_table && buffer_rows > 0) {

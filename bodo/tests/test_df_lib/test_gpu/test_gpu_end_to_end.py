@@ -171,7 +171,38 @@ def test_gpu_to_cpu_exchange(datapath):
     bdf = bd.read_parquet(path)
     assert count_gpu_plan_nodes(bdf._plan) == 1, "Expected GPU node for reading parquet"
     # Force plan execution
-    print(bdf)
+    bdf.execute_plan()
 
     pdf = pd.read_parquet(path)
     _test_equal(pdf, bdf)
+
+
+def test_gpu_join_bloom_filter(datapath):
+    """Test bloom join filter on GPU."""
+    cust_path = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path = datapath("tpch-test_data/parquet/orders.pq")
+
+    def merge_impl(cust_df, orders_df):
+        # Select only a couple keys that can't be filtered out by row-group so that
+        # bloom filter has something to do.
+        cust_filt = cust_df[(cust_df["C_CUSTKEY"] == 3) | (cust_df["C_CUSTKEY"] == 37)]
+        orders_df["price2"] = orders_df["O_TOTALPRICE"] * 2.0
+        return cust_filt.merge(
+            orders_df, how="inner", left_on=["C_CUSTKEY"], right_on=["O_CUSTKEY"]
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cust_bodo = bd.read_parquet(cust_path)
+        orders_bodo = bd.read_parquet(orders_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        merged_bodo = merge_impl(cust_bodo, orders_bodo)
+        merged_bodo.to_parquet(out_path_bodo)
+
+        cust_pd = pd.read_parquet(cust_path)
+        orders_pd = pd.read_parquet(orders_path)
+        out_path_pd = os.path.join(tmp, "out_pd.pq")
+        merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
+
+        result_bodo = pd.read_parquet(out_path_bodo)
+        result_pd = pd.read_parquet(out_path_pd)
+        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)

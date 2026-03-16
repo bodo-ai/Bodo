@@ -262,10 +262,10 @@ class ShuffleTableInfo {
 };
 
 /**
- * @brief Class for managing async shuffle of cudf::tables using MPI
+ * @brief Class for handling mpi communication between GPU nodes.
  */
-class GpuShuffleManager {
-   private:
+class GpuMpiManager {
+   protected:
     // MPI communicator for CPU communication between ranks
     // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
@@ -282,6 +282,46 @@ class GpuShuffleManager {
     // GPU device ID
     rmm::cuda_device_id gpu_id;
 
+   public:
+    GpuMpiManager();
+    ~GpuMpiManager();
+
+    int get_rank() const { return rank; }
+
+    /**
+     * @brief Get the underlying CUDA stream
+     * @return cudaStream_t
+     */
+    cudaStream_t get_stream() const { return stream; }
+
+    /**
+     * @brief Get the underlying MPI communicator
+     * @return MPI_Comm
+     */
+    MPI_Comm get_mpi_comm() const { return mpi_comm; }
+
+    /**
+     * @brief All GPU ranks send a device buffer to all other GPU ranks
+     * @param local_buf - the local device buffer to send to all GPU ranks
+     * @param stream - stream to perform the operations on
+     * @return number of GPU rank length vector of their device_buffers
+     */
+    std::vector<std::unique_ptr<rmm::device_buffer>> all_gather_device_buffers(
+        rmm::device_buffer const& local_buf, cudaStream_t stream);
+
+    /**
+     * @brief Sum all the local values from the GPU ranks
+     * @param local - the local value to be added to the sum
+     * @return the sum
+     */
+    uint64_t allreduce(uint64_t local);
+};
+
+/**
+ * @brief Class for managing async shuffle of cudf::tables using MPI
+ */
+class GpuShuffleManager : public GpuMpiManager {
+   private:
     std::deque<GpuShuffle> inflight_shuffles;
 
     // Tag counter for shuffles, each shuffle uses 3 tags
@@ -313,7 +353,6 @@ class GpuShuffleManager {
 
    public:
     GpuShuffleManager();
-    ~GpuShuffleManager();
 
     /**
      * @brief Shuffle a cudf table across all ranks
@@ -330,18 +369,6 @@ class GpuShuffleManager {
      * received.
      */
     std::vector<std::unique_ptr<cudf::table>> progress();
-
-    /**
-     * @brief Get the underlying CUDA stream
-     * @return cudaStream_t
-     */
-    cudaStream_t get_stream() const { return stream; }
-
-    /**
-     * @brief Get the underlying MPI communicator
-     * @return MPI_Comm
-     */
-    MPI_Comm get_mpi_comm() const { return mpi_comm; }
 
     /**
      * @brief Check if there are any inflight shuffles
@@ -391,6 +418,19 @@ int get_cluster_cuda_device_count();
  * @return MPI_Comm
  */
 MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
+
+/**
+ * @brief Allgather a device buffer from each GPU-enabled rank to every other
+ * GPU-enabled rank.
+ * @param stream: CUDA stream to perform operations on.
+ * @param local_buf: device buffer owned by this rank to send (may be size 0).
+ * @return vector of length comm_size where element i is a unique_ptr to the
+ * buffer sent by rank i. If a rank sent size 0, the corresponding vector
+ * element will be nullptr.
+ */
+std::vector<std::unique_ptr<rmm::device_buffer>>
+allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
+                                      cudaStream_t stream);
 
 /**
  * @brief Return whether the current rank has a GPU assigned (i.e. should
