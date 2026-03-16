@@ -1599,10 +1599,12 @@ def _detect_column_dict_encoding(
         # filter the string col indices based on the criterion
         n_rows = max(total_rows, 1)
         col_inds_to_convert = filter(
-            lambda x: (x[0] / n_rows) <= SF_READ_DICT_ENCODE_CRITERION
-            and (
-                (not bodo.bodosql_use_streaming_plan)
-                or x[0] < SF_STREAM_READ_DICT_ENCODE_LIMIT
+            lambda x: (
+                (x[0] / n_rows) <= SF_READ_DICT_ENCODE_CRITERION
+                and (
+                    (not bodo.bodosql_use_streaming_plan)
+                    or x[0] < SF_STREAM_READ_DICT_ENCODE_LIMIT
+                )
             ),
             zip(n_uniques, string_col_ind),
         )

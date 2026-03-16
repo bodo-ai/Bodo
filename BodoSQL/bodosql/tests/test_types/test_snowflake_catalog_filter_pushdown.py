@@ -2276,9 +2276,9 @@ string_transform_func = {
     "repeat": lambda x: x * 3,
     "strtok": lambda x: x.split()[0] if x else None,
     "strtok-opt-delimiter": lambda x: x.split("h")[0] if x else None,
-    "strtok-opt-delimiter-partNr": lambda x: x.split("h")[2]
-    if len(list(x.split("h"))) >= 3
-    else None,
+    "strtok-opt-delimiter-partNr": lambda x: (
+        x.split("h")[2] if len(list(x.split("h"))) >= 3 else None
+    ),
     "translate": lambda x: x.translate(str.maketrans("abcdefgh", "ABCDEFGH")),
     "concat": lambda x: x + "bodo",
     "concat-binop": lambda x: x + "bodo",
@@ -2569,16 +2569,12 @@ def test_regex_string_match_functions(
     df.columns = df.columns.str.upper()
 
     if "regexp_instr" in request.node.name:
-        func = (
-            lambda x: re.search(pat, x).start() + 1
-            if re.search(pat, x) is not None
-            else None
+        func = lambda x: (
+            re.search(pat, x).start() + 1 if re.search(pat, x) is not None else None
         )
     elif "regexp_substr" in request.node.name:
-        func = (
-            lambda x: re.search(pat, x).group()
-            if re.search(pat, x) is not None
-            else None
+        func = lambda x: (
+            re.search(pat, x).group() if re.search(pat, x) is not None else None
         )
     elif "regexp_count" in request.node.name:
         func = lambda x: len(re.findall(pat, x))

@@ -907,33 +907,41 @@ def test_simple_count_star(partition_col, spark_info, capfd):
         ),
         pytest.param(
             "BOOLAND_AGG",
-            lambda x: None
-            if x.count() == 0
-            else (x.astype(pd.BooleanDtype()).sum() == x.count()),
+            lambda x: (
+                None
+                if x.count() == 0
+                else (x.astype(pd.BooleanDtype()).sum() == x.count())
+            ),
             pd.BooleanDtype(),
             id="booland_agg",
         ),
         pytest.param(
             "BITOR_AGG",
-            lambda x: None
-            if x.count() == 0
-            else functools.reduce(lambda a, b: a | b, x[pd.notna(x)]),
+            lambda x: (
+                None
+                if x.count() == 0
+                else functools.reduce(lambda a, b: a | b, x[pd.notna(x)])
+            ),
             pd.Int64Dtype(),
             id="bitor_agg",
         ),
         pytest.param(
             "BITAND_AGG",
-            lambda x: None
-            if x.count() == 0
-            else functools.reduce(lambda a, b: a & b, x[pd.notna(x)]),
+            lambda x: (
+                None
+                if x.count() == 0
+                else functools.reduce(lambda a, b: a & b, x[pd.notna(x)])
+            ),
             pd.Int64Dtype(),
             id="bitand_agg",
         ),
         pytest.param(
             "BITXOR_AGG",
-            lambda x: None
-            if x.count() == 0
-            else functools.reduce(lambda a, b: a ^ b, x[pd.notna(x)]),
+            lambda x: (
+                None
+                if x.count() == 0
+                else functools.reduce(lambda a, b: a ^ b, x[pd.notna(x)])
+            ),
             pd.Int64Dtype(),
             id="bitxor_agg",
         ),

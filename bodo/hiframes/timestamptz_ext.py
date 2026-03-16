@@ -335,8 +335,8 @@ def overload_timestamptz(utc_timestamp, offset_minutes):
 
 @overload_method(TimestampTZType, "local_timestamp")
 def overload_timestamptz_local_timestamp(A):
-    return lambda A: A.utc_timestamp + pd.Timedelta(
-        minutes=A.offset_minutes
+    return lambda A: (
+        A.utc_timestamp + pd.Timedelta(minutes=A.offset_minutes)
     )  # pragma: no cover
 
 
