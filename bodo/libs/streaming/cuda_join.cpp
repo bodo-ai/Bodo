@@ -11,6 +11,7 @@
 #include "../_utils.h"
 #include "_util.h"
 #include "duckdb/common/enum_util.hpp"
+#include "duckdb/common/enums/join_type.hpp"
 #include "fmt/core.h"
 
 constexpr float FALSE_POSITIVE_RATE = 0.01;
@@ -289,12 +290,13 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Materialize the selected rows
+    cudf::out_of_bounds_policy oob_policy = this->join_type == duckdb::JoinType::INNER ? cudf::out_of_bounds_policy::DONT_CHECK : cudf::out_of_bounds_policy::NULLIFY;
     auto gathered_probe =
         cudf::gather(probe_kept_view, probe_idx_view,
-                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
+                     oob_policy, stream);
     auto gathered_build =
         cudf::gather(build_kept_view, build_idx_view,
-                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
+                     oob_policy, stream);
 
     // Assemble Final Result
     std::vector<std::unique_ptr<cudf::column>> final_columns;
