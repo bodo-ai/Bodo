@@ -187,7 +187,7 @@ bool GpuShuffleManager::sync_is_last(bool local_is_last) {
         return true;
     }
 
-    local_is_last&& = this->SendRecvEmpty();
+    local_is_last = local_is_last && this->SendRecvEmpty();
 
     if (!local_is_last) {
         return false;
