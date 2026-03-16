@@ -90,8 +90,9 @@ void GpuShuffleManager::do_shuffle() {
             "[GpuShuffleManager::do_shuffle] Unable to get "
             "available MPI tag for shuffle send. All tags are inflight.");
     }
-    this->send_states.push_back(
-        this->shuffle_issend(std::move(packed_tables), start_tag));
+
+    this->send_states.emplace_back(std::move(packed_tables), starting_msg_tag,
+                                   shuffle_comm);
     this->inflight_tags.insert(start_tag);
 }
 
