@@ -223,27 +223,25 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        std::unique_ptr<cudf::table> output_table =
-            cuda_join->ProbeProcessBatch(input_batch.table,
-                                         input_batch.stream_event, se->stream);
+        bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+
+        // TODO(ehsan): implement buffering output similar to CPU join
+        bool request_input = true;
+        auto [output_table, global_is_last] = cuda_join->ProbeProcessBatch(
+            input_batch.table, input_batch.stream_event, se->stream,
+            local_is_last);
         GPU_DATA output_gpu_data = {
             output_table != nullptr ? std::move(output_table) : nullptr,
             this->arrow_schema, se};
-
-        bool local_finished = prev_op_result == OperatorResult::FINISHED;
-        if (local_finished) {
-            // If we are finished consuming input but the shuffle is not
-            // complete, we need to wait for the shuffle to complete before we
-            // can be finished
-            cuda_join->probe_shuffle_manager.complete();
+        if (cuda_join->probe_shuffle_state.BuffersFull()) {
+            request_input = false;
         }
 
-        return {
-            output_gpu_data,
-            local_finished && cuda_join->probe_shuffle_manager.all_complete()
-                ? OperatorResult::FINISHED
-                : (local_finished ? OperatorResult::HAVE_MORE_OUTPUT
-                                  : OperatorResult::NEED_MORE_INPUT)};
+        return {output_gpu_data,
+                global_is_last
+                    ? OperatorResult::FINISHED
+                    : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                     : OperatorResult::HAVE_MORE_OUTPUT)};
     }
 
     /**

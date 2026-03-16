@@ -79,10 +79,10 @@ struct CudaHashJoin {
      * @param probe_chunk input batch to probe
      * @return output batch of probe
      */
-    std::unique_ptr<cudf::table> ProbeProcessBatch(
+    std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
         std::shared_ptr<StreamAndEvent> input_stream_event,
-        rmm::cuda_stream_view& stream);
+        rmm::cuda_stream_view& stream, bool local_is_last);
 
     /**
      * @brief Add to the previous mask of rows.
