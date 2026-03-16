@@ -91,7 +91,7 @@ void GpuShuffleManager::do_shuffle() {
             "available MPI tag for shuffle send. All tags are inflight.");
     }
 
-    this->send_states.emplace_back(std::move(packed_tables), starting_msg_tag,
+    this->send_states.emplace_back(std::move(packed_tables), start_tag,
                                    shuffle_comm);
     this->inflight_tags.insert(start_tag);
 }
