@@ -327,13 +327,11 @@ class GpuShuffleManager : public GpuMpiManager {
     bool is_last_barrier_started = false;
     MPI_Request is_last_request = MPI_REQUEST_NULL;
 
-    std::deque<GpuShuffle> inflight_shuffles;
+    // Keep track of inflight tags to avoid tag collisions.
+    std::unordered_set<int> inflight_tags;
 
-    // Tag counter for shuffles, each shuffle uses 3 tags
-    // and they can't overlap
-    int curr_tag = 0;
-
-    const int MAX_TAG_VAL;
+    std::vector<GpuShuffleSendState> send_states;
+    std::vector<GpuShuffleRecvState> recv_states;
 
     std::vector<ShuffleTableInfo> tables_to_shuffle;
 

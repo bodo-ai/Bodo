@@ -51,8 +51,7 @@ GpuMpiManager::~GpuMpiManager() {
     MPI_Comm_free(&mpi_comm);
 }
 
-GpuShuffleManager::GpuShuffleManager()
-    : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
+GpuShuffleManager::GpuShuffleManager() {}
 
 void GpuShuffleManager::append_batch(
     std::shared_ptr<cudf::table> table,
