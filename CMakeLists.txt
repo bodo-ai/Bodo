@@ -246,13 +246,18 @@ endif()
 # TODO [BSE-4552]: Add DebugSanitize as a build type for Windows builds.
 if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
   if (NOT WIN32)
+    set(sanitizer_flags "-fsanitize=address")
+
+    # Disable undefined behavior sanitizer due issues with CUDF code.
+    if (NOT USE_CUDF)
+      list(APPEND sanitizer_flags "-fsanitize=undefined")
+    endif()
+
     add_compile_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
+      ${sanitizer_flags}
     )
     add_link_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
+      ${sanitizer_flags}
     )
   else()
     # Note for DebugSanitize builds we have to compile with /bigobj to allow larger object files

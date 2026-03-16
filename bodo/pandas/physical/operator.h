@@ -105,6 +105,10 @@ class RankDataExchange {
     std::unique_ptr<IsLastState> is_last_state;
     std::unique_ptr<IncrementalShuffleState> shuffle_state;
     bool finished = false;
+
+    // Currently unused, required for IncrementalShuffleState.
+    uint64_t curr_iter = 0;
+    int64_t sync_freq = 1;
 };
 
 struct GPUBatchGenerator {
