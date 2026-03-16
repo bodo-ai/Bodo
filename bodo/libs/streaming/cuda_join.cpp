@@ -193,19 +193,21 @@ void CudaHashJoin::FinalizeBuild() {
     this->_build_chunks.clear();
 }
 
-void CudaHashJoin::BuildConsumeBatch(
+bool CudaHashJoin::BuildConsumeBatch(
     std::shared_ptr<cudf::table> build_chunk,
-    std::shared_ptr<StreamAndEvent> input_stream_event) {
+    std::shared_ptr<StreamAndEvent> input_stream_event, bool local_is_last) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory.
     // Store the incoming build chunk for later finalization
-    this->build_shuffle_manager.shuffle_table(
+    this->build_shuffle_manager.append_batch(
         build_chunk, this->build_key_indices, input_stream_event);
     std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-        build_shuffle_manager.progress();
+        build_shuffle_manager.progress(local_is_last);
     for (auto& chunk : shuffled_build_chunks) {
         this->_build_chunks.emplace_back(std::move(chunk));
     }
+
+    return this->build_shuffle_manager.sync_is_last(local_is_last);
 }
 
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
@@ -214,8 +216,8 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     rmm::cuda_stream_view& stream) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
-    probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
-                                        input_stream_event);
+    probe_shuffle_manager.append_batch(probe_chunk, this->probe_key_indices,
+                                       input_stream_event);
 
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =

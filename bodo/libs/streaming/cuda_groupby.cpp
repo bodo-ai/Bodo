@@ -141,8 +141,8 @@ void CudaGroupbyState::build_consume_batch(
                        aggregation_requests, aggregation_fns, post_agg_fns,
                        pre_agg_table_fns, local_groupby_se->stream);
         local_groupby_se->event.record(local_groupby_se->stream);
-        merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
-                                     local_groupby_se);
+        merge_shuffler.append_batch(new_data, shuffle_key_indices,
+                                    local_groupby_se);
     }
 
     // Give shuffler a chance to receive chunks.

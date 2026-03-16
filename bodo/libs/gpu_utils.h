@@ -359,9 +359,9 @@ class GpuShuffleManager : public GpuMpiManager {
      * @param table Input table to shuffle
      * @param partition_indices Column indices to use for partitioning
      */
-    void shuffle_table(std::shared_ptr<cudf::table> table,
-                       const std::vector<cudf::size_type>& partition_indices,
-                       std::shared_ptr<StreamAndEvent> se);
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      const std::vector<cudf::size_type>& partition_indices,
+                      std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Progress any inflight shuffles

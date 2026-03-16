@@ -54,7 +54,7 @@ GpuMpiManager::~GpuMpiManager() {
 GpuShuffleManager::GpuShuffleManager()
     : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
-void GpuShuffleManager::shuffle_table(
+void GpuShuffleManager::append_batch(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
     std::shared_ptr<StreamAndEvent> se) {
