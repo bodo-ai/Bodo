@@ -48,6 +48,8 @@
 
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
+#include <rmm/mr/owning_wrapper.hpp>
+#include <rmm/mr/pool_memory_resource.hpp>
 #include "cuda_runtime_api.h"
 #endif
 
@@ -1257,6 +1259,26 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     return set_operation;
 }
 
+/**
+ * @brief Create a memory resource object
+ *
+ * @param is_gpu
+ * @return std::shared_ptr<rmm::mr::device_memory_resource>
+ */
+std::shared_ptr<rmm::mr::device_memory_resource> create_memory_resource(
+    bool is_gpu) {
+    if (is_gpu) {
+        char *rmm_pool_size_env = std::getenv("BODO_RMM_POOL_SIZE");
+        int percent_pool_size =
+            rmm_pool_size_env ? std::stoi(rmm_pool_size_env)
+                              : 80;  // Default to 80% if env var is not set
+        return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
+            std::make_shared<rmm::mr::cuda_memory_resource>(),
+            rmm::percent_of_free_device_memory(percent_pool_size));
+    }
+    return nullptr;
+}
+
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
 #ifdef USE_CUDF
@@ -1268,6 +1290,9 @@ std::pair<int64_t, PyObject *> execute_plan(
         // scope)
         device_guard.emplace(gpu_id);
     }
+
+    auto const mr = create_memory_resource(gpu_id.value() != -1);
+    cudf::set_current_device_resource(mr.get());
 #endif
 
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
