@@ -115,6 +115,63 @@ enum class GpuShuffleState {
 };
 
 /**
+ * @brief Holds buffers and MPI requests for async shuffle sends for cudf tables
+ (MPI_Issend calls). Buffers cannot be freed until send is completed.
+ *
+ */
+class GpuShuffleSendState {
+   public:
+    /**
+     * @brief Construct a new send state.
+     *
+     * @param starting_msg_tag Starting message tag to use for posting the
+     * messages that send the data buffers.
+     */
+    explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
+                                 int starting_msg_tag_, MPI_Comm shuffle_comm,
+                                 int n_ranks);
+
+    /**
+     * @brief Getter for starting_msg_tag.
+     *
+     * @return int
+     */
+    int get_starting_msg_tag() const { return this->starting_msg_tag; }
+
+    /**
+     * @brief Returns true if send is done which allows this state to be freed.
+     *
+     */
+    bool sendDone() {
+        int flag;
+        CHECK_MPI_TEST_ALL(
+            send_requests, flag,
+            "[GpuShuffleSendState::sendDone] MPI error on MPI_Testall: ")
+        return flag;
+    }
+
+   private:
+    std::vector<MPI_Request> send_requests;
+    // Starting message tag to use for posting the messages that send the data
+    // buffers. This enables sending multiple tables to ranks (as long as the
+    // sender, e.g. StreamSort, maintains sufficient state to not re-use tags
+    // for concurrent sends).
+    int starting_msg_tag = -1;
+
+    // Buffers for metadata transfers to other ranks, these are used to
+    // construct packed_columns. Indexed by destination rank
+    std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_send_buffers;
+
+    // Buffers for column data sent to other ranks, these are used to construct
+    // packed_columns. Indexed by destination rank
+    std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
+
+    // We need to keep sizes around while the transfers are inflight
+    std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
+    std::unique_ptr<std::vector<uint64_t>> send_gpu_sizes;
+};
+
+/**
  * @brief Holds information for inflight shuffle operations
  */
 struct GpuShuffle {
@@ -242,11 +299,6 @@ struct GpuShuffle {
     std::optional<std::unique_ptr<cudf::table>> progress_waiting_for_data();
     void progress_sending_sizes();
     void progress_sending_data();
-};
-
-struct DoShuffleCoordination {
-    MPI_Request req = MPI_REQUEST_NULL;
-    int has_data;
 };
 
 class ShuffleTableInfo {

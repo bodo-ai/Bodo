@@ -92,7 +92,7 @@ void GpuShuffleManager::do_shuffle() {
     }
 
     this->send_states.emplace_back(std::move(packed_tables), start_tag,
-                                   shuffle_comm);
+                                   shuffle_comm, n_ranks);
     this->inflight_tags.insert(start_tag);
 }
 
@@ -203,6 +203,80 @@ GpuShuffleManager::consume_completed_recvs() {
         return done;
     });
     return out_tables;
+}
+
+GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
+                                         int starting_msg_tag_,
+                                         MPI_Comm shuffle_comm, int n_ranks)
+    : starting_msg_tag(starting_msg_tag_),
+      metadata_send_buffers(n_ranks),
+      packed_send_buffers(n_ranks),
+      send_metadata_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
+      send_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)) {
+    // Prepare send buffers
+    for (size_t dest_rank = 0; dest_rank < packed_tables.size(); dest_rank++) {
+        cudf::packed_table& table = packed_tables[dest_rank];
+        packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
+        metadata_send_buffers[dest_rank] =
+            std::make_unique<std::vector<uint8_t>>(
+                std::move(*table.data.metadata));
+    }
+
+    // Send starting tag
+    for (size_t dest_rank = 0; dest_rank < n_ranks; dest_rank++) {
+        MPI_Request req;
+        CHECK_MPI(MPI_Issend(&starting_msg_tag, 1, MPI_INT32_T, dest_rank,
+                             SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
+                  "GpuShuffleSendState: MPI_Issend for starting tag failed:");
+        this->send_requests.push_back(req);
+    }
+
+    // Send metadata sizes
+    for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
+         dest_rank++) {
+        MPI_Request req;
+        (*this->send_metadata_sizes)[dest_rank] =
+            this->metadata_send_buffers[dest_rank]->size();
+        CHECK_MPI(MPI_Issend(&(*this->send_metadata_sizes)[dest_rank], 1,
+                             MPI_UINT64_T, dest_rank, starting_msg_tag,
+                             shuffle_comm, &req),
+                  "GpuShuffleSendState: MPI_Issend for metadata sizes failed:");
+        this->send_requests.push_back(req);
+    }
+
+    // Send GPU data sizes
+    for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
+         dest_rank++) {
+        (*this->send_gpu_sizes)[dest_rank] =
+            packed_send_buffers[dest_rank]->size();
+        CHECK_MPI(
+            MPI_Issend(&(*this->send_gpu_sizes)[dest_rank], 1, MPI_UINT64_T,
+                       dest_rank, starting_msg_tag + 1, shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for GPU data sizes failed:");
+        this->send_requests.push_back(req);
+    }
+
+    // Send metadata
+    for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
+         dest_rank++) {
+        CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
+                             this->metadata_send_buffers[dest_rank]->size(),
+                             MPI_UINT8_T, dest_rank, starting_msg_tag + 2,
+                             shuffle_comm, &req),
+                  "GpuShuffleSendState: MPI_Issend for metadata failed:");
+        this->send_requests.push_back(req);
+    }
+
+    // Send data
+    for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
+         dest_rank++) {
+        CHECK_MPI(
+            MPI_Issend(packed_send_buffers[dest_rank]->data(),
+                       packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
+                       dest_rank, starting_msg_tag + 3, shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for data failed:");
+        this->send_requests.push_back(req);
+    }
 }
 
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
