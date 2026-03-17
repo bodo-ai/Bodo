@@ -28,8 +28,8 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::LEFT:
         case duckdb::JoinType::INNER: {
-        return true;
-    }
+            return true;
+        }
         default: {
             return false;
         }
@@ -189,8 +189,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         this->cuda_join = std::make_unique<CudaHashJoin>(
             build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, output_schema, logical_join.join_type,
-            cudf::null_equality::UNEQUAL);
+            build_kept_cols, probe_kept_cols, output_schema,
+            logical_join.join_type, cudf::null_equality::UNEQUAL);
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
@@ -238,7 +238,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         bool local_finished = prev_op_result == OperatorResult::FINISHED;
         std::unique_ptr<cudf::table> output_table =
             cuda_join->ProbeProcessBatch(input_batch.table,
-                                         input_batch.stream_event, se->stream, local_finished);
+                                         input_batch.stream_event, se->stream,
+                                         local_finished);
         GPU_DATA output_gpu_data = {
             output_table != nullptr ? std::move(output_table) : nullptr,
             this->arrow_schema, se};
