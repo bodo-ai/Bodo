@@ -137,7 +137,7 @@ static bodo::tests::suite tests([] {
             std::vector<std::unique_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.global_is_last) {
+            do {
                 auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
@@ -145,7 +145,7 @@ static bodo::tests::suite tests([] {
                         received_tables.push_back(std::move(t));
                     }
                 }
-            }
+            } while (!manager.sync_is_last(true));
 
             // Verification
             // 1. Calculate total rows received on this rank
@@ -204,7 +204,7 @@ static bodo::tests::suite tests([] {
             std::vector<std::unique_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.global_is_last) {
+            do {
                 auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
@@ -212,7 +212,7 @@ static bodo::tests::suite tests([] {
                         received_tables.push_back(std::move(t));
                     }
                 }
-            }
+            } while (!manager.sync_is_last(true));
 
             // Verification
             // 1. Calculate total rows received on this rank
