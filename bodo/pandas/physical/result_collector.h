@@ -38,7 +38,6 @@ class PhysicalResultCollector : public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        DEBUG_PrintTable(std::cout, input_batch);
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
 
         return prev_op_result == OperatorResult::FINISHED

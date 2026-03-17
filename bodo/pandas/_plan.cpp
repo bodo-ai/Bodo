@@ -49,8 +49,11 @@
 
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
+#include <rmm/mr/managed_memory_resource.hpp>
 #include <rmm/mr/owning_wrapper.hpp>
 #include <rmm/mr/pool_memory_resource.hpp>
+#include <rmm/mr/prefetch_resource_adaptor.hpp>
 #include "cuda_runtime_api.h"
 #endif
 
@@ -1260,41 +1263,38 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     return set_operation;
 }
 
-/**
- * @brief Create a memory resource object
- *
- * @param is_gpu
- * @return std::shared_ptr<rmm::mr::device_memory_resource>
- */
-std::shared_ptr<rmm::mr::device_memory_resource> create_memory_resource(
-    bool is_gpu) {
-    if (is_gpu) {
-        char *rmm_pool_size_env = std::getenv("BODO_RMM_POOL_SIZE");
-        int percent_pool_size =
-            rmm_pool_size_env ? std::stoi(rmm_pool_size_env)
-                              : 80;  // Default to 80% if env var is not set
-        return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
-            std::make_shared<rmm::mr::cuda_memory_resource>(),
-            rmm::percent_of_free_device_memory(percent_pool_size));
-    }
-    return nullptr;
-}
-
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
     std::optional<rmm::cuda_set_device_raii> device_guard;
+    std::shared_ptr<rmm::mr::device_memory_resource> mr = nullptr;
+    rmm::mr::device_memory_resource *prev_mr = nullptr;
     if (gpu_id.value() != -1) {
         // Set device (resets to previous device when device_guard goes out of
         // scope)
         device_guard.emplace(gpu_id);
-    }
-    auto const mr = create_memory_resource(gpu_id.value() != -1);
-    rmm::mr::device_memory_resource *prev = nullptr;
-    if (mr) {
-        prev = cudf::set_current_device_resource(mr.get());
+        // Set memory resource for GPU ranks.
+        // Use Pool resource with 80% of free memory to reduce allocations
+        // overheads.
+        // TODO(scott): Reuse memory resource across multiple plan executions.
+        const int PERCENT_POOL_SIZE = 80;
+        bool use_managed = false;
+        if (use_managed) {
+            auto managed = std::make_shared<rmm::mr::managed_memory_resource>();
+            auto pool =
+                rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
+                    managed,
+                    rmm::percent_of_free_device_memory(PERCENT_POOL_SIZE));
+            mr = rmm::mr::make_owning_wrapper<
+                rmm::mr::prefetch_resource_adaptor>(pool);
+        } else {
+            mr = rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
+                std::make_shared<rmm::mr::cuda_memory_resource>(),
+                rmm::percent_of_free_device_memory(PERCENT_POOL_SIZE));
+        }
+        prev_mr = cudf::set_current_device_resource(mr.get());
     }
 #endif
 
@@ -1318,9 +1318,9 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<table_info> output_table = std::get<0>(output);
 
 #ifdef USE_CUDF
-    // Reset memory resource
-    if (mr) {
-        cudf::set_current_device_resource(prev);
+    // Reset memory resource for GPU ranks.
+    if (prev_mr) {
+        cudf::set_current_device_resource(prev_mr);
     }
 #endif
 
