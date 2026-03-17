@@ -200,7 +200,7 @@ class GpuShuffleRecvState {
     std::vector<MPI_Request> recv_requests;
     std::vector<uint64_t> sizes_vec;
 
-    std::vector<uint8_t> recv_metadata_buffer;
+    std::unique_ptr<std::vector<uint8_t>> recv_metadata_buffer;
     std::unique_ptr<rmm::device_buffer> packed_recv_buffer;
 };
 

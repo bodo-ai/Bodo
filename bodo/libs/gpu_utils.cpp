@@ -306,14 +306,15 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
     uint64_t metadata_size = sizes_vec[1];
     uint64_t data_size = sizes_vec[2];
 
-    this->recv_metadata_buffer.resize(metadata_size);
+    this->recv_metadata_buffer =
+        std::make_unique<std::vector<uint8_t>>(metadata_size);
     this->packed_recv_buffer =
         std::make_unique<rmm::device_buffer>(data_size, stream);
 
     // recv metadata
     MPI_Request recv_req;
-    CHECK_MPI(MPI_Irecv(this->recv_metadata_buffer.data(),
-                        this->recv_metadata_buffer.size(), MPI_UINT8_T, source,
+    CHECK_MPI(MPI_Irecv(this->recv_metadata_buffer->data(),
+                        this->recv_metadata_buffer->size(), MPI_UINT8_T, source,
                         curr_tag, shuffle_comm, &recv_req),
               "GpuShuffle::recv_metadata: MPI_Irecv failed:");
     this->recv_requests.push_back(recv_req);
