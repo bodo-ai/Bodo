@@ -144,7 +144,7 @@ bool CudaGroupbyState::build_consume_batch(
     std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
         merge_shuffler.progress(is_last);
 
-    bool global_is_last = this->probe_shuffle_manager.sync_is_last(is_last);
+    bool global_is_last = this->merge_shuffler.sync_is_last(is_last);
 
     if (!is_gpu_rank()) {
         return global_is_last;

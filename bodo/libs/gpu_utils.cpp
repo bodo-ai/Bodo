@@ -92,7 +92,7 @@ void GpuShuffleManager::do_shuffle() {
     }
 
     this->send_states.emplace_back(std::move(packed_tables), start_tag,
-                                   mpi_comm, n_ranks);
+                                   mpi_comm, static_cast<size_t>(n_ranks));
     this->inflight_tags.insert(start_tag);
 }
 

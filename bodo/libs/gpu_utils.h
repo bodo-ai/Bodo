@@ -130,7 +130,7 @@ class GpuShuffleSendState {
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
                                  int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 int n_ranks);
+                                 size_t n_ranks);
 
     /**
      * @brief Getter for starting_msg_tag.
@@ -194,10 +194,10 @@ class GpuShuffleRecvState {
     void TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm);
 
    private:
+    int source;
     cudaStream_t stream;
     MPI_Request metadata_request = MPI_REQUEST_NULL;
     std::vector<MPI_Request> recv_requests;
-    int source;
     std::vector<uint64_t> sizes_vec;
 
     std::vector<uint8_t> recv_metadata_buffer;
