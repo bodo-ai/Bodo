@@ -51,9 +51,6 @@ GpuMpiManager::~GpuMpiManager() {
     MPI_Comm_free(&mpi_comm);
 }
 
-GpuShuffleManager::GpuShuffleManager()
-    : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
-
 GpuTableManager::GpuTableManager() : MAX_TAG_VAL(get_max_allowed_tag_value()) {}
 
 void GpuShuffleManager::shuffle_table(
@@ -518,7 +515,7 @@ bool GpuTableManager::all_complete() {
         }
     }
     return this->global_completion && inflight_shuffles.empty() &&
-           tables_to_shuffle.empty();
+           !hasMoreTables();
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
