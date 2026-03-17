@@ -1239,6 +1239,7 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                 return std::make_unique<cudf::numeric_scalar<int8_t>>(
                     static_cast<int8_t>(false), false);
 
+            case arrow::Type::LARGE_STRING:
             case arrow::Type::STRING:
                 return std::make_unique<cudf::string_scalar>("", false);
             case arrow::Type::BINARY:
