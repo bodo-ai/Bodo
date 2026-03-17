@@ -129,6 +129,10 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
     return received_tables;
 }
 
+bool GpuShuffleManager::SendRecvEmpty() {
+    return (this->send_states.empty() && this->recv_states.empty());
+}
+
 // Similar to the CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/8706d2d4b4f957023090834b430682c09a275012/bodo/libs/streaming/_join.cpp#L3092
 bool GpuShuffleManager::sync_is_last(bool local_is_last) {
