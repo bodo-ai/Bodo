@@ -416,12 +416,12 @@ class CudaGroupbyState {
     void all_local_data_processed() {
         if (!all_local_done) {
             all_local_done = true;
-            merge_shuffler.complete();
+            // merge_shuffler.complete();
         }
     }
 
     bool all_complete() {
-        return all_local_done && merge_shuffler.all_complete();
+        return all_local_done;  // && merge_shuffler.all_complete();
     }
 
     /**

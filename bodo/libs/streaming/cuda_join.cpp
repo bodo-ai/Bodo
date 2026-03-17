@@ -85,6 +85,10 @@ void CudaHashJoin::build_hash_table(
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
     for (const auto& chunk : build_chunks) {
+        // Skip empty chunks
+        if (chunk->num_rows() == 0) {
+            continue;
+        }
         build_views.push_back(chunk->view());
     }
     this->_build_table = cudf::concatenate(build_views);
@@ -199,13 +203,14 @@ void CudaHashJoin::BuildConsumeBatch(
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory.
     // Store the incoming build chunk for later finalization
-    this->build_shuffle_manager.shuffle_table(
-        build_chunk, this->build_key_indices, input_stream_event);
-    std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-        build_shuffle_manager.progress();
-    for (auto& chunk : shuffled_build_chunks) {
-        this->_build_chunks.emplace_back(std::move(chunk));
-    }
+    // this->build_shuffle_manager.shuffle_table(
+    //     build_chunk, this->build_key_indices, input_stream_event);
+    // std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
+    //     build_shuffle_manager.progress();
+    // for (auto& chunk : shuffled_build_chunks) {
+    //     this->_build_chunks.emplace_back(std::move(chunk));
+    // }
+    this->_build_chunks.emplace_back(std::move(build_chunk));
 }
 
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
@@ -214,12 +219,14 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     rmm::cuda_stream_view& stream) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
-    probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
-                                        input_stream_event);
+    // probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
+    //                                     input_stream_event);
 
+    std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks;
+    shuffled_probe_chunks.push_back(probe_chunk);
     //    Receive data destined for this rank
-    std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
-        probe_shuffle_manager.progress();
+    // std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
+    //     probe_shuffle_manager.progress();
     if (!is_gpu_rank()) {
         return nullptr;
     }

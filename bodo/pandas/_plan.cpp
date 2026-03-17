@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <rmm/mr/device_memory_resource.hpp>
 #include <utility>
 
 #include <arrow/api.h>
@@ -1290,9 +1291,11 @@ std::pair<int64_t, PyObject *> execute_plan(
         // scope)
         device_guard.emplace(gpu_id);
     }
-
     auto const mr = create_memory_resource(gpu_id.value() != -1);
-    cudf::set_current_device_resource(mr.get());
+    rmm::mr::device_memory_resource *prev = nullptr;
+    if (mr) {
+        prev = cudf::set_current_device_resource(mr.get());
+    }
 #endif
 
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
@@ -1304,6 +1307,7 @@ std::pair<int64_t, PyObject *> execute_plan(
         Executor executor(std::move(plan), out_schema);
         output = executor.ExecutePipelines();
     }
+    std::cout << "Execution complete, processing output..." << std::endl;
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
@@ -1312,6 +1316,13 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 
     std::shared_ptr<table_info> output_table = std::get<0>(output);
+
+#ifdef USE_CUDF
+    // Reset memory resource
+    if (mr) {
+        cudf::set_current_device_resource(prev);
+    }
+#endif
 
     // Parquet write doesn't return data
     if (output_table == nullptr) {

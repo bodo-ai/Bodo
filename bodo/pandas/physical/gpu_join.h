@@ -210,10 +210,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
-            cuda_join->build_shuffle_manager.complete();
+            // cuda_join->build_shuffle_manager.complete();
         }
-        return prev_op_result == OperatorResult::FINISHED &&
-                       cuda_join->build_shuffle_manager.all_complete()
+        return prev_op_result ==
+                       OperatorResult::
+                           FINISHED  // &&
+                                     // cuda_join->build_shuffle_manager.all_complete()
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
     }
@@ -239,12 +241,13 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             // If we are finished consuming input but the shuffle is not
             // complete, we need to wait for the shuffle to complete before we
             // can be finished
-            cuda_join->probe_shuffle_manager.complete();
+            // cuda_join->probe_shuffle_manager.complete();
         }
 
         return {
             output_gpu_data,
-            local_finished && cuda_join->probe_shuffle_manager.all_complete()
+            local_finished  // &&
+                            // cuda_join->probe_shuffle_manager.all_complete()
                 ? OperatorResult::FINISHED
                 : (local_finished ? OperatorResult::HAVE_MORE_OUTPUT
                                   : OperatorResult::NEED_MORE_INPUT)};

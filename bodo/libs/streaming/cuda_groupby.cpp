@@ -132,22 +132,25 @@ void CudaGroupbyState::build_consume_batch(
         return;
     }
 
+    std::shared_ptr<cudf::table> new_data;
     if (input_table->view().num_rows() != 0) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
-        std::shared_ptr<cudf::table> new_data =
+        new_data =
             do_groupby(input_table->view(), key_indices, column_indices,
                        aggregation_requests, aggregation_fns, post_agg_fns,
                        pre_agg_table_fns, local_groupby_se->stream);
         local_groupby_se->event.record(local_groupby_se->stream);
-        merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
-                                     local_groupby_se);
+        // merge_shuffler.shuffle_table(new_data, shuffle_key_indices,
+        //                              local_groupby_se);
     }
 
     // Give shuffler a chance to receive chunks.
-    std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
-        merge_shuffler.progress();
+    std::vector<std::shared_ptr<cudf::table>> shuffled_merge_chunks;
+    shuffled_merge_chunks.push_back(new_data);
+    // std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
+    //     merge_shuffler.progress();
 
     std::vector<cudf::table_view> views;
 
