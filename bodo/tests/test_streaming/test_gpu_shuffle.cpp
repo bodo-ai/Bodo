@@ -179,4 +179,67 @@ static bodo::tests::suite tests([] {
             }
         },
         {"gpu_cpp"});
+    bodo::tests::test(
+        "test_shuffle_empty",
+        [] {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+            rmm::cuda_device_id device_id = get_gpu_id();
+            if (device_id.value() >= 0) {
+                cudaSetDevice(device_id.value());
+            }
+
+            // Setup: Create 0 rows (empty table)
+            // We use the same helper, just requesting 0 rows.
+            auto table = create_int_table(0, 0);
+            std::shared_ptr<cudf::table> input_ptr = std::move(table);
+
+            GpuShuffleManager manager;
+
+            // Shuffle based on column 0
+            std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
+            manager.append_batch(input_ptr, {0}, se);
+
+            std::vector<std::unique_ptr<cudf::table>> received_tables;
+
+            // Pump the progress loop
+            while (!manager.global_is_last) {
+                auto out_batch = manager.progress(true);
+                // Move received tables into our accumulator
+                for (auto& t : out_batch) {
+                    if (t) {
+                        received_tables.push_back(std::move(t));
+                    }
+                }
+            }
+
+            // Verification
+            // 1. Calculate total rows received on this rank
+            int local_received_rows = 0;
+            for (const auto& t : received_tables) {
+                local_received_rows += t->num_rows();
+            }
+
+            // 2. Sum global rows received (requires MPI check)
+            int global_received_rows = 0;
+            CHECK_MPI(MPI_Allreduce(&local_received_rows, &global_received_rows,
+                                    1, MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+                      "test_shuffle_empty: MPI_Allreduce failed:");
+
+            // 3. Check conservation of data: Total rows in system must be 0
+            bodo::tests::check(global_received_rows == 0);
+
+            // 4. Check schema preservation
+            // Even if the table is empty, we expect the schema (column types)
+            // to remain INT64
+            if (!received_tables.empty()) {
+                bodo::tests::check(received_tables[0]->num_columns() ==
+                                   input_ptr->num_columns());
+                bodo::tests::check(
+                    received_tables[0]->get_column(0).type().id() ==
+                    cudf::type_id::INT64);
+            }
+        },
+        {"gpu_cpp"});
 });
