@@ -208,7 +208,7 @@ GpuShuffleManager::consume_completed_recvs() {
 
 GpuShuffleSendState::GpuShuffleSendState(
     std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
-    MPI_Comm shuffle_comm, int n_ranks)
+    MPI_Comm shuffle_comm, size_t n_ranks)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
@@ -272,7 +272,8 @@ bool GpuShuffleSendState::sendDone() {
     return flag;
 }
 
-GpuShuffleRecvState::GpuShuffleRecvState(MPI_Status& status, MPI_Message& m)
+GpuShuffleRecvState::GpuShuffleRecvState(MPI_Status& status, MPI_Message& m,
+                                         cudaStream_t stream)
     : source(status.MPI_SOURCE), stream(stream) {
     assert(this->metadata_request == MPI_REQUEST_NULL);
 
@@ -326,7 +327,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
     this->recv_requests.push_back(data_recv_req);
 }
 
-std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
+std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
     MPI_Comm shuffle_comm) {
     if (recv_requests.empty()) {
         // Try receiving the length again and see if we can populate the data
@@ -351,8 +352,8 @@ std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
 
     // Unpack received table
     cudf::packed_columns packed_recv_column =
-        cudf::packed_columns(std::move(this->metadata_recv_buffers[src_rank]),
-                             std::move(this->packed_recv_buffers[src_rank]));
+        cudf::packed_columns(std::move(this->recv_metadata_buffer),
+                             std::move(this->packed_recv_buffer));
     cudf::table_view table_view = cudf::unpack(packed_recv_column);
 
     // TODO(ehsan): avoid copy if possible

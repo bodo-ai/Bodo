@@ -182,7 +182,7 @@ class GpuShuffleRecvState {
      * will be non-null, otherwise the return value will be (false, NULL).
      * When the boolean is true this state can be freed.
      */
-    std::pair<bool, std::shared_ptr<cudf::table>> recvDone(
+    std::pair<bool, std::unique_ptr<cudf::table>> recvDone(
         MPI_Comm shuffle_comm);
 
     /**
