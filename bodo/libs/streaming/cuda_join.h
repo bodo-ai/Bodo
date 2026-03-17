@@ -1,5 +1,6 @@
 #pragma once
 #include <arrow/scalar.h>
+#include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
@@ -48,6 +49,7 @@ struct CudaHashJoin {
 
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
+    std::unique_ptr<cudf::column> matched_build_rows; // Used for right/outer joins to track which build rows have been matched
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -83,12 +85,15 @@ struct CudaHashJoin {
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
+     * @param input_stream_event stream and event for synchronizing input batch availability
+     * @param stream CUDA stream to execute the probe on
+     * @param local_finished whether anymore input will be passed (is it safe to generate rows that don't have matches on the build side for right joins)
      * @return output batch of probe
      */
     std::unique_ptr<cudf::table> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
         std::shared_ptr<StreamAndEvent> input_stream_event,
-        rmm::cuda_stream_view& stream);
+        rmm::cuda_stream_view& stream, bool local_finished);
 
     /**
      * @brief Add to the previous mask of rows.

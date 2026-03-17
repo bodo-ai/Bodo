@@ -2,8 +2,10 @@
 #include <arrow/array/util.h>
 #include <arrow/compute/api_aggregate.h>
 #include <cudf/column/column_factories.hpp>
+#include <cudf/column/column_view.hpp>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/filling.hpp>
 #include <cudf/reduction.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
@@ -195,6 +197,16 @@ void CudaHashJoin::FinalizeBuild() {
 
     // Clear build chunks to free memory
     this->_build_chunks.clear();
+
+    if (this->join_type == duckdb::JoinType::RIGHT || this->join_type == duckdb::JoinType::OUTER) {
+        // For right and outer joins we need to track which build rows have been matched
+        // so we can output unmatched build rows at the end
+        this->matched_build_rows = 
+            cudf::make_numeric_column(cudf::data_type(cudf::type_id::BOOL8), this->_build_table->num_rows());
+        // Initialize all rows as unmatched
+        cudf::mutable_column_view view = this->matched_build_rows->mutable_view();
+        cudf::fill_in_place(view, 0, this->matched_build_rows->size(), cudf::numeric_scalar<bool>(false), cudf::get_default_stream());
+    }
 }
 
 void CudaHashJoin::BuildConsumeBatch(
@@ -215,7 +227,7 @@ void CudaHashJoin::BuildConsumeBatch(
 std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
-    rmm::cuda_stream_view& stream) {
+    rmm::cuda_stream_view& stream, bool local_finished) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
     probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
@@ -262,7 +274,9 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         } break;
         case duckdb::JoinType::OUTER: {
         std::tie(probe_indices, build_indices) = 
-            _join_handle->full_join(selected, {}, stream);
+            // Use left join because it will give us all probe rows, and for the build rows we can use the matched_build_rows boolean mask to determine which ones are unmatched and should be included in the output.
+            // If we used cudf's full join it would output unmatched build rows every batch
+            _join_handle->left_join(selected, {}, stream);
         } break;
         default: {
             throw std::runtime_error("Unsupported join type " + duckdb::EnumUtil::ToString(this->join_type));
