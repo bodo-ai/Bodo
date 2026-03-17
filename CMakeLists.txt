@@ -246,13 +246,18 @@ endif()
 # TODO [BSE-4552]: Add DebugSanitize as a build type for Windows builds.
 if (CMAKE_BUILD_TYPE STREQUAL "DebugSanitize")
   if (NOT WIN32)
+    set(sanitizer_flags "-fsanitize=address")
+
+    # Disable undefined behavior sanitizer due issues with CUDF code.
+    if (NOT USE_CUDF)
+      list(APPEND sanitizer_flags "-fsanitize=undefined")
+    endif()
+
     add_compile_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
+      ${sanitizer_flags}
     )
     add_link_options(
-      "-fsanitize=address"
-      "-fsanitize=undefined"
+      ${sanitizer_flags}
     )
   else()
     # Note for DebugSanitize builds we have to compile with /bigobj to allow larger object files
@@ -919,7 +924,7 @@ if(USE_CUDF)
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_STANDARD 20
     CUDA_STANDARD_REQUIRED ON
-    CUDA_ARCHITECTURES "89;90;100;120"
+    CUDA_ARCHITECTURES "75;86;89;90;100;120"
   )
 
   target_compile_options(ext PRIVATE
@@ -939,37 +944,6 @@ if(USE_CUDF)
   message(STATUS "CMAKE_CXX_LINK_EXECUTABLE = ${CMAKE_CXX_LINK_EXECUTABLE}")
   message(STATUS "CMAKE_CUDA_LINK_EXECUTABLE = ${CMAKE_CUDA_LINK_EXECUTABLE}")
   message(STATUS "CMAKE_LINKER = ${CMAKE_LINKER}")
-
-  # After python_add_library(ext ...) and target_sources(ext ...)
-
-  # Find the object file for gpu_bloom_filter.cu
-  get_target_property(EXT_OBJECTS ext OBJECTS)
-
-
-  add_custom_command(
-    TARGET ext
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "=== Checking CUDA registration symbols in ext.so ==="
-    COMMAND nm -D $<TARGET_FILE:ext> | grep __cudaRegisterLinkedBinary || true
-    COMMAND ${CMAKE_COMMAND} -E echo "=== Checking ext.so for fatbin ==="
-    COMMAND cuobjdump --dump-elf $<TARGET_FILE:ext> | grep fatbin || true
-    COMMAND ${CMAKE_COMMAND} -E echo "=== After checking ext.so for fatbin ==="
-    COMMAND /bin/sh -c '
-        for f in $<TARGET_OBJECTS:ext>; do
-            case "$f" in
-                *gpu_bloom_filter.cu.o)
-                    echo "Running cuobjdump on: $f"
-                    cuobjdump --dump-elf "$f" | grep fatbin || true
-                    echo "Done Running cuobjdump on: $f"
-                    ;;
-            esac
-        done
-    '
-    COMMAND ${CMAKE_COMMAND} -E echo "=== cuobjdump: after checking gpu_bloom_filter.cu.o ==="
-    #    COMMAND cuobjdump --dump-elf CMakeFiles/ext.dir/bodo/libs/gpu_bloom_filter.cu.o | grep fatbin
-    #COMMAND ${CMAKE_COMMAND} -E echo "=== After gpu_bloom_filter.cu.o for fatbin ==="
-  )
-
 endif()
 
 # TODO: fix excluding plan_optimizer.cpp and enable clang-tidy

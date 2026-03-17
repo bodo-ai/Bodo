@@ -5,19 +5,9 @@ extern bool g_use_async;
 
 #ifdef USE_CUDF
 #include <mpi.h>
-#include <nccl.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
 
-// Error checking macros for NCCL
-#define CHECK_NCCL(call)                                                       \
-    do {                                                                       \
-        ncclResult_t result = call;                                            \
-        if (result != ncclSuccess) {                                           \
-            throw std::runtime_error("NCCL error: " +                          \
-                                     std::string(ncclGetErrorString(result))); \
-        }                                                                      \
-    } while (0)
 #define CHECK_CUDA(call)                                                    \
     do {                                                                    \
         cudaError_t err = call;                                             \
@@ -131,7 +121,6 @@ struct GpuShuffle {
     GpuShuffleState send_state = GpuShuffleState::SIZES_INFLIGHT;
     GpuShuffleState recv_state = GpuShuffleState::SIZES_INFLIGHT;
     MPI_Comm mpi_comm = MPI_COMM_NULL;
-    ncclComm_t nccl_comm = nullptr;
     cudaStream_t stream = nullptr;
     // These need to be unique_ptrs to vectors to guarantee they don't
     // move if GpuShuffle is moved
@@ -153,10 +142,13 @@ struct GpuShuffle {
     // MPI_Requests for metadata transfers to other ranks
     // Indexed by destination rank
     std::unique_ptr<std::vector<MPI_Request>> metadata_send_reqs;
-    // Event markers for all nccl operations needed for this shuffle.
-    // When this is finished all GPU buffers are in the correct place.
-    cuda_event_wrapper nccl_send_event;
-    cuda_event_wrapper nccl_recv_event;
+    // MPI_Requests for data transfers from other ranks
+    // Indexed by sending rank
+    std::unique_ptr<std::vector<MPI_Request>> data_send_reqs;
+    // MPI_Requests for data transfers to other ranks
+    // Indexed by destination rank
+    std::unique_ptr<std::vector<MPI_Request>> data_recv_reqs;
+
     // We need to keep sizes around while the transfers are inflight
     std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
     std::unique_ptr<std::vector<uint64_t>> recv_metadata_sizes;
@@ -176,10 +168,9 @@ struct GpuShuffle {
     std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
     GpuShuffle(std::vector<std::shared_ptr<cudf::packed_table>> packed_tables,
-               MPI_Comm mpi_comm_, ncclComm_t nccl_comm_, cudaStream_t stream_,
-               int n_ranks, int start_tag)
+               MPI_Comm mpi_comm_, cudaStream_t stream_, int n_ranks,
+               int start_tag)
         : mpi_comm(mpi_comm_),
-          nccl_comm(nccl_comm_),
           stream(stream_),
           gpu_sizes_recv_reqs(
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
@@ -193,6 +184,8 @@ struct GpuShuffle {
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
           metadata_send_reqs(
               std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          data_send_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks)),
+          data_recv_reqs(std::make_unique<std::vector<MPI_Request>>(n_ranks)),
           send_metadata_sizes(
               std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
           recv_metadata_sizes(
@@ -278,13 +271,10 @@ class BroadcastTableInfo {
 };
 
 /**
- * @brief Class for handling nccl communication between GPU nodes.
+ * @brief Class for handling mpi communication between GPU nodes.
  */
 class GpuMpiManager {
    protected:
-    // GPU device ID
-    rmm::cuda_device_id gpu_id;
-
     // MPI communicator for CPU communication between ranks
     // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
@@ -298,25 +288,14 @@ class GpuMpiManager {
     // Stream for CUDA operations
     cudaStream_t stream = nullptr;
 
-    // NCCL communicator
-    ncclComm_t nccl_comm = nullptr;
-
-    /**
-     * @brief Initialize NCCL communicator
-     */
-    void initialize_nccl();
+    // GPU device ID
+    rmm::cuda_device_id gpu_id;
 
    public:
     GpuMpiManager();
     ~GpuMpiManager();
 
     int get_rank() const { return rank; }
-
-    /**
-     * @brief Get the underlying NCCL communicator
-     * @return ncclComm_t
-     */
-    ncclComm_t get_nccl_comm() const { return nccl_comm; }
 
     /**
      * @brief Get the underlying CUDA stream
@@ -486,16 +465,15 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 /**
  * @brief Allgather a device buffer from each GPU-enabled rank to every other
  * GPU-enabled rank.
- * @param nccl_comm: initialized nccl communicator for the same group.
- * @param stream: CUDA stream to perform NCCL operations on.
  * @param local_buf: device buffer owned by this rank to send (may be size 0).
+ * @param stream: CUDA stream to perform operations on.
  * @return vector of length comm_size where element i is a unique_ptr to the
  * buffer sent by rank i. If a rank sent size 0, the corresponding vector
  * element will be nullptr.
  */
 std::vector<std::unique_ptr<rmm::device_buffer>>
-allgather_device_buffers_across_ranks(ncclComm_t nccl_comm, cudaStream_t stream,
-                                      rmm::device_buffer const& local_buf);
+allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
+                                      cudaStream_t stream);
 
 /**
  * @brief Return whether the current rank has a GPU assigned (i.e. should

@@ -966,3 +966,15 @@ def verbose_mode_on():
     bodo.set_verbose_level(2)
     yield
     bodo.user_logging.restore_default_bodo_verbose_level()
+
+
+@pytest.fixture(autouse=True)
+def gpu_disable_cpu_fallback(request, monkeypatch):
+    """Disable CPU fallback for GPU tests unless explicitly allowed (throws an error if
+    any operator falls back to CPU unexpectedly)."""
+    marker = request.node.get_closest_marker("gpu")
+    if marker:
+        kws = marker.kwargs
+        allow_fallback = kws.get("allow_fallback", False)
+        if not allow_fallback:
+            monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", "1")

@@ -1,11 +1,11 @@
 #pragma once
 #include <arrow/scalar.h>
 #include "../_bodo_common.h"
-#include "../gpu_bloom_filter.h"
-#include "../gpu_utils.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
+#include "../gpu_bloom_filter.h"
+#include "../gpu_utils.h"
 
 struct CudaHashJoin {
    private:
