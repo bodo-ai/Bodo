@@ -173,7 +173,8 @@ class GpuShuffleSendState {
  */
 class GpuShuffleRecvState {
    public:
-    GpuShuffleRecvState(MPI_Status& status, MPI_Message& m);
+    GpuShuffleRecvState(MPI_Status& status, MPI_Message& m,
+                        cudaStream_t stream);
 
     /**
      * @brief Returns a tuple of a boolean and a shared_ptr to a table. If
@@ -193,6 +194,7 @@ class GpuShuffleRecvState {
     void TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm);
 
    private:
+    cudaStream_t stream;
     MPI_Request metadata_request = MPI_REQUEST_NULL;
     std::vector<MPI_Request> recv_requests;
     int source;

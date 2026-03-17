@@ -185,7 +185,7 @@ void GpuShuffleManager::shuffle_irecv() {
         if (!flag) {
             break;
         }
-        recv_states.emplace_back(status, m);
+        recv_states.emplace_back(status, m, stream);
     }
 
     for (auto& recv_state : recv_states) {
@@ -197,7 +197,7 @@ std::vector<std::unique_ptr<cudf::table>>
 GpuShuffleManager::consume_completed_recvs() {
     std::vector<std::unique_ptr<cudf::table>> out_tables;
     std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
-        auto [done, table] = s.recvDone(dict_builders, mpi_comm, metrics);
+        auto [done, table] = s.recvDone(mpi_comm);
         if (done) {
             out_tables.push_back(std::move(table));
         }
@@ -206,9 +206,9 @@ GpuShuffleManager::consume_completed_recvs() {
     return out_tables;
 }
 
-GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
-                                         int starting_msg_tag_,
-                                         MPI_Comm shuffle_comm, int n_ranks)
+GpuShuffleSendState::GpuShuffleSendState(
+    std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
+    MPI_Comm shuffle_comm, int n_ranks)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
@@ -273,7 +273,7 @@ bool GpuShuffleSendState::sendDone() {
 }
 
 GpuShuffleRecvState::GpuShuffleRecvState(MPI_Status& status, MPI_Message& m)
-    : source(status.MPI_SOURCE) {
+    : source(status.MPI_SOURCE), stream(stream) {
     assert(this->metadata_request == MPI_REQUEST_NULL);
 
     sizes_vec.resize(3);
