@@ -211,8 +211,7 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
-      send_metadata_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-      send_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)) {
+      send_metadata_sizes(3 * n_ranks, 0) {
     // Prepare send buffers
     for (size_t dest_rank = 0; dest_rank < packed_tables.size(); dest_rank++) {
         cudf::packed_table& table = packed_tables[dest_rank];
@@ -220,39 +219,22 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
         metadata_send_buffers[dest_rank] =
             std::make_unique<std::vector<uint8_t>>(
                 std::move(*table.data.metadata));
+
+        send_metadata_sizes[3 * dest_rank + 0] =
+            static_cast<uint64_t>(starting_msg_tag);
+        send_metadata_sizes[3 * dest_rank + 1] =
+            metadata_send_buffers[dest_rank]->size();
+        send_metadata_sizes[3 * dest_rank + 2] =
+            packed_send_buffers[dest_rank]->size();
     }
 
-    // Send starting tag
+    // Send sizes
     for (size_t dest_rank = 0; dest_rank < n_ranks; dest_rank++) {
         MPI_Request req;
-        CHECK_MPI(MPI_Issend(&starting_msg_tag, 1, MPI_INT32_T, dest_rank,
-                             SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
-                  "GpuShuffleSendState: MPI_Issend for starting tag failed:");
-        this->send_requests.push_back(req);
-    }
-
-    // Send metadata sizes
-    for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
-         dest_rank++) {
-        MPI_Request req;
-        (*this->send_metadata_sizes)[dest_rank] =
-            this->metadata_send_buffers[dest_rank]->size();
-        CHECK_MPI(MPI_Issend(&(*this->send_metadata_sizes)[dest_rank], 1,
-                             MPI_UINT64_T, dest_rank, starting_msg_tag,
-                             shuffle_comm, &req),
-                  "GpuShuffleSendState: MPI_Issend for metadata sizes failed:");
-        this->send_requests.push_back(req);
-    }
-
-    // Send GPU data sizes
-    for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
-         dest_rank++) {
-        (*this->send_gpu_sizes)[dest_rank] =
-            packed_send_buffers[dest_rank]->size();
         CHECK_MPI(
-            MPI_Issend(&(*this->send_gpu_sizes)[dest_rank], 1, MPI_UINT64_T,
-                       dest_rank, starting_msg_tag + 1, shuffle_comm, &req),
-            "GpuShuffleSendState: MPI_Issend for GPU data sizes failed:");
+            MPI_Issend(&send_metadata_sizes[3 * dest_rank], 3, MPI_UINT64_T,
+                       dest_rank, SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for sizes failed:");
         this->send_requests.push_back(req);
     }
 
@@ -261,7 +243,7 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
          dest_rank++) {
         CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
                              this->metadata_send_buffers[dest_rank]->size(),
-                             MPI_UINT8_T, dest_rank, starting_msg_tag + 2,
+                             MPI_UINT8_T, dest_rank, starting_msg_tag,
                              shuffle_comm, &req),
                   "GpuShuffleSendState: MPI_Issend for metadata failed:");
         this->send_requests.push_back(req);
@@ -273,10 +255,100 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[dest_rank]->data(),
                        packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
-                       dest_rank, starting_msg_tag + 3, shuffle_comm, &req),
+                       dest_rank, starting_msg_tag + 1, shuffle_comm, &req),
             "GpuShuffleSendState: MPI_Issend for data failed:");
         this->send_requests.push_back(req);
     }
+}
+
+GpuShuffleRecvState::GpuShuffleRecvState(MPI_Status& status, MPI_Message& m)
+    : source(status.MPI_SOURCE) {
+    assert(this->metadata_request == MPI_REQUEST_NULL);
+
+    sizes_vec.resize(3);
+
+    CHECK_MPI(MPI_Imrecv(sizes_vec.data(), 3, MPI_UINT64_T, &m,
+                         &this->metadata_request),
+              "GpuShuffleRecvState: MPI error on MPI_Imrecv:");
+}
+
+void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
+    // Only post irecv if we haven't already
+    if (!recv_requests.empty()) {
+        return;
+    }
+
+    assert(this->metadata_request != MPI_REQUEST_NULL);
+
+    int flag;
+    CHECK_MPI(MPI_Test(&this->metadata_request, &flag, MPI_STATUS_IGNORE),
+              "GpuShuffleRecvState::GetRecvMetadata: MPI error on MPI_Test:");
+    if (!flag) {
+        return;
+    }
+    this->metadata_request = MPI_REQUEST_NULL;
+
+    // In the metadata, the starting tag to use is the first element, followed
+    // by the lengths.
+    int curr_tag = static_cast<int>(sizes_vec[0]);
+    uint64_t metadata_size = sizes_vec[1];
+    uint64_t data_size = sizes_vec[2];
+
+    this->recv_metadata_buffer.resize(metadata_size);
+    this->packed_recv_buffer =
+        std::make_unique<rmm::device_buffer>(data_size, stream);
+
+    // recv metadata
+    MPI_Request recv_req;
+    CHECK_MPI(MPI_Irecv(this->recv_metadata_buffer.data(),
+                        this->recv_metadata_buffer.size(), MPI_UINT8_T, source,
+                        curr_tag, shuffle_comm, &recv_req),
+              "GpuShuffle::recv_metadata: MPI_Irecv failed:");
+    this->recv_requests.push_back(recv_req);
+
+    // recv data
+    MPI_Request data_recv_req;
+    CHECK_MPI(MPI_Irecv(this->packed_recv_buffer->data(),
+                        this->packed_recv_buffer->size(), MPI_UINT8_T, source,
+                        curr_tag + 1, shuffle_comm, &data_recv_req),
+              "GpuShuffle::recv_data: MPI_Irecv failed:");
+    this->recv_requests.push_back(data_recv_req);
+}
+
+std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
+    MPI_Comm shuffle_comm) {
+    if (recv_requests.empty()) {
+        // Try receiving the length again and see if we can populate the data
+        // requests.
+        TryRecvMetadataAndAllocArrs(shuffle_comm);
+        if (recv_requests.empty()) {
+            return std::make_pair(false, nullptr);
+        }
+    }
+
+    // This could be optimized by allocating the required size upfront and
+    // having the recv step fill it directly instead of each rank having its own
+    // array and inserting them all into a builder
+    int flag;
+    CHECK_MPI_TEST_ALL(
+        recv_requests, flag,
+        "[GpuShuffleRecvState::recvDone] MPI Error on MPI_Testall: ");
+
+    if (!flag) {
+        return std::make_pair(false, nullptr);
+    }
+
+    // Unpack received table
+    cudf::packed_columns packed_recv_column =
+        cudf::packed_columns(std::move(this->metadata_recv_buffers[src_rank]),
+                             std::move(this->packed_recv_buffers[src_rank]));
+    cudf::table_view table_view = cudf::unpack(packed_recv_column);
+
+    // TODO(ehsan): avoid copy if possible
+    std::unique_ptr<cudf::table> shuffle_res =
+        std::make_unique<cudf::table>(table_view, stream);
+
+    return std::make_pair(true, std::move(shuffle_res));
 }
 
 std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {

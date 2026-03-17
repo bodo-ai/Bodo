@@ -166,9 +166,45 @@ class GpuShuffleSendState {
     // packed_columns. Indexed by destination rank
     std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
-    // We need to keep sizes around while the transfers are inflight
-    std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
-    std::unique_ptr<std::vector<uint64_t>> send_gpu_sizes;
+    // We need to keep metadata around while the transfers are inflight
+    std::vector<uint64_t> send_metadata_sizes;
+};
+
+/**
+ * @brief Holds buffers and MPI requests for async shuffle recvs for a cudf
+ table (MPI_Irecv calls). Buffers cannot be used or freed until recvs are
+ completed.
+ *
+ */
+class GpuShuffleRecvState {
+   public:
+    GpuShuffleRecvState(MPI_Status& status, MPI_Message& m);
+
+    /**
+     * @brief Returns a tuple of a boolean and a shared_ptr to a table. If
+     * recvs of all arrays are done, the boolean will be true, and the table
+     * will be non-null, otherwise the return value will be (false, NULL).
+     * When the boolean is true this state can be freed.
+     */
+    std::pair<bool, std::shared_ptr<cudf::table>> recvDone(
+        MPI_Comm shuffle_comm);
+
+    /**
+     * @brief test if the initial sizes metadata request posted is complete and
+     * if so, get the sizes metadata and post receives for the data.
+     *
+     * @param shuffle_comm MPI communicator for shuffle
+     */
+    void TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm);
+
+   private:
+    MPI_Request metadata_request = MPI_REQUEST_NULL;
+    std::vector<MPI_Request> recv_requests;
+    int source;
+    std::vector<uint64_t> sizes_vec;
+
+    std::vector<uint8_t> recv_metadata_buffer;
+    std::unique_ptr<rmm::device_buffer> packed_recv_buffer;
 };
 
 /**
