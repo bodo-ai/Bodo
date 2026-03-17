@@ -7,6 +7,7 @@ extern bool g_use_async;
 #include <mpi.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
+#include <unordered_set>
 
 #define CHECK_CUDA(call)                                                    \
     do {                                                                    \
@@ -142,13 +143,7 @@ class GpuShuffleSendState {
      * @brief Returns true if send is done which allows this state to be freed.
      *
      */
-    bool sendDone() {
-        int flag;
-        CHECK_MPI_TEST_ALL(
-            send_requests, flag,
-            "[GpuShuffleSendState::sendDone] MPI error on MPI_Testall: ")
-        return flag;
-    }
+    bool sendDone();
 
    private:
     std::vector<MPI_Request> send_requests;
@@ -281,7 +276,6 @@ class GpuMpiManager {
 class GpuShuffleManager : public GpuMpiManager {
    private:
     // IBarrier to know when all ranks are fully done
-    bool global_is_last = false;
     bool is_last_barrier_started = false;
     MPI_Request is_last_request = MPI_REQUEST_NULL;
 
@@ -309,6 +303,8 @@ class GpuShuffleManager : public GpuMpiManager {
     std::vector<std::unique_ptr<cudf::table>> consume_completed_recvs();
 
    public:
+    bool global_is_last = false;
+
     GpuShuffleManager();
 
     /**

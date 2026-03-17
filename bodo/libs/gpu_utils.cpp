@@ -92,7 +92,7 @@ void GpuShuffleManager::do_shuffle() {
     }
 
     this->send_states.emplace_back(std::move(packed_tables), start_tag,
-                                   shuffle_comm, n_ranks);
+                                   mpi_comm, n_ranks);
     this->inflight_tags.insert(start_tag);
 }
 
@@ -189,7 +189,7 @@ void GpuShuffleManager::shuffle_irecv() {
     }
 
     for (auto& recv_state : recv_states) {
-        recv_state.TryRecvMetadataAndAllocArrs(shuffle_comm);
+        recv_state.TryRecvMetadataAndAllocArrs(mpi_comm);
     }
 }
 
@@ -197,7 +197,7 @@ std::vector<std::unique_ptr<cudf::table>>
 GpuShuffleManager::consume_completed_recvs() {
     std::vector<std::unique_ptr<cudf::table>> out_tables;
     std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
-        auto [done, table] = s.recvDone(dict_builders, shuffle_comm, metrics);
+        auto [done, table] = s.recvDone(dict_builders, mpi_comm, metrics);
         if (done) {
             out_tables.push_back(std::move(table));
         }
@@ -262,6 +262,14 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
             "GpuShuffleSendState: MPI_Issend for data failed:");
         this->send_requests.push_back(req);
     }
+}
+
+bool GpuShuffleSendState::sendDone() {
+    int flag;
+    CHECK_MPI_TEST_ALL(
+        send_requests, flag,
+        "[GpuShuffleSendState::sendDone] MPI error on MPI_Testall: ")
+    return flag;
 }
 
 GpuShuffleRecvState::GpuShuffleRecvState(MPI_Status& status, MPI_Message& m)
