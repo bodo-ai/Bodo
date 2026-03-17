@@ -591,8 +591,6 @@ void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch,
         dummy_gpu_data, static_cast<size_t>(get_gpu_streaming_batch_size()));
 
     // Initialize Shuffle State
-    uint64_t curr_iter = 0;
-    int64_t sync_freq = 1;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
     for (const std::unique_ptr<bodo::DataType> &t :
