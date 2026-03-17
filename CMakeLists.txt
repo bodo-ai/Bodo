@@ -643,7 +643,7 @@ set(sources_list
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
-  "bodo/libs/gpu_utils.cu"
+  "bodo/libs/gpu_utils.cpp"
 )
 
 if (BUILD_WITH_V8)
@@ -725,6 +725,7 @@ if (USE_CUDF)
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
     "bodo/libs/gpu_bloom_filter.cu"
+    "bodo/libs/gpu_utils.cu"
     )
 
     list(APPEND allow_implicit_fallthrough_list
