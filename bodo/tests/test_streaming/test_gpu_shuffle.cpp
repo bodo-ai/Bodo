@@ -138,7 +138,7 @@ static bodo::tests::suite tests([] {
 
             // Pump the progress loop
             while (!manager.global_is_last) {
-                auto out_batch = manager.progress();
+                auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
                     if (t) {
@@ -205,7 +205,7 @@ static bodo::tests::suite tests([] {
 
             // Pump the progress loop
             while (!manager.global_is_last) {
-                auto out_batch = manager.progress();
+                auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
                     if (t) {

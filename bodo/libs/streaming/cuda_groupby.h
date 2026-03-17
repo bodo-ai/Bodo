@@ -117,8 +117,6 @@ class CudaGroupbyState {
         pre_aggregation_table_fns.push_back(pre_agg_table_fn);
     }
 
-    GpuShuffleManager merge_shuffler;
-
     void bodo_agg_to_cudf(
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
@@ -362,6 +360,8 @@ class CudaGroupbyState {
     }
 
    public:
+    GpuShuffleManager merge_shuffler;
+
     CudaGroupbyState(
         const std::vector<uint64_t> &_key_indices,
         const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs,

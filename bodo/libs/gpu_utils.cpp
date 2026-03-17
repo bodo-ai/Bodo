@@ -98,7 +98,8 @@ void GpuShuffleManager::do_shuffle() {
 
 // Similar to CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/5be77dc4ee731f674f679a4ff6f60ac2f231d326/bodo/libs/streaming/_shuffle.cpp#L688
-std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress() {
+std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
+    const bool is_last) {
     if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
         return {};
     }
@@ -241,6 +242,7 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
     // Send metadata
     for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
          dest_rank++) {
+        MPI_Request req;
         CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
                              this->metadata_send_buffers[dest_rank]->size(),
                              MPI_UINT8_T, dest_rank, starting_msg_tag,
@@ -252,6 +254,7 @@ GpuShuffleSendState::GpuShuffleSendState(std::vector<cudf::packed_table> tables,
     // Send data
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
+        MPI_Request req;
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[dest_rank]->data(),
                        packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
@@ -349,36 +352,6 @@ std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
         std::make_unique<cudf::table>(table_view, stream);
 
     return std::make_pair(true, std::move(shuffle_res));
-}
-
-std::optional<std::unique_ptr<cudf::table>> GpuShuffle::progress() {
-    switch (this->send_state) {
-        case GpuShuffleState::SIZES_INFLIGHT: {
-            this->progress_sending_sizes();
-            break;
-        }
-        case GpuShuffleState::DATA_INFLIGHT: {
-            this->progress_sending_data();
-            break;
-        }
-        case GpuShuffleState::COMPLETED: {
-            break;
-        }
-    }
-
-    switch (this->recv_state) {
-        case GpuShuffleState::SIZES_INFLIGHT: {
-            this->progress_waiting_for_sizes();
-            return std::nullopt;
-        } break;
-        case GpuShuffleState::DATA_INFLIGHT: {
-            return this->progress_waiting_for_data();
-        } break;
-        case GpuShuffleState::COMPLETED: {
-            return std::nullopt;
-        } break;
-    }
-    return std::nullopt;
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
