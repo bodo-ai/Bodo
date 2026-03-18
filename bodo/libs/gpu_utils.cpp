@@ -596,11 +596,8 @@ bool is_gpu_rank() {
 }
 
 std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_memory_resource() {
-    // Options: "pool", "async", "managed_pool"
-    std::string rmm_mode = std::getenv("BODO_RMM_MODE");
-    if (rmm_mode == "") {
-        rmm_mode = "pool";  // default to pool if not set
-    }
+    char* rmm_mode_env = std::getenv("BODO_RMM_MODE");
+    std::string rmm_mode = rmm_mode_env ? std::string(rmm_mode_env) : "pool";
 
     // Use 80% of free memory for pool size to avoid OOMs.
     size_t initial_pool_size = rmm::percent_of_free_device_memory(80);
@@ -622,7 +619,7 @@ std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_memory_resource() {
     } else if (rmm_mode == "pool") {
         return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
             std::make_shared<rmm::mr::cuda_memory_resource>(),
-            rmm::percent_of_free_device_memory(initial_pool_size));
+            initial_pool_size);
     } else if (rmm_mode == "async") {
         return std::make_shared<rmm::mr::cuda_async_memory_resource>();
     } else {
