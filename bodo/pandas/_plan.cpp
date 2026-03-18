@@ -1272,7 +1272,7 @@ std::pair<int64_t, PyObject *> execute_plan(
         device_guard.emplace(gpu_id);
 
         // Set memory resource for GPU ranks.
-        mr = get_gpu_memory_resource();
+        mr = get_gpu_pool_memory_resource();
         prev_mr = cudf::set_current_device_resource(mr.get());
     }
 #endif

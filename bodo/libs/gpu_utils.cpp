@@ -17,8 +17,6 @@ bool g_use_async = false;
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
-#include <rmm/mr/cuda_async_memory_resource.hpp>
-#include <rmm/mr/managed_memory_resource.hpp>
 #include <rmm/mr/owning_wrapper.hpp>
 #include <rmm/mr/pool_memory_resource.hpp>
 #include <rmm/mr/prefetch_resource_adaptor.hpp>
@@ -595,36 +593,11 @@ bool is_gpu_rank() {
     return is_gpu_rank;
 }
 
-std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_memory_resource() {
-    char* rmm_mode_env = std::getenv("BODO_GPU_RMM_MODE");
-    std::string rmm_mode = rmm_mode_env ? std::string(rmm_mode_env) : "pool";
-
-    // Use 80% of free memory for pool size to avoid OOMs.
-    size_t initial_pool_size = rmm::percent_of_free_device_memory(80);
-    if (rmm_mode == "managed_pool") {
-        int managed_access_supported = 0;
-        // Assume homogeneous nodes (just checks device 0).
-        CHECK_CUDA(cudaDeviceGetAttribute(&managed_access_supported,
-                                          cudaDevAttrManagedMemory, 0));
-        if (!managed_access_supported) {
-            throw std::runtime_error(
-                "Managed memory is not supported on this GPU, cannot use "
-                "managed_pool RMM mode.");
-        }
-        auto managed = std::make_shared<rmm::mr::managed_memory_resource>();
-        auto pool = rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
-            managed, initial_pool_size);
-        return rmm::mr::make_owning_wrapper<rmm::mr::prefetch_resource_adaptor>(
-            pool);
-    } else if (rmm_mode == "pool") {
-        return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
-            std::make_shared<rmm::mr::cuda_memory_resource>(),
-            initial_pool_size);
-    } else if (rmm_mode == "async") {
-        return std::make_shared<rmm::mr::cuda_async_memory_resource>();
-    } else {
-        throw std::runtime_error("Unsupported RMM mode: " + rmm_mode);
-    }
+std::shared_ptr<rmm::mr::device_memory_resource>
+get_gpu_pool_memory_resource() {
+    size_t initial_pool_size = rmm::percent_of_free_device_memory(90);
+    return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
+        std::make_shared<rmm::mr::cuda_memory_resource>(), initial_pool_size);
 }
 
 #endif  // USE_CUDF
