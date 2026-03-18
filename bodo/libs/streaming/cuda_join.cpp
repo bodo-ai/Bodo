@@ -85,10 +85,6 @@ void CudaHashJoin::build_hash_table(
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
     for (const auto& chunk : build_chunks) {
-        // Skip empty chunks
-        if (chunk->num_rows() == 0) {
-            continue;
-        }
         build_views.push_back(chunk->view());
     }
     this->_build_table = cudf::concatenate(build_views);
@@ -223,8 +219,6 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     probe_shuffle_manager.append_batch(probe_chunk, this->probe_key_indices,
                                        input_stream_event);
 
-    std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks;
-    shuffled_probe_chunks.push_back(probe_chunk);
     //    Receive data destined for this rank
     std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
         probe_shuffle_manager.progress(local_is_last);

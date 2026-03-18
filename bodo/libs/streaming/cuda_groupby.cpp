@@ -131,7 +131,7 @@ bool CudaGroupbyState::build_consume_batch(
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
-        new_data =
+        std::shared_ptr<cudf::table> new_data =
             do_groupby(input_table->view(), key_indices, column_indices,
                        aggregation_requests, aggregation_fns, post_agg_fns,
                        pre_agg_table_fns, local_groupby_se->stream);
