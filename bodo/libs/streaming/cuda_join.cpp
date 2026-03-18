@@ -380,7 +380,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
          this->join_type == duckdb::JoinType::OUTER) &&
         // If this is nullptr we either don't have a build table on this rank
         // or we've already produced the unmatched output
-        this->unmatched_build_rows) {
+        this->unmatched_build_rows && build_idx_view.size()) {
         cudf_set_bools_false_from_indices(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
