@@ -312,8 +312,6 @@ class GpuTableManager : public GpuMpiManager {
     std::vector<std::unique_ptr<cudf::table>> consume_completed_recvs();
 
    public:
-    GpuTableManager();
-
     bool global_is_last = false;
 
     /**
@@ -349,7 +347,7 @@ class GpuShuffleManager : public GpuTableManager {
                this->tables_to_shuffle.back().event.ready();
     }
 
-    std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
+    std::vector<cudf::packed_table> getNextPerRankTables();
 
     bool hasMoreTables() { return !tables_to_shuffle.empty(); }
 
@@ -375,7 +373,7 @@ class GpuTableBroadcastManager : public GpuTableManager {
                this->tables_to_broadcast.back().event.ready();
     }
 
-    std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
+    std::vector<cudf::packed_table> getNextPerRankTables();
 
     bool hasMoreTables() { return !tables_to_broadcast.empty(); }
 
