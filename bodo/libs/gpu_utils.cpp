@@ -148,7 +148,7 @@ bool GpuShuffleManager::sync_is_last(bool local_is_last) {
 
     if (!this->is_last_barrier_started) {
         CHECK_MPI(
-            MPI_Ibarrier(this->mpi_comm, &this->is_last_request),
+            MPI_Ibarrier(MPI_COMM_WORLD, &this->is_last_request),
             "GpuShuffleManager::sync_is_last: MPI error on MPI_Ibarrier:");
         this->is_last_barrier_started = true;
         return false;
