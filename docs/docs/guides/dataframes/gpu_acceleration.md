@@ -19,6 +19,12 @@ export BODO_GPU=1
 
 If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only even if GPUs are present.
 
+Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
+
+```
+export OMPI_MCA_pml="ucx"
+```
+
 ## How Placement is Decided
 
 Currently, when GPU execution is enabled, Bodo will run every operation on the GPU for which we have a GPU implementation (see supported capabilities below).  However, this approach will be replaced in the near future with an advanced device placement algorithm that will use a cost-model to determine which plan nodes should run on CPU versus GPU such that the plan execution achieves the lowest latency.  In either case, when adjacent nodes in a plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.

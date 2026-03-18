@@ -1,7 +1,6 @@
 #include <arrow/util/bit_util.h>
 #include <fmt/core.h>
 #include <mpi.h>
-#include <mpi_proto.h>
 #include <cudf/concatenate.hpp>
 #include <numeric>
 #include <sstream>

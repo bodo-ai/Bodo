@@ -899,6 +899,7 @@ def test_s3_json_write_records_lines_1D_var(
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.df_lib
 def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
@@ -907,11 +908,18 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     from bodo.spawn.utils import run_rank0
 
+    row_group_size = 2
+
     @run_rank0
     def write_table():
         table = pa.Table.from_pandas(test_df)
         fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
-        pq.write_table(table, "bodo-test/test_df_bodo_read.pq", filesystem=fs)
+        pq.write_table(
+            table,
+            "bodo-test/test_df_bodo_read.pq",
+            filesystem=fs,
+            row_group_size=row_group_size,
+        )
 
     write_table()
 
