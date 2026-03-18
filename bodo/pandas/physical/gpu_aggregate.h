@@ -204,20 +204,15 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se) override {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
-        groupby_state->build_consume_batch(input_batch.table, local_is_last,
-                                           se->stream,
-                                           input_batch.stream_event);
+        bool global_is_last = groupby_state->build_consume_batch(
+            input_batch.table, local_is_last, se->stream,
+            input_batch.stream_event);
 
-        if (local_is_last) {
-            // Tell groupby state that all data from the local pipeline has
-            // been processed.
-            groupby_state->all_local_data_processed();
-        }
         this->metrics.consume_time += end_timer(start_consume);
-        return (local_is_last && groupby_state->all_complete())
-                   ? OperatorResult::FINISHED
-                   : (local_is_last ? OperatorResult::HAVE_MORE_OUTPUT
-                                    : OperatorResult::NEED_MORE_INPUT);
+        return global_is_last ? OperatorResult::FINISHED
+                              : (groupby_state->merge_shuffler.BuffersFull()
+                                     ? OperatorResult::HAVE_MORE_OUTPUT
+                                     : OperatorResult::NEED_MORE_INPUT);
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(

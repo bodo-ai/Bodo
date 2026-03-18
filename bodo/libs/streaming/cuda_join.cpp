@@ -197,42 +197,48 @@ void CudaHashJoin::FinalizeBuild() {
     this->_build_chunks.clear();
 }
 
-void CudaHashJoin::BuildConsumeBatch(
+bool CudaHashJoin::BuildConsumeBatch(
     std::shared_ptr<cudf::table> build_chunk,
-    std::shared_ptr<StreamAndEvent> input_stream_event) {
+    std::shared_ptr<StreamAndEvent> input_stream_event, bool local_is_last) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory.
     // Store the incoming build chunk for later finalization
-    // this->build_shuffle_manager.shuffle_table(
-    //     build_chunk, this->build_key_indices, input_stream_event);
-    // std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-    //     build_shuffle_manager.progress();
-    // for (auto& chunk : shuffled_build_chunks) {
-    //     this->_build_chunks.emplace_back(std::move(chunk));
-    // }
-    this->_build_chunks.emplace_back(std::move(build_chunk));
+    this->build_shuffle_manager.append_batch(
+        build_chunk, this->build_key_indices, input_stream_event);
+    std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
+        build_shuffle_manager.progress(local_is_last);
+    for (auto& chunk : shuffled_build_chunks) {
+        this->_build_chunks.emplace_back(std::move(chunk));
+    }
+
+    return this->build_shuffle_manager.sync_is_last(local_is_last);
 }
 
-std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
+std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
-    rmm::cuda_stream_view& stream) {
+    rmm::cuda_stream_view& stream, bool local_is_last) {
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory Send local data to appropriate ranks
-    // probe_shuffle_manager.shuffle_table(probe_chunk, this->probe_key_indices,
-    //                                     input_stream_event);
+    probe_shuffle_manager.append_batch(probe_chunk, this->probe_key_indices,
+                                       input_stream_event);
 
     std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks;
     shuffled_probe_chunks.push_back(probe_chunk);
     //    Receive data destined for this rank
-    // std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
-    //     probe_shuffle_manager.progress();
+    std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
+        probe_shuffle_manager.progress(local_is_last);
+
+    bool global_is_last =
+        this->probe_shuffle_manager.sync_is_last(local_is_last);
+
     if (!is_gpu_rank()) {
-        return nullptr;
+        return {nullptr, global_is_last};
     }
     if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr) {
-        return empty_table_from_arrow_schema(
-            this->output_schema->ToArrowSchema());
+        return {
+            empty_table_from_arrow_schema(this->output_schema->ToArrowSchema()),
+            global_is_last};
     }
 
     // Concatenate all incoming chunks into one contiguous table and join
@@ -246,8 +252,9 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         cudf::concatenate(probe_views, stream);
 
     if (coalesced_probe->num_rows() == 0) {
-        return empty_table_from_arrow_schema(
-            this->output_schema->ToArrowSchema());
+        return {
+            empty_table_from_arrow_schema(this->output_schema->ToArrowSchema()),
+            global_is_last};
     }
 
     cudf::table_view selected =
@@ -257,8 +264,9 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         _join_handle->inner_join(selected, {}, stream);
 
     if (probe_indices->size() == 0) {
-        return empty_table_from_arrow_schema(
-            this->output_schema->ToArrowSchema());
+        return {
+            empty_table_from_arrow_schema(this->output_schema->ToArrowSchema()),
+            global_is_last};
     }
 
     // Create views for the columns we want to keep
@@ -294,5 +302,6 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
         final_columns.push_back(std::move(col));
     }
 
-    return std::make_unique<cudf::table>(std::move(final_columns));
+    return {std::make_unique<cudf::table>(std::move(final_columns)),
+            global_is_last};
 }

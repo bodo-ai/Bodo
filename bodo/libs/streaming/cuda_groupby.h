@@ -117,8 +117,6 @@ class CudaGroupbyState {
         pre_aggregation_table_fns.push_back(pre_agg_table_fn);
     }
 
-    GpuShuffleManager merge_shuffler;
-
     void bodo_agg_to_cudf(
         uint64_t ftype,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
@@ -362,6 +360,8 @@ class CudaGroupbyState {
     }
 
    public:
+    GpuShuffleManager merge_shuffler;
+
     CudaGroupbyState(
         const std::vector<uint64_t> &_key_indices,
         const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs,
@@ -413,17 +413,6 @@ class CudaGroupbyState {
         }
     }
 
-    void all_local_data_processed() {
-        if (!all_local_done) {
-            all_local_done = true;
-            // merge_shuffler.complete();
-        }
-    }
-
-    bool all_complete() {
-        return all_local_done;  // && merge_shuffler.all_complete();
-    }
-
     /**
      * @brief Logic to consume a build table batch.
      *
@@ -432,8 +421,9 @@ class CudaGroupbyState {
      * Union-Distinct case where this is called in multiple pipelines. For
      * regular groupby, this should always be true. We only call FinalizeBuild
      * in the last pipeline.
+     * @return global is last flag
      */
-    void build_consume_batch(std::shared_ptr<cudf::table> input_table,
+    bool build_consume_batch(std::shared_ptr<cudf::table> input_table,
                              bool is_last, rmm::cuda_stream_view &output_stream,
                              std::shared_ptr<StreamAndEvent> input_se);
 
