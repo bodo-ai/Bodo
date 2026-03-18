@@ -807,7 +807,9 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
-        this->batch_gen->ReportMetrics(metrics_out);
+        if (this->batch_gen) {
+            this->batch_gen->ReportMetrics(metrics_out);
+        }
     }
 
     void init_batch_gen() {
