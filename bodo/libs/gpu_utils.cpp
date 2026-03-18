@@ -130,7 +130,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
 }
 
 bool GpuShuffleManager::SendRecvEmpty() {
-    return (this->send_states.empty() && this->recv_states.empty());
+    return (this->send_states.empty() && this->recv_states.empty() &&
+            this->tables_to_shuffle.empty());
 }
 
 // Similar to the CPU version here:
