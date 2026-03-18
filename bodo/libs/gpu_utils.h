@@ -400,7 +400,7 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
 bool is_gpu_rank();
 
 /**
- * @brief Get the pool memory resource.
+ * @brief Get a pool memory resource instance.
  *
  * NOTE: This function must be called after a rank's device id is set.
  *

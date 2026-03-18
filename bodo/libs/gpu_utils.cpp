@@ -19,7 +19,6 @@ bool g_use_async = false;
 #include <rmm/device_uvector.hpp>
 #include <rmm/mr/owning_wrapper.hpp>
 #include <rmm/mr/pool_memory_resource.hpp>
-#include <rmm/mr/prefetch_resource_adaptor.hpp>
 #include "../libs/_distributed.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_utils.h"
@@ -514,7 +513,7 @@ bool is_gpu_rank() {
 
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_pool_memory_resource() {
-    size_t initial_pool_size = rmm::percent_of_free_device_memory(90);
+    size_t initial_pool_size = rmm::percent_of_free_device_memory(80);
     return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
         std::make_shared<rmm::mr::cuda_memory_resource>(), initial_pool_size);
 }

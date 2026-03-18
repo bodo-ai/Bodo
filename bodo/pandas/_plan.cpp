@@ -1271,7 +1271,6 @@ std::pair<int64_t, PyObject *> execute_plan(
         // scope)
         device_guard.emplace(gpu_id);
 
-        // Set memory resource for GPU ranks.
         mr = get_gpu_pool_memory_resource();
         prev_mr = cudf::set_current_device_resource(mr.get());
     }
@@ -1297,8 +1296,8 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<table_info> output_table = std::get<0>(output);
 
 #ifdef USE_CUDF
-    // Reset memory resource for GPU ranks.
     if (prev_mr) {
+        // Reset device resource for GPU ranks.
         cudf::set_current_device_resource(prev_mr);
     }
 #endif
