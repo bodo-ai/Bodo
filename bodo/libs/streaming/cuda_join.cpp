@@ -217,9 +217,9 @@ void CudaHashJoin::FinalizeBuild() {
 }
 
 std::unique_ptr<cudf::table> CudaHashJoin::produce_unmatched_build_rows(
-    std::unique_ptr<cudf::table> table, bool local_is_last,
+    std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!local_is_last || this->unmatched_build_rows == nullptr ||
+    if (!global_is_last || this->unmatched_build_rows == nullptr ||
         (this->join_type != duckdb::JoinType::RIGHT &&
          this->join_type != duckdb::JoinType::OUTER)) {
         return table;
@@ -310,7 +310,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         return {produce_unmatched_build_rows(
                     empty_table_from_arrow_schema(
                         this->output_schema->ToArrowSchema()),
-                    local_is_last, stream),
+                    global_is_last, stream),
                 global_is_last};
     }
 
@@ -328,7 +328,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         return {produce_unmatched_build_rows(
                     empty_table_from_arrow_schema(
                         this->output_schema->ToArrowSchema()),
-                    local_is_last, stream),
+                    global_is_last, stream),
                 global_is_last};
     }
 
@@ -409,6 +409,6 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::make_unique<cudf::table>(std::move(final_columns));
 
     output_table = this->produce_unmatched_build_rows(std::move(output_table),
-                                                      local_is_last, stream);
+                                                      global_is_last, stream);
     return {std::move(output_table), global_is_last};
 }
