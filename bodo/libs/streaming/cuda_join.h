@@ -77,7 +77,11 @@ struct CudaHashJoin {
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
-     * @return output batch of probe
+     * @param input_stream_event stream and event associated with the input
+     * batch
+     * @param stream CUDA stream to execute on
+     * @param local_is_last whether this is the last input batch on this rank
+     * @return output batch of probe and global is last flag
      */
     std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,

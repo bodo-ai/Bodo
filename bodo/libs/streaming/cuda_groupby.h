@@ -421,6 +421,7 @@ class CudaGroupbyState {
      * Union-Distinct case where this is called in multiple pipelines. For
      * regular groupby, this should always be true. We only call FinalizeBuild
      * in the last pipeline.
+     * @return global is last flag
      */
     bool build_consume_batch(std::shared_ptr<cudf::table> input_table,
                              bool is_last, rmm::cuda_stream_view &output_stream,

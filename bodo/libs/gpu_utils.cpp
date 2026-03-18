@@ -343,9 +343,6 @@ std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
         }
     }
 
-    // This could be optimized by allocating the required size upfront and
-    // having the recv step fill it directly instead of each rank having its own
-    // array and inserting them all into a builder
     int flag;
     CHECK_MPI_TEST_ALL(
         recv_requests, flag,
