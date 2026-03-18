@@ -82,22 +82,22 @@ struct CudaHashJoin {
     /**
      * @brief Process input tables to build side of join
      */
-    void BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                           std::shared_ptr<StreamAndEvent> input_stream_event);
+    bool BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
+                           std::shared_ptr<StreamAndEvent> input_stream_event,
+                           bool local_is_last);
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
-     * @param input_stream_event stream and event for synchronizing input batch
-     * availability
-     * @param stream CUDA stream to execute the probe on
-     * @param local_finished whether anymore input will be passed (is it safe to
-     * generate rows that don't have matches on the build side for right joins)
-     * @return output batch of probe
+     * @param input_stream_event stream and event associated with the input
+     * batch
+     * @param stream CUDA stream to execute on
+     * @param local_is_last whether this is the last input batch on this rank
+     * @return output batch of probe and global is last flag
      */
-    std::unique_ptr<cudf::table> ProbeProcessBatch(
+    std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
         std::shared_ptr<StreamAndEvent> input_stream_event,
-        rmm::cuda_stream_view& stream, bool local_finished);
+        rmm::cuda_stream_view& stream, bool local_is_last);
 
     /**
      * @brief Add to the previous mask of rows.
