@@ -2,7 +2,6 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
-#include <rmm/mr/device_memory_resource.hpp>
 #include <utility>
 
 #include <arrow/api.h>
@@ -49,6 +48,7 @@
 
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
+#include <rmm/mr/device_memory_resource.hpp>
 #include "cuda_runtime_api.h"
 #endif
 
