@@ -17,6 +17,7 @@ bool g_use_async = false;
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
 #include <rmm/mr/owning_wrapper.hpp>
 #include <rmm/mr/pool_memory_resource.hpp>
 #include "../libs/_distributed.h"
@@ -118,6 +119,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
     std::erase_if(this->send_states, [&](GpuShuffleSendState& s) {
         bool done = s.sendDone();
         if (done) {
+            cudaDeviceSynchronize();
             inflight_tags.erase(s.get_starting_msg_tag());
         }
         return done;
@@ -132,7 +134,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
 }
 
 bool GpuShuffleManager::SendRecvEmpty() {
-    return (this->send_states.empty() && this->recv_states.empty());
+    return (this->send_states.empty() && this->recv_states.empty() &&
+            this->tables_to_shuffle.empty());
 }
 
 // Similar to the CPU version here:
@@ -234,6 +237,7 @@ GpuShuffleSendState::GpuShuffleSendState(
         send_metadata_sizes[3 * dest_rank + 2] =
             packed_send_buffers[dest_rank]->size();
     }
+    cudaDeviceSynchronize();
 
     // Send sizes
     for (size_t dest_rank = 0; dest_rank < n_ranks; dest_rank++) {
@@ -316,6 +320,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
         std::make_unique<std::vector<uint8_t>>(metadata_size);
     this->packed_recv_buffer =
         std::make_unique<rmm::device_buffer>(data_size, stream);
+    cudaDeviceSynchronize();
 
     // recv metadata
     MPI_Request recv_req;
@@ -473,6 +478,7 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
 
     // Post sends: send this rank's buffer to every rank (including self)
     if (local_size > 0) {
+        cudaDeviceSynchronize();
         for (int dst = 0; dst < n_ranks; ++dst) {
             CHECK_MPI(
                 MPI_Issend(local_buf.data(), static_cast<int>(local_size),
@@ -494,6 +500,7 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     CHECK_MPI(MPI_Waitall(static_cast<int>(all_reqs.size()), all_reqs.data(),
                           MPI_STATUSES_IGNORE),
               "MPI_Waitall failed:");
+    cudaDeviceSynchronize();
 
     return recv_buffers;
 }

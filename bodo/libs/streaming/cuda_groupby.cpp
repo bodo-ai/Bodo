@@ -8,6 +8,7 @@
 #include <cudf/lists/count_elements.hpp>
 #include <cudf/lists/explode.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/stream_compaction.hpp>
 #include <cudf/unary.hpp>
 #include <cudf/utilities/type_dispatcher.hpp>
 #include <list>
@@ -127,6 +128,23 @@ bool CudaGroupbyState::build_consume_batch(
     // blank tables, on which we don't need to run the first groupby
     // pass.
 
+    auto const& col = input_table->get_column(1).view();
+
+    // Build scalar 0
+    cudf::numeric_scalar<double> zero(0);
+
+    // mask = col < 0
+    auto mask = cudf::binary_operation(col, zero, cudf::binary_operator::LESS,
+                                       cudf::data_type{cudf::type_id::BOOL8});
+
+    // Filter rows where mask == true
+    auto result =
+        cudf::apply_boolean_mask(cudf::table_view{{col}}, mask->view());
+
+    if (result->num_rows() > 0) {
+        throw std::runtime_error("Negative values found in column");
+    }
+
     if (is_gpu_rank() && (input_table->view().num_rows() != 0)) {
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
@@ -174,6 +192,12 @@ bool CudaGroupbyState::build_consume_batch(
 
     // Make one table out of all the views.
     auto combined = cudf::concatenate(views, output_stream);
+    std::cout << "datatypes of combined tabled" << std::endl;
+    for (int i = 0; i < combined->num_columns(); ++i) {
+        std::cout << (int)(combined->get_column(i).type().id()) << std::endl;
+    }
+    std::cout << "num rows in combined table: " << combined->num_rows()
+              << std::endl;
     // Do the groupby on the combined table.
     accumulation =
         do_groupby(combined->view(), merge_key_indices, merge_column_indices,
