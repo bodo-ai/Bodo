@@ -50,8 +50,8 @@ struct CudaHashJoin {
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
     std::unique_ptr<cudf::column>
-        matched_build_rows;  // Used for right/outer joins to track which build
-                             // rows have been matched
+        unmatched_build_rows;  // Used for right/outer joins to track which
+                               // build rows have been matched
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,

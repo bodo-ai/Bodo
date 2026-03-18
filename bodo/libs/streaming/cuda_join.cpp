@@ -203,13 +203,13 @@ void CudaHashJoin::FinalizeBuild() {
         this->join_type == duckdb::JoinType::OUTER) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
-        this->matched_build_rows =
+        this->unmatched_build_rows =
             cudf::make_numeric_column(cudf::data_type(cudf::type_id::BOOL8),
                                       this->_build_table->num_rows());
         // Initialize all rows as unmatched
         cudf::mutable_column_view view =
-            this->matched_build_rows->mutable_view();
-        cudf::fill_in_place(view, 0, this->matched_build_rows->size(),
+            this->unmatched_build_rows->mutable_view();
+        cudf::fill_in_place(view, 0, this->unmatched_build_rows->size(),
                             cudf::numeric_scalar<bool>(true),
                             cudf::get_default_stream());
     }
@@ -335,17 +335,19 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
     std::unique_ptr<cudf::table> output_table =
         std::make_unique<cudf::table>(std::move(final_columns));
 
-    if (this->join_type == duckdb::JoinType::RIGHT ||
-        this->join_type == duckdb::JoinType::OUTER) {
+    if ((this->join_type == duckdb::JoinType::RIGHT ||
+         this->join_type == duckdb::JoinType::OUTER) &&
+        this->unmatched_build_rows) {
         cudf_set_bools_false_from_indices(
-            this->matched_build_rows->mutable_view(), build_idx_view, stream);
+            this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
         if (local_finished) {
             // For right and outer joins, we need to output unmatched build rows
             // at the end. We can identify these using the matched_build_rows
             // boolean mask.
             std::unique_ptr<cudf::table> unmatched_build_build_side =
-                cudf::apply_boolean_mask(
-                    build_kept_view, this->matched_build_rows->view(), stream);
+                cudf::apply_boolean_mask(build_kept_view,
+                                         this->unmatched_build_rows->view(),
+                                         stream);
 
             // Then we need to construct null columns for the probe side for
             // these unmatched build rows, and concatenate them with the
@@ -377,6 +379,10 @@ std::unique_ptr<cudf::table> CudaHashJoin::ProbeProcessBatch(
             std::vector<cudf::table_view> output_views = {
                 output_table->view(), unmatched_build_output_view};
             output_table = cudf::concatenate(output_views, stream);
+
+            // Set unmatched_build_rows to nullptr so we only add the unmatched
+            // rows once
+            this->unmatched_build_rows.reset(nullptr);
         }
     }
 
