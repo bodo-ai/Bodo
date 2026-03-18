@@ -596,7 +596,7 @@ bool is_gpu_rank() {
 }
 
 std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_memory_resource() {
-    char* rmm_mode_env = std::getenv("BODO_RMM_MODE");
+    char* rmm_mode_env = std::getenv("BODO_GPU_RMM_MODE");
     std::string rmm_mode = rmm_mode_env ? std::string(rmm_mode_env) : "pool";
 
     // Use 80% of free memory for pool size to avoid OOMs.
