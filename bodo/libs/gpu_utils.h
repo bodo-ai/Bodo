@@ -439,6 +439,21 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
  */
 bool is_gpu_rank();
 
+/**
+ * @brief Get the gpu memory resource object based on environment variable
+ * settings. Similar to:
+ * https://github.com/rapidsai/cudf/blob/3700565ae18e1bf221b1b3158fb708d2e0ec42cd/python/cudf/cudf/pandas/__init__.py#L46
+ *
+ * Options are: "pool", "managed_pool", and "async". The default "pool" was set
+ * based on TPCH performance.
+ *
+ * NOTE: This function must be called after rank's device id is set and resource
+ * must remain alive for the entire time it is in use.
+ *
+ * @return std::shared_ptr<rmm::mr::device_memory_resource>
+ */
+std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_memory_resource();
+
 #else
 // Empty implementation when CUDF is not available
 class GpuShuffleManager {
