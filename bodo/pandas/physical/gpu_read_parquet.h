@@ -755,16 +755,16 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
-        // Non-GPU ranks return nullptr to avoid any GPU work
-        if (!is_gpu_rank()) {
-            return {GPU_DATA(nullptr, arrow_schema, se),
-                    OperatorResult::FINISHED};
-        }
-
         if (!batch_gen) {
             time_pt start_init = start_timer();
             init_batch_gen();
             this->metrics.init_time += end_timer(start_init);
+        }
+
+        // Non-GPU ranks return nullptr to avoid any GPU work
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_schema, se),
+                    OperatorResult::FINISHED};
         }
 
         time_pt start_produce = start_timer();
