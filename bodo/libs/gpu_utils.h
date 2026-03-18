@@ -392,7 +392,7 @@ class GpuShuffleManager : public GpuTableManager {
 
     std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
 
-    bool hasMoreTables() { return tables_to_shuffle.empty(); }
+    bool hasMoreTables() { return !tables_to_shuffle.empty(); }
 
    public:
     /**
@@ -418,7 +418,7 @@ class GpuTableBroadcastManager : public GpuTableManager {
 
     std::vector<std::shared_ptr<cudf::packed_table>> getNextPerRankTables();
 
-    bool hasMoreTables() { return tables_to_broadcast.empty(); }
+    bool hasMoreTables() { return !tables_to_broadcast.empty(); }
 
    public:
     void broadcast_table(std::shared_ptr<cudf::table> table,

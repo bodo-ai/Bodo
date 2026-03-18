@@ -194,7 +194,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress() {
     // to be called on all ranks even without GPUs assigned so they know when
     // they can exit the pipeline.
     if (this->complete_signaled && inflight_shuffles.empty() &&
-        hasMoreTables() && global_completion_req == MPI_REQUEST_NULL &&
+        !hasMoreTables() && global_completion_req == MPI_REQUEST_NULL &&
         !global_completion) {
         CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &global_completion_req),
                   "GpuTableManager::complete: MPI_Ibarrier failed:");
