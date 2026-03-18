@@ -210,6 +210,7 @@ bool CudaHashJoin::BuildConsumeBatch(
         for (auto& chunk : received_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
         }
+        return this->build_broadcast_manager->sync_is_last(local_is_last);
     } else {
         this->build_shuffle_manager->append_batch(
             build_chunk, this->build_key_indices, input_stream_event);
@@ -218,9 +219,9 @@ bool CudaHashJoin::BuildConsumeBatch(
         for (auto& chunk : shuffled_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
         }
+        return this->build_shuffle_manager->sync_is_last(local_is_last);
     }
 
-    return this->build_shuffle_manager->sync_is_last(local_is_last);
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
