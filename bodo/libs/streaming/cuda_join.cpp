@@ -199,8 +199,9 @@ void CudaHashJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (this->join_type == duckdb::JoinType::RIGHT ||
-        this->join_type == duckdb::JoinType::OUTER) {
+    if ((this->join_type == duckdb::JoinType::RIGHT ||
+         this->join_type == duckdb::JoinType::OUTER) &&
+        this->_build_table->num_rows()) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows =
@@ -324,7 +325,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     // Materialize the selected rows
     cudf::out_of_bounds_policy oob_policy =
-        this->join_type == duckdb::JoinType::INNER
+        this->join_type == duckdb::JoinType::INNER ||
+                this->join_type == duckdb::JoinType::RIGHT
             ? cudf::out_of_bounds_policy::DONT_CHECK
             : cudf::out_of_bounds_policy::NULLIFY;
     auto gathered_probe =
