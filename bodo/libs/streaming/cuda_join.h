@@ -139,42 +139,22 @@ struct CudaHashJoin {
     /**
      * @brief Signal this rank has completed its portion of the join.
      */
-    void build_complete() {
+    bool is_build_complete() {
         if (is_broadcast_join) {
-            build_broadcast_manager->complete();
+            return build_broadcast_manager->BuffersFull();
         } else {
-            build_shuffle_manager->complete();
+            return build_shuffle_manager->BuffersFull();
         }
     }
 
     /**
      * @brief Signal this rank has completed its portion of the join.
      */
-    bool is_all_build_complete() {
-        if (is_broadcast_join) {
-            return build_broadcast_manager->all_complete();
-        } else {
-            return build_shuffle_manager->all_complete();
-        }
-    }
-
-    /**
-     * @brief Signal this rank has completed its portion of the join.
-     */
-    void probe_complete() {
-        if (!is_broadcast_join) {
-            probe_shuffle_manager->complete();
-        }
-    }
-
-    /**
-     * @brief Signal this rank has completed its portion of the join.
-     */
-    bool is_all_probe_complete() {
+    bool is_probe_complete() {
         if (is_broadcast_join) {
             return true;
         } else {
-            return probe_shuffle_manager->all_complete();
+            return probe_shuffle_manager->BuffersFull();
         }
     }
 };

@@ -75,9 +75,8 @@ void GpuTableBroadcastManager::broadcast_table(
     this->tables_to_broadcast.emplace_back(table, se->event);
 }
 
-std::vector<std::shared_ptr<cudf::packed_table>>
-GpuShuffleManager::getNextPerRankTables() {
-    std::vector<std::shared_ptr<cudf::packed_table>> packed_tables;
+std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables() {
+    std::vector<cudf::packed_table> packed_tables;
     if (!tableReadyToSend()) {
         throw std::runtime_error("getNextPerRankTables has no data");
     }
@@ -108,7 +107,7 @@ std::vector<cudf::packed_table> make_replicas(cudf::table_view const& t,
     std::vector<cudf::packed_table> out;
     out.reserve(N);
     for (std::size_t i = 0; i < N; ++i) {
-        out.push_back(cudf::pack(t, stream));
+        out.emplace_back(t, cudf::pack(t, stream));
     }
 
     return out;
@@ -116,30 +115,16 @@ std::vector<cudf::packed_table> make_replicas(cudf::table_view const& t,
 
 std::vector<cudf::packed_table>
 GpuTableBroadcastManager::getNextPerRankTables() {
-    std::vector<std::shared_ptr<cudf::packed_table>> packed_tables;
-    if (tableReadyToSend()) {
-        BroadcastTableInfo broadcast_table_info =
-            this->tables_to_broadcast.back();
-        this->tables_to_broadcast.pop_back();
-
-        packed_tables =
-            make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
-    } else {
-        // If we have no data to shuffle, we still need to create empty packed
-        // tables for each rank so that the shuffle can proceed without special
-        // casing empty sends/receives
-        cudf::table empty_table(
-            cudf::table_view(std::vector<cudf::column_view>{}));
-
-        for (int i = 0; i < n_ranks; i++) {
-            cudf::packed_columns empty_packed_columns =
-                cudf::pack(empty_table.view(), stream);
-            cudf::packed_table empty_packed_table(
-                empty_table.view(), std::move(empty_packed_columns));
-            packed_tables.push_back(std::make_shared<cudf::packed_table>(
-                std::move(empty_packed_table)));
-        }
+    std::vector<cudf::packed_table> packed_tables;
+    if (!tableReadyToSend()) {
+        throw std::runtime_error("getNextPerRankTables has no data");
     }
+
+    BroadcastTableInfo broadcast_table_info = this->tables_to_broadcast.back();
+    this->tables_to_broadcast.pop_back();
+
+    packed_tables =
+        make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
     return packed_tables;
 }
 
@@ -185,7 +170,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress(
     });
 
     // TODO(ehsan): decide when to shuffle based on buffer size
-    if (this->data_ready_to_send()) {
+    if (this->tableReadyToSend()) {
         this->do_shuffle();
     }
 
@@ -261,7 +246,7 @@ void GpuTableManager::shuffle_irecv() {
 }
 
 std::vector<std::unique_ptr<cudf::table>>
-GpuShuffleManager::consume_completed_recvs() {
+GpuTableManager::consume_completed_recvs() {
     std::vector<std::unique_ptr<cudf::table>> out_tables;
     std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
         auto [done, table] = s.recvDone(mpi_comm);

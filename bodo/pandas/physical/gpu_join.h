@@ -236,7 +236,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             input_batch.table, input_batch.stream_event, local_is_last);
 
         return global_is_last ? OperatorResult::FINISHED
-                              : (cuda_join->build_shuffle_manager.BuffersFull()
+                              : (cuda_join->is_build_complete()
                                      ? OperatorResult::HAVE_MORE_OUTPUT
                                      : OperatorResult::NEED_MORE_INPUT);
     }
@@ -260,7 +260,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {
             output_table != nullptr ? std::move(output_table) : nullptr,
             this->arrow_schema, se};
-        if (cuda_join->probe_shuffle_manager.BuffersFull()) {
+        if (cuda_join->is_probe_complete()) {
             request_input = false;
         }
 

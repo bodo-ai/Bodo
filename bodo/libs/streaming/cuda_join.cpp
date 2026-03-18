@@ -206,7 +206,7 @@ bool CudaHashJoin::BuildConsumeBatch(
         this->build_broadcast_manager->broadcast_table(build_chunk,
                                                        input_stream_event);
         std::vector<std::unique_ptr<cudf::table>> received_build_chunks =
-            build_broadcast_manager->progress();
+            build_broadcast_manager->progress(local_is_last);
         for (auto& chunk : received_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
         }
@@ -220,7 +220,7 @@ bool CudaHashJoin::BuildConsumeBatch(
         }
     }
 
-    return this->build_shuffle_manager.sync_is_last(local_is_last);
+    return this->build_shuffle_manager->sync_is_last(local_is_last);
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
@@ -229,15 +229,16 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     rmm::cuda_stream_view& stream, bool local_is_last) {
     if (is_broadcast_join) {
         if (!is_gpu_rank()) {
-            return nullptr;
+            return {nullptr, local_is_last};
         }
 
         auto [probe_indices, build_indices] = _join_handle->inner_join(
             probe_chunk->select(this->probe_key_indices), {}, stream);
 
         if (probe_indices->size() == 0) {
-            return empty_table_from_arrow_schema(
-                this->output_schema->ToArrowSchema());
+            return {empty_table_from_arrow_schema(
+                        this->output_schema->ToArrowSchema()),
+                    local_is_last};
         }
 
         // Create views for the columns we want to keep
@@ -273,7 +274,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             final_columns.push_back(std::move(col));
         }
 
-        return std::make_unique<cudf::table>(std::move(final_columns));
+        return {std::make_unique<cudf::table>(std::move(final_columns)),
+                local_is_last};
     } else {
         // TODO: remove unused columns before shuffling to save network
         // bandwidth and GPU memory Send local data to appropriate ranks
