@@ -238,7 +238,7 @@ std::unique_ptr<cudf::table> CudaHashJoin::produce_unmatched_build_rows(
     // these unmatched build rows, and concatenate them with the
     // unmatched build rows to add to the final output
     std::vector<std::unique_ptr<cudf::column>> null_probe_columns;
-    for (int i = 0; i < probe_kept_cols.size(); i++) {
+    for (size_t i = 0; i < probe_kept_cols.size(); i++) {
         std::shared_ptr<arrow::Field> field =
             this->probe_table_schema->ToArrowSchema()->field(
                 this->probe_kept_cols[i]);
