@@ -53,6 +53,10 @@ struct CudaHashJoin {
         nullptr;  // Used for right/outer joins to track which
                   // build rows have been matched
 
+    std::unique_ptr<cudf::table> produce_unmatched_build_rows(
+        std::unique_ptr<cudf::table> table, bool local_is_last,
+        rmm::cuda_stream_view stream);
+
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
                  std::vector<cudf::size_type> probe_keys,
