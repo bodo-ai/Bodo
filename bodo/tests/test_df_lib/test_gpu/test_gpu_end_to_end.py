@@ -40,7 +40,7 @@ def test_gpu_join(datapath):
         _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
-@pytest.mark.parameterize("broadcast", [True, False])
+@pytest.mark.parametrize("broadcast", [True, False])
 def test_project_filter1(datapath, broadcast):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
@@ -177,7 +177,7 @@ def test_gpu_to_cpu_exchange(datapath):
     _test_equal(pdf, bdf)
 
 
-@pytest.mark.parameterize("broadcast", [True, False])
+@pytest.mark.parametrize("broadcast", [True, False])
 def test_gpu_join_bloom_filter(datapath, broadcast):
     """Test bloom join filter on GPU."""
     cust_path = datapath("tpch-test_data/parquet/customer.pq")
