@@ -899,13 +899,6 @@ if(USE_CUDF)
   add_library(libcudart SHARED IMPORTED)
   set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
 
-  # nccl
-  find_library(NCCL_LIB NAMES libnccl.so)
-  get_filename_component(NCCL_LIBDIR "${NCCL_LIB}" DIRECTORY)
-  message(STATUS "libnccl lib: ${NCCL_LIB} libdir: ${NCCL_LIBDIR}")
-  add_library(nccl SHARED IMPORTED)
-  set_target_properties(nccl PROPERTIES IMPORTED_LOCATION "${NCCL_LIB}")
-
   message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
   message(STATUS "Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
   message(STATUS "Using RMM base dir: ${RMM_BASE_DIR}")
@@ -919,8 +912,8 @@ if(USE_CUDF)
 
   # RPATH
   set_target_properties(ext PROPERTIES
-    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
-    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR};${NCCL_LIBDIR}"
+    BUILD_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR}"
+    INSTALL_RPATH "${RMM_LIBDIR};${RL_LIBDIR};${LIBCUDF_LIBDIR};${LIBCUDART_LIBDIR}"
     LINKER_LANGUAGE CUDA
     POSITION_INDEPENDENT_CODE ON
     CUDA_SEPARABLE_COMPILATION ON
@@ -939,7 +932,7 @@ if(USE_CUDF)
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart nccl)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart)
 
   get_target_property(EXT_LINKER_LANG ext LINKER_LANGUAGE)
   message(STATUS "ext LINKER_LANGUAGE = ${EXT_LINKER_LANG}")

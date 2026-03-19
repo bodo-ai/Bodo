@@ -527,8 +527,6 @@ void GPUtoCPUExchange::Initialize(std::shared_ptr<arrow::Schema> table_schema) {
     ctb_state = std::make_unique<ChunkedTableBuilderState>(
         bodo_schema, get_streaming_batch_size());
 
-    uint64_t curr_iter = 0;
-    int64_t sync_freq = 1;
     this->shuffle_state = std::make_unique<SrcDestIncrementalShuffleState>(
         bodo_schema, ctb_state->dict_builders, gpu_ranks, cpu_ranks, curr_iter,
         sync_freq, this->op_id);
