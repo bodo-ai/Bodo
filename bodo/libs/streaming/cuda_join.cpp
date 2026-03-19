@@ -201,7 +201,7 @@ void CudaHashJoin::FinalizeBuild() {
 
     if ((this->join_type == duckdb::JoinType::RIGHT ||
          this->join_type == duckdb::JoinType::OUTER) &&
-        this->_build_table->num_rows()) {
+        this->_build_table && this->_build_table->num_rows()) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows =
