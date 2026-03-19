@@ -221,7 +221,6 @@ bool CudaHashJoin::BuildConsumeBatch(
         }
         return this->build_shuffle_manager->sync_is_last(local_is_last);
     }
-
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
