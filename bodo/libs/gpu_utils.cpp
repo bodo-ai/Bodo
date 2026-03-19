@@ -178,7 +178,8 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress(
 }
 
 bool GpuTableManager::SendRecvEmpty() {
-    return (this->send_states.empty() && this->recv_states.empty());
+    return (this->send_states.empty() && this->recv_states.empty() &&
+            !this->hasMoreTables());
 }
 
 // Similar to the CPU version here:
