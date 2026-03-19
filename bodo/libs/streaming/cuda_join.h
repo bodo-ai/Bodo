@@ -79,7 +79,6 @@ struct CudaHashJoin {
           probe_table_schema(std::move(probe_schema)),
           null_equality(null_eq),
           is_broadcast_join(is_broadcast) {
-std::cout << "CudaHashJoin " << is_broadcast_join << std::endl;
         if (is_broadcast_join) {
             build_broadcast_manager =
                 std::make_shared<GpuTableBroadcastManager>();

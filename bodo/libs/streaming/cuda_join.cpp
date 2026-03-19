@@ -233,6 +233,12 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             return {nullptr, local_is_last};
         }
 
+        if (probe_chunk->num_rows() == 0 || _join_handle == nullptr) {
+            return {empty_table_from_arrow_schema(
+                        this->output_schema->ToArrowSchema()),
+                    local_is_last};
+        }
+
         auto [probe_indices, build_indices] = _join_handle->inner_join(
             probe_chunk->select(this->probe_key_indices), {}, stream);
 
