@@ -70,6 +70,10 @@ void GpuShuffleManager::do_shuffle() {
     ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
     this->tables_to_shuffle.pop_back();
 
+    // TODO[BSE-5347]: debug stream and event handling and remove device sync
+    // before MPI calls
+    cudaDeviceSynchronize();
+
     // Hash partition the table
     auto [partitioned_table, partition_start_rows] = hash_partition_table(
         shuffle_table_info.table, shuffle_table_info.partition_indices, n_ranks,
