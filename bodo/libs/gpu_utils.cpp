@@ -18,8 +18,6 @@ bool g_use_async = false;
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 #include <rmm/mr/cuda_async_memory_resource.hpp>
-#include <rmm/mr/owning_wrapper.hpp>
-#include <rmm/mr/pool_memory_resource.hpp>
 #include "../libs/_distributed.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_utils.h"
