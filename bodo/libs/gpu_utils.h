@@ -282,7 +282,7 @@ class GpuMpiManager {
 };
 
 /**
- * @brief Class for managing async shuffle of cudf::tables using NCCL
+ * @brief Class for managing async shuffle of cudf::tables using MPI
  */
 class GpuTableManager : public GpuMpiManager {
    private:
