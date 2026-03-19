@@ -400,13 +400,14 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
 bool is_gpu_rank();
 
 /**
- * @brief Get a pool memory resource instance.
+ * @brief Get a cuda asynchronous memory resource instance.
  *
  * NOTE: This function must be called after a rank's device id is set.
  *
  * @return std::shared_ptr<rmm::mr::device_memory_resource>
  */
-std::shared_ptr<rmm::mr::device_memory_resource> get_gpu_pool_memory_resource();
+std::shared_ptr<rmm::mr::device_memory_resource>
+get_gpu_async_memory_resource();
 
 #else
 // Empty implementation when CUDF is not available

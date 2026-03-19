@@ -1271,7 +1271,7 @@ std::pair<int64_t, PyObject *> execute_plan(
         // scope)
         device_guard.emplace(gpu_id);
 
-        mr = get_gpu_pool_memory_resource();
+        mr = get_gpu_async_memory_resource();
         prev_mr = cudf::set_current_device_resource(mr.get());
     }
 #endif

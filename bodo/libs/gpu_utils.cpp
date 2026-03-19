@@ -17,6 +17,7 @@ bool g_use_async = false;
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
 #include <rmm/mr/owning_wrapper.hpp>
 #include <rmm/mr/pool_memory_resource.hpp>
 #include "../libs/_distributed.h"
@@ -513,10 +514,8 @@ bool is_gpu_rank() {
 }
 
 std::shared_ptr<rmm::mr::device_memory_resource>
-get_gpu_pool_memory_resource() {
-    size_t initial_pool_size = rmm::percent_of_free_device_memory(80);
-    return rmm::mr::make_owning_wrapper<rmm::mr::pool_memory_resource>(
-        std::make_shared<rmm::mr::cuda_memory_resource>(), initial_pool_size);
+get_gpu_async_memory_resource() {
+    return std::make_shared<rmm::mr::cuda_async_memory_resource>();
 }
 
 #endif  // USE_CUDF
