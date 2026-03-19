@@ -274,7 +274,6 @@ GpuShuffleSendState::GpuShuffleSendState(
     bool broadcast;
     if (packed_tables.size() == 1) {
         broadcast = true;
-        std::cout << "Will broadcast" << std::endl;
         cudf::packed_table& table = packed_tables[0];
         packed_send_buffers[0] = std::move(table.data.gpu_data);
         metadata_send_buffers[0] = std::make_unique<std::vector<uint8_t>>(
