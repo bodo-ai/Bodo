@@ -9,11 +9,12 @@ import argparse
 import os
 from datetime import date
 
+import boto3
 import polars as pl
 from linetimer import CodeTimer
 
 
-def q(root) -> pl.LazyFrame:
+def q(root, scale_factor=1) -> pl.LazyFrame:
     """
     select
         n_name,
@@ -40,12 +41,25 @@ def q(root) -> pl.LazyFrame:
         order by
     revenue desc;
     """
+
+    # read customer, orders, lineitem
+    if root.startswith("s3://"):
+        customer = pl.scan_parquet(f"{root}/customer.pq/*.pq")
+        orders = pl.scan_parquet(f"{root}/orders.pq/*.pq")
+        lineitem = pl.scan_parquet(f"{root}/lineitem.pq/*.pq")
+    else:
+        customer = pl.scan_parquet(f"{root}/customer.pq")
+        orders = pl.scan_parquet(f"{root}/orders.pq")
+        lineitem = pl.scan_parquet(f"{root}/lineitem.pq")
+
+    # supplier becomes a multi-part after SF100
+    if root.startswith("s3://") and scale_factor >= 1000:
+        supplier = pl.scan_parquet(f"{root}/supplier.pq/*.pq")
+    else:
+        supplier = pl.scan_parquet(f"{root}/supplier.pq")
+
     region = pl.scan_parquet(f"{root}/region.pq")
     nation = pl.scan_parquet(f"{root}/nation.pq")
-    customer = pl.scan_parquet(f"{root}/customer.pq")
-    orders = pl.scan_parquet(f"{root}/orders.pq")
-    lineitem = pl.scan_parquet(f"{root}/lineitem.pq")
-    supplier = pl.scan_parquet(f"{root}/supplier.pq")
 
     var1 = "ASIA"
     var2 = date(1996, 1, 1)
@@ -99,9 +113,16 @@ def main():
         help="Path to CSV file where timings will be logged. If not provided, timings will not be logged to a file.",
     )
     parser.add_argument(
-        "--remake_timings",
+        "--store_output",
         action="store_true",
-        help="If set, the timings CSV file will be overwritten if it already exists. By default, timings will be appended to the CSV file if it already exists.",
+    )
+    parser.add_argument(
+        "--print_output",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
     )
     args = parser.parse_args()
 
@@ -126,8 +147,23 @@ def main():
             raise_on_fail=True,
         )
 
+    scale_factor = int(args.root.split("/")[-1].replace("SF", ""))
+
+    storage_type = "s3" if args.root.startswith("s3://") else "local"
+
+    if args.root.startswith("s3://"):
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        # Variables required for using kvikio for S3 reads.
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
+        os.environ["AWS_REGION"] = "us-east-2"
+
     if args.visualize_plan:
-        result: pl.LazyFrame = q(args.root)
+        result: pl.LazyFrame = q(args.root, scale_factor=scale_factor)
 
         unoptimized_gviz_out_path = f"{args.visualize_plan}_unoptimized.png"
         result.show_graph(
@@ -140,37 +176,46 @@ def main():
         )
 
         print(
-            f"Unoptimized query plan visualized and saved to {unoptimized_gviz_out_path}"
+            f"Unoptimized query plan visualized and saved to: {unoptimized_gviz_out_path}"
         )
-        print(f"Optimized query plan visualized and saved to {optimized_gviz_out_path}")
+        print(
+            f"Optimized query plan visualized and saved to: {optimized_gviz_out_path}"
+        )
 
-        print("Unoptimized Explain String:")
-        print(result.explain(engine=pl_engine, optimized=False))
-
-        print("Optimized Explain String:")
-        print(result.explain(engine=pl_engine, optimized=True))
-
-    if args.log_timings and (
-        not os.path.exists(args.log_timings) or args.remake_timings
-    ):
+    if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
-            f.write("scale_factor,n_gpus,implementation,time_seconds\n")
+            f.write(
+                "scale_factor,storage_type,n_gpus,implementation,time_seconds,extras\n"
+            )
 
-    scale_factor = int(args.root.split("/")[-1].replace("SF", ""))
-
+    if args.warmup:
+        try:
+            print("Running warmup...")
+            q(args.root).collect(engine=pl_engine)
+            print("Warmup complete.")
+        except Exception as e:
+            print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
             with CodeTimer(
                 f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}",
                 unit="s",
             ) as timer:
-                result: pl.LazyFrame = q(args.root)
-                print(result.collect(engine=pl_engine))
+                result: pl.LazyFrame = q(args.root, scale_factor=scale_factor)
+                result_collected = result.collect(engine=pl_engine)
+
+                if args.print_output:
+                    print(result_collected)
+
+                if args.store_output:
+                    output_path = f"q5_polars_{args.engine}_sf{scale_factor}_gpu{args.n_workers}_iter{i}.parquet"
+                    result_collected.to_pandas().to_parquet(output_path)
+                    print(f"Query output saved to {output_path}")
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{args.n_workers},Polars({args.engine}),{timer.took:.4f}\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},Polars[{args.engine}],{timer.took:.4f},\n"
                     )
         except Exception as e:
             print(

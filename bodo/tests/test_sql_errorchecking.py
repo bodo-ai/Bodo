@@ -14,7 +14,8 @@ from bodo.tests.utils import (
     sql_user_pass_and_hostname,
 )
 
-pytestmark = [pytest.mark.sql, pytest.mark.slow]
+# TODO[BSE-5338]: Replace AWS SQL database test setup and re-enable tests
+pytestmark = [pytest.mark.sql, pytest.mark.slow, pytest.mark.skip]
 
 
 @pytest.mark.slow

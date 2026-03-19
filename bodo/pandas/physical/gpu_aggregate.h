@@ -77,9 +77,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->initKeysAndSchema(col_ref_map, op.groups, in_table_schema, keys);
 
         std::optional<bool> dropna = std::nullopt;
-        for (size_t i = 0; i < op.expressions.size(); i++) {
-            const auto& expr = op.expressions[i];
-
+        for (const auto& expr : op.expressions) {
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
                 throw std::runtime_error(
                     "Aggregate expression is not a bound aggregate: " +
@@ -206,20 +204,15 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se) override {
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
-        groupby_state->build_consume_batch(input_batch.table, local_is_last,
-                                           se->stream,
-                                           input_batch.stream_event);
+        bool global_is_last = groupby_state->build_consume_batch(
+            input_batch.table, local_is_last, se->stream,
+            input_batch.stream_event);
 
-        if (local_is_last) {
-            // Tell groupby state that all data from the local pipeline has
-            // been processed.
-            groupby_state->all_local_data_processed();
-        }
         this->metrics.consume_time += end_timer(start_consume);
-        return (local_is_last && groupby_state->all_complete())
-                   ? OperatorResult::FINISHED
-                   : (local_is_last ? OperatorResult::HAVE_MORE_OUTPUT
-                                    : OperatorResult::NEED_MORE_INPUT);
+        return global_is_last ? OperatorResult::FINISHED
+                              : (groupby_state->merge_shuffler.BuffersFull()
+                                     ? OperatorResult::HAVE_MORE_OUTPUT
+                                     : OperatorResult::NEED_MORE_INPUT);
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
@@ -227,9 +220,14 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         time_pt start_produce = start_timer();
         std::unique_ptr<cudf::table> next_batch;
 
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
+                    OperatorResult::FINISHED};
+        }
+
         if (!leftover_tbl) {
-            leftover_tbl = std::move(groupby_state->produce_output_batch(
-                out_is_last /* output */, true, se->stream));
+            leftover_tbl = groupby_state->produce_output_batch(
+                out_is_last /* output */, true, se->stream);
         }
 
         std::size_t n = leftover_tbl->num_rows();
@@ -364,7 +362,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        local_count += input_batch.table->num_rows();
+        local_count += input_batch.table ? input_batch.table->num_rows() : 0;
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -381,6 +379,11 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, out_schema->ToArrowSchema(), se),
+                    OperatorResult::FINISHED};
+        }
+
         cudf::numeric_scalar<uint64_t> s(global_count, true);
         auto col = cudf::make_column_from_scalar(s, 1, se->stream);
         std::vector<std::unique_ptr<cudf::column>> cols;

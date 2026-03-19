@@ -46,16 +46,13 @@ static bodo::tests::suite tests([] {
                 GpuShuffleManager manager;
 
                 if (device_id.value() < 0) {
-                    // If no GPU assigned, NCCL comm should be null
-                    bodo::tests::check(manager.get_nccl_comm() == nullptr);
                     bodo::tests::check(manager.get_stream() == nullptr);
                     bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
                 } else {
                     // Should be empty on init
-                    bodo::tests::check(manager.all_complete() == false);
+                    bodo::tests::check(manager.global_is_last == false);
 
                     // Check communicators exist
-                    bodo::tests::check(manager.get_nccl_comm() != nullptr);
                     bodo::tests::check(manager.get_stream() != nullptr);
                     bodo::tests::check(manager.get_mpi_comm() != MPI_COMM_NULL);
                 }
@@ -135,21 +132,20 @@ static bodo::tests::suite tests([] {
 
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-            manager.shuffle_table(input_ptr, {0}, se->event);
-            manager.complete();
+            manager.append_batch(input_ptr, {0}, se);
 
-            std::vector<std::unique_ptr<cudf::table>> received_tables;
+            std::vector<std::shared_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.all_complete()) {
-                auto out_batch = manager.progress();
+            do {
+                auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
                     if (t) {
                         received_tables.push_back(std::move(t));
                     }
                 }
-            }
+            } while (!manager.sync_is_last(true));
 
             // Verification
             // 1. Calculate total rows received on this rank
@@ -203,21 +199,20 @@ static bodo::tests::suite tests([] {
 
             // Shuffle based on column 0
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-            manager.shuffle_table(input_ptr, {0}, se->event);
-            manager.complete();
+            manager.append_batch(input_ptr, {0}, se);
 
-            std::vector<std::unique_ptr<cudf::table>> received_tables;
+            std::vector<std::shared_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
-            while (!manager.all_complete()) {
-                auto out_batch = manager.progress();
+            do {
+                auto out_batch = manager.progress(true);
                 // Move received tables into our accumulator
                 for (auto& t : out_batch) {
                     if (t) {
                         received_tables.push_back(std::move(t));
                     }
                 }
-            }
+            } while (!manager.sync_is_last(true));
 
             // Verification
             // 1. Calculate total rows received on this rank

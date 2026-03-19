@@ -14,6 +14,7 @@
 #include "physical/gpu_aggregate.h"
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
+#include "physical/gpu_join_filter.h"
 #include "physical/gpu_project.h"
 #endif
 #include "physical/join.h"
@@ -384,41 +385,37 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // Process the source of this join filter.
     this->Visit(*op.children[0]);
 
-#ifdef USE_CUDF
-    bool all_joins_on_gpu = true;
-    for (int filter_id : op.filter_ids) {
-        all_joins_on_gpu = all_joins_on_gpu && !(*join_on_gpu)[filter_id];
-    }
-    if (all_joins_on_gpu) {
-        // Don't need to add a pipeline stage if all joins will be
-        // run on GPU.
-        return;
-    }
-
-    bool run_on_gpu = node_run_on_gpu(op);
-    if (run_on_gpu) {
-        // If the planner wants this JoinFilter to run on GPU
-        // then we won't do join filtering even if the join itself
-        // is done on CPU.
-        return;
-    }
-#endif
-
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalJoinFilter>,
+                 std::shared_ptr<PhysicalGPUJoinFilter>>
+        physical_op;
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op = std::make_shared<PhysicalGPUJoinFilter>(
+            op, in_table_schema, this->join_filter_states);
+    } else {
+        physical_op = std::make_shared<PhysicalJoinFilter>(
+            op, in_table_schema, this->join_filter_states);
+    }
+#else
     std::shared_ptr<PhysicalJoinFilter> physical_op =
         std::make_shared<PhysicalJoinFilter>(op, in_table_schema,
                                              this->join_filter_states);
-    this->active_pipeline->AddOperator(physical_op);
+#endif
+
+    bool found_join_on_same_device = false;
 
     // Make sure all filter generators used by this
     // join filter run before this pipeline.
     for (int filter_id : op.filter_ids) {
 #ifdef USE_CUDF
-        if ((*join_on_gpu)[filter_id]) {
+        if ((*join_on_gpu)[filter_id] != run_on_gpu) {
             continue;
         }
+        found_join_on_same_device = true;
 #endif
         std::shared_ptr<Pipeline> filter_pipeline =
             (*join_filter_pipelines)[filter_id];
@@ -431,6 +428,20 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
         // this consumer of the filter.
         this->active_pipeline->addRunBefore(filter_pipeline);
     }
+    // Only insert join filter if both the join and the filter are on
+    // the same device type.  We could change this later but it is much
+    // more complicated and involves transferring and transforming the
+    // bloom filters.
+    if (!found_join_on_same_device) {
+        return;
+    }
+
+#ifdef USE_CUDF
+    std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
+               physical_op);
+#else
+    this->active_pipeline->AddOperator(physical_op);
+#endif
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {

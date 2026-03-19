@@ -3,7 +3,10 @@ import datetime
 import os
 
 import boto3
+import pandas
 from linetimer import CodeTimer
+
+from bodo.tests.utils import _test_equal
 
 
 def q(root, pd):
@@ -33,22 +36,9 @@ def q(root, pd):
         order by
     revenue desc;
     """
-    if pd.__name__ == "bodo.pandas":
-        lineitem = pd.read_parquet(f"{root}/lineitem.pq")
-        orders = pd.read_parquet(f"{root}/orders.pq")
-        customer = pd.read_parquet(f"{root}/customer.pq")
-    else:
-        # Cudf doesn't have column pruning
-        lineitem = pd.read_parquet(
-            f"{root}/lineitem.pq",
-            columns=["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SUPPKEY"],
-        )
-        orders = pd.read_parquet(
-            f"{root}/orders.pq", columns=["O_ORDERKEY", "O_CUSTKEY", "O_ORDERDATE"]
-        )
-        customer = pd.read_parquet(
-            f"{root}/customer.pq", columns=["C_CUSTKEY", "C_NATIONKEY"]
-        )
+    lineitem = pd.read_parquet(f"{root}/lineitem.pq")
+    orders = pd.read_parquet(f"{root}/orders.pq")
+    customer = pd.read_parquet(f"{root}/customer.pq")
     nation = pd.read_parquet(f"{root}/nation.pq")
     region = pd.read_parquet(f"{root}/region.pq")
     supplier = pd.read_parquet(f"{root}/supplier.pq")
@@ -105,11 +95,7 @@ def main():
     )
 
     # Bodo Config
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=32768 * 10,
-    )
+    parser.add_argument("--batch_size", type=int, default=24_000_000)
     parser.add_argument(
         "--no_parallel",
         action="store_true",
@@ -127,12 +113,32 @@ def main():
         type=str,
         default=None,
     )
+    parser.add_argument(
+        "--store_output",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--answer_path",
+        type=str,
+        default=None,
+        help="Path to saved answer, in parquet format.",
+    )
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="If set, run a warmup run that is not timed.",
+    )
+    parser.add_argument(
+        "--print_output", action="store_true", help="If set, print the query results."
+    )
 
     args = parser.parse_args()
 
     if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
-            f.write("scale_factor,n_gpus,implementation,time_seconds\n")
+            f.write(
+                "scale_factor,storage_type,n_gpus,implementation,time_seconds,extras\n"
+            )
 
     scale_factor = args.root.split("/")[-1].replace("SF", "")
     if scale_factor.isdigit():
@@ -140,24 +146,26 @@ def main():
     else:
         scale_factor = 0
 
+    storage_type = "s3" if args.root.startswith("s3://") else "local"
+
     if args.library == "cudf":
         import cudf
 
         pd_impl = cudf
     else:
-        session = boto3.Session()
-        credentials = session.get_credentials().get_frozen_credentials()
+        if args.root.startswith("s3://"):
+            session = boto3.Session()
+            credentials = session.get_credentials().get_frozen_credentials()
 
-        # Variables required for using kvikio for S3 reads.
-        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-        os.environ["AWS_SESSION_TOKEN"] = credentials.token
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
-        os.environ["AWS_REGION"] = "us-east-2"
-        os.environ["KVIKIO_COMPAT_MODE"] = "on"
-        os.environ["KVIKIO_NTHREADS"] = "8"
+            # Variables required for using kvikio for S3 reads.
+            os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+            os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+            os.environ["AWS_SESSION_TOKEN"] = credentials.token
+            os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
+            os.environ["AWS_REGION"] = "us-east-2"
 
         # Bodo envs (set prior to importing bodo.pandas)
+        os.environ["BODO_GPU"] = "1"
         os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
         os.environ["BODO_GPU_STREAMING_BATCH_SIZE"] = str(args.batch_size)
         os.environ["BODO_GPU_ASYNC"] = "1" if args.use_async else "0"
@@ -181,23 +189,43 @@ def main():
         print(f"  Dump Plan: {args.dump_plan}")
         print(f"  Trace Dir: {args.tracedir}")
 
+    n_correct = 0
+    try:
+        if args.warmup:
+            print("Running warmup...")
+            q(args.root, pd_impl).execute_plan()
+            print("Warmup complete.")
+    except Exception as e:
+        print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
             with CodeTimer(
                 f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i}",
                 unit="s",
             ) as timer:
-                print(q(args.root, pd_impl))
+                res = q(args.root, pd_impl)
+                if args.print_output:
+                    print(res)
+                else:
+                    res.execute_plan()
+
+            if args.answer_path:
+                answer_df = pandas.read_parquet(args.answer_path)
+                _test_equal(res, answer_df)
+                n_correct += 1
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{args.n_workers},{args.library},{timer.took:.4f}\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},{args.library},{timer.took:.4f},batch_size={args.batch_size}\n"
                     )
         except Exception as e:
             print(
                 f"Error executing query library={args.library}, sf={scale_factor}, n_gpus={args.n_workers}: {e}"
             )
+
+    if args.answer_path:
+        print(f"Correct Results: {n_correct}/{args.n_iters}")
 
 
 if __name__ == "__main__":

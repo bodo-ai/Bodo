@@ -83,8 +83,10 @@ jobs:
           if: ${{ inputs.test-type == 'NARWHALS' }}
           run: |
             pip install hypothesis polars sqlframe ibis-framework pyarrow-hotfix
-
-        # Run Tests
+        - name: Dump GPU Info
+          if: ${{ inputs.test-type == 'DF_LIB_GPU' }}
+          run: |
+            nvidia-smi
         - name: Run Tests
           run: |
             if [[ "$RUNNER_OS" == "Windows" ]]; then
@@ -200,6 +202,7 @@ jobs:
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
             BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ startsWith(inputs.test-type, 'DF_LIB') && '1' || '0' }}
             BODO_GPU: ${{ inputs.test-type == 'DF_LIB_GPU' && '1' || '0' }}
+            OMPI_MCA_pml: ${{ inputs.test-type == 'DF_LIB_GPU' && 'ucx' || '' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"

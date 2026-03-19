@@ -14,7 +14,7 @@ platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],    
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py313", "rcpp", "dev", "local-mpi", "cudf"],          solve-group = "gpu" }
+default-cuda =      { features = ["py313", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
@@ -112,7 +112,7 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-bodo-cudf-san-in-default-cuda]
 cmd = """
-cmake -S . -B build/cudf-san -DCMAKE_BUILD_TYPE=DebugSanitize -DUSE_CUDF=ON && \
+cmake --build build/cudf-san -j && \
 cmake --install build/cudf-san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
 cmake -E copy build/cudf-san/compile_commands.json compile_commands.json
 """
@@ -260,18 +260,28 @@ platforms = ["linux-64"]
 channels = ["rapidsai", "nvidia", "conda-forge"]
 
 [feature.cudf.dependencies]
-cuda-toolkit = "13.*"
 cuda-version = "13.*"
 rmm = ">=25.12"
 librmm = ">=25.12"
 cudf = ">=25.12"
-nccl = ">=2.18"
 numba = ">=0.60,<0.62.0"
 pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
+
+# benchmark deps
 [feature.cudf.pypi-dependencies]
 linetimer = "*"
+
+[feature.open-mpi.dependencies]
+openmpi = { version = "*" }
+
+[feature.rcpp-openmpi.dependencies]
+zstd = "*"
+boost-cpp = "*"
+aws-sdk-cpp = "*"
+hdf5 = { version = "*", build = "*mpi_openmpi_*" }
+
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]

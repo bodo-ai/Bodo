@@ -8,46 +8,50 @@
 #include "_pipeline.h"
 #include "duckdb/planner/logical_operator.hpp"
 
+#ifndef DEBUG_CONSOLIDATED
+#include <fstream>
+#endif
+
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_CONTENTS(rank, pipeliens)                     \
-    do {                                                             \
-        std::cout << "Rank " << rank << " ExecutePipelines with "    \
-                  << pipelines.size() << " pipelines." << std::endl; \
-        for (size_t i = 0; i < pipelines.size(); ++i) {              \
-            std::cout << "Rank " << rank << " ------ Pipeline " << i \
-                      << " ------" << std::endl;                     \
-            pipelines[i]->printPipeline();                           \
-            std::cout << "Rank " << rank << " ------ Pipeline " << i \
-                      << " ------" << std::endl;                     \
-        }                                                            \
+#define DEBUG_PIPELINE_CONTENTS(rank, pipelines, out)                       \
+    do {                                                                    \
+        out << "Rank " << rank << " ExecutePipelines with "                 \
+            << pipelines.size() << " pipelines." << std::endl;              \
+        for (size_t i = 0; i < pipelines.size(); ++i) {                     \
+            out << "Rank " << rank << " ------ Pipeline " << i << " ------" \
+                << std::endl;                                               \
+            pipelines[i]->printPipeline(out);                               \
+            out << "Rank " << rank << " ------ Pipeline " << i << " ------" \
+                << std::endl;                                               \
+        }                                                                   \
     } while (0)
 #else
-#define DEBUG_PIPELINE_CONTENTS(rank, pipeliens) \
-    do {                                         \
+#define DEBUG_PIPELINE_CONTENTS(rank, pipelines, out) \
+    do {                                              \
     } while (0)
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_PRE_EXECUTE(rank)                                 \
-    do {                                                                 \
-        std::cout << "Rank " << rank << " Before execute pipeline " << i \
-                  << std::endl;                                          \
+#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out)                      \
+    do {                                                           \
+        out << "Rank " << rank << " Before execute pipeline " << i \
+            << std::endl;                                          \
     } while (0)
 #else
-#define DEBUG_PIPELINE_PRE_EXECUTE(rank) \
-    do {                                 \
+#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out) \
+    do {                                      \
     } while (0)
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_POST_EXECUTE(rank)                               \
-    do {                                                                \
-        std::cout << "Rank " << rank << " After execute pipeline " << i \
-                  << std::endl;                                         \
+#define DEBUG_PIPELINE_POST_EXECUTE(rank, out)                    \
+    do {                                                          \
+        out << "Rank " << rank << " After execute pipeline " << i \
+            << std::endl;                                         \
     } while (0)
 #else
-#define DEBUG_PIPELINE_POST_EXECUTE(rank) \
-    do {                                  \
+#define DEBUG_PIPELINE_POST_EXECUTE(rank, out) \
+    do {                                       \
     } while (0)
 #endif
 
@@ -165,12 +169,18 @@ class Executor {
         // pipeline is before probe).
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        DEBUG_PIPELINE_CONTENTS(rank, pipelines);
+#ifdef DEBUG_CONSOLIDATED
+        std::ostream &out = std::cout;
+#else
+        std::string outfile = "rank" + std::to_string(rank);
+        std::ofstream out(outfile, std::ios::app);
+#endif
+        DEBUG_PIPELINE_CONTENTS(rank, pipelines, out);
 
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
-            DEBUG_PIPELINE_PRE_EXECUTE(rank);
-            uint64_t batches_processed = pipelines[i]->Execute();
+            DEBUG_PIPELINE_PRE_EXECUTE(rank, out);
+            uint64_t batches_processed = pipelines[i]->Execute(rank, out);
 
             // Free pipeline resources as early as possible to reduce memory
             // pressure.
@@ -178,7 +188,7 @@ class Executor {
                 pipelines[i].reset();
             }
 
-            DEBUG_PIPELINE_POST_EXECUTE(rank);
+            DEBUG_PIPELINE_POST_EXECUTE(rank, out);
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
         QueryProfileCollector::Default().Finalize(0);

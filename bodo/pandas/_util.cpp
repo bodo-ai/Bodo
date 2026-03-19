@@ -957,7 +957,9 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
 
                 return std::make_optional<col_min_max_t>(min_scalar,
                                                          max_scalar);
-            } else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
+            }
+#ifdef USE_CUDF
+            else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
                 std::shared_ptr<arrow::Table> min_max_values =
                     join_state->get_min_max_stats()[build_key_col];
 
@@ -968,6 +970,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
                 return std::make_optional<col_min_max_t>(min_scalar,
                                                          max_scalar);
             }
+#endif  // USE_CUDF
         },
         join_state);
 }
@@ -1458,4 +1461,4 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
-#endif
+#endif  // USE_CUDF

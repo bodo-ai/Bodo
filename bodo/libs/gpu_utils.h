@@ -5,19 +5,10 @@ extern bool g_use_async;
 
 #ifdef USE_CUDF
 #include <mpi.h>
-#include <nccl.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
+#include <unordered_set>
 
-// Error checking macros for NCCL
-#define CHECK_NCCL(call)                                                       \
-    do {                                                                       \
-        ncclResult_t result = call;                                            \
-        if (result != ncclSuccess) {                                           \
-            throw std::runtime_error("NCCL error: " +                          \
-                                     std::string(ncclGetErrorString(result))); \
-        }                                                                      \
-    } while (0)
 #define CHECK_CUDA(call)                                                    \
     do {                                                                    \
         cudaError_t err = call;                                             \
@@ -125,135 +116,92 @@ enum class GpuShuffleState {
 };
 
 /**
- * @brief Holds information for inflight shuffle operations
+ * @brief Holds buffers and MPI requests for async shuffle sends for cudf tables
+ (MPI_Issend calls). Buffers cannot be freed until send is completed.
+ *
  */
-struct GpuShuffle {
-    GpuShuffleState send_state = GpuShuffleState::SIZES_INFLIGHT;
-    GpuShuffleState recv_state = GpuShuffleState::SIZES_INFLIGHT;
-    MPI_Comm mpi_comm = MPI_COMM_NULL;
-    ncclComm_t nccl_comm = nullptr;
-    cudaStream_t stream = nullptr;
-    // These need to be unique_ptrs to vectors to guarantee they don't
-    // move if GpuShuffle is moved
-    // MPI Requests for sizes of gpu buffers from other ranks
-    // Indexed by sending rank
-    std::unique_ptr<std::vector<MPI_Request>> gpu_sizes_recv_reqs;
-    // MPI Requests for sizes of gpu buffers to other ranks
-    // Indexed by destination rank
-    std::unique_ptr<std::vector<MPI_Request>> gpu_sizes_send_reqs;
-    // MPI Requests for sizes of metadata from other ranks
-    // Indexed by sending rank
-    std::unique_ptr<std::vector<MPI_Request>> metadata_sizes_recv_reqs;
-    // MPI Requests for sizes of metadata to other ranks
-    // Indexed by destination rank
-    std::unique_ptr<std::vector<MPI_Request>> metadata_sizes_send_reqs;
-    // MPI_Requests for metadata transfers from other ranks
-    // Indexed by sending rank
-    std::unique_ptr<std::vector<MPI_Request>> metadata_recv_reqs;
-    // MPI_Requests for metadata transfers to other ranks
-    // Indexed by destination rank
-    std::unique_ptr<std::vector<MPI_Request>> metadata_send_reqs;
-    // Event markers for all nccl operations needed for this shuffle.
-    // When this is finished all GPU buffers are in the correct place.
-    cuda_event_wrapper nccl_send_event;
-    cuda_event_wrapper nccl_recv_event;
-    // We need to keep sizes around while the transfers are inflight
-    std::unique_ptr<std::vector<uint64_t>> send_metadata_sizes;
-    std::unique_ptr<std::vector<uint64_t>> recv_metadata_sizes;
-    std::unique_ptr<std::vector<uint64_t>> send_gpu_sizes;
-    std::unique_ptr<std::vector<uint64_t>> recv_gpu_sizes;
-    // Buffers for metadata from other ranks, these are used to construct
-    // packed_columns. Indexed by sending rank
-    std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_recv_buffers;
+class GpuShuffleSendState {
+   public:
+    /**
+     * @brief Construct a new send state.
+     *
+     * @param starting_msg_tag Starting message tag to use for posting the
+     * messages that send the data buffers.
+     */
+    explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
+                                 int starting_msg_tag_, MPI_Comm shuffle_comm,
+                                 size_t n_ranks);
+
+    /**
+     * @brief Getter for starting_msg_tag.
+     *
+     * @return int
+     */
+    int get_starting_msg_tag() const { return this->starting_msg_tag; }
+
+    /**
+     * @brief Returns true if send is done which allows this state to be freed.
+     *
+     */
+    bool sendDone();
+
+   private:
+    std::vector<MPI_Request> send_requests;
+    // Starting message tag to use for posting the messages that send the data
+    // buffers. This enables sending multiple tables to ranks (as long as the
+    // sender, e.g. StreamSort, maintains sufficient state to not re-use tags
+    // for concurrent sends).
+    int starting_msg_tag = -1;
+
     // Buffers for metadata transfers to other ranks, these are used to
     // construct packed_columns. Indexed by destination rank
     std::vector<std::unique_ptr<std::vector<uint8_t>>> metadata_send_buffers;
-    // Buffers for column data from other ranks, these are used to construct
-    // packed_columns. Indexed by sending rank
-    std::vector<std::unique_ptr<rmm::device_buffer>> packed_recv_buffers;
+
     // Buffers for column data sent to other ranks, these are used to construct
     // packed_columns. Indexed by destination rank
     std::vector<std::unique_ptr<rmm::device_buffer>> packed_send_buffers;
 
-    GpuShuffle(std::vector<cudf::packed_table> packed_tables,
-               MPI_Comm mpi_comm_, ncclComm_t nccl_comm_, cudaStream_t stream_,
-               int n_ranks, int start_tag)
-        : mpi_comm(mpi_comm_),
-          nccl_comm(nccl_comm_),
-          stream(stream_),
-          gpu_sizes_recv_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          gpu_sizes_send_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          metadata_sizes_recv_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          metadata_sizes_send_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          metadata_recv_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          metadata_send_reqs(
-              std::make_unique<std::vector<MPI_Request>>(n_ranks)),
-          send_metadata_sizes(
-              std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          recv_metadata_sizes(
-              std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          send_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          recv_gpu_sizes(std::make_unique<std::vector<uint64_t>>(n_ranks, 0)),
-          metadata_recv_buffers(n_ranks),
-          metadata_send_buffers(n_ranks),
-          packed_recv_buffers(n_ranks),
-          packed_send_buffers(n_ranks),
-          start_tag(start_tag),
-          n_ranks(n_ranks) {
-        for (size_t dest_rank = 0; dest_rank < packed_tables.size();
-             dest_rank++) {
-            cudf::packed_table& table = packed_tables[dest_rank];
-            // Prepare send buffers
-            packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
-            metadata_send_buffers[dest_rank] =
-                std::make_unique<std::vector<uint8_t>>(
-                    std::move(*table.data.metadata));
-        }
-
-        this->send_sizes();
-        this->recv_sizes();
-        this->send_metadata();
-    }
-
-    // Enable move constructors
-    GpuShuffle(GpuShuffle&&) = default;
-    GpuShuffle& operator=(GpuShuffle&&) = default;
-
-    // Disable copy constructors
-    GpuShuffle(const GpuShuffle&) = delete;
-    GpuShuffle& operator=(const GpuShuffle&) = delete;
-
-    ~GpuShuffle() {}
-
-    /*
-     * @brief Progress the shuffle operation
-     * @return Optional unique_ptr to cudf::table if shuffle is complete
-     */
-    std::optional<std::unique_ptr<cudf::table>> progress();
-
-   private:
-    int start_tag;
-    int n_ranks;
-    void send_sizes();
-    void recv_sizes();
-    void send_metadata();
-    void recv_metadata();
-    void send_data();
-    void recv_data();
-    void progress_waiting_for_sizes();
-    std::optional<std::unique_ptr<cudf::table>> progress_waiting_for_data();
-    void progress_sending_sizes();
-    void progress_sending_data();
+    // We need to keep metadata around while the transfers are inflight
+    std::vector<uint64_t> send_metadata_sizes;
 };
 
-struct DoShuffleCoordination {
-    MPI_Request req = MPI_REQUEST_NULL;
-    int has_data;
+/**
+ * @brief Holds buffers and MPI requests for async shuffle recvs for a cudf
+ table (MPI_Irecv calls). Buffers cannot be used or freed until recvs are
+ completed.
+ *
+ */
+class GpuShuffleRecvState {
+   public:
+    GpuShuffleRecvState(MPI_Status& status, MPI_Message& m,
+                        cudaStream_t stream);
+
+    /**
+     * @brief Returns a tuple of a boolean and a shared_ptr to a table. If
+     * recvs of all arrays are done, the boolean will be true, and the table
+     * will be non-null, otherwise the return value will be (false, NULL).
+     * When the boolean is true this state can be freed.
+     */
+    std::pair<bool, std::shared_ptr<cudf::table>> recvDone(
+        MPI_Comm shuffle_comm);
+
+    /**
+     * @brief test if the initial sizes metadata request posted is complete and
+     * if so, get the sizes metadata and post receives for the data.
+     *
+     * @param shuffle_comm MPI communicator for shuffle
+     */
+    void TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm);
+
+   private:
+    int source;
+    cudaStream_t stream;
+    MPI_Request metadata_request = MPI_REQUEST_NULL;
+    std::vector<MPI_Request> recv_requests;
+    std::vector<uint64_t> sizes_vec;
+
+    std::unique_ptr<std::vector<uint8_t>> recv_metadata_buffer;
+    std::unique_ptr<rmm::device_buffer> packed_recv_buffer;
 };
 
 class ShuffleTableInfo {
@@ -269,13 +217,10 @@ class ShuffleTableInfo {
 };
 
 /**
- * @brief Class for managing async shuffle of cudf::tables using NCCL
+ * @brief Class for handling mpi communication between GPU nodes.
  */
-class GpuShuffleManager {
-   private:
-    // NCCL communicator
-    ncclComm_t nccl_comm = nullptr;
-
+class GpuMpiManager {
+   protected:
     // MPI communicator for CPU communication between ranks
     // with GPUs assigned
     MPI_Comm mpi_comm = MPI_COMM_NULL;
@@ -292,65 +237,11 @@ class GpuShuffleManager {
     // GPU device ID
     rmm::cuda_device_id gpu_id;
 
-    std::deque<GpuShuffle> inflight_shuffles;
-
-    // Tag counter for shuffles, each shuffle uses 3 tags
-    // and they can't overlap
-    int curr_tag = 0;
-
-    const int MAX_TAG_VAL;
-
-    // This is used to coordinate the start of shuffles across ranks
-    DoShuffleCoordination shuffle_coordination;
-
-    // IBarrier to know when all ranks are done sending data
-    MPI_Request global_completion_req = MPI_REQUEST_NULL;
-    int global_completion = false;
-    bool complete_signaled = false;
-
-    std::vector<ShuffleTableInfo> tables_to_shuffle;
-
-    /**
-     * @brief Initialize NCCL communicator
-     */
-    void initialize_nccl();
-
-    /**
-     * @brief Once we've determined we will shuffle, start the shuffle by
-     * partitioning the table and posting sends/receives
-     */
-    void do_shuffle();
-
-    bool data_ready_to_send() {
-        return !this->tables_to_shuffle.empty() &&
-               this->tables_to_shuffle.back().event.ready();
-    }
-
    public:
-    GpuShuffleManager();
-    ~GpuShuffleManager();
+    GpuMpiManager();
+    ~GpuMpiManager();
 
-    /**
-     * @brief Shuffle a cudf table across all ranks
-     * @param table Input table to shuffle
-     * @param partition_indices Column indices to use for partitioning
-     */
-    void shuffle_table(std::shared_ptr<cudf::table> table,
-                       const std::vector<cudf::size_type>& partition_indices,
-                       cuda_event_wrapper event);
-
-    /**
-     * @brief Progress any inflight shuffles
-     * @return Optional vector of tables received from all ranks if any were
-     * received.
-     */
-    std::vector<std::unique_ptr<cudf::table>> progress();
-
-    /**
-     * @brief Get the underlying NCCL communicator
-     * @return ncclComm_t
-     */
-    ncclComm_t get_nccl_comm() const { return nccl_comm; }
+    int get_rank() const { return rank; }
 
     /**
      * @brief Get the underlying CUDA stream
@@ -365,15 +256,90 @@ class GpuShuffleManager {
     MPI_Comm get_mpi_comm() const { return mpi_comm; }
 
     /**
-     * @brief Check if there are any inflight shuffles
-     * @return true if there are inflight shuffles, false otherwise
+     * @brief All GPU ranks send a device buffer to all other GPU ranks
+     * @param local_buf - the local device buffer to send to all GPU ranks
+     * @param stream - stream to perform the operations on
+     * @return number of GPU rank length vector of their device_buffers
      */
-    bool all_complete();
+    std::vector<std::unique_ptr<rmm::device_buffer>> all_gather_device_buffers(
+        rmm::device_buffer const& local_buf, cudaStream_t stream);
 
     /**
-     * @brief Idempotent call to signify that this rank has no more data to send
+     * @brief Sum all the local values from the GPU ranks
+     * @param local - the local value to be added to the sum
+     * @return the sum
      */
-    void complete();
+    uint64_t allreduce(uint64_t local);
+};
+
+/**
+ * @brief Class for managing async shuffle of cudf::tables using MPI
+ */
+class GpuShuffleManager : public GpuMpiManager {
+   private:
+    // IBarrier to know when all ranks are fully done
+    bool is_last_barrier_started = false;
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+
+    // Keep track of inflight tags to avoid tag collisions.
+    std::unordered_set<int> inflight_tags;
+
+    std::vector<GpuShuffleSendState> send_states;
+    std::vector<GpuShuffleRecvState> recv_states;
+
+    std::vector<ShuffleTableInfo> tables_to_shuffle;
+
+    /**
+     * @brief Once we've determined we will shuffle, start the shuffle by
+     * partitioning the table and posting sends/receives
+     */
+    void do_shuffle();
+
+    bool data_ready_to_send() {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
+
+    void shuffle_irecv();
+
+    std::vector<std::shared_ptr<cudf::table>> consume_completed_recvs();
+
+   public:
+    bool global_is_last = false;
+
+    GpuShuffleManager();
+
+    /**
+     * @brief Shuffle a cudf table across all ranks
+     * @param table Input table to shuffle
+     * @param partition_indices Column indices to use for partitioning
+     */
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      const std::vector<cudf::size_type>& partition_indices,
+                      std::shared_ptr<StreamAndEvent> se);
+
+    /**
+     * @brief Progress any inflight shuffles
+     * @return Optional vector of tables received from all ranks if any were
+     * received.
+     */
+    std::vector<std::shared_ptr<cudf::table>> progress(const bool is_last);
+
+    bool SendRecvEmpty();
+
+    /**
+     * @brief TODO(ehsan): Return true if send/recv buffer sizes are over a
+     threshold and this rank shouldn't get more input data to avoid potential
+     OOM.
+     */
+    bool BuffersFull() { return false; }
+
+    /**
+     * @brief Sync local is_last flags across ranks to determine if all ranks
+     * are fully done.
+     *
+     */
+    bool sync_is_last(bool local_is_last);
 
     bool is_available() const { return true; }
 };
@@ -412,6 +378,36 @@ int get_cluster_cuda_device_count();
  * @return MPI_Comm
  */
 MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
+
+/**
+ * @brief Allgather a device buffer from each GPU-enabled rank to every other
+ * GPU-enabled rank.
+ * @param stream: CUDA stream to perform operations on.
+ * @param local_buf: device buffer owned by this rank to send (may be size 0).
+ * @return vector of length comm_size where element i is a unique_ptr to the
+ * buffer sent by rank i. If a rank sent size 0, the corresponding vector
+ * element will be nullptr.
+ */
+std::vector<std::unique_ptr<rmm::device_buffer>>
+allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
+                                      cudaStream_t stream);
+
+/**
+ * @brief Return whether the current rank has a GPU assigned (i.e. should
+ * participate in GPU compute)
+ *
+ */
+bool is_gpu_rank();
+
+/**
+ * @brief Get a cuda asynchronous memory resource instance.
+ *
+ * NOTE: This function must be called after a rank's device id is set.
+ *
+ * @return std::shared_ptr<rmm::mr::device_memory_resource>
+ */
+std::shared_ptr<rmm::mr::device_memory_resource>
+get_gpu_async_memory_resource();
 
 #else
 // Empty implementation when CUDF is not available

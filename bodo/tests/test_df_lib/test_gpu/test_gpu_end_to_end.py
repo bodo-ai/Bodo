@@ -7,31 +7,10 @@ import pytest
 import bodo.pandas as bd
 from bodo.pandas.base import _empty_like
 from bodo.pandas.plan import (
-    LazyPlan,
     LogicalParquetWrite,
     count_gpu_plan_nodes,
-    getPlanStatistics,
 )
 from bodo.tests.utils import _test_equal
-
-
-def is_gpu_plan(plan: LazyPlan) -> bool:
-    """Check whether entire plan is being executed on GPU."""
-    num_gpu_nodes = count_gpu_plan_nodes(plan)
-    _, total_optimized_nodes = getPlanStatistics(plan)
-    return num_gpu_nodes == total_optimized_nodes
-
-
-def create_write_plan(df: bd.DataFrame, out_path: str) -> LogicalParquetWrite:
-    """Create a LogicalParquetWrite plan for a given DataFrame."""
-    return LogicalParquetWrite(
-        _empty_like(df),
-        df._plan,
-        out_path,
-        "none",  # compression
-        "",  # bucket_region
-        -1,  # row_group_size
-    )
 
 
 def test_gpu_join(datapath):
@@ -49,8 +28,6 @@ def test_gpu_join(datapath):
         orders_bodo = bd.read_parquet(orders_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
         merged_bodo = merge_impl(cust_bodo, orders_bodo)
-        write_plan = create_write_plan(merged_bodo, out_path_bodo)
-        assert is_gpu_plan(write_plan), "Expected entire plan to run on GPU"
         merged_bodo.to_parquet(out_path_bodo)
 
         cust_pd = pd.read_parquet(cust_path)
@@ -67,21 +44,19 @@ def test_project_filter1(datapath):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
 
-    def merge_impl(df1_df, out_path, check_gpu_plan):
+    def filter_impl(df1_df, out_path):
         proj_df = df1_df[["B", "D"]]
         filt_df = proj_df[proj_df.D > 30]
-        if check_gpu_plan:
-            assert is_gpu_plan(filt_df._plan), "Expected entire plan to run on GPU"
         filt_df.to_parquet(out_path)
 
     with tempfile.TemporaryDirectory() as tmp:
         df1_bodo = bd.read_parquet(df1_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        merge_impl(df1_bodo, out_path_bodo, True)
+        filter_impl(df1_bodo, out_path_bodo)
 
         df1_pd = pd.read_parquet(df1_path)
         out_path_pd = os.path.join(tmp, "out_pd.pq")
-        merge_impl(df1_pd, out_path_pd, False)
+        filter_impl(df1_pd, out_path_pd)
 
         result_bodo = pd.read_parquet(out_path_bodo)
         result_pd = pd.read_parquet(out_path_pd)
@@ -108,33 +83,31 @@ def test_groupby_agg(datapath, func):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
 
-    def merge_impl(df1_df, out_path, check_gpu_plan):
+    def groupby_impl(df1_df, out_path):
         if func == "distinct":
             df1_agg = df1_df.drop_duplicates()
         else:
             df1_agg = getattr(
                 df1_df.groupby("D", as_index=False, sort=False)["A"], func
             )()
-        if check_gpu_plan:
-            assert is_gpu_plan(df1_agg._plan), "Expected entire plan to run on GPU"
 
         df1_agg.to_parquet(out_path)
 
     with tempfile.TemporaryDirectory() as tmp:
-        # TODO: Check that entire pipeline is being executed on GPU.
         df1_bodo = bd.read_parquet(df1_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        merge_impl(df1_bodo, out_path_bodo, True)
+        groupby_impl(df1_bodo, out_path_bodo)
 
         df1_pd = pd.read_parquet(df1_path)
         out_path_pd = os.path.join(tmp, "out_pd.pq")
-        merge_impl(df1_pd, out_path_pd, False)
+        groupby_impl(df1_pd, out_path_pd)
 
         result_bodo = pd.read_parquet(out_path_bodo)
         result_pd = pd.read_parquet(out_path_pd)
         _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_cpu_to_gpu_exchange(datapath):
     """Test pipelines that transfer data between CPU and GPU"""
     path = datapath("dataframe_library/df1.parquet")
@@ -178,6 +151,7 @@ def test_cpu_to_gpu_exchange(datapath):
         )
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_gpu_to_cpu_exchange(datapath):
     """Test pipelines that transfer data between GPU and CPU"""
     path = datapath("dataframe_library/df1.parquet")
@@ -195,7 +169,38 @@ def test_gpu_to_cpu_exchange(datapath):
     bdf = bd.read_parquet(path)
     assert count_gpu_plan_nodes(bdf._plan) == 1, "Expected GPU node for reading parquet"
     # Force plan execution
-    print(bdf)
+    bdf.execute_plan()
 
     pdf = pd.read_parquet(path)
     _test_equal(pdf, bdf)
+
+
+def test_gpu_join_bloom_filter(datapath):
+    """Test bloom join filter on GPU."""
+    cust_path = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path = datapath("tpch-test_data/parquet/orders.pq")
+
+    def merge_impl(cust_df, orders_df):
+        # Select only a couple keys that can't be filtered out by row-group so that
+        # bloom filter has something to do.
+        cust_filt = cust_df[(cust_df["C_CUSTKEY"] == 3) | (cust_df["C_CUSTKEY"] == 37)]
+        orders_df["price2"] = orders_df["O_TOTALPRICE"] * 2.0
+        return cust_filt.merge(
+            orders_df, how="inner", left_on=["C_CUSTKEY"], right_on=["O_CUSTKEY"]
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cust_bodo = bd.read_parquet(cust_path)
+        orders_bodo = bd.read_parquet(orders_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        merged_bodo = merge_impl(cust_bodo, orders_bodo)
+        merged_bodo.to_parquet(out_path_bodo)
+
+        cust_pd = pd.read_parquet(cust_path)
+        orders_pd = pd.read_parquet(orders_path)
+        out_path_pd = os.path.join(tmp, "out_pd.pq")
+        merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
+
+        result_bodo = pd.read_parquet(out_path_bodo)
+        result_pd = pd.read_parquet(out_path_pd)
+        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
