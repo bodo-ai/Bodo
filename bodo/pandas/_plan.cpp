@@ -1285,7 +1285,6 @@ std::pair<int64_t, PyObject *> execute_plan(
         Executor executor(std::move(plan), out_schema);
         output = executor.ExecutePipelines();
     }
-    std::cout << "Execution complete, processing output..." << std::endl;
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {

@@ -84,7 +84,6 @@ void CudaHashJoin::build_hash_table(
     std::vector<cudf::table_view> build_views;
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
-    std::cout << "Build chunks: " << build_chunks.size() << std::endl;
     for (const auto& chunk : build_chunks) {
         build_views.push_back(chunk->view());
     }
@@ -187,8 +186,6 @@ void CudaHashJoin::FinalizeBuild() {
         }
         std::shared_ptr<arrow::Table> global_stats =
             SyncAndReduceGlobalStats(std::move(local_stats));
-        std::cout << "Global min max stats after join: "
-                  << global_stats->ToString() << std::endl;
         this->min_max_stats.push_back(global_stats);
     }
 
@@ -202,14 +199,10 @@ bool CudaHashJoin::BuildConsumeBatch(
     // TODO: remove unused columns before shuffling to save network bandwidth
     // and GPU memory.
     // Store the incoming build chunk for later finalization
-    std::cout << build_chunk->num_rows() << " rows in incoming build chunk"
-              << std::endl;
     this->build_shuffle_manager.append_batch(
         build_chunk, this->build_key_indices, input_stream_event);
     std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
         build_shuffle_manager.progress(local_is_last);
-    std::cout << "Shuffled build chunks: " << shuffled_build_chunks.size()
-              << std::endl;
     for (auto& chunk : shuffled_build_chunks) {
         this->_build_chunks.emplace_back(std::move(chunk));
     }
