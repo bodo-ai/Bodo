@@ -54,6 +54,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         uint64_t build_total = buildSide.estimated_cardinality * build_row_size;
         uint64_t probe_total = probeSide.estimated_cardinality * probe_row_size;
 
+        char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
+        if (bcast_threshold) {
+            return static_cast<int>(build_total) < std::stoi(bcast_threshold);
+        }
+
         size_t free_bytes = 0;
         size_t total_bytes = 0;
         cudaMemGetInfo(&free_bytes, &total_bytes);
