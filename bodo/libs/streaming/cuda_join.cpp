@@ -227,61 +227,28 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream, bool local_is_last) {
+    bool global_is_last;
+    // Assemble Final Result
+    std::vector<std::unique_ptr<cudf::column>> final_columns;
+    std::shared_ptr<cudf::table> probe_to_select;
+    cudf::table_view selected;
+
     if (is_broadcast_join) {
+        global_is_last = local_is_last;
+
         if (!is_gpu_rank()) {
-            return {nullptr, local_is_last};
+            return {nullptr, global_is_last};
         }
 
         if (probe_chunk->num_rows() == 0 || _join_handle == nullptr) {
             return {empty_table_from_arrow_schema(
                         this->output_schema->ToArrowSchema()),
-                    local_is_last};
+                    global_is_last};
         }
 
-        auto [probe_indices, build_indices] = _join_handle->inner_join(
-            probe_chunk->select(this->probe_key_indices), {}, stream);
+        selected = probe_chunk->select(this->probe_key_indices);
 
-        if (probe_indices->size() == 0) {
-            return {empty_table_from_arrow_schema(
-                        this->output_schema->ToArrowSchema()),
-                    local_is_last};
-        }
-
-        // Create views for the columns we want to keep
-        cudf::table_view probe_kept_view = probe_chunk->select(
-            this->probe_kept_cols.begin(), this->probe_kept_cols.end());
-        cudf::table_view build_kept_view = _build_table->select(
-            this->build_kept_cols.begin(), this->build_kept_cols.end());
-
-        // Create column views of the indices from the indices buffers
-        cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
-                                         probe_indices->size(),
-                                         probe_indices->data(), nullptr, 0);
-
-        cudf::column_view build_idx_view(cudf::data_type{cudf::type_id::INT32},
-                                         build_indices->size(),
-                                         build_indices->data(), nullptr, 0);
-
-        // Materialize the selected rows
-        auto gathered_probe =
-            cudf::gather(probe_kept_view, probe_idx_view,
-                         cudf::out_of_bounds_policy::DONT_CHECK, stream);
-        auto gathered_build =
-            cudf::gather(build_kept_view, build_idx_view,
-                         cudf::out_of_bounds_policy::DONT_CHECK, stream);
-
-        // Assemble Final Result
-        std::vector<std::unique_ptr<cudf::column>> final_columns;
-
-        for (auto& col : gathered_probe->release()) {
-            final_columns.push_back(std::move(col));
-        }
-        for (auto& col : gathered_build->release()) {
-            final_columns.push_back(std::move(col));
-        }
-
-        return {std::make_unique<cudf::table>(std::move(final_columns)),
-                local_is_last};
+        probe_to_select = probe_chunk;
     } else {
         // TODO: remove unused columns before shuffling to save network
         // bandwidth and GPU memory Send local data to appropriate ranks
@@ -292,8 +259,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
             probe_shuffle_manager->progress(local_is_last);
 
-        bool global_is_last =
-            probe_shuffle_manager->sync_is_last(local_is_last);
+        global_is_last = probe_shuffle_manager->sync_is_last(local_is_last);
 
         if (!is_gpu_rank()) {
             return {nullptr, global_is_last};
@@ -320,52 +286,50 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                     global_is_last};
         }
 
-        cudf::table_view selected =
-            coalesced_probe->select(this->probe_key_indices);
+        selected = coalesced_probe->select(this->probe_key_indices);
 
-        auto [probe_indices, build_indices] =
-            _join_handle->inner_join(selected, {}, stream);
-
-        if (probe_indices->size() == 0) {
-            return {empty_table_from_arrow_schema(
-                        this->output_schema->ToArrowSchema()),
-                    global_is_last};
-        }
-
-        // Create views for the columns we want to keep
-        cudf::table_view probe_kept_view = coalesced_probe->select(
-            this->probe_kept_cols.begin(), this->probe_kept_cols.end());
-        cudf::table_view build_kept_view = _build_table->select(
-            this->build_kept_cols.begin(), this->build_kept_cols.end());
-
-        // Create column views of the indices from the indices buffers
-        cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
-                                         probe_indices->size(),
-                                         probe_indices->data(), nullptr, 0);
-
-        cudf::column_view build_idx_view(cudf::data_type{cudf::type_id::INT32},
-                                         build_indices->size(),
-                                         build_indices->data(), nullptr, 0);
-
-        // Materialize the selected rows
-        auto gathered_probe =
-            cudf::gather(probe_kept_view, probe_idx_view,
-                         cudf::out_of_bounds_policy::DONT_CHECK, stream);
-        auto gathered_build =
-            cudf::gather(build_kept_view, build_idx_view,
-                         cudf::out_of_bounds_policy::DONT_CHECK, stream);
-
-        // Assemble Final Result
-        std::vector<std::unique_ptr<cudf::column>> final_columns;
-
-        for (auto& col : gathered_probe->release()) {
-            final_columns.push_back(std::move(col));
-        }
-        for (auto& col : gathered_build->release()) {
-            final_columns.push_back(std::move(col));
-        }
-
-        return {std::make_unique<cudf::table>(std::move(final_columns)),
-                global_is_last};
+        probe_to_select = std::move(coalesced_probe);
     }
+
+    auto [probe_indices, build_indices] =
+        _join_handle->inner_join(selected, {}, stream);
+
+    if (probe_indices->size() == 0) {
+        return {
+            empty_table_from_arrow_schema(this->output_schema->ToArrowSchema()),
+            global_is_last};
+    }
+
+    // Create views for the columns we want to keep
+    cudf::table_view probe_kept_view = probe_to_select->select(
+        this->probe_kept_cols.begin(), this->probe_kept_cols.end());
+    cudf::table_view build_kept_view = _build_table->select(
+        this->build_kept_cols.begin(), this->build_kept_cols.end());
+
+    // Create column views of the indices from the indices buffers
+    cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
+                                     probe_indices->size(),
+                                     probe_indices->data(), nullptr, 0);
+
+    cudf::column_view build_idx_view(cudf::data_type{cudf::type_id::INT32},
+                                     build_indices->size(),
+                                     build_indices->data(), nullptr, 0);
+
+    // Materialize the selected rows
+    auto gathered_probe =
+        cudf::gather(probe_kept_view, probe_idx_view,
+                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
+    auto gathered_build =
+        cudf::gather(build_kept_view, build_idx_view,
+                     cudf::out_of_bounds_policy::DONT_CHECK, stream);
+
+    for (auto& col : gathered_probe->release()) {
+        final_columns.push_back(std::move(col));
+    }
+    for (auto& col : gathered_build->release()) {
+        final_columns.push_back(std::move(col));
+    }
+
+    return {std::make_unique<cudf::table>(std::move(final_columns)),
+            global_is_last};
 }
