@@ -1033,8 +1033,9 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
                     duckdb::make_uniq<duckdb::ConstantFilter>(
                         duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
                         ArrowScalarToDuckDBValue(min));
-                filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                    std::move(min_filter));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(min_filter));
             }
 
             if (max->is_valid) {
@@ -1042,8 +1043,9 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
                     duckdb::make_uniq<duckdb::ConstantFilter>(
                         duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
                         ArrowScalarToDuckDBValue(max));
-                filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                    std::move(max_filter));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(max_filter));
             }
         }
     }
