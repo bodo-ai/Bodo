@@ -48,6 +48,7 @@
 
 #ifdef USE_CUDF
 #include <rmm/cuda_device.hpp>
+#include <rmm/mr/device_memory_resource.hpp>
 #include "cuda_runtime_api.h"
 #endif
 
@@ -1263,10 +1264,15 @@ std::pair<int64_t, PyObject *> execute_plan(
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
     std::optional<rmm::cuda_set_device_raii> device_guard;
+    std::shared_ptr<rmm::mr::device_memory_resource> mr = nullptr;
+    rmm::mr::device_memory_resource *prev_mr = nullptr;
     if (gpu_id.value() != -1) {
         // Set device (resets to previous device when device_guard goes out of
         // scope)
         device_guard.emplace(gpu_id);
+
+        mr = get_gpu_async_memory_resource();
+        prev_mr = cudf::set_current_device_resource(mr.get());
     }
 #endif
 
@@ -1287,6 +1293,13 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 
     std::shared_ptr<table_info> output_table = std::get<0>(output);
+
+#ifdef USE_CUDF
+    if (prev_mr) {
+        // Reset device resource for GPU ranks.
+        cudf::set_current_device_resource(prev_mr);
+    }
+#endif
 
     // Parquet write doesn't return data
     if (output_table == nullptr) {

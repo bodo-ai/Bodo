@@ -17,6 +17,7 @@ bool g_use_async = false;
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
 #include "../libs/_distributed.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_utils.h"
@@ -151,10 +152,20 @@ void GpuTableManager::do_shuffle() {
 
 // Similar to CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/5be77dc4ee731f674f679a4ff6f60ac2f231d326/bodo/libs/streaming/_shuffle.cpp#L688
-std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress(
+std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
     const bool is_last) {
     if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
         return {};
+    }
+
+    // Short circuit shuffle if running on a single GPU
+    if (n_ranks == 1) {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& shuffle_info : this->tables_to_shuffle) {
+            out_tables.push_back(shuffle_info.table);
+        }
+        this->tables_to_shuffle.clear();
+        return out_tables;
     }
 
     // recv data first, but avoid receiving too much data at once
@@ -162,7 +173,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuTableManager::progress(
         this->shuffle_irecv();
     }
 
-    std::vector<std::unique_ptr<cudf::table>> received_tables =
+    std::vector<std::shared_ptr<cudf::table>> received_tables =
         this->consume_completed_recvs();
 
     // Remove send state if recv done
@@ -251,9 +262,9 @@ void GpuTableManager::shuffle_irecv() {
     }
 }
 
-std::vector<std::unique_ptr<cudf::table>>
+std::vector<std::shared_ptr<cudf::table>>
 GpuTableManager::consume_completed_recvs() {
-    std::vector<std::unique_ptr<cudf::table>> out_tables;
+    std::vector<std::shared_ptr<cudf::table>> out_tables;
     std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
         auto [done, table] = s.recvDone(mpi_comm);
         if (done) {
@@ -409,7 +420,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
     this->recv_requests.push_back(data_recv_req);
 }
 
-std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
+std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
     MPI_Comm shuffle_comm) {
     if (recv_requests.empty()) {
         // Try receiving the length again and see if we can populate the data
@@ -436,10 +447,10 @@ std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
     cudf::table_view table_view = cudf::unpack(packed_recv_column);
 
     // TODO(ehsan): avoid copy if possible
-    std::unique_ptr<cudf::table> shuffle_res =
-        std::make_unique<cudf::table>(table_view, stream);
+    std::shared_ptr<cudf::table> shuffle_res =
+        std::make_shared<cudf::table>(table_view, stream);
 
-    return std::make_pair(true, std::move(shuffle_res));
+    return std::make_pair(true, shuffle_res);
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
@@ -584,6 +595,11 @@ uint64_t GpuMpiManager::allreduce(uint64_t local) {
 bool is_gpu_rank() {
     static bool is_gpu_rank = (get_gpu_id().value() != -1);
     return is_gpu_rank;
+}
+
+std::shared_ptr<rmm::mr::device_memory_resource>
+get_gpu_async_memory_resource() {
+    return std::make_shared<rmm::mr::cuda_async_memory_resource>();
 }
 
 #endif  // USE_CUDF

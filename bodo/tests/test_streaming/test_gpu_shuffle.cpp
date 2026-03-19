@@ -134,7 +134,7 @@ static bodo::tests::suite tests([] {
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
             manager.append_batch(input_ptr, {0}, se);
 
-            std::vector<std::unique_ptr<cudf::table>> received_tables;
+            std::vector<std::shared_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
             do {
@@ -201,7 +201,7 @@ static bodo::tests::suite tests([] {
             std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
             manager.append_batch(input_ptr, {0}, se);
 
-            std::vector<std::unique_ptr<cudf::table>> received_tables;
+            std::vector<std::shared_ptr<cudf::table>> received_tables;
 
             // Pump the progress loop
             do {

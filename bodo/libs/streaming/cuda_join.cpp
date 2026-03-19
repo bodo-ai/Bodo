@@ -205,7 +205,7 @@ bool CudaHashJoin::BuildConsumeBatch(
     if (is_broadcast_join) {
         this->build_broadcast_manager->broadcast_table(build_chunk,
                                                        input_stream_event);
-        std::vector<std::unique_ptr<cudf::table>> received_build_chunks =
+        std::vector<std::shared_ptr<cudf::table>> received_build_chunks =
             build_broadcast_manager->progress(local_is_last);
         for (auto& chunk : received_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
@@ -214,7 +214,7 @@ bool CudaHashJoin::BuildConsumeBatch(
     } else {
         this->build_shuffle_manager->append_batch(
             build_chunk, this->build_key_indices, input_stream_event);
-        std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
+        std::vector<std::shared_ptr<cudf::table>> shuffled_build_chunks =
             build_shuffle_manager->progress(local_is_last);
         for (auto& chunk : shuffled_build_chunks) {
             this->_build_chunks.emplace_back(std::move(chunk));
@@ -256,8 +256,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             probe_chunk, this->probe_key_indices, input_stream_event);
 
         // Receive data destined for this rank
-        std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
-            probe_shuffle_manager->progress(local_is_last);
+        std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks =
+            probe_shuffle_manager.progress(local_is_last);
 
         global_is_last = probe_shuffle_manager->sync_is_last(local_is_last);
 
