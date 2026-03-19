@@ -17,6 +17,7 @@ bool g_use_async = false;
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
 #include "../libs/_distributed.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_utils.h"
@@ -508,6 +509,11 @@ uint64_t GpuMpiManager::allreduce(uint64_t local) {
 bool is_gpu_rank() {
     static bool is_gpu_rank = (get_gpu_id().value() != -1);
     return is_gpu_rank;
+}
+
+std::shared_ptr<rmm::mr::device_memory_resource>
+get_gpu_async_memory_resource() {
+    return std::make_shared<rmm::mr::cuda_async_memory_resource>();
 }
 
 #endif  // USE_CUDF
