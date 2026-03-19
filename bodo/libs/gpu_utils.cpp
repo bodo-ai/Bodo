@@ -72,7 +72,7 @@ void GpuShuffleManager::do_shuffle() {
 
     // TODO[BSE-5347]: debug stream and event handling and remove device sync
     // before MPI calls
-    cudaDeviceSynchronize();
+    CHECK_CUDA(cudaDeviceSynchronize());
 
     // Hash partition the table
     auto [partitioned_table, partition_start_rows] = hash_partition_table(
@@ -89,7 +89,7 @@ void GpuShuffleManager::do_shuffle() {
         cudf::contiguous_split(partitioned_table->view(), splits, stream);
     // Make sure GPU buffers are ready before passing to MPI
     // TODO(ehsan): move buffer creation to append_batch() and do asynchronously
-    cudaStreamSynchronize(stream);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     int start_tag = get_next_available_tag(this->inflight_tags);
     if (start_tag == -1) {
@@ -324,7 +324,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
         std::make_unique<rmm::device_buffer>(data_size, stream);
     // Make sure GPU buffers are ready before passing to MPI
     // TODO(ehsan): make async?
-    cudaStreamSynchronize(stream);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // recv metadata
     MPI_Request recv_req;
@@ -484,7 +484,7 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     if (local_size > 0) {
         // TODO[BSE-5347]: debug stream and event handling and remove device
         // sync before MPI calls
-        cudaDeviceSynchronize();
+        CHECK_CUDA(cudaDeviceSynchronize());
         for (int dst = 0; dst < n_ranks; ++dst) {
             CHECK_MPI(
                 MPI_Issend(local_buf.data(), static_cast<int>(local_size),
