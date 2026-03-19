@@ -83,6 +83,9 @@ void GpuShuffleManager::do_shuffle() {
     // Pack the tables for sending
     std::vector<cudf::packed_table> packed_tables =
         cudf::contiguous_split(partitioned_table->view(), splits, stream);
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(ehsan): move buffer creation to append_batch() and do asynchronously
+    cudaStreamSynchronize(stream);
 
     int start_tag = get_next_available_tag(this->inflight_tags);
     if (start_tag == -1) {
