@@ -482,6 +482,9 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
 
     // Post sends: send this rank's buffer to every rank (including self)
     if (local_size > 0) {
+        // TODO[BSE-5347]: debug stream and event handling and remove device
+        // sync before MPI calls
+        cudaDeviceSynchronize();
         for (int dst = 0; dst < n_ranks; ++dst) {
             CHECK_MPI(
                 MPI_Issend(local_buf.data(), static_cast<int>(local_size),
