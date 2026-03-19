@@ -322,6 +322,9 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
         std::make_unique<std::vector<uint8_t>>(metadata_size);
     this->packed_recv_buffer =
         std::make_unique<rmm::device_buffer>(data_size, stream);
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(ehsan): make async?
+    cudaStreamSynchronize(stream);
 
     // recv metadata
     MPI_Request recv_req;
