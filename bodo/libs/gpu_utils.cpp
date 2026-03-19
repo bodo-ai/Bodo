@@ -116,6 +116,7 @@ std::vector<cudf::packed_table> make_replicas(cudf::table_view const& t,
 std::vector<cudf::packed_table>
 GpuTableBroadcastManager::getNextPerRankTables() {
     std::vector<cudf::packed_table> packed_tables;
+    packed_tables.reserve(1);
     if (!tableReadyToSend()) {
         throw std::runtime_error("getNextPerRankTables has no data");
     }
@@ -123,14 +124,18 @@ GpuTableBroadcastManager::getNextPerRankTables() {
     BroadcastTableInfo broadcast_table_info = this->tables_to_broadcast.back();
     this->tables_to_broadcast.pop_back();
 
-    packed_tables =
-        make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
+    // packed_tables =
+    //     make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
+    cudf::table_view tv = broadcast_table_info.table->view();
+    // By doing only one return value signifies a broadcast.
+    packed_tables.emplace_back(tv, cudf::pack(tv, stream));
     return packed_tables;
 }
 
 void GpuTableManager::do_shuffle() {
     std::vector<cudf::packed_table> packed_tables = getNextPerRankTables();
-    assert(packed_tables.size() == static_cast<size_t>(n_ranks));
+    assert(packed_tables.size() == static_cast<size_t>(n_ranks) ||
+           packed_tables.size() == 1);
 
     int start_tag = get_next_available_tag(this->inflight_tags);
     if (start_tag == -1) {
@@ -266,20 +271,42 @@ GpuShuffleSendState::GpuShuffleSendState(
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
       send_metadata_sizes(3 * n_ranks, 0) {
-    // Prepare send buffers
-    for (size_t dest_rank = 0; dest_rank < packed_tables.size(); dest_rank++) {
-        cudf::packed_table& table = packed_tables[dest_rank];
-        packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
-        metadata_send_buffers[dest_rank] =
-            std::make_unique<std::vector<uint8_t>>(
-                std::move(*table.data.metadata));
+    bool broadcast;
+    if (packed_tables.size() == 1) {
+        broadcast = true;
+        std::cout << "Will broadcast" << std::endl;
+        cudf::packed_table& table = packed_tables[0];
+        packed_send_buffers[0] = std::move(table.data.gpu_data);
+        metadata_send_buffers[0] = std::make_unique<std::vector<uint8_t>>(
+            std::move(*table.data.metadata));
 
-        send_metadata_sizes[3 * dest_rank + 0] =
-            static_cast<uint64_t>(starting_msg_tag);
-        send_metadata_sizes[3 * dest_rank + 1] =
-            metadata_send_buffers[dest_rank]->size();
-        send_metadata_sizes[3 * dest_rank + 2] =
-            packed_send_buffers[dest_rank]->size();
+        // Prepare send buffers
+        for (size_t dest_rank = 0; dest_rank < n_ranks; dest_rank++) {
+            send_metadata_sizes[3 * dest_rank + 0] =
+                static_cast<uint64_t>(starting_msg_tag);
+            send_metadata_sizes[3 * dest_rank + 1] =
+                metadata_send_buffers[0]->size();
+            send_metadata_sizes[3 * dest_rank + 2] =
+                packed_send_buffers[0]->size();
+        }
+    } else {
+        broadcast = false;
+        // Prepare send buffers
+        for (size_t dest_rank = 0; dest_rank < packed_tables.size();
+             dest_rank++) {
+            cudf::packed_table& table = packed_tables[dest_rank];
+            packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
+            metadata_send_buffers[dest_rank] =
+                std::make_unique<std::vector<uint8_t>>(
+                    std::move(*table.data.metadata));
+
+            send_metadata_sizes[3 * dest_rank + 0] =
+                static_cast<uint64_t>(starting_msg_tag);
+            send_metadata_sizes[3 * dest_rank + 1] =
+                metadata_send_buffers[dest_rank]->size();
+            send_metadata_sizes[3 * dest_rank + 2] =
+                packed_send_buffers[dest_rank]->size();
+        }
     }
 
     // Send sizes
@@ -296,11 +323,12 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
-        CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
-                             this->metadata_send_buffers[dest_rank]->size(),
-                             MPI_UINT8_T, dest_rank, starting_msg_tag,
-                             shuffle_comm, &req),
-                  "GpuShuffleSendState: MPI_Issend for metadata failed:");
+        CHECK_MPI(
+            MPI_Issend(
+                this->metadata_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                this->metadata_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                MPI_UINT8_T, dest_rank, starting_msg_tag, shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for metadata failed:");
         this->send_requests.push_back(req);
     }
 
@@ -309,9 +337,10 @@ GpuShuffleSendState::GpuShuffleSendState(
          dest_rank++) {
         MPI_Request req;
         CHECK_MPI(
-            MPI_Issend(packed_send_buffers[dest_rank]->data(),
-                       packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
-                       dest_rank, starting_msg_tag + 1, shuffle_comm, &req),
+            MPI_Issend(packed_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                       packed_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                       MPI_UINT8_T, dest_rank, starting_msg_tag + 1,
+                       shuffle_comm, &req),
             "GpuShuffleSendState: MPI_Issend for data failed:");
         this->send_requests.push_back(req);
     }
