@@ -257,7 +257,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
         // Receive data destined for this rank
         std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks =
-            probe_shuffle_manager.progress(local_is_last);
+            probe_shuffle_manager->progress(local_is_last);
 
         global_is_last = probe_shuffle_manager->sync_is_last(local_is_last);
 

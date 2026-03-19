@@ -306,6 +306,7 @@ class GpuTableManager : public GpuMpiManager {
     virtual std::vector<cudf::packed_table> getNextPerRankTables() = 0;
     virtual bool hasMoreTables() = 0;
     virtual bool tableReadyToSend() = 0;
+    virtual std::vector<std::shared_ptr<cudf::table>> ownAndClear() = 0;
 
     void shuffle_irecv();
 
@@ -362,6 +363,15 @@ class GpuShuffleManager : public GpuTableManager {
                       std::shared_ptr<StreamAndEvent> se);
 
     bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& shuffle_info : this->tables_to_shuffle) {
+            out_tables.push_back(shuffle_info.table);
+        }
+        this->tables_to_shuffle.clear();
+        return out_tables;
+    }
 };
 
 class GpuTableBroadcastManager : public GpuTableManager {
@@ -382,6 +392,15 @@ class GpuTableBroadcastManager : public GpuTableManager {
                          std::shared_ptr<StreamAndEvent> se);
 
     bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& shuffle_info : this->tables_to_broadcast) {
+            out_tables.push_back(shuffle_info.table);
+        }
+        this->tables_to_broadcast.clear();
+        return out_tables;
+    }
 };
 
 /**

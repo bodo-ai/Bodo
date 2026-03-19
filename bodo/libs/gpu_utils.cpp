@@ -101,19 +101,6 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables() {
     return packed_tables;
 }
 
-std::vector<cudf::packed_table> make_replicas(cudf::table_view const& t,
-                                              std::size_t N,
-                                              rmm::cuda_stream_view stream) {
-    // replicate N times
-    std::vector<cudf::packed_table> out;
-    out.reserve(N);
-    for (std::size_t i = 0; i < N; ++i) {
-        out.emplace_back(t, cudf::pack(t, stream));
-    }
-
-    return out;
-}
-
 std::vector<cudf::packed_table>
 GpuTableBroadcastManager::getNextPerRankTables() {
     std::vector<cudf::packed_table> packed_tables;
@@ -125,8 +112,6 @@ GpuTableBroadcastManager::getNextPerRankTables() {
     BroadcastTableInfo broadcast_table_info = this->tables_to_broadcast.back();
     this->tables_to_broadcast.pop_back();
 
-    // packed_tables =
-    //     make_replicas(broadcast_table_info.table->view(), n_ranks, stream);
     cudf::table_view tv = broadcast_table_info.table->view();
     // By doing only one return value signifies a broadcast.
     packed_tables.emplace_back(tv, cudf::pack(tv, stream));
@@ -160,12 +145,7 @@ std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
 
     // Short circuit shuffle if running on a single GPU
     if (n_ranks == 1) {
-        std::vector<std::shared_ptr<cudf::table>> out_tables;
-        for (auto& shuffle_info : this->tables_to_shuffle) {
-            out_tables.push_back(shuffle_info.table);
-        }
-        this->tables_to_shuffle.clear();
-        return out_tables;
+        return ownAndClear();
     }
 
     // recv data first, but avoid receiving too much data at once
