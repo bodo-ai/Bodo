@@ -55,28 +55,27 @@ struct CudaHashJoin {
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
-     * of               a RIGHT or FULL OUTER join.
+     * of a RIGHT or FULL OUTER join.
      *
      * On the last global probe batch, gathers all build rows that were never
-     * matched               (tracked via @c unmatched_build_rows), pairs them
-     * with               null-filled probe-side               columns, and
-     * concatenates them               onto @p table.               Resets @c
-     * unmatched_build_rows               to @c nullptr               after
-     * emission to prevent               duplicate output.
+     * matched (tracked via @c unmatched_build_rows), pairs them with
+     * null-filled probe-side columns, and concatenates them onto @p table.
+     * Resets @c unmatched_build_rows to @c nullptr after emission to prevent
+     * duplicate output.
      *
      * Returns @p table unmodified if @p global_is_last is @c false, the join
-     * type               is not RIGHT or OUTER, or @c unmatched_build_rows is
+     * type is not RIGHT or OUTER, or @c unmatched_build_rows is
      * @c nullptr.
      *
-     * @param table          Accumulated join output for this batch; unmatched
+     * @param table Accumulated join output for this batch; unmatched
      * rows are appended.
      * @param global_is_last True if all ranks have finished producing probe
      * data.
-     * @param stream         CUDA stream on which device operations are
+     * @param stream CUDA stream on which device operations are
      * enqueued.
      *
      * @return The input @p table with unmatched build rows appended, or
-     * unmodified               if the emission conditions are not met.
+     * unmodified if the emission conditions are not met.
      */
     std::unique_ptr<cudf::table> produce_unmatched_build_rows(
         std::unique_ptr<cudf::table> table, bool global_is_last,
