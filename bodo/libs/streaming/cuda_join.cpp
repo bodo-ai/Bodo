@@ -201,7 +201,7 @@ bool CudaHashJoin::BuildConsumeBatch(
     // Store the incoming build chunk for later finalization
     this->build_shuffle_manager.append_batch(
         build_chunk, this->build_key_indices, input_stream_event);
-    std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
+    std::vector<std::shared_ptr<cudf::table>> shuffled_build_chunks =
         build_shuffle_manager.progress(local_is_last);
     for (auto& chunk : shuffled_build_chunks) {
         this->_build_chunks.emplace_back(std::move(chunk));
@@ -220,7 +220,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                                        input_stream_event);
 
     //    Receive data destined for this rank
-    std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
+    std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks =
         probe_shuffle_manager.progress(local_is_last);
 
     bool global_is_last =
