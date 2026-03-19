@@ -1219,6 +1219,7 @@ def test_project_after_filter(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
 def test_merge(how):
     """Simple test for DataFrame merge."""

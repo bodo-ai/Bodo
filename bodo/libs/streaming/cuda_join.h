@@ -1,11 +1,13 @@
 #pragma once
 #include <arrow/scalar.h>
+#include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
 #include "../gpu_bloom_filter.h"
 #include "../gpu_utils.h"
+#include "duckdb/common/enums/join_type.hpp"
 
 struct CudaHashJoin {
    private:
@@ -43,7 +45,41 @@ struct CudaHashJoin {
     std::shared_ptr<bodo::Schema> build_table_schema;
     std::shared_ptr<bodo::Schema> probe_table_schema;
 
+    duckdb::JoinType join_type;
+
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
+
+    std::unique_ptr<cudf::column> unmatched_build_rows =
+        nullptr;  // Used for right/outer joins to track which
+                  // build rows have been matched
+
+    /**
+     * @brief Appends unmatched build-side rows to the output on the final batch
+     * of a RIGHT or FULL OUTER join.
+     *
+     * On the last global probe batch, gathers all build rows that were never
+     * matched (tracked via @c unmatched_build_rows), pairs them with
+     * null-filled probe-side columns, and concatenates them onto @p table.
+     * Resets @c unmatched_build_rows to @c nullptr after emission to prevent
+     * duplicate output.
+     *
+     * Returns @p table unmodified if @p global_is_last is @c false, the join
+     * type is not RIGHT or OUTER, or @c unmatched_build_rows is
+     * @c nullptr.
+     *
+     * @param table Accumulated join output for this batch; unmatched
+     * rows are appended.
+     * @param global_is_last True if all ranks have finished producing probe
+     * data.
+     * @param stream CUDA stream on which device operations are
+     * enqueued.
+     *
+     * @return The input @p table with unmatched build rows appended, or
+     * unmodified if the emission conditions are not met.
+     */
+    std::unique_ptr<cudf::table> produce_unmatched_build_rows(
+        std::unique_ptr<cudf::table> table, bool global_is_last,
+        rmm::cuda_stream_view stream);
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -53,6 +89,7 @@ struct CudaHashJoin {
                  std::vector<int64_t> build_kept_cols,
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
+                 duckdb::JoinType join_type,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL)
         : output_schema(std::move(output_schema)),
           build_key_indices(std::move(build_keys)),
@@ -61,7 +98,9 @@ struct CudaHashJoin {
           probe_kept_cols(std::move(probe_kept_cols)),
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
+          join_type(join_type),
           null_equality(null_eq) {}
+
     CudaHashJoin() = default;
     /**
      * @brief Finalize the build phase by constructing the hash table
