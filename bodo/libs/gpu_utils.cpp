@@ -35,7 +35,8 @@ GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
+    // TODO: Use async streams for shuffle when g_use_async is true
+    this->stream = cudf::get_default_stream();
 }
 
 GpuMpiManager::~GpuMpiManager() {
@@ -562,12 +563,16 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     std::vector<MPI_Request> all_reqs;
     all_reqs.reserve(2 * n_ranks);
 
-    for (auto& r : recv_reqs)
-        if (r != MPI_REQUEST_NULL)
+    for (auto& r : recv_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
-    for (auto& r : send_reqs)
-        if (r != MPI_REQUEST_NULL)
+        }
+    }
+    for (auto& r : send_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
+        }
+    }
 
     CHECK_MPI(MPI_Waitall(static_cast<int>(all_reqs.size()), all_reqs.data(),
                           MPI_STATUSES_IGNORE),
