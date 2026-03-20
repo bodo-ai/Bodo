@@ -116,20 +116,24 @@ void CudaHashJoin::build_hash_table(
         this->_build_bloom_filter = build_empty_bloom_filter(
             build_total_size, FALSE_POSITIVE_RATE, cudf::get_default_stream());
     }
-    // Get all GPU nodes' bloom filters.
-    std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
-        gather_blooms.all_gather_device_buffers(
-            this->_build_bloom_filter->bitset, cudf::get_default_stream());
-    // AtomicOR them all together.
-    for (auto& one_bloom : all_blooms) {
-        if (one_bloom) {
-            size_t one_bloom_size = one_bloom->size();
-            if (one_bloom_size % 8 != 0) {
-                throw std::runtime_error(
-                    "Received bloom filter that isn't a multiple of 64-bits");
+
+    if (!is_broadcast_join) {
+        // Get all GPU nodes' bloom filters.
+        std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
+            gather_blooms.all_gather_device_buffers(
+                this->_build_bloom_filter->bitset, cudf::get_default_stream());
+        // AtomicOR them all together.
+        for (auto& one_bloom : all_blooms) {
+            if (one_bloom) {
+                size_t one_bloom_size = one_bloom->size();
+                if (one_bloom_size % 8 != 0) {
+                    throw std::runtime_error(
+                        "Received bloom filter that isn't a multiple of "
+                        "64-bits");
+                }
+                mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
+                                 cudf::get_default_stream());
             }
-            mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
-                             cudf::get_default_stream());
         }
     }
 }
@@ -145,8 +149,7 @@ void CudaHashJoin::runtime_filter(
 }
 
 void CudaHashJoin::FinalizeBuild() {
-    // Build the hash table if we have a gpu assigned to us
-    if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL) {
+    if (is_gpu_rank()) {
         this->build_hash_table(this->_build_chunks);
     }
 
@@ -155,8 +158,7 @@ void CudaHashJoin::FinalizeBuild() {
 
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
-        if (this->build_shuffle_manager.get_mpi_comm() != MPI_COMM_NULL &&
-            this->_build_table->num_rows()) {
+        if (is_gpu_rank() && this->_build_table->num_rows()) {
             auto [min, max] =
                 cudf::minmax(this->_build_table->get_column(col_idx).view());
             std::vector<std::unique_ptr<cudf::column>> columns;
@@ -191,9 +193,13 @@ void CudaHashJoin::FinalizeBuild() {
                      build_table_arrow_schema->field(col_idx)->type(), 1)
                      .ValueOrDie()});
         }
-        std::shared_ptr<arrow::Table> global_stats =
-            SyncAndReduceGlobalStats(std::move(local_stats));
-        this->min_max_stats.push_back(global_stats);
+        if (is_broadcast_join) {
+            this->min_max_stats.push_back(std::move(local_stats));
+        } else {
+            std::shared_ptr<arrow::Table> global_stats =
+                SyncAndReduceGlobalStats(std::move(local_stats));
+            this->min_max_stats.push_back(global_stats);
+        }
     }
 
     // Clear build chunks to free memory
@@ -273,67 +279,104 @@ std::unique_ptr<cudf::table> CudaHashJoin::produce_unmatched_build_rows(
 bool CudaHashJoin::BuildConsumeBatch(
     std::shared_ptr<cudf::table> build_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event, bool local_is_last) {
-    // TODO: remove unused columns before shuffling to save network bandwidth
-    // and GPU memory.
-    // Store the incoming build chunk for later finalization
-    this->build_shuffle_manager.append_batch(
-        build_chunk, this->build_key_indices, input_stream_event);
-    std::vector<std::unique_ptr<cudf::table>> shuffled_build_chunks =
-        build_shuffle_manager.progress(local_is_last);
-    for (auto& chunk : shuffled_build_chunks) {
-        this->_build_chunks.emplace_back(std::move(chunk));
+    if (is_broadcast_join) {
+        this->build_broadcast_manager->broadcast_table(build_chunk,
+                                                       input_stream_event);
+        std::vector<std::shared_ptr<cudf::table>> received_build_chunks =
+            build_broadcast_manager->progress(local_is_last);
+        for (auto& chunk : received_build_chunks) {
+            this->_build_chunks.emplace_back(std::move(chunk));
+        }
+        return this->build_broadcast_manager->sync_is_last(local_is_last);
+    } else {
+        this->build_shuffle_manager->append_batch(
+            build_chunk, this->build_key_indices, input_stream_event);
+        std::vector<std::shared_ptr<cudf::table>> shuffled_build_chunks =
+            build_shuffle_manager->progress(local_is_last);
+        for (auto& chunk : shuffled_build_chunks) {
+            this->_build_chunks.emplace_back(std::move(chunk));
+        }
+        return this->build_shuffle_manager->sync_is_last(local_is_last);
     }
-
-    return this->build_shuffle_manager.sync_is_last(local_is_last);
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     const std::shared_ptr<cudf::table>& probe_chunk,
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream, bool local_is_last) {
-    // TODO: remove unused columns before shuffling to save network bandwidth
-    // and GPU memory Send local data to appropriate ranks
-    probe_shuffle_manager.append_batch(probe_chunk, this->probe_key_indices,
-                                       input_stream_event);
+    bool global_is_last;
+    // Assemble Final Result
+    std::vector<std::unique_ptr<cudf::column>> final_columns;
+    std::shared_ptr<cudf::table> probe_to_select;
+    cudf::table_view selected;
 
-    //    Receive data destined for this rank
-    std::vector<std::unique_ptr<cudf::table>> shuffled_probe_chunks =
-        probe_shuffle_manager.progress(local_is_last);
+    if (is_broadcast_join) {
+        // In broadcast join mode, we don't need to wait for other workers to
+        // send probe data to us and that is the only reason that there is a
+        // need for a global check in the non-broadcast section.  In broadcast
+        // mode, if this is the last batch for this worker then we set the
+        // global_is_last flag just so that the below code will finish and
+        // allow this operator to terminate.
+        global_is_last = local_is_last;
 
-    bool global_is_last =
-        this->probe_shuffle_manager.sync_is_last(local_is_last);
+        if (!is_gpu_rank()) {
+            return {nullptr, global_is_last};
+        }
 
-    if (!is_gpu_rank()) {
-        return {nullptr, global_is_last};
-    }
-    if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr) {
-        return {produce_unmatched_build_rows(
-                    empty_table_from_arrow_schema(
+        if (probe_chunk->num_rows() == 0 || _join_handle == nullptr) {
+            return {empty_table_from_arrow_schema(
                         this->output_schema->ToArrowSchema()),
-                    global_is_last, stream),
-                global_is_last};
-    }
+                    global_is_last};
+        }
 
-    // Concatenate all incoming chunks into one contiguous table and join
-    // against it
-    std::vector<cudf::table_view> probe_views;
-    probe_views.reserve(shuffled_probe_chunks.size());
-    for (const auto& chunk : shuffled_probe_chunks) {
-        probe_views.push_back(chunk->view());
-    }
-    std::unique_ptr<cudf::table> coalesced_probe =
-        cudf::concatenate(probe_views, stream);
+        selected = probe_chunk->select(this->probe_key_indices);
 
-    if (coalesced_probe->num_rows() == 0) {
-        return {produce_unmatched_build_rows(
-                    empty_table_from_arrow_schema(
-                        this->output_schema->ToArrowSchema()),
-                    global_is_last, stream),
-                global_is_last};
-    }
+        probe_to_select = probe_chunk;
+    } else {
+        // TODO: remove unused columns before shuffling to save network
+        // bandwidth and GPU memory Send local data to appropriate ranks
+        probe_shuffle_manager->append_batch(
+            probe_chunk, this->probe_key_indices, input_stream_event);
 
-    cudf::table_view selected =
-        coalesced_probe->select(this->probe_key_indices);
+        // Receive data destined for this rank
+        std::vector<std::shared_ptr<cudf::table>> shuffled_probe_chunks =
+            probe_shuffle_manager->progress(local_is_last);
+
+        global_is_last = probe_shuffle_manager->sync_is_last(local_is_last);
+
+        if (!is_gpu_rank()) {
+            return {nullptr, global_is_last};
+        }
+        if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr) {
+            return {produce_unmatched_build_rows(
+                        empty_table_from_arrow_schema(
+                            this->output_schema->ToArrowSchema()),
+                        global_is_last, stream),
+                    global_is_last};
+        }
+
+        // Concatenate all incoming chunks into one contiguous table and join
+        // against it
+        std::vector<cudf::table_view> probe_views;
+        probe_views.reserve(shuffled_probe_chunks.size());
+        for (const auto& chunk : shuffled_probe_chunks) {
+            probe_views.push_back(chunk->view());
+        }
+        std::unique_ptr<cudf::table> coalesced_probe =
+            cudf::concatenate(probe_views, stream);
+
+        if (coalesced_probe->num_rows() == 0) {
+            return {produce_unmatched_build_rows(
+                        empty_table_from_arrow_schema(
+                            this->output_schema->ToArrowSchema()),
+                        global_is_last, stream),
+                    global_is_last};
+        }
+
+        selected = coalesced_probe->select(this->probe_key_indices);
+
+        probe_to_select = std::move(coalesced_probe);
+    }
 
     std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
         build_indices;
@@ -361,7 +404,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     }
 
     // Create views for the columns we want to keep
-    cudf::table_view probe_kept_view = coalesced_probe->select(
+    cudf::table_view probe_kept_view = probe_to_select->select(
         this->probe_kept_cols.begin(), this->probe_kept_cols.end());
     cudf::table_view build_kept_view = _build_table->select(
         this->build_kept_cols.begin(), this->build_kept_cols.end());
@@ -396,9 +439,6 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     auto gathered_build =
         cudf::gather(build_kept_view, build_idx_view, oob_policy, stream);
 
-    // Assemble Final Result
-    std::vector<std::unique_ptr<cudf::column>> final_columns;
-
     for (auto& col : gathered_probe->release()) {
         final_columns.push_back(std::move(col));
     }
@@ -410,5 +450,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     output_table = this->produce_unmatched_build_rows(std::move(output_table),
                                                       global_is_last, stream);
-    return {std::move(output_table), global_is_last};
+    return {produce_unmatched_build_rows(std::move(output_table),
+                                         global_is_last, stream),
+            global_is_last};
 }

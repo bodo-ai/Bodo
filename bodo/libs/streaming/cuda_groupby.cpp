@@ -141,7 +141,7 @@ bool CudaGroupbyState::build_consume_batch(
     }
 
     // Give shuffler a chance to receive chunks.
-    std::vector<std::unique_ptr<cudf::table>> shuffled_merge_chunks =
+    std::vector<std::shared_ptr<cudf::table>> shuffled_merge_chunks =
         merge_shuffler.progress(is_last);
 
     bool global_is_last = this->merge_shuffler.sync_is_last(is_last);
