@@ -270,7 +270,6 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
-        // calling MPI_Issend
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[dest_rank]->data(),
                        packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
