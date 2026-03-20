@@ -473,7 +473,7 @@ get_gpu_async_memory_resource();
 // Empty implementation when CUDF is not available
 class GpuShuffleManager {
    public:
-    explicit GpuTableManager() = default;
+    explicit GpuShuffleManager() = default;
     bool is_available() const { return false; }
 };
 #endif
