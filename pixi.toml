@@ -271,6 +271,9 @@ pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
 
+# benchmark deps
+[feature.cudf.pypi-dependencies]
+linetimer = "*"
 
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
