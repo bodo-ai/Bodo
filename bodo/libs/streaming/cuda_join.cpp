@@ -142,7 +142,7 @@ void CudaHashJoin::runtime_filter(
 }
 
 void CudaHashJoin::FinalizeBuild() {
-    if (hasComm()) {
+    if (is_gpu_rank()) {
         this->build_hash_table(this->_build_chunks);
     }
 
