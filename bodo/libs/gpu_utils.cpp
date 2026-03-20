@@ -76,7 +76,9 @@ void GpuTableBroadcastManager::broadcast_table(
     this->tables_to_broadcast.emplace_back(table, se->event);
 }
 
-std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables() {
+std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    do_broadcast = false;
     std::vector<cudf::packed_table> packed_tables;
     if (!tableReadyToSend()) {
         throw std::runtime_error("getNextPerRankTables has no data");
@@ -101,8 +103,9 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables() {
     return packed_tables;
 }
 
-std::vector<cudf::packed_table>
-GpuTableBroadcastManager::getNextPerRankTables() {
+std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    do_broadcast = true;
     std::vector<cudf::packed_table> packed_tables;
     packed_tables.reserve(1);
     if (!tableReadyToSend()) {
@@ -119,9 +122,12 @@ GpuTableBroadcastManager::getNextPerRankTables() {
 }
 
 void GpuTableManager::do_shuffle() {
-    std::vector<cudf::packed_table> packed_tables = getNextPerRankTables();
-    assert(packed_tables.size() == static_cast<size_t>(n_ranks) ||
-           packed_tables.size() == 1);
+    bool do_broadcast;
+    std::vector<cudf::packed_table> packed_tables =
+        getNextPerRankTables(do_broadcast);
+    assert(do_broadcast ||
+           packed_tables.size() == static_cast<size_t>(n_ranks));
+    assert(!do_broadcast || packed_tables.size() == 1);
 
     int start_tag = get_next_available_tag(this->inflight_tags);
     if (start_tag == -1) {
@@ -131,7 +137,8 @@ void GpuTableManager::do_shuffle() {
     }
 
     this->send_states.emplace_back(std::move(packed_tables), start_tag,
-                                   mpi_comm, static_cast<size_t>(n_ranks));
+                                   mpi_comm, static_cast<size_t>(n_ranks),
+                                   do_broadcast);
     this->inflight_tags.insert(start_tag);
 }
 
@@ -257,14 +264,19 @@ GpuTableManager::consume_completed_recvs() {
 
 GpuShuffleSendState::GpuShuffleSendState(
     std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
-    MPI_Comm shuffle_comm, size_t n_ranks)
+    MPI_Comm shuffle_comm, size_t n_ranks, bool broadcast)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
       send_metadata_sizes(3 * n_ranks, 0) {
-    bool broadcast;
-    if (packed_tables.size() == 1) {
-        broadcast = true;
+    // This constructor can operate in two modes.  If the broadcast flag
+    // isn't set then it expects one packed_table per rank and sends those
+    // tables to the corresponding ranks.  If broadcast mode is set then
+    // only one entry is expected in the packed_tables and that entry is
+    // sent to all ranks.  This way we don't duplicate the table/memory
+    // unnecessarily.
+    if (broadcast) {
+        assert(packed_tables.size() == 1);
         cudf::packed_table& table = packed_tables[0];
         packed_send_buffers[0] = std::move(table.data.gpu_data);
         metadata_send_buffers[0] = std::make_unique<std::vector<uint8_t>>(
@@ -280,7 +292,7 @@ GpuShuffleSendState::GpuShuffleSendState(
                 packed_send_buffers[0]->size();
         }
     } else {
-        broadcast = false;
+        assert(packed_tables.size() == static_cast<size_t>(n_ranks));
         // Prepare send buffers
         for (size_t dest_rank = 0; dest_rank < packed_tables.size();
              dest_rank++) {

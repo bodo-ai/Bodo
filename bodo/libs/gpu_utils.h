@@ -130,7 +130,7 @@ class GpuShuffleSendState {
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
                                  int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 size_t n_ranks);
+                                 size_t n_ranks, bool broadcast);
 
     /**
      * @brief Getter for starting_msg_tag.
@@ -303,7 +303,8 @@ class GpuTableManager : public GpuMpiManager {
     void do_shuffle();
 
    protected:
-    virtual std::vector<cudf::packed_table> getNextPerRankTables() = 0;
+    virtual std::vector<cudf::packed_table> getNextPerRankTables(
+        bool& do_broadcast) = 0;
     virtual bool hasMoreTables() = 0;
     virtual bool tableReadyToSend() = 0;
     virtual std::vector<std::shared_ptr<cudf::table>> ownAndClear() = 0;
@@ -348,7 +349,7 @@ class GpuShuffleManager : public GpuTableManager {
                this->tables_to_shuffle.back().event.ready();
     }
 
-    std::vector<cudf::packed_table> getNextPerRankTables();
+    std::vector<cudf::packed_table> getNextPerRankTables(bool& do_broadcast);
 
     bool hasMoreTables() { return !tables_to_shuffle.empty(); }
 
@@ -383,7 +384,7 @@ class GpuTableBroadcastManager : public GpuTableManager {
                this->tables_to_broadcast.back().event.ready();
     }
 
-    std::vector<cudf::packed_table> getNextPerRankTables();
+    std::vector<cudf::packed_table> getNextPerRankTables(bool& do_broadcast);
 
     bool hasMoreTables() { return !tables_to_broadcast.empty(); }
 

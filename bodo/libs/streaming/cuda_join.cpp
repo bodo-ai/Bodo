@@ -234,6 +234,12 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     cudf::table_view selected;
 
     if (is_broadcast_join) {
+        // In broadcast join mode, we don't need to wait for other workers to
+        // send probe data to us and that is the only reason that there is a
+        // need for a global check in the non-broadcast section.  In broadcast
+        // mode, if this is the last batch for this worker then we set the
+        // global_is_last flag just so that the below code will finish and
+        // allow this operator to terminate.
         global_is_last = local_is_last;
 
         if (!is_gpu_rank()) {
