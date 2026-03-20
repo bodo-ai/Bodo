@@ -35,7 +35,7 @@ GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
+    this->stream = cudf::get_default_stream();
 }
 
 GpuMpiManager::~GpuMpiManager() {
@@ -51,8 +51,6 @@ GpuMpiManager::~GpuMpiManager() {
     // Free MPI communicator
     MPI_Comm_free(&mpi_comm);
 }
-
-GpuShuffleManager::GpuShuffleManager() {}
 
 void GpuShuffleManager::append_batch(
     std::shared_ptr<cudf::table> table,
@@ -271,6 +269,9 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
+        // std::cout << packed_send_buffers[dest_rank]->size() << std::endl;
+        // cudaDeviceSynchronize();  // Ensure data is ready to be sent before
+        // calling MPI_Issend
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[dest_rank]->data(),
                        packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
@@ -494,12 +495,16 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     std::vector<MPI_Request> all_reqs;
     all_reqs.reserve(2 * n_ranks);
 
-    for (auto& r : recv_reqs)
-        if (r != MPI_REQUEST_NULL)
+    for (auto& r : recv_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
-    for (auto& r : send_reqs)
-        if (r != MPI_REQUEST_NULL)
+        }
+    }
+    for (auto& r : send_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
+        }
+    }
 
     CHECK_MPI(MPI_Waitall(static_cast<int>(all_reqs.size()), all_reqs.data(),
                           MPI_STATUSES_IGNORE),

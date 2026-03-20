@@ -307,7 +307,7 @@ class GpuShuffleManager : public GpuMpiManager {
    public:
     bool global_is_last = false;
 
-    GpuShuffleManager();
+    GpuShuffleManager() = default;
 
     /**
      * @brief Shuffle a cudf table across all ranks
