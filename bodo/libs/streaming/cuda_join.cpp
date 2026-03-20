@@ -151,7 +151,7 @@ void CudaHashJoin::FinalizeBuild() {
 
     for (const auto& col_idx : this->build_key_indices) {
         std::shared_ptr<arrow::Table> local_stats;
-        if (hasComm() && this->_build_table->num_rows()) {
+        if (is_gpu_rank() && this->_build_table->num_rows()) {
             auto [min, max] =
                 cudf::minmax(this->_build_table->get_column(col_idx).view());
             std::vector<std::unique_ptr<cudf::column>> columns;
