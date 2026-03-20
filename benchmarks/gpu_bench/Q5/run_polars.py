@@ -14,7 +14,7 @@ import polars as pl
 from linetimer import CodeTimer
 
 
-def q(root, scale_factor=1) -> pl.LazyFrame:
+def q(root, scale_factor) -> pl.LazyFrame:
     """
     select
         n_name,
@@ -42,22 +42,14 @@ def q(root, scale_factor=1) -> pl.LazyFrame:
     revenue desc;
     """
 
-    # read customer, orders, lineitem
-    if root.startswith("s3://"):
-        customer = pl.scan_parquet(f"{root}/customer.pq/*.pq")
-        orders = pl.scan_parquet(f"{root}/orders.pq/*.pq")
-        lineitem = pl.scan_parquet(f"{root}/lineitem.pq/*.pq")
-    else:
-        customer = pl.scan_parquet(f"{root}/customer.pq")
-        orders = pl.scan_parquet(f"{root}/orders.pq")
-        lineitem = pl.scan_parquet(f"{root}/lineitem.pq")
-
-    # supplier becomes a multi-part after SF100
-    if root.startswith("s3://") and scale_factor >= 1000:
+    customer = pl.scan_parquet(f"{root}/customer.pq/*.pq")
+    orders = pl.scan_parquet(f"{root}/orders.pq/*.pq")
+    lineitem = pl.scan_parquet(f"{root}/lineitem.pq/*.pq")
+    # For larger scale factors, supplier becomes multi-part.
+    if scale_factor >= 1000:
         supplier = pl.scan_parquet(f"{root}/supplier.pq/*.pq")
     else:
         supplier = pl.scan_parquet(f"{root}/supplier.pq")
-
     region = pl.scan_parquet(f"{root}/region.pq")
     nation = pl.scan_parquet(f"{root}/nation.pq")
 
@@ -163,7 +155,7 @@ def main():
         os.environ["AWS_REGION"] = "us-east-2"
 
     if args.visualize_plan:
-        result: pl.LazyFrame = q(args.root, scale_factor=scale_factor)
+        result: pl.LazyFrame = q(args.root, scale_factor)
 
         unoptimized_gviz_out_path = f"{args.visualize_plan}_unoptimized.png"
         result.show_graph(
@@ -191,7 +183,7 @@ def main():
     if args.warmup:
         try:
             print("Running warmup...")
-            q(args.root).collect(engine=pl_engine)
+            q(args.root, scale_factor).collect(engine=pl_engine)
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
@@ -201,7 +193,7 @@ def main():
                 f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}",
                 unit="s",
             ) as timer:
-                result: pl.LazyFrame = q(args.root, scale_factor=scale_factor)
+                result: pl.LazyFrame = q(args.root, scale_factor)
                 result_collected = result.collect(engine=pl_engine)
 
                 if args.print_output:

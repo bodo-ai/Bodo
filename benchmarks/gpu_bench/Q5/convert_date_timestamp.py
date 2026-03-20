@@ -1,73 +1,95 @@
 """
-Rewrite Parquet files in a directory and convert date columns to timestamp.
+Rewrite Parquet files and convert date columns to timestamp.
+Supports local paths and S3 paths.
 """
 
 import argparse
 import os
 
 import pyarrow as pa
+import pyarrow.fs as fs
 import pyarrow.parquet as pq
 
 
-def rewrite_table(src_dir, dst_dir):
+def get_filesystem_and_path(path):
     """
-    Read Parquet files *src_dir* a directory and convert date columns to timestamp.
-    Write converted Parquet files to *dst_dir*.
+    Returns (filesystem, path_without_scheme)
     """
+    if path.startswith("s3://"):
+        filesystem = fs.S3FileSystem()
+        path = path.replace("s3://", "")
+    else:
+        filesystem = fs.LocalFileSystem()
+    return filesystem, path
+
+
+def rewrite_table(src_path, dst_path):
+    """
+    Read Parquet files and convert date columns to timestamp.
+    Supports local or S3 paths.
+    """
+
+    src_fs, src_path = get_filesystem_and_path(src_path)
+    dst_fs, dst_path = get_filesystem_and_path(dst_path)
 
     def convert_parquet_file(src_file, dst_file):
-        pf = pq.ParquetFile(src_file)
-        schema = pf.schema_arrow
+        with src_fs.open_input_file(src_file) as f:
+            pf = pq.ParquetFile(f)
 
-        # Build new schema
-        new_fields = []
-        for field in schema:
-            if pa.types.is_date32(field.type):
-                new_fields.append(
-                    pa.field(field.name, pa.timestamp("ns"), field.nullable)
-                )
-            else:
-                new_fields.append(field)
+            schema = pf.schema_arrow
 
-        rg = pf.metadata.row_group(0)
+            # Replace date32 types with timestamp[ns]
+            new_fields = []
+            for field in schema:
+                if pa.types.is_date32(field.type):
+                    new_fields.append(
+                        pa.field(field.name, pa.timestamp("ns"), field.nullable)
+                    )
+                else:
+                    new_fields.append(field)
 
-        compression_map = {}
-        for i in range(rg.num_columns):
-            col = rg.column(i)
-            compression_map[col.path_in_schema] = col.compression.lower()
+            new_schema = pa.schema(new_fields)
 
-        new_schema = pa.schema(new_fields)
+            rg = pf.metadata.row_group(0)
 
-        with pq.ParquetWriter(
-            dst_file, new_schema, compression=compression_map
-        ) as writer:
-            # Preserve row groups exactly
-            for i in range(pf.num_row_groups):
-                table = pf.read_row_group(i)
+            compression_map = {}
+            for i in range(rg.num_columns):
+                col = rg.column(i)
+                compression_map[col.path_in_schema] = col.compression.lower()
 
-                # Cast only date columns
-                columns = []
-                for col in table.columns:
-                    if pa.types.is_date32(col.type):
-                        col = col.cast(pa.timestamp("ns"))
-                    columns.append(col)
+            with dst_fs.open_output_stream(dst_file) as out:
+                with pq.ParquetWriter(
+                    out, new_schema, compression=compression_map
+                ) as writer:
+                    for i in range(pf.num_row_groups):
+                        table = pf.read_row_group(i)
 
-                new_table = pa.Table.from_arrays(columns, schema=new_schema)
-                writer.write_table(new_table)
+                        columns = []
+                        for col in table.columns:
+                            if pa.types.is_date32(col.type):
+                                col = col.cast(pa.timestamp("ns"))
+                            columns.append(col)
 
-    if os.path.isfile(src_dir):
-        convert_parquet_file(src_dir, dst_dir)
+                        new_table = pa.Table.from_arrays(columns, schema=new_schema)
+                        writer.write_table(new_table)
 
-    elif os.path.isdir(src_dir):
-        os.makedirs(dst_dir, exist_ok=True)
+    info = src_fs.get_file_info(src_path)
+    if info.type == fs.FileType.File:
+        convert_parquet_file(src_path, dst_path)
 
-        for fname in sorted(os.listdir(src_dir)):
-            if not fname.endswith(".pq"):
+    elif info.type == fs.FileType.Directory:
+        dst_fs.create_dir(dst_path, recursive=True)
+
+        selector = fs.FileSelector(src_path, allow_not_found=False, recursive=False)
+        for file_info in src_fs.get_file_info(selector):
+            if not file_info.path.endswith(".pq"):
                 continue
+
+            fname = os.path.basename(file_info.path)
             print("Converting file:", fname)
 
-            src_file = os.path.join(src_dir, fname)
-            dst_file = os.path.join(dst_dir, fname)
+            src_file = file_info.path
+            dst_file = f"{dst_path}/{fname}"
 
             convert_parquet_file(src_file, dst_file)
 
@@ -96,7 +118,8 @@ def main():
     ]:
         print(f"Converting table {table}...")
         rewrite_table(
-            os.path.join(args.src_dir, table), os.path.join(args.dst_dir, table)
+            f"{args.src_dir}/{table}",
+            f"{args.dst_dir}/{table}",
         )
 
 
