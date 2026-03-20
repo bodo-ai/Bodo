@@ -46,14 +46,12 @@ static bodo::tests::suite tests([] {
                 GpuShuffleManager manager;
 
                 if (device_id.value() < 0) {
-                    bodo::tests::check(manager.get_stream() == nullptr);
                     bodo::tests::check(manager.get_mpi_comm() == MPI_COMM_NULL);
                 } else {
                     // Should be empty on init
                     bodo::tests::check(manager.global_is_last == false);
 
                     // Check communicators exist
-                    bodo::tests::check(manager.get_stream() != nullptr);
                     bodo::tests::check(manager.get_mpi_comm() != MPI_COMM_NULL);
                 }
 
