@@ -1319,6 +1319,7 @@ def test_merge_switch_side():
     )
 
 
+@pytest.mark.gpu
 def test_merge_non_equi_cond():
     """Simple test for non-equi join conditions."""
     # Make sure bdf3 is unevaluated in the process.

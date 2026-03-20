@@ -9,6 +9,9 @@
 #include "../gpu_utils.h"
 #include "duckdb/common/enums/join_type.hpp"
 
+// Forward declaration to avoid import loop
+struct CudfASTOwner;
+
 struct CudaHashJoin {
    private:
     // Storage for the finalized build table
@@ -47,11 +50,14 @@ struct CudaHashJoin {
 
     duckdb::JoinType join_type;
 
-    cudf::null_equality null_equality = cudf::null_equality::EQUAL;
-
     std::unique_ptr<cudf::column> unmatched_build_rows =
         nullptr;  // Used for right/outer joins to track which
                   // build rows have been matched
+
+    // Optional expression to evaluate
+    std::unique_ptr<CudfASTOwner> non_equi_expression;
+
+    cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
@@ -90,16 +96,8 @@ struct CudaHashJoin {
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
                  duckdb::JoinType join_type,
-                 cudf::null_equality null_eq = cudf::null_equality::EQUAL)
-        : output_schema(std::move(output_schema)),
-          build_key_indices(std::move(build_keys)),
-          probe_key_indices(std::move(probe_keys)),
-          build_kept_cols(std::move(build_kept_cols)),
-          probe_kept_cols(std::move(probe_kept_cols)),
-          build_table_schema(std::move(build_schema)),
-          probe_table_schema(std::move(probe_schema)),
-          join_type(join_type),
-          null_equality(null_eq) {}
+                 std::unique_ptr<CudfASTOwner> non_equi_expression,
+                 cudf::null_equality null_eq = cudf::null_equality::EQUAL);
 
     CudaHashJoin() = default;
     /**

@@ -11,6 +11,7 @@
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
+#include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 #include "_util.h"
@@ -412,3 +413,24 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                                                       global_is_last, stream);
     return {std::move(output_table), global_is_last};
 }
+
+CudaHashJoin::CudaHashJoin(std::vector<cudf::size_type> build_keys,
+                           std::vector<cudf::size_type> probe_keys,
+                           std::shared_ptr<bodo::Schema> build_schema,
+                           std::shared_ptr<bodo::Schema> probe_schema,
+                           std::vector<int64_t> build_kept_cols,
+                           std::vector<int64_t> probe_kept_cols,
+                           std::shared_ptr<bodo::Schema> output_schema,
+                           duckdb::JoinType join_type,
+                           std::unique_ptr<CudfASTOwner> non_equi_expression,
+                           cudf::null_equality null_eq)
+    : output_schema(std::move(output_schema)),
+      build_key_indices(std::move(build_keys)),
+      probe_key_indices(std::move(probe_keys)),
+      build_kept_cols(std::move(build_kept_cols)),
+      probe_kept_cols(std::move(probe_kept_cols)),
+      build_table_schema(std::move(build_schema)),
+      probe_table_schema(std::move(probe_schema)),
+      join_type(join_type),
+      non_equi_expression(std::move(non_equi_expression)),
+      null_equality(null_eq) {}
