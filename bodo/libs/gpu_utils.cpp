@@ -35,6 +35,7 @@ GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
+    // TODO: Use async streams for shuffle when g_use_async is true
     this->stream = cudf::get_default_stream();
 }
 
@@ -269,8 +270,6 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
-        // std::cout << packed_send_buffers[dest_rank]->size() << std::endl;
-        // cudaDeviceSynchronize();  // Ensure data is ready to be sent before
         // calling MPI_Issend
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[dest_rank]->data(),
