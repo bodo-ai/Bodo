@@ -190,13 +190,13 @@ def main():
         print(f"  Trace Dir: {args.tracedir}")
 
     n_correct = 0
-    try:
-        if args.warmup:
+    if args.warmup:
+        try:
             print("Running warmup...")
             q(args.root, pd_impl).execute_plan()
             print("Warmup complete.")
-    except Exception as e:
-        print(f"Error during warmup run: {e}")
+        except Exception as e:
+            print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
             with CodeTimer(
