@@ -45,6 +45,21 @@ struct CudaHashJoin {
 
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
+    bool is_broadcast_join;
+
+    std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
+    std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
+    GpuMpiManager gather_blooms;
+    std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
+
+    bool hasComm() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->get_mpi_comm() != MPI_COMM_NULL;
+        } else {
+            return build_shuffle_manager->get_mpi_comm() != MPI_COMM_NULL;
+        }
+    }
+
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
                  std::vector<cudf::size_type> probe_keys,
@@ -53,7 +68,8 @@ struct CudaHashJoin {
                  std::vector<int64_t> build_kept_cols,
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
-                 cudf::null_equality null_eq = cudf::null_equality::EQUAL)
+                 cudf::null_equality null_eq = cudf::null_equality::EQUAL,
+                 bool is_broadcast = false)
         : output_schema(std::move(output_schema)),
           build_key_indices(std::move(build_keys)),
           probe_key_indices(std::move(probe_keys)),
@@ -61,19 +77,32 @@ struct CudaHashJoin {
           probe_kept_cols(std::move(probe_kept_cols)),
           build_table_schema(std::move(build_schema)),
           probe_table_schema(std::move(probe_schema)),
-          null_equality(null_eq) {}
+          null_equality(null_eq),
+          is_broadcast_join(is_broadcast) {
+        if (is_broadcast_join) {
+            build_broadcast_manager =
+                std::make_shared<GpuTableBroadcastManager>();
+        } else {
+            build_shuffle_manager = std::make_shared<GpuShuffleManager>();
+            probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+        }
+    }
+
     CudaHashJoin() = default;
+
     /**
      * @brief Finalize the build phase by constructing the hash table
      * and collecting statistics
      */
     void FinalizeBuild();
+
     /**
      * @brief Process input tables to build side of join
      */
     bool BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
                            std::shared_ptr<StreamAndEvent> input_stream_event,
                            bool local_is_last);
+
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
@@ -107,11 +136,27 @@ struct CudaHashJoin {
         return min_max_stats;
     }
 
-    // Public so PhysicalGPUJoin can access to determine if there are pending
-    // shuffles
-    GpuShuffleManager build_shuffle_manager;
-    GpuShuffleManager probe_shuffle_manager;
-    GpuMpiManager gather_blooms;
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_build_complete() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->BuffersFull();
+        } else {
+            return build_shuffle_manager->BuffersFull();
+        }
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_probe_complete() {
+        if (is_broadcast_join) {
+            return true;
+        } else {
+            return probe_shuffle_manager->BuffersFull();
+        }
+    }
 };
 #else
 struct CudaHashJoin {};
