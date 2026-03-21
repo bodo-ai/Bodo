@@ -673,6 +673,18 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         // We know we have two children so process them first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
+        std::shared_ptr<ScalarExprResult> left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        // Implement short-circuit for scalars.
+        if (left_as_scalar) {
+            bool left_bool = left_as_scalar->result->at<bool>(0);
+            if (comparator == "and" && !left_bool) {
+                return left_res;
+            }
+            if (comparator == "or" && left_bool) {
+                return left_res;
+            }
+        }
         std::shared_ptr<ExprResult> right_res =
             children[1]->ProcessBatch(input_batch);
 
@@ -688,6 +700,31 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         arrow::Datum left_datum = children[0]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
+        // Implement short-circuit for scalars.
+        if (left_datum.is_scalar()) {
+            auto left_scalar = left_datum.scalar();
+            if (left_scalar->type->id() == arrow::Type::BOOL) {
+                auto bool_sc =
+                    std::static_pointer_cast<arrow::BooleanScalar>(left_scalar);
+                if (bool_sc->is_valid) {
+                    bool left_bool = bool_sc->value;
+                    if (comparator == "and" && !left_bool) {
+                        return left_datum;
+                    }
+                    if (comparator == "or" && left_bool) {
+                        return left_datum;
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "join_expr_internal for conjunction left_datum was "
+                        "null bool.");
+                }
+            } else {
+                throw std::runtime_error(
+                    "join_expr_internal for conjunction left_datum wasn't "
+                    "bool.");
+            }
+        }
         arrow::Datum right_datum = children[1]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);

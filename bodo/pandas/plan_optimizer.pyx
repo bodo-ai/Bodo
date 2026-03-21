@@ -676,7 +676,7 @@ cdef class PythonScalarFuncExpression(Expression):
             source.c_logical_operator, out_schema, args, input_column_indices, is_cfunc, has_state, empty_str.encode())
 
     def __str__(self):
-        return f"PythonScalarFuncExpression({self.function_name})"
+        return f"PythonScalarFuncExpression({self.is_cfunc})"
 
 
 cdef class ArrowScalarFuncExpression(Expression):
