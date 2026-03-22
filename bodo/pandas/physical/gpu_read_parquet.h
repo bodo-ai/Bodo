@@ -402,8 +402,8 @@ class RankBatchGenerator {
                 // potentially selected columns in all cases.
                 std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
                     filesystem_->OpenInputFile(part.path).ValueOrDie();
-                sources.push_back(cudf::io::datasource::create(
-                    new arrow_file_datasource(arrow_file)));
+                sources.push_back(
+                    std::make_unique<arrow_file_datasource>(arrow_file));
             } else {
                 std::string path = part.path;
                 if (filesystem_->type_name() == "s3") {
