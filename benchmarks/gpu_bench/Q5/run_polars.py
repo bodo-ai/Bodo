@@ -118,6 +118,24 @@ def main():
     )
     args = parser.parse_args()
 
+    scale_factor = args.root.split("/")[-1].replace("SF", "")
+    if scale_factor.isdigit():
+        scale_factor = int(scale_factor)
+    else:
+        scale_factor = 0
+
+    storage_type = "s3" if args.root.startswith("s3://") else "local"
+    if storage_type == "s3":
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        # Variables required for using kvikio for S3 reads.
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
+        os.environ["AWS_REGION"] = "us-east-2"
+
     if args.engine != "dask" and args.n_workers > 1:
         raise ValueError(
             f"engine={args.engine} does not support multiple workers. Please set n_workers to 1 or choose 'dask' engine."
@@ -138,21 +156,6 @@ def main():
             executor_options={"cluster": "distributed"},
             raise_on_fail=True,
         )
-
-    scale_factor = int(args.root.split("/")[-1].replace("SF", ""))
-
-    storage_type = "s3" if args.root.startswith("s3://") else "local"
-
-    if args.root.startswith("s3://"):
-        session = boto3.Session()
-        credentials = session.get_credentials().get_frozen_credentials()
-
-        # Variables required for using kvikio for S3 reads.
-        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-        os.environ["AWS_SESSION_TOKEN"] = credentials.token
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
-        os.environ["AWS_REGION"] = "us-east-2"
 
     if args.visualize_plan:
         result: pl.LazyFrame = q(args.root, scale_factor)

@@ -134,12 +134,6 @@ def main():
 
     args = parser.parse_args()
 
-    if args.log_timings and not os.path.exists(args.log_timings):
-        with open(args.log_timings, "w") as f:
-            f.write(
-                "scale_factor,storage_type,n_gpus,implementation,time_seconds,extras\n"
-            )
-
     scale_factor = args.root.split("/")[-1].replace("SF", "")
     if scale_factor.isdigit():
         scale_factor = int(scale_factor)
@@ -147,23 +141,22 @@ def main():
         scale_factor = 0
 
     storage_type = "s3" if args.root.startswith("s3://") else "local"
+    if storage_type == "s3":
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        # Variables required for using kvikio for S3 reads.
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
+        os.environ["AWS_REGION"] = "us-east-2"
 
     if args.library == "cudf":
         import cudf
 
         pd_impl = cudf
     else:
-        if args.root.startswith("s3://"):
-            session = boto3.Session()
-            credentials = session.get_credentials().get_frozen_credentials()
-
-            # Variables required for using kvikio for S3 reads.
-            os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
-            os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-            os.environ["AWS_SESSION_TOKEN"] = credentials.token
-            os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
-            os.environ["AWS_REGION"] = "us-east-2"
-
         # Bodo envs (set prior to importing bodo.pandas)
         os.environ["BODO_GPU"] = "1"
         os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
@@ -177,9 +170,9 @@ def main():
             os.environ["BODO_TRACING_LEVEL"] = "1"
             os.environ["BODO_TRACING_OUTPUT_DIR"] = args.tracedir
 
-        import bodo.pandas as pd
+        import bodo.pandas
 
-        pd_impl = pd
+        pd_impl = bodo.pandas
 
         print("Bodo Config:")
         print(f"  Number of Workers: {args.n_workers}")
@@ -188,6 +181,12 @@ def main():
         print(f"  Use Async: {args.use_async}")
         print(f"  Dump Plan: {args.dump_plan}")
         print(f"  Trace Dir: {args.tracedir}")
+
+    if args.log_timings and not os.path.exists(args.log_timings):
+        with open(args.log_timings, "w") as f:
+            f.write(
+                "scale_factor,storage_type,n_gpus,implementation,time_seconds,extras\n"
+            )
 
     n_correct = 0
     if args.warmup:
