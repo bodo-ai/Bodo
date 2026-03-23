@@ -238,6 +238,8 @@ std::unique_ptr<cudf::table> CudaHashJoin::produce_unmatched_build_rows(
                       "produce_unmatched_build_rows: MPI error on MPI_Test ");
             if (flag) {
                 this->build_matches_synced = true;
+            } else {
+                return table;
             }
         }
     }
