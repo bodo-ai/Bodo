@@ -58,7 +58,7 @@ def main():
 
     if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
-            f.write("scale_factor,n_gpus,implementation,time_seconds\n")
+            f.write("scale_factor,n_gpus,implementation,time_seconds,extras\n")
 
     scale_factor = args.root.split("/")[-1].replace("SF", "")
     if scale_factor.isdigit():
@@ -77,7 +77,7 @@ def main():
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
-                    f.write(f"{scale_factor},{args.n_workers},dask,{timer.took:.4f}\n")
+                    f.write(f"{scale_factor},{args.n_workers},dask,{timer.took:.4f},\n")
         except Exception as e:
             print(
                 f"Error executing query library=dask, sf={scale_factor}, n_gpus={args.n_workers}: {e}"

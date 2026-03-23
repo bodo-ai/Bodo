@@ -78,8 +78,6 @@ def rewrite_table(src_path, dst_path):
         convert_parquet_file(src_path, dst_path)
 
     elif info.type == fs.FileType.Directory:
-        dst_fs.create_dir(dst_path, recursive=True)
-
         selector = fs.FileSelector(src_path, allow_not_found=False, recursive=False)
         for file_info in src_fs.get_file_info(selector):
             if not file_info.path.endswith(".pq"):
