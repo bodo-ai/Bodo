@@ -143,7 +143,7 @@ def main():
 
     # KVIKIO settings
     os.environ["KVIKIO_COMPAT_MODE"] = "on"
-    os.environ["KVIKIO_NTHREADS"] = "64"
+    os.environ["KVIKIO_NTHREADS"] = str(int(64 / args.n_workers))
 
     if args.engine == "cudf":
         pl_engine = pl.GPUEngine(executor="streaming", raise_on_fail=True)
@@ -158,13 +158,7 @@ def main():
         dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
         dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
-        _ = Client(
-            LocalCUDACluster(
-                n_workers=args.n_workers,
-                enable_cudf_spill=True,
-                rmm_async=True,
-            )
-        )
+        _ = Client(LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True))
 
         pl_engine = pl.GPUEngine(
             executor="streaming",
