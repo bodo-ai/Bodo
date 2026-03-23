@@ -477,8 +477,6 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     output_table = this->produce_unmatched_build_rows(std::move(output_table),
                                                       global_is_last, stream);
-    std::cout << " global_is_last" << global_is_last << " build_sync "
-              << this->build_matches_synced << std::endl;
     return {produce_unmatched_build_rows(std::move(output_table),
                                          global_is_last, stream),
             global_is_last && this->build_matches_synced};
