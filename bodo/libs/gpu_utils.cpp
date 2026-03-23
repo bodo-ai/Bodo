@@ -414,10 +414,17 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
 
     // recv data
     MPI_Request data_recv_req;
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+    CHECK_MPI(MPI_Irecv_c(this->packed_recv_buffer->data(),
+                          this->packed_recv_buffer->size(), MPI_UINT8_T, source,
+                          curr_tag + 1, shuffle_comm, &data_recv_req),
+              "GpuShuffle::recv_data: MPI_Irecv_c failed:");
+#else
     CHECK_MPI(MPI_Irecv(this->packed_recv_buffer->data(),
                         this->packed_recv_buffer->size(), MPI_UINT8_T, source,
                         curr_tag + 1, shuffle_comm, &data_recv_req),
               "GpuShuffle::recv_data: MPI_Irecv failed:");
+#endif
     this->recv_requests.push_back(data_recv_req);
 }
 
@@ -551,9 +558,15 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
             continue;
         }
         void* dst_ptr = recv_buffers[static_cast<size_t>(src)]->data();
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+        CHECK_MPI(MPI_Irecv_c(dst_ptr, static_cast<int64_t>(sz), MPI_BYTE, src,
+                              /*tag=*/0, mpi_comm, &recv_reqs[src]),
+                  "MPI_Irecv_c failed:");
+#else
         CHECK_MPI(MPI_Irecv(dst_ptr, static_cast<int>(sz), MPI_BYTE, src,
                             /*tag=*/0, mpi_comm, &recv_reqs[src]),
                   "MPI_Irecv failed:");
+#endif
     }
 
     std::vector<MPI_Request> send_reqs(n_ranks, MPI_REQUEST_NULL);
@@ -561,10 +574,17 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     // Post sends: send this rank's buffer to every rank (including self)
     if (local_size > 0) {
         for (int dst = 0; dst < n_ranks; ++dst) {
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+            CHECK_MPI(MPI_Issend_c(local_buf.data(),
+                                   static_cast<int64_t>(local_size), MPI_BYTE,
+                                   dst, /*tag=*/0, mpi_comm, &send_reqs[dst]),
+                      "MPI_Issend_c failed:");
+#else
             CHECK_MPI(
                 MPI_Issend(local_buf.data(), static_cast<int>(local_size),
                            MPI_BYTE, dst, /*tag=*/0, mpi_comm, &send_reqs[dst]),
                 "MPI_Issend failed:");
+#endif
         }
     }
 
