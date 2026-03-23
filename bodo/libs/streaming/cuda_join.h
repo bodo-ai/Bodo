@@ -1,5 +1,6 @@
 #pragma once
 #include <arrow/scalar.h>
+#include <mpi.h>
 #include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
@@ -50,6 +51,13 @@ struct CudaHashJoin {
     std::unique_ptr<cudf::column> unmatched_build_rows =
         nullptr;  // Used for right/outer joins to track which
                   // build rows have been matched
+    // For broadcast joins on RIGHT/OUTER joins we need to sync the build table
+    // matches globally to only produce unmatched build rows once.
+    MPI_Request sync_build_matches_req = MPI_REQUEST_NULL;
+    // Flag to determine if unmatched_build_rows can be used to produce output
+    // rows, if false this means this is a broadcast join and we need to wait
+    // for sync_build_matches_req to complete before proceeding.
+    bool build_matches_synced = true;
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
@@ -114,12 +122,16 @@ struct CudaHashJoin {
           join_type(join_type),
           null_equality(null_eq),
           is_broadcast_join(is_broadcast) {
+        probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+
+        this->build_matches_synced =
+            !(this->is_broadcast_join &&
+              duckdb::IsRightOuterJoin(this->join_type));
         if (is_broadcast_join) {
             build_broadcast_manager =
                 std::make_shared<GpuTableBroadcastManager>();
         } else {
             build_shuffle_manager = std::make_shared<GpuShuffleManager>();
-            probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
         }
     }
 

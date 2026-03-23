@@ -1,6 +1,7 @@
 #include "cuda_join.h"
 #include <arrow/array/util.h>
 #include <arrow/compute/api_aggregate.h>
+#include <mpi.h>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/column/column_view.hpp>
 #include <cudf/concatenate.hpp>
@@ -205,9 +206,8 @@ void CudaHashJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if ((this->join_type == duckdb::JoinType::RIGHT ||
-         this->join_type == duckdb::JoinType::OUTER) &&
-        this->_build_table && this->_build_table->num_rows()) {
+    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table &&
+        this->_build_table->num_rows()) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows =
@@ -225,9 +225,35 @@ void CudaHashJoin::FinalizeBuild() {
 std::unique_ptr<cudf::table> CudaHashJoin::produce_unmatched_build_rows(
     std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!global_is_last || this->unmatched_build_rows == nullptr ||
-        (this->join_type != duckdb::JoinType::RIGHT &&
-         this->join_type != duckdb::JoinType::OUTER)) {
+    if (!global_is_last || !duckdb::IsRightOuterJoin(this->join_type)) {
+        return table;
+    }
+
+    const MPI_Comm comm = this->probe_shuffle_manager->get_mpi_comm();
+    if (this->is_broadcast_join && !this->build_matches_synced) {
+        if (this->sync_build_matches_req == MPI_REQUEST_NULL) {
+            CHECK_MPI(
+                MPI_Iallreduce(MPI_IN_PLACE, this->unmatched_build_rows.get(),
+                               this->unmatched_build_rows->size(), MPI_UINT8_T,
+                               MPI_BAND, comm, &this->sync_build_matches_req),
+                "produce_unmatched_build_rows: MPI error on MPI_Iallreduce ");
+        } else {
+            int flag = 0;
+            CHECK_MPI(MPI_Test(&this->sync_build_matches_req, &flag,
+                               MPI_STATUS_IGNORE),
+                      "produce_unmatched_build_rows: MPI error on MPI_Test ");
+            if (flag) {
+                this->build_matches_synced = true;
+            }
+        }
+    }
+
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    // If it's a broadcast join we only want to
+    // produce the unmatched rows on one rank since
+    // all ranks share a build table
+    if (this->is_broadcast_join && rank > 0) {
         return table;
     }
 
@@ -313,20 +339,27 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     if (is_broadcast_join) {
         // In broadcast join mode, we don't need to wait for other workers to
         // send probe data to us and that is the only reason that there is a
-        // need for a global check in the non-broadcast section.  In broadcast
-        // mode, if this is the last batch for this worker then we set the
-        // global_is_last flag just so that the below code will finish and
-        // allow this operator to terminate.
-        global_is_last = local_is_last;
+        // need for a global check in the non-broadcast section unless we have a
+        // right/outer join. In broadcast mode, if this is the last batch for
+        // this worker then we set the global_is_last flag just so that the
+        // below code will finish and allow this operator to terminate. If this
+        // is a right/outer join, we need to synchronize which build rows have
+        // been globally matched before terminating this operator.
+        global_is_last =
+            duckdb::IsRightOuterJoin(this->join_type)
+                ? probe_shuffle_manager->sync_is_last(local_is_last)
+                : local_is_last;
 
         if (!is_gpu_rank()) {
             return {nullptr, global_is_last};
         }
 
         if (probe_chunk->num_rows() == 0 || _join_handle == nullptr) {
-            return {empty_table_from_arrow_schema(
-                        this->output_schema->ToArrowSchema()),
-                    global_is_last};
+            return {produce_unmatched_build_rows(
+                        empty_table_from_arrow_schema(
+                            this->output_schema->ToArrowSchema()),
+                        global_is_last, stream),
+                    global_is_last && this->build_matches_synced};
         }
 
         selected = probe_chunk->select(this->probe_key_indices);
@@ -352,7 +385,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
                         global_is_last, stream),
-                    global_is_last};
+                    global_is_last && this->build_matches_synced};
         }
 
         // Concatenate all incoming chunks into one contiguous table and join
@@ -370,7 +403,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
                         global_is_last, stream),
-                    global_is_last};
+                    global_is_last && this->build_matches_synced};
         }
 
         selected = coalesced_probe->select(this->probe_key_indices);
@@ -419,8 +452,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Update which build table indices we've matched if it's relevant
-    if ((this->join_type == duckdb::JoinType::RIGHT ||
-         this->join_type == duckdb::JoinType::OUTER) &&
+    if (duckdb::IsRightOuterJoin(this->join_type) &&
         // If this is nullptr we either don't have a build table on this rank
         // or we've already produced the unmatched output
         this->unmatched_build_rows && build_idx_view.size()) {
@@ -450,7 +482,9 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     output_table = this->produce_unmatched_build_rows(std::move(output_table),
                                                       global_is_last, stream);
+    std::cout << " global_is_last" << global_is_last << " build_sync "
+              << this->build_matches_synced << std::endl;
     return {produce_unmatched_build_rows(std::move(output_table),
                                          global_is_last, stream),
-            global_is_last};
+            global_is_last && this->build_matches_synced};
 }
