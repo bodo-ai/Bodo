@@ -210,15 +210,9 @@ void CudaHashJoin::FinalizeBuild() {
         this->_build_table->num_rows()) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
-        this->unmatched_build_rows =
-            cudf::make_numeric_column(cudf::data_type(cudf::type_id::BOOL8),
-                                      this->_build_table->num_rows());
-        // Initialize all rows as unmatched
-        cudf::mutable_column_view view =
-            this->unmatched_build_rows->mutable_view();
-        cudf::fill_in_place(view, 0, this->unmatched_build_rows->size(),
-                            cudf::numeric_scalar<bool>(true),
-                            cudf::get_default_stream());
+        this->unmatched_build_rows = cudf::make_column_from_scalar(
+            cudf::numeric_scalar(true), this->_build_table->num_rows(),
+            cudf::get_default_stream());
     }
 }
 
