@@ -141,6 +141,10 @@ def main():
             f"engine={args.engine} does not support multiple workers. Please set n_workers to 1 or choose 'dask' engine."
         )
 
+    # KVIKIO settings
+    os.environ["KVIKIO_COMPAT_MODE"] = "on"
+    os.environ["KVIKIO_NTHREADS"] = "64"
+
     if args.engine == "cudf":
         pl_engine = pl.GPUEngine(executor="streaming", raise_on_fail=True)
     elif args.engine == "cpu":
