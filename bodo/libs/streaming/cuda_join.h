@@ -124,12 +124,13 @@ struct CudaHashJoin {
           is_broadcast_join(is_broadcast) {
         probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
 
-        this->build_matches_synced =
-            !(this->is_broadcast_join &&
-              duckdb::IsRightOuterJoin(this->join_type));
         if (is_broadcast_join) {
             build_broadcast_manager =
                 std::make_shared<GpuTableBroadcastManager>();
+            if (duckdb::IsRightOuterJoin(this->join_type)) {
+                // This is the only case we need to sync build matches
+                this->build_matches_synced = false;
+            }
         } else {
             build_shuffle_manager = std::make_shared<GpuShuffleManager>();
         }

@@ -206,8 +206,7 @@ void CudaHashJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table &&
-        this->_build_table->num_rows()) {
+    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows = cudf::make_column_from_scalar(
