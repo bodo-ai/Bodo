@@ -338,12 +338,21 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+        CHECK_MPI(
+            MPI_Issend_c(packed_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                         packed_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                         MPI_UINT8_T, dest_rank, starting_msg_tag + 1,
+                         shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for data failed:");
+#else
         CHECK_MPI(
             MPI_Issend(packed_send_buffers[broadcast ? 0 : dest_rank]->data(),
                        packed_send_buffers[broadcast ? 0 : dest_rank]->size(),
                        MPI_UINT8_T, dest_rank, starting_msg_tag + 1,
                        shuffle_comm, &req),
             "GpuShuffleSendState: MPI_Issend for data failed:");
+#endif
         this->send_requests.push_back(req);
     }
 }
