@@ -130,7 +130,7 @@ class GpuShuffleSendState {
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
                                  int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 size_t n_ranks);
+                                 size_t n_ranks, bool broadcast);
 
     /**
      * @brief Getter for starting_msg_tag.
@@ -182,7 +182,7 @@ class GpuShuffleRecvState {
      * will be non-null, otherwise the return value will be (false, NULL).
      * When the boolean is true this state can be freed.
      */
-    std::pair<bool, std::unique_ptr<cudf::table>> recvDone(
+    std::pair<bool, std::shared_ptr<cudf::table>> recvDone(
         MPI_Comm shuffle_comm);
 
     /**
@@ -214,6 +214,15 @@ class ShuffleTableInfo {
                      const std::vector<cudf::size_type>& v,
                      cuda_event_wrapper e)
         : table(t), partition_indices(v), event(e) {}
+};
+
+class BroadcastTableInfo {
+   public:
+    std::shared_ptr<cudf::table> table;
+    cuda_event_wrapper event;
+
+    BroadcastTableInfo(std::shared_ptr<cudf::table> t, cuda_event_wrapper e)
+        : table(t), event(e) {}
 };
 
 /**
@@ -275,7 +284,7 @@ class GpuMpiManager {
 /**
  * @brief Class for managing async shuffle of cudf::tables using MPI
  */
-class GpuShuffleManager : public GpuMpiManager {
+class GpuTableManager : public GpuMpiManager {
    private:
     // IBarrier to know when all ranks are fully done
     bool is_last_barrier_started = false;
@@ -287,43 +296,32 @@ class GpuShuffleManager : public GpuMpiManager {
     std::vector<GpuShuffleSendState> send_states;
     std::vector<GpuShuffleRecvState> recv_states;
 
-    std::vector<ShuffleTableInfo> tables_to_shuffle;
-
     /**
      * @brief Once we've determined we will shuffle, start the shuffle by
      * partitioning the table and posting sends/receives
      */
     void do_shuffle();
 
-    bool data_ready_to_send() {
-        return !this->tables_to_shuffle.empty() &&
-               this->tables_to_shuffle.back().event.ready();
-    }
+   protected:
+    virtual std::vector<cudf::packed_table> getNextPerRankTables(
+        bool& do_broadcast) = 0;
+    virtual bool hasMoreTables() = 0;
+    virtual bool tableReadyToSend() = 0;
+    virtual std::vector<std::shared_ptr<cudf::table>> ownAndClear() = 0;
 
     void shuffle_irecv();
 
-    std::vector<std::unique_ptr<cudf::table>> consume_completed_recvs();
+    std::vector<std::shared_ptr<cudf::table>> consume_completed_recvs();
 
    public:
     bool global_is_last = false;
-
-    GpuShuffleManager();
-
-    /**
-     * @brief Shuffle a cudf table across all ranks
-     * @param table Input table to shuffle
-     * @param partition_indices Column indices to use for partitioning
-     */
-    void append_batch(std::shared_ptr<cudf::table> table,
-                      const std::vector<cudf::size_type>& partition_indices,
-                      std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Progress any inflight shuffles
      * @return Optional vector of tables received from all ranks if any were
      * received.
      */
-    std::vector<std::unique_ptr<cudf::table>> progress(const bool is_last);
+    std::vector<std::shared_ptr<cudf::table>> progress(const bool is_last);
 
     bool SendRecvEmpty();
 
@@ -340,8 +338,70 @@ class GpuShuffleManager : public GpuMpiManager {
      *
      */
     bool sync_is_last(bool local_is_last);
+};
+
+class GpuShuffleManager : public GpuTableManager {
+   private:
+    std::vector<ShuffleTableInfo> tables_to_shuffle;
+
+    bool tableReadyToSend() {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
+
+    std::vector<cudf::packed_table> getNextPerRankTables(bool& do_broadcast);
+
+    bool hasMoreTables() { return !tables_to_shuffle.empty(); }
+
+   public:
+    /**
+     * @brief Shuffle a cudf table across all ranks
+     * @param table Input table to shuffle
+     * @param partition_indices Column indices to use for partitioning
+     */
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      const std::vector<cudf::size_type>& partition_indices,
+                      std::shared_ptr<StreamAndEvent> se);
 
     bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& shuffle_info : this->tables_to_shuffle) {
+            out_tables.push_back(shuffle_info.table);
+        }
+        this->tables_to_shuffle.clear();
+        return out_tables;
+    }
+};
+
+class GpuTableBroadcastManager : public GpuTableManager {
+   private:
+    std::vector<BroadcastTableInfo> tables_to_broadcast;
+
+    bool tableReadyToSend() {
+        return !this->tables_to_broadcast.empty() &&
+               this->tables_to_broadcast.back().event.ready();
+    }
+
+    std::vector<cudf::packed_table> getNextPerRankTables(bool& do_broadcast);
+
+    bool hasMoreTables() { return !tables_to_broadcast.empty(); }
+
+   public:
+    void broadcast_table(std::shared_ptr<cudf::table> table,
+                         std::shared_ptr<StreamAndEvent> se);
+
+    bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& shuffle_info : this->tables_to_broadcast) {
+            out_tables.push_back(shuffle_info.table);
+        }
+        this->tables_to_broadcast.clear();
+        return out_tables;
+    }
 };
 
 /**
@@ -382,8 +442,8 @@ MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id);
 /**
  * @brief Allgather a device buffer from each GPU-enabled rank to every other
  * GPU-enabled rank.
- * @param stream: CUDA stream to perform operations on.
  * @param local_buf: device buffer owned by this rank to send (may be size 0).
+ * @param stream: CUDA stream to perform operations on.
  * @return vector of length comm_size where element i is a unique_ptr to the
  * buffer sent by rank i. If a rank sent size 0, the corresponding vector
  * element will be nullptr.

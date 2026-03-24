@@ -35,7 +35,8 @@ GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
+    // TODO: Use async streams for shuffle when g_use_async is true
+    this->stream = cudf::get_default_stream();
 }
 
 GpuMpiManager::~GpuMpiManager() {
@@ -52,8 +53,6 @@ GpuMpiManager::~GpuMpiManager() {
     MPI_Comm_free(&mpi_comm);
 }
 
-GpuShuffleManager::GpuShuffleManager() {}
-
 void GpuShuffleManager::append_batch(
     std::shared_ptr<cudf::table> table,
     const std::vector<cudf::size_type>& partition_indices,
@@ -67,7 +66,25 @@ void GpuShuffleManager::append_batch(
     this->tables_to_shuffle.emplace_back(table, partition_indices, se->event);
 }
 
-void GpuShuffleManager::do_shuffle() {
+void GpuTableBroadcastManager::broadcast_table(
+    std::shared_ptr<cudf::table> table, std::shared_ptr<StreamAndEvent> se) {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return;
+    }
+    if (table->num_rows() == 0) {
+        return;
+    }
+    this->tables_to_broadcast.emplace_back(table, se->event);
+}
+
+std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    do_broadcast = false;
+    std::vector<cudf::packed_table> packed_tables;
+    if (!tableReadyToSend()) {
+        throw std::runtime_error("getNextPerRankTables has no data");
+    }
+
     ShuffleTableInfo shuffle_table_info = this->tables_to_shuffle.back();
     this->tables_to_shuffle.pop_back();
 
@@ -82,8 +99,36 @@ void GpuShuffleManager::do_shuffle() {
     std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
         partition_start_rows.begin() + 1, partition_start_rows.end());
     // Pack the tables for sending
-    std::vector<cudf::packed_table> packed_tables =
+    packed_tables =
         cudf::contiguous_split(partitioned_table->view(), splits, stream);
+    return packed_tables;
+}
+
+std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    do_broadcast = true;
+    std::vector<cudf::packed_table> packed_tables;
+    packed_tables.reserve(1);
+    if (!tableReadyToSend()) {
+        throw std::runtime_error("getNextPerRankTables has no data");
+    }
+
+    BroadcastTableInfo broadcast_table_info = this->tables_to_broadcast.back();
+    this->tables_to_broadcast.pop_back();
+
+    cudf::table_view tv = broadcast_table_info.table->view();
+    // By doing only one return value signifies a broadcast.
+    packed_tables.emplace_back(tv, cudf::pack(tv, stream));
+    return packed_tables;
+}
+
+void GpuTableManager::do_shuffle() {
+    bool do_broadcast;
+    std::vector<cudf::packed_table> packed_tables =
+        getNextPerRankTables(do_broadcast);
+    assert(do_broadcast ||
+           packed_tables.size() == static_cast<size_t>(n_ranks));
+    assert(!do_broadcast || packed_tables.size() == 1);
 
     int start_tag = get_next_available_tag(this->inflight_tags);
     if (start_tag == -1) {
@@ -93,16 +138,22 @@ void GpuShuffleManager::do_shuffle() {
     }
 
     this->send_states.emplace_back(std::move(packed_tables), start_tag,
-                                   mpi_comm, static_cast<size_t>(n_ranks));
+                                   mpi_comm, static_cast<size_t>(n_ranks),
+                                   do_broadcast);
     this->inflight_tags.insert(start_tag);
 }
 
 // Similar to CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/5be77dc4ee731f674f679a4ff6f60ac2f231d326/bodo/libs/streaming/_shuffle.cpp#L688
-std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
+std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
     const bool is_last) {
     if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
         return {};
+    }
+
+    // Short circuit shuffle if running on a single GPU
+    if (n_ranks == 1) {
+        return ownAndClear();
     }
 
     // recv data first, but avoid receiving too much data at once
@@ -110,7 +161,7 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
         this->shuffle_irecv();
     }
 
-    std::vector<std::unique_ptr<cudf::table>> received_tables =
+    std::vector<std::shared_ptr<cudf::table>> received_tables =
         this->consume_completed_recvs();
 
     // Remove send state if recv done
@@ -123,21 +174,21 @@ std::vector<std::unique_ptr<cudf::table>> GpuShuffleManager::progress(
     });
 
     // TODO(ehsan): decide when to shuffle based on buffer size
-    if (this->data_ready_to_send()) {
+    if (this->tableReadyToSend()) {
         this->do_shuffle();
     }
 
     return received_tables;
 }
 
-bool GpuShuffleManager::SendRecvEmpty() {
+bool GpuTableManager::SendRecvEmpty() {
     return (this->send_states.empty() && this->recv_states.empty() &&
-            this->tables_to_shuffle.empty());
+            !this->hasMoreTables());
 }
 
 // Similar to the CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/8706d2d4b4f957023090834b430682c09a275012/bodo/libs/streaming/_join.cpp#L3092
-bool GpuShuffleManager::sync_is_last(bool local_is_last) {
+bool GpuTableManager::sync_is_last(bool local_is_last) {
     if (this->global_is_last) {
         return true;
     }
@@ -167,7 +218,7 @@ bool GpuShuffleManager::sync_is_last(bool local_is_last) {
 
 // Similar to the CPU version here:
 // https://github.com/bodo-ai/Bodo/blob/b5f3663d4744982528c91d06bb437713a1d707b1/bodo/libs/streaming/_shuffle.cpp#L613
-void GpuShuffleManager::shuffle_irecv() {
+void GpuTableManager::shuffle_irecv() {
     while (true) {
         int flag;
         MPI_Status status;
@@ -199,9 +250,9 @@ void GpuShuffleManager::shuffle_irecv() {
     }
 }
 
-std::vector<std::unique_ptr<cudf::table>>
-GpuShuffleManager::consume_completed_recvs() {
-    std::vector<std::unique_ptr<cudf::table>> out_tables;
+std::vector<std::shared_ptr<cudf::table>>
+GpuTableManager::consume_completed_recvs() {
+    std::vector<std::shared_ptr<cudf::table>> out_tables;
     std::erase_if(recv_states, [&](GpuShuffleRecvState& s) {
         auto [done, table] = s.recvDone(mpi_comm);
         if (done) {
@@ -214,25 +265,51 @@ GpuShuffleManager::consume_completed_recvs() {
 
 GpuShuffleSendState::GpuShuffleSendState(
     std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
-    MPI_Comm shuffle_comm, size_t n_ranks)
+    MPI_Comm shuffle_comm, size_t n_ranks, bool broadcast)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
       send_metadata_sizes(3 * n_ranks, 0) {
-    // Prepare send buffers
-    for (size_t dest_rank = 0; dest_rank < packed_tables.size(); dest_rank++) {
-        cudf::packed_table& table = packed_tables[dest_rank];
-        packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
-        metadata_send_buffers[dest_rank] =
-            std::make_unique<std::vector<uint8_t>>(
-                std::move(*table.data.metadata));
+    // This constructor can operate in two modes.  If the broadcast flag
+    // isn't set then it expects one packed_table per rank and sends those
+    // tables to the corresponding ranks.  If broadcast mode is set then
+    // only one entry is expected in the packed_tables and that entry is
+    // sent to all ranks.  This way we don't duplicate the table/memory
+    // unnecessarily.
+    if (broadcast) {
+        assert(packed_tables.size() == 1);
+        cudf::packed_table& table = packed_tables[0];
+        packed_send_buffers[0] = std::move(table.data.gpu_data);
+        metadata_send_buffers[0] = std::make_unique<std::vector<uint8_t>>(
+            std::move(*table.data.metadata));
 
-        send_metadata_sizes[3 * dest_rank + 0] =
-            static_cast<uint64_t>(starting_msg_tag);
-        send_metadata_sizes[3 * dest_rank + 1] =
-            metadata_send_buffers[dest_rank]->size();
-        send_metadata_sizes[3 * dest_rank + 2] =
-            packed_send_buffers[dest_rank]->size();
+        // Prepare send buffers
+        for (size_t dest_rank = 0; dest_rank < n_ranks; dest_rank++) {
+            send_metadata_sizes[3 * dest_rank + 0] =
+                static_cast<uint64_t>(starting_msg_tag);
+            send_metadata_sizes[3 * dest_rank + 1] =
+                metadata_send_buffers[0]->size();
+            send_metadata_sizes[3 * dest_rank + 2] =
+                packed_send_buffers[0]->size();
+        }
+    } else {
+        assert(packed_tables.size() == static_cast<size_t>(n_ranks));
+        // Prepare send buffers
+        for (size_t dest_rank = 0; dest_rank < packed_tables.size();
+             dest_rank++) {
+            cudf::packed_table& table = packed_tables[dest_rank];
+            packed_send_buffers[dest_rank] = std::move(table.data.gpu_data);
+            metadata_send_buffers[dest_rank] =
+                std::make_unique<std::vector<uint8_t>>(
+                    std::move(*table.data.metadata));
+
+            send_metadata_sizes[3 * dest_rank + 0] =
+                static_cast<uint64_t>(starting_msg_tag);
+            send_metadata_sizes[3 * dest_rank + 1] =
+                metadata_send_buffers[dest_rank]->size();
+            send_metadata_sizes[3 * dest_rank + 2] =
+                packed_send_buffers[dest_rank]->size();
+        }
     }
 
     // Send sizes
@@ -249,11 +326,12 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < metadata_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
-        CHECK_MPI(MPI_Issend(this->metadata_send_buffers[dest_rank]->data(),
-                             this->metadata_send_buffers[dest_rank]->size(),
-                             MPI_UINT8_T, dest_rank, starting_msg_tag,
-                             shuffle_comm, &req),
-                  "GpuShuffleSendState: MPI_Issend for metadata failed:");
+        CHECK_MPI(
+            MPI_Issend(
+                this->metadata_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                this->metadata_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                MPI_UINT8_T, dest_rank, starting_msg_tag, shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for metadata failed:");
         this->send_requests.push_back(req);
     }
 
@@ -261,11 +339,21 @@ GpuShuffleSendState::GpuShuffleSendState(
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
+#if BODO_MPI_HAS_LARGE_COUNT == 1
         CHECK_MPI(
-            MPI_Issend(packed_send_buffers[dest_rank]->data(),
-                       packed_send_buffers[dest_rank]->size(), MPI_UINT8_T,
-                       dest_rank, starting_msg_tag + 1, shuffle_comm, &req),
+            MPI_Issend_c(packed_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                         packed_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                         MPI_UINT8_T, dest_rank, starting_msg_tag + 1,
+                         shuffle_comm, &req),
             "GpuShuffleSendState: MPI_Issend for data failed:");
+#else
+        CHECK_MPI(
+            MPI_Issend(packed_send_buffers[broadcast ? 0 : dest_rank]->data(),
+                       packed_send_buffers[broadcast ? 0 : dest_rank]->size(),
+                       MPI_UINT8_T, dest_rank, starting_msg_tag + 1,
+                       shuffle_comm, &req),
+            "GpuShuffleSendState: MPI_Issend for data failed:");
+#endif
         this->send_requests.push_back(req);
     }
 }
@@ -327,14 +415,21 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
 
     // recv data
     MPI_Request data_recv_req;
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+    CHECK_MPI(MPI_Irecv_c(this->packed_recv_buffer->data(),
+                          this->packed_recv_buffer->size(), MPI_UINT8_T, source,
+                          curr_tag + 1, shuffle_comm, &data_recv_req),
+              "GpuShuffle::recv_data: MPI_Irecv_c failed:");
+#else
     CHECK_MPI(MPI_Irecv(this->packed_recv_buffer->data(),
                         this->packed_recv_buffer->size(), MPI_UINT8_T, source,
                         curr_tag + 1, shuffle_comm, &data_recv_req),
               "GpuShuffle::recv_data: MPI_Irecv failed:");
+#endif
     this->recv_requests.push_back(data_recv_req);
 }
 
-std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
+std::pair<bool, std::shared_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
     MPI_Comm shuffle_comm) {
     if (recv_requests.empty()) {
         // Try receiving the length again and see if we can populate the data
@@ -361,10 +456,10 @@ std::pair<bool, std::unique_ptr<cudf::table>> GpuShuffleRecvState::recvDone(
     cudf::table_view table_view = cudf::unpack(packed_recv_column);
 
     // TODO(ehsan): avoid copy if possible
-    std::unique_ptr<cudf::table> shuffle_res =
-        std::make_unique<cudf::table>(table_view, stream);
+    std::shared_ptr<cudf::table> shuffle_res =
+        std::make_shared<cudf::table>(table_view, stream);
 
-    return std::make_pair(true, std::move(shuffle_res));
+    return std::make_pair(true, shuffle_res);
 }
 
 std::pair<std::unique_ptr<cudf::table>, std::vector<cudf::size_type>>
@@ -464,9 +559,15 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
             continue;
         }
         void* dst_ptr = recv_buffers[static_cast<size_t>(src)]->data();
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+        CHECK_MPI(MPI_Irecv_c(dst_ptr, static_cast<int64_t>(sz), MPI_BYTE, src,
+                              /*tag=*/0, mpi_comm, &recv_reqs[src]),
+                  "MPI_Irecv_c failed:");
+#else
         CHECK_MPI(MPI_Irecv(dst_ptr, static_cast<int>(sz), MPI_BYTE, src,
                             /*tag=*/0, mpi_comm, &recv_reqs[src]),
                   "MPI_Irecv failed:");
+#endif
     }
 
     std::vector<MPI_Request> send_reqs(n_ranks, MPI_REQUEST_NULL);
@@ -474,22 +575,33 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     // Post sends: send this rank's buffer to every rank (including self)
     if (local_size > 0) {
         for (int dst = 0; dst < n_ranks; ++dst) {
+#if BODO_MPI_HAS_LARGE_COUNT == 1
+            CHECK_MPI(MPI_Issend_c(local_buf.data(),
+                                   static_cast<int64_t>(local_size), MPI_BYTE,
+                                   dst, /*tag=*/0, mpi_comm, &send_reqs[dst]),
+                      "MPI_Issend_c failed:");
+#else
             CHECK_MPI(
                 MPI_Issend(local_buf.data(), static_cast<int>(local_size),
                            MPI_BYTE, dst, /*tag=*/0, mpi_comm, &send_reqs[dst]),
                 "MPI_Issend failed:");
+#endif
         }
     }
 
     std::vector<MPI_Request> all_reqs;
     all_reqs.reserve(2 * n_ranks);
 
-    for (auto& r : recv_reqs)
-        if (r != MPI_REQUEST_NULL)
+    for (auto& r : recv_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
-    for (auto& r : send_reqs)
-        if (r != MPI_REQUEST_NULL)
+        }
+    }
+    for (auto& r : send_reqs) {
+        if (r != MPI_REQUEST_NULL) {
             all_reqs.push_back(r);
+        }
+    }
 
     CHECK_MPI(MPI_Waitall(static_cast<int>(all_reqs.size()), all_reqs.data(),
                           MPI_STATUSES_IGNORE),

@@ -1,5 +1,6 @@
 #pragma once
 #include <arrow/scalar.h>
+#include <mpi.h>
 #include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
@@ -13,8 +14,6 @@
 struct CudfASTOwner;
 
 struct CudaHashJoin {
-   private:
-    // Storage for the finalized build table
     std::unique_ptr<cudf::table> _build_table;
 
     // Store build chunks until FinalizeBuild is called
@@ -50,14 +49,21 @@ struct CudaHashJoin {
 
     duckdb::JoinType join_type;
 
-    std::unique_ptr<cudf::column> unmatched_build_rows =
-        nullptr;  // Used for right/outer joins to track which
-                  // build rows have been matched
-
     // Optional expression to evaluate
     std::unique_ptr<CudfASTOwner> non_equi_expression;
 
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
+
+    std::unique_ptr<cudf::column> unmatched_build_rows =
+        nullptr;  // Used for right/outer joins to track which
+                  // build rows have been matched
+    // For broadcast joins on RIGHT/OUTER joins we need to sync the build table
+    // matches globally to only produce unmatched build rows once.
+    MPI_Request sync_build_matches_req = MPI_REQUEST_NULL;
+    // Flag to determine if unmatched_build_rows can be used to produce output
+    // rows, if false this means this is a broadcast join and we need to wait
+    // for sync_build_matches_req to complete before proceeding.
+    bool build_matches_synced = true;
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
@@ -86,6 +92,20 @@ struct CudaHashJoin {
     std::unique_ptr<cudf::table> produce_unmatched_build_rows(
         std::unique_ptr<cudf::table> table, bool global_is_last,
         rmm::cuda_stream_view stream);
+    bool is_broadcast_join;
+
+    std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
+    std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
+    GpuMpiManager gather_blooms;
+    std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
+
+    bool hasComm() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->get_mpi_comm() != MPI_COMM_NULL;
+        } else {
+            return build_shuffle_manager->get_mpi_comm() != MPI_COMM_NULL;
+        }
+    }
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -97,20 +117,47 @@ struct CudaHashJoin {
                  std::shared_ptr<bodo::Schema> output_schema,
                  duckdb::JoinType join_type,
                  std::unique_ptr<CudfASTOwner> non_equi_expression,
-                 cudf::null_equality null_eq = cudf::null_equality::EQUAL);
+                 cudf::null_equality null_eq = cudf::null_equality::EQUAL,
+                 bool is_broadcast = false)
+        : output_schema(std::move(output_schema)),
+          build_key_indices(std::move(build_keys)),
+          probe_key_indices(std::move(probe_keys)),
+          build_kept_cols(std::move(build_kept_cols)),
+          probe_kept_cols(std::move(probe_kept_cols)),
+          build_table_schema(std::move(build_schema)),
+          probe_table_schema(std::move(probe_schema)),
+          join_type(join_type),
+          null_equality(null_eq),
+          is_broadcast_join(is_broadcast) {
+        probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+
+        if (is_broadcast_join) {
+            build_broadcast_manager =
+                std::make_shared<GpuTableBroadcastManager>();
+            if (duckdb::IsRightOuterJoin(this->join_type)) {
+                // This is the only case we need to sync build matches
+                this->build_matches_synced = false;
+            }
+        } else {
+            build_shuffle_manager = std::make_shared<GpuShuffleManager>();
+        }
+    }
 
     CudaHashJoin() = default;
+
     /**
      * @brief Finalize the build phase by constructing the hash table
      * and collecting statistics
      */
     void FinalizeBuild();
+
     /**
      * @brief Process input tables to build side of join
      */
     bool BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
                            std::shared_ptr<StreamAndEvent> input_stream_event,
                            bool local_is_last);
+
     /**
      * @brief Run join probe on the input batch
      * @param probe_chunk input batch to probe
@@ -144,11 +191,27 @@ struct CudaHashJoin {
         return min_max_stats;
     }
 
-    // Public so PhysicalGPUJoin can access to determine if there are pending
-    // shuffles
-    GpuShuffleManager build_shuffle_manager;
-    GpuShuffleManager probe_shuffle_manager;
-    GpuMpiManager gather_blooms;
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_build_complete() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->BuffersFull();
+        } else {
+            return build_shuffle_manager->BuffersFull();
+        }
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_probe_complete() {
+        if (is_broadcast_join) {
+            return true;
+        } else {
+            return probe_shuffle_manager->BuffersFull();
+        }
+    }
 };
 #else
 struct CudaHashJoin {};

@@ -1028,20 +1028,25 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     const std::vector<int> column_projection) {
     for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
         for (const auto &[min, max] : min_max_vec) {
-            duckdb::unique_ptr<duckdb::TableFilter> min_filter =
-                duckdb::make_uniq<duckdb::ConstantFilter>(
-                    duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                    ArrowScalarToDuckDBValue(min));
+            if (min->is_valid) {
+                duckdb::unique_ptr<duckdb::TableFilter> min_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(min));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(min_filter));
+            }
 
-            duckdb::unique_ptr<duckdb::TableFilter> max_filter =
-                duckdb::make_uniq<duckdb::ConstantFilter>(
-                    duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
-                    ArrowScalarToDuckDBValue(max));
-
-            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                std::move(min_filter));
-            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                std::move(max_filter));
+            if (max->is_valid) {
+                duckdb::unique_ptr<duckdb::TableFilter> max_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(max));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(max_filter));
+            }
         }
     }
     return filters;

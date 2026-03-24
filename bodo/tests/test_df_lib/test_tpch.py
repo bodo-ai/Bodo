@@ -5,7 +5,7 @@ import pytest
 import benchmarks.tpch.bodo.dataframe_queries as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
-from bodo.tests.utils import _test_equal
+from bodo.tests.utils import _test_equal, set_broadcast_join
 
 pytestmark = pytest.mark.jit_dependency
 
@@ -88,8 +88,10 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
 
 
 @pytest.mark.gpu
-def test_tpch_q01():
-    run_tpch_query_test(tpch.tpch_q01)
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_tpch_q01(broadcast):
+    with set_broadcast_join(broadcast):
+        run_tpch_query_test(tpch.tpch_q01)
 
 
 def test_tpch_q02():
@@ -105,8 +107,10 @@ def test_tpch_q04():
 
 
 @pytest.mark.gpu
-def test_tpch_q05():
-    run_tpch_query_test(tpch.tpch_q05)
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_tpch_q05(broadcast):
+    with set_broadcast_join(broadcast):
+        run_tpch_query_test(tpch.tpch_q05)
 
 
 def test_tpch_q06():
