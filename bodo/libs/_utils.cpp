@@ -13,6 +13,59 @@
 #include "_distributed.h"
 #include "_mpi.h"
 
+#ifdef USE_CUDF
+
+#include <hwloc.h>
+
+/**
+ * @brief Detect the number of physical cores on the node and the current rank's
+ * position on the node. This assumes that the cluster is homogeneous and that
+ * the number of physical cores is the same on each node. This version avoids
+ * creating MPI sub-communicators since CUDA-aware MPICH doesn't seem to support
+ * MPI_COMM_TYPE_SHARED properly.
+ * TODO: use hwloc approach for all platforms and make sure it's packaged
+ * properly.
+ *
+ * @return std::tuple<int, int> number of cores on the node, rank's position on
+ * the node
+ */
+std::tuple<int, int> dist_get_ranks_on_node() {
+    hwloc_topology_t topo;
+    int err;
+
+    err = hwloc_topology_init(&topo);
+    if (err) {
+        throw std::runtime_error("Failed to initialize hwloc topology");
+    }
+
+    err = hwloc_topology_load(topo);
+    if (err) {
+        hwloc_topology_destroy(topo);
+        throw std::runtime_error("Failed to load hwloc topology");
+    }
+
+    int ncores_on_node = hwloc_get_nbobjs_by_type(topo, HWLOC_OBJ_CORE);
+
+    hwloc_topology_destroy(topo);
+
+    int is_initialized;
+    MPI_Initialized(&is_initialized);
+    if (!is_initialized) {
+        CHECK_MPI(MPI_Init(nullptr, nullptr),
+                  "dist_get_ranks_on_node: MPI error on MPI_Init:");
+    }
+
+    int rank;
+    CHECK_MPI(MPI_Comm_rank(MPI_COMM_WORLD, &rank),
+              "dist_get_ranks_on_node: MPI error on MPI_Comm_rank:");
+
+    int rank_on_node = rank % ncores_on_node;
+
+    return std::make_tuple(ncores_on_node, rank_on_node);
+}
+
+#else
+
 std::tuple<int, int> dist_get_ranks_on_node() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
@@ -39,6 +92,8 @@ std::tuple<int, int> dist_get_ranks_on_node() {
     MPI_Comm_free(&shmcomm);
     return std::make_tuple(npes_node, rank_on_node);
 }
+
+#endif
 
 std::string BytesToHumanReadableString(const size_t bytes) {
     auto kibibytes = bytes / 1024;
