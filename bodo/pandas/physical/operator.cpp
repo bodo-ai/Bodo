@@ -24,8 +24,7 @@ int get_streaming_batch_size() {
 
 int get_gpu_streaming_batch_size() {
     char *env_str = std::getenv("BODO_GPU_STREAMING_BATCH_SIZE");
-    // TODO: tune batch size
-    return (env_str != nullptr) ? std::stoi(env_str) : 32768 * 10;
+    return (env_str != nullptr) ? std::stoi(env_str) : 24.e6;
 }
 
 // Maximum Parquet file size for streaming Parquet write
