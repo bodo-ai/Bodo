@@ -39,6 +39,30 @@ using cond_expr_fn_t = bool (*)(array_info**, array_info**, void**, void**,
  * @param left_null_bitmap array of null bitmaps for the left table.
  * @param right_null_bitmap array of null bitmaps for the right table.
  * @param match_arr array of null bitmaps to set output
+ * @param right_size size of the match_arr and right_selected
+ * @param l_ind index in left table
+ * @param right_selected start index for right table loop
+ */
+using cond_expr_fn_right_batch_t =
+    void (*)(array_info** left_table, array_info** right_table,
+             void** left_data1, void** right_data1, void** left_null_bitmap,
+             void** right_null_bitmap, uint8_t* match_arr, int64_t right_size,
+             int64_t l_ind, size_t* right_selected);
+
+/**
+ * @brief Same as previous function type, but processes data in batches and sets
+ * bits in a bitmap.
+ *
+ * @param left_table array of array_info pointers for all columns of left table
+ * @param right_table array of array_info pointers for all columns of right
+ * table
+ * @param left_data1 array of data1 pointers for the left table. This is used as
+ *      a fast path for numeric columns.
+ * @param right_data1  array of data1 pointers for the right table. This is used
+ * as a fast path for numeric columns.
+ * @param left_null_bitmap array of null bitmaps for the left table.
+ * @param right_null_bitmap array of null bitmaps for the right table.
+ * @param match_arr array of null bitmaps to set output
  * @param left_block_start start index for left table loop
  * @param left_block_end end index for left table loop
  * @param right_block_start start index for right table loop

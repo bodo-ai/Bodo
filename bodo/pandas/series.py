@@ -1202,6 +1202,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
+        if len(values) <= 4:
+            ret = self == values[0]
+            for val in values[1:]:
+                ret = ret | (self == val)
+            return ret
+
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.bool_()),
             name=self.name,
