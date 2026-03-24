@@ -53,8 +53,25 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
  */
 class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
    private:
-    bool doBroadcastJoin(duckdb::LogicalOperator& buildSide,
-                         duckdb::LogicalOperator& probeSide) {
+    bool doBroadcastJoin(duckdb::LogicalComparisonJoin& join) {
+        duckdb::LogicalOperator& buildSide = *join.children[1];
+        duckdb::LogicalOperator& probeSide = *join.children[0];
+
+        // If we have no equality conditions we have to do
+        //  a broadcast join.
+        bool no_equality = true;
+        for (const duckdb::JoinCondition& cond : join.conditions) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
+                no_equality = false;
+                break;
+            }
+        }
+        if (no_equality) {
+            return true;
+        }
+
         // Get build side row width.
         uint64_t build_row_size = std::transform_reduce(
             buildSide.types.begin(), buildSide.types.end(), 0LL, std::plus<>{},
@@ -82,19 +99,14 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
    public:
     explicit PhysicalGPUJoin(duckdb::LogicalComparisonJoin& logical_join)
-        : has_non_equi_cond(false),
-          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
+        : is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
-          is_broadcast_join(doBroadcastJoin(*logical_join.children[1],
-                                            *logical_join.children[0])) {}
+          is_broadcast_join(doBroadcastJoin(logical_join)) {}
 
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
-                    const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false),
-          is_broadcast_join(doBroadcastJoin(*logical_join.children[1],
-                                            *logical_join.children[0])) {
+                    const std::shared_ptr<bodo::Schema> probe_table_schema) {
         throw std::runtime_error("Not implemented.");
     }
 
@@ -293,6 +305,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+        std::cout << "probing with batch of " << input_batch.table->num_rows()
+                  << " rows" << std::endl;
+        std::cout << "local_is_last: " << local_is_last << std::endl;
 
         // TODO(ehsan): implement buffering output similar to CPU join
         bool request_input = true;
@@ -340,7 +355,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
-    bool has_non_equi_cond;
     bool is_mark_join = false;
     bool is_anti_join = false;
 
