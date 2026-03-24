@@ -30,6 +30,13 @@
  * the node
  */
 std::tuple<int, int> dist_get_ranks_on_node() {
+    static std::tuple<int, int> cached_result;
+    static bool cache_initialized = false;
+
+    if (cache_initialized) {
+        return cached_result;
+    }
+
     hwloc_topology_t topo;
     int err;
 
@@ -61,7 +68,10 @@ std::tuple<int, int> dist_get_ranks_on_node() {
 
     int rank_on_node = rank % ncores_on_node;
 
-    return std::make_tuple(ncores_on_node, rank_on_node);
+    cached_result = std::make_tuple(ncores_on_node, rank_on_node);
+    cache_initialized = true;
+
+    return cached_result;
 }
 
 #else
