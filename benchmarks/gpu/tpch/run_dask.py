@@ -52,7 +52,7 @@ def main():
     parser.add_argument(
         "--log_timings",
         type=str,
-        default="timings.csv",
+        default=None,
     )
     args = parser.parse_args()
 

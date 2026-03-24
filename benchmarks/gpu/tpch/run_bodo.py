@@ -5,12 +5,14 @@ import os
 import boto3
 import pandas
 from linetimer import CodeTimer
+from pandas import DataFrame
 
 from bodo.tests.utils import _test_equal
 
 
-def q(root, pd):
-    """
+def q5(root: str, pd) -> DataFrame:
+    """Implementation of of TPC-H Query 5 using the Pandas API.
+
     select
         n_name,
         sum(l_extendedprice * (1 - l_discount)) as revenue
@@ -35,6 +37,13 @@ def q(root, pd):
         n_name
         order by
     revenue desc;
+
+    Args:
+        root: Path to the root directory containing the parquet files.
+        pd: The Pandas module or a compatible API.
+
+    Returns:
+        DataFrame: The query result.
     """
     lineitem = pd.read_parquet(f"{root}/lineitem.pq")
     orders = pd.read_parquet(f"{root}/orders.pq")
@@ -71,7 +80,6 @@ def q(root, pd):
 
 def main():
     parser = argparse.ArgumentParser()
-    # Common Args
     parser.add_argument(
         "--root",
         type=str,
@@ -84,7 +92,7 @@ def main():
     parser.add_argument(
         "--log_timings",
         type=str,
-        default="timings.csv",
+        default=None,
     )
     parser.add_argument(
         "--library",
@@ -108,7 +116,7 @@ def main():
     )
 
     # Bodo Config
-    parser.add_argument("--batch_size", type=int, default=24_000_000)
+    parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument(
         "--no_parallel",
         action="store_true",
@@ -152,7 +160,8 @@ def main():
         # Bodo envs (set prior to importing bodo.pandas)
         os.environ["BODO_GPU"] = "1"
         os.environ["BODO_NUM_WORKERS"] = str(args.n_workers)
-        os.environ["BODO_GPU_STREAMING_BATCH_SIZE"] = str(args.batch_size)
+        if args.batch_size:
+            os.environ["BODO_GPU_STREAMING_BATCH_SIZE"] = str(args.batch_size)
         os.environ["BODO_DATAFRAME_LIBRARY_DUMP_PLANS"] = "1" if args.dump_plan else "0"
         os.environ["BODO_DATAFRAME_LIBRARY_RUN_PARALLEL"] = (
             "0" if args.no_parallel else "1"
@@ -175,14 +184,14 @@ def main():
     if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
             f.write(
-                "scale_factor,storage_type,n_gpus,implementation,time_seconds,extras\n"
+                "scale_factor,storage_type,n_gpus,implementation,time_seconds,params\n"
             )
 
     n_correct = 0
     if args.warmup:
         try:
             print("Running warmup...")
-            q(args.root, pd_impl).execute_plan()
+            q5(args.root, pd_impl).execute_plan()
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
@@ -192,7 +201,7 @@ def main():
                 f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i}",
                 unit="s",
             ) as timer:
-                res = q(args.root, pd_impl)
+                res = q5(args.root, pd_impl)
                 if args.print_output:
                     print(res)
                 else:
