@@ -1,8 +1,3 @@
-"""
-Usage:
-    python run_polars.py --root <path_to_parquet_files> --engine {cudf,dask} --n_workers <num_gpus>
-"""
-
 import argparse
 import os
 from datetime import date
@@ -116,8 +111,12 @@ def main():
         os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
         os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
         os.environ["AWS_SESSION_TOKEN"] = credentials.token
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
-        os.environ["AWS_REGION"] = "us-east-2"
+        os.environ["AWS_DEFAULT_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
+        os.environ["AWS_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
 
     if args.engine != "dask" and args.n_workers > 1:
         raise ValueError(
