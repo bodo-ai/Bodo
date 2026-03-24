@@ -1,10 +1,10 @@
 import argparse
 import os
+import time
 from datetime import date
 
 import boto3
 import polars as pl
-from linetimer import CodeTimer
 
 
 def q5(root: str, scale_factor: int) -> pl.LazyFrame:
@@ -179,13 +179,13 @@ def main():
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            with CodeTimer(
-                f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i}",
-                unit="s",
-            ) as timer:
-                result = q5(args.root, scale_factor).collect(engine=pl_engine)
-                if args.print_output:
-                    print(result)
+            t0 = time.time()
+            result = q5(args.root, scale_factor).collect(engine=pl_engine)
+            print(result)
+            total_time = time.time() - t0
+            print(
+                f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
+            )
 
             if args.store_output:
                 output_path = f"q5_polars_{args.engine}_sf{scale_factor}.pq"
@@ -195,7 +195,7 @@ def main():
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{storage_type},{args.n_workers},Polars[{args.engine}],{timer.took:.4f},\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},Polars[{args.engine}],{total_time:.4f},\n"
                     )
         except Exception as e:
             print(

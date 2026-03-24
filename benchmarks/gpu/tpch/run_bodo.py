@@ -1,13 +1,11 @@
 import argparse
 import datetime
 import os
+import time
 
 import boto3
 import pandas
-from linetimer import CodeTimer
 from pandas import DataFrame
-
-from bodo.tests.utils import _test_equal
 
 
 def q5(root: str, pd) -> DataFrame:
@@ -90,6 +88,11 @@ def main():
     parser.add_argument("--n_workers", type=int, default=1)
     parser.add_argument("--n_iters", type=int, default=1)
     parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="If set, run a warmup run that is not timed.",
+    )
+    parser.add_argument(
         "--log_timings",
         type=str,
         default=None,
@@ -105,14 +108,6 @@ def main():
         type=str,
         default=None,
         help="Path to saved answer, in parquet format for asserting output matches expected.",
-    )
-    parser.add_argument(
-        "--warmup",
-        action="store_true",
-        help="If set, run a warmup run that is not timed.",
-    )
-    parser.add_argument(
-        "--print_output", action="store_true", help="If set, print the query results."
     )
 
     # Bodo Config
@@ -201,19 +196,19 @@ def main():
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            with CodeTimer(
-                f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i}",
-                unit="s",
-            ) as timer:
-                res = q5(args.root, pd_impl)
-                if args.print_output:
-                    print(res)
-                else:
-                    res.execute_plan()
+            t0 = time.time()
+            result = q5(args.root, pd_impl)
+            print(result)
+            total_time = time.time() - t0
+            print(
+                f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
+            )
 
             if args.answer_path:
+                from bodo.tests.utils import _test_equal
+
                 answer_df = pandas.read_parquet(args.answer_path)
-                _test_equal(res, answer_df)
+                _test_equal(result, answer_df)
                 n_correct += 1
 
             if args.log_timings:
@@ -222,7 +217,7 @@ def main():
                 )
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{storage_type},{args.n_workers},{args.library},{timer.took:.4f},{batch_size_str}\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},{args.library},{total_time:.4f},{batch_size_str}\n"
                     )
         except Exception as e:
             print(

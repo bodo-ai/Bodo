@@ -1,13 +1,13 @@
 import argparse
 import datetime
 import os
+import time
 
 import dask
 import dask_cudf
 from dask.dataframe import DataFrame
 from dask_cuda import LocalCUDACluster
 from distributed import Client
-from linetimer import CodeTimer
 
 
 def q5(root: str) -> DataFrame:
@@ -59,25 +59,21 @@ def main():
     parser.add_argument("--n_workers", type=int, default=1)
     parser.add_argument("--n_iters", type=int, default=1)
     parser.add_argument(
-        "--log_timings",
-        type=str,
-        default=None,
-        help="Path to CSV file where timings will be logged.",
-    )
-    parser.add_argument(
         "--warmup",
         action="store_true",
         help="If set, a warmup run of the query will be executed before timing.",
     )
     parser.add_argument(
-        "--print_output",
-        action="store_true",
+        "--log_timings",
+        type=str,
+        default=None,
+        help="Path to CSV file where timings will be logged.",
     )
     args = parser.parse_args()
 
     if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
-            f.write("scale_factor,n_gpus,implementation,time_seconds,extras\n")
+            f.write("scale_factor,n_gpus,implementation,time_seconds,params\n")
 
     scale_factor = args.root.split("/")[-1].replace("SF", "")
     if scale_factor.isdigit():
@@ -100,19 +96,20 @@ def main():
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            with CodeTimer(
-                f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i}", unit="s"
-            ) as timer:
-                result = q5(args.root).compute()
-                if args.print_output:
-                    print(result)
+            t0 = time.time()
+            result = q5(args.root).compute()
+            print(result)
+            total_time = time.time() - t0
+            print(
+                f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
+            )
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
-                    f.write(f"{scale_factor},{args.n_workers},dask,{timer.took:.4f},\n")
+                    f.write(f"{scale_factor},{args.n_workers},dask,{total_time:.4f},\n")
         except Exception as e:
             print(
-                f"Error executing query library=dask, sf={scale_factor}, n_gpus={args.n_workers}: {e}"
+                f"Error executing query sf={scale_factor}, n_gpus={args.n_workers}: {e}"
             )
 
 

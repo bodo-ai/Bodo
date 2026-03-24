@@ -16,7 +16,8 @@ def get_filesystem_and_path(path):
     Returns (filesystem, path_without_scheme)
     """
     if path.startswith("s3://"):
-        filesystem = fs.S3FileSystem()
+        region = os.environ.get("AWS_REGION", "us-east-2")
+        filesystem = fs.S3FileSystem(region=region)
         path = path.replace("s3://", "")
     else:
         filesystem = fs.LocalFileSystem()

@@ -1,6 +1,5 @@
 """
-Usage:
-    python aggregate_timings.py --timings_csv <path_to_timings_csv> --output_csv <path_to_output_csv>
+Aggregate timings from multiple runs of the TPC-H benchmark and save the average timings to a new CSV file.
 """
 
 import argparse
