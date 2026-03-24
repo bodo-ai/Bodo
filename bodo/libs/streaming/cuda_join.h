@@ -196,11 +196,13 @@ struct CudaHashJoin {
     }
 
     /**
-     * @brief Signal this rank has completed its portion of the join.
+     * @brief Signal this rank cannot accept new input since shuffle buffer is
+     * full.
      */
-    bool is_probe_complete() {
+    bool shuffle_buffer_full() {
         if (is_broadcast_join) {
-            return true;
+            // There is no shuffling in broadcast join
+            return false;
         } else {
             return probe_shuffle_manager->BuffersFull();
         }
