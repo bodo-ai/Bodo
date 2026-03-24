@@ -7,9 +7,11 @@
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/filling.hpp>
+#include <cudf/join/conditional_join.hpp>
 #include <cudf/join/join.hpp>
 #include <cudf/reduction.hpp>
 #include <cudf/stream_compaction.hpp>
+#include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
@@ -104,7 +106,7 @@ void CudaHashJoin::build_hash_table(
     //    We maintain ownership of _join_handle to reuse it for probing.
     cudf::table_view build_view = _build_table->view();
 
-    if (build_view.num_rows() != 0) {
+    if (build_view.num_rows() != 0 && this->build_key_indices.size() > 0) {
         this->_join_handle = std::make_unique<cudf::hash_join>(
             build_view.select(this->build_key_indices), this->null_equality);
     }
@@ -351,7 +353,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             return {nullptr, global_is_last};
         }
 
-        if (probe_chunk->num_rows() == 0 || _join_handle == nullptr) {
+        if (probe_chunk->num_rows() == 0) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
@@ -377,7 +379,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         if (!is_gpu_rank()) {
             return {nullptr, global_is_last};
         }
-        if (shuffled_probe_chunks.empty() || this->_join_handle == nullptr) {
+        if (shuffled_probe_chunks.empty()) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
@@ -407,47 +409,71 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
         probe_to_select = std::move(coalesced_probe);
     }
-
-    std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
-        build_indices;
-    cudf::join_kind cudf_join_kind;
-    switch (this->join_type) {
-        case duckdb::JoinType::RIGHT:
-        case duckdb::JoinType::INNER: {
-            std::tie(probe_indices, build_indices) =
-                _join_handle->inner_join(selected, {}, stream);
-            cudf_join_kind = cudf::join_kind::INNER_JOIN;
-        } break;
-        // Use left join for outer because it will give us all probe rows, and
-        // for the build rows we can use the matched_build_rows boolean mask to
-        // determine which ones are unmatched and should be included in the
-        // output. If we used cudf's full join it would output unmatched build
-        // rows every batch
-        case duckdb::JoinType::OUTER:
-        case duckdb::JoinType::LEFT: {
-            std::tie(probe_indices, build_indices) =
-                _join_handle->left_join(selected, {}, stream);
-            cudf_join_kind = cudf::join_kind::LEFT_JOIN;
-        } break;
-        default: {
-            throw std::runtime_error(
-                "Unsupported join type " +
-                duckdb::EnumUtil::ToString(this->join_type));
-        }
-    }
-
-    if (this->non_equi_expression != nullptr) {
-        std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
-            probe_chunk->view(), this->_build_table->view(), *probe_indices,
-            *build_indices, this->non_equi_expression->get_root(),
-            cudf_join_kind, stream);
-    }
-
     // Create views for the columns we want to keep
     cudf::table_view probe_kept_view = probe_to_select->select(
         this->probe_kept_cols.begin(), this->probe_kept_cols.end());
     cudf::table_view build_kept_view = _build_table->select(
         this->build_kept_cols.begin(), this->build_kept_cols.end());
+
+    std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
+        build_indices;
+    if (this->_join_handle == nullptr) {
+        // If there's no equi conditions just do a filter join
+        switch (this->join_type) {
+            case duckdb::JoinType::RIGHT:
+            case duckdb::JoinType::INNER: {
+                std::tie(probe_indices, build_indices) =
+                    cudf::conditional_inner_join(
+                        probe_chunk->view(), this->_build_table->view(),
+                        this->non_equi_expression->get_root(), {}, stream);
+            } break;
+            case duckdb::JoinType::OUTER:
+            case duckdb::JoinType::LEFT: {
+                std::tie(probe_indices, build_indices) =
+                    cudf::conditional_left_join(
+                        probe_chunk->view(), this->_build_table->view(),
+                        this->non_equi_expression->get_root(), {}, stream);
+            } break;
+            default: {
+                throw std::runtime_error(
+                    "Unsupported join type " +
+                    duckdb::EnumUtil::ToString(this->join_type));
+            }
+        }
+    } else {
+        cudf::join_kind cudf_join_kind;
+        switch (this->join_type) {
+            case duckdb::JoinType::RIGHT:
+            case duckdb::JoinType::INNER: {
+                std::tie(probe_indices, build_indices) =
+                    _join_handle->inner_join(selected, {}, stream);
+                cudf_join_kind = cudf::join_kind::INNER_JOIN;
+            } break;
+            // Use left join for outer because it will give us all probe rows,
+            // and for the build rows we can use the matched_build_rows boolean
+            // mask to determine which ones are unmatched and should be included
+            // in the output. If we used cudf's full join it would output
+            // unmatched build rows every batch
+            case duckdb::JoinType::OUTER:
+            case duckdb::JoinType::LEFT: {
+                std::tie(probe_indices, build_indices) =
+                    _join_handle->left_join(selected, {}, stream);
+                cudf_join_kind = cudf::join_kind::LEFT_JOIN;
+            } break;
+            default: {
+                throw std::runtime_error(
+                    "Unsupported join type " +
+                    duckdb::EnumUtil::ToString(this->join_type));
+            }
+        }
+
+        if (this->non_equi_expression != nullptr) {
+            std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
+                probe_chunk->view(), this->_build_table->view(), *probe_indices,
+                *build_indices, this->non_equi_expression->get_root(),
+                cudf_join_kind, stream);
+        }
+    }
 
     // Create column views of the indices from the indices buffers
     cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
