@@ -1321,10 +1321,11 @@ def test_merge_switch_side():
 
 
 @pytest.mark.gpu
-def test_merge_non_equi_cond():
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_merge_non_equi_cond(broadcast):
     """Simple test for non-equi join conditions."""
     # Make sure bdf3 is unevaluated in the process.
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "B": pd.array([4, 5, 6], "Int64"),
@@ -1342,8 +1343,8 @@ def test_merge_non_equi_cond():
         bdf1 = bd.from_pandas(df1)
         bdf2 = bd.from_pandas(df2)
 
-        df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
-        bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+        df3 = df1.merge(df2, how="cross")
+        bdf3 = bdf1.merge(bdf2, how="cross")
 
         df4 = df3[df3.B < df3.Dog]
         bdf4 = bdf3[bdf3.B < bdf3.Dog]
@@ -1352,8 +1353,8 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    # The filter node gets pushed into join and then a join filter is inserted
-    _test_equal(post, 5)
+    # The filter node gets pushed into join
+    _test_equal(post, 4)
 
     _test_equal(
         bdf4.copy(),
@@ -1364,12 +1365,12 @@ def test_merge_non_equi_cond():
     )
 
     # Make sure bdf3 is unevaluated at this point.
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1.loc[0, "B"] = np.nan
         bdf1 = bd.from_pandas(df1)
 
-        nan_df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
-        nan_bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+        nan_df3 = df1.merge(df2, how="cross")
+        nan_bdf3 = bdf1.merge(bdf2, how="cross")
 
         nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
         nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
@@ -1378,12 +1379,58 @@ def test_merge_non_equi_cond():
     pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
 
     _test_equal(pre, 5)
-    # The filter node gets pushed into join and then a join filter is inserted
-    _test_equal(post, 5)
+    # The filter node gets pushed into join
+    _test_equal(post, 4)
 
     _test_equal(
         nan_bdf4.copy(),
         nan_df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_merge_mixed_join_conds(broadcast):
+    """Test merge with both equi and non-equi join conditions."""
+    # Make sure bdf3 is unevaluated at this point.
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+        df1 = pd.DataFrame(
+            {
+                "B": pd.array([4, 5, 6], "Int64"),
+                "E": [1.1, 2.2, 3.3],
+                "A": pd.array([2, 2, 3], "Int64"),
+            },
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": pd.array([2, 3, 8], "Int64"),
+                "D": pd.array([8, 3, 9], "Int64"),
+                "E": [1.1, 2.2, 3.3],
+            },
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+
+        df3 = df1.merge(df2, how="inner", on=["A"])
+        bdf3 = bdf1.merge(bdf2, how="inner", on=["A"])
+
+        df4 = df3[df3.B < df3.D]
+        bdf4 = bdf3[bdf3.B < bdf3.D]
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+
+    _test_equal(pre, 5)
+    # The filter node gets pushed into join and a join filter gets created
+    _test_equal(post, 5)
+
+    _test_equal(
+        bdf4.copy(),
+        df4,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
