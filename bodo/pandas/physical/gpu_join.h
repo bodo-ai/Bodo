@@ -39,7 +39,7 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
     }
 
     for (duckdb::JoinCondition& cond : logical_join.conditions) {
-        if (gpu_capable(cond.GetJoinExpression()) {
+        if (!gpu_capable(cond.GetJoinExpression())) {
             return false;
         }
     }
@@ -201,29 +201,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             probe_kept_cols.push_back(idx);
         }
 
-        // Convert the duckdb non-equi join conditions to cudf expressions
-        auto build_kept_col_rev = std::vector<int64_t>(build_kept_cols.size());
-        for (size_t i = 0; i < build_kept_cols.size(); ++i) {
-            build_kept_col_rev[build_kept_cols[i]] = i;
-        }
-        auto probe_kept_col_rev = std::vector<int64_t>(probe_kept_cols.size());
-        for (size_t i = 0; i < probe_kept_cols.size(); ++i) {
-            probe_kept_col_rev[probe_kept_cols[i]] = i;
-        }
-
         std::unordered_set<duckdb::idx_t> probe_table_inds;
         for (auto [k, _] : left_col_ref_map) {
             probe_table_inds.emplace(k.first);
-        }
-        // Create a col ref map for both the tables, mapping to their
-        // respective positions in the reordered schemas
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
-            combined_left_right_expr_col_ref_map;
-        for (const auto& [k, v] : left_col_ref_map) {
-            combined_left_right_expr_col_ref_map[k] = probe_kept_col_rev[v];
-        }
-        for (const auto& [k, v] : right_col_ref_map) {
-            combined_left_right_expr_col_ref_map[k] = build_kept_col_rev[v];
         }
         std::vector<duckdb::unique_ptr<duckdb::Expression>> duckdb_exprs;
         for (duckdb::JoinCondition& cond : conditions) {
@@ -240,9 +220,11 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         rmm::cuda_stream_view stream = cudf::get_default_stream();
         std::unique_ptr<CudfASTOwner> physExprTree =
-            std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
-                duckdb_exprs, combined_left_right_expr_col_ref_map,
-                probe_table_inds, stream));
+            duckdb_exprs.size()
+                ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
+                      duckdb_exprs, probe_table_inds, stream))
+                : nullptr;
+        ;
 
         this->output_schema = std::make_shared<bodo::Schema>();
         for (const auto& kept_col : probe_kept_cols) {

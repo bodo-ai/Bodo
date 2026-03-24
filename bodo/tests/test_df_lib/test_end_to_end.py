@@ -3855,6 +3855,7 @@ def test_bodo_pandas_inside_jit():
     assert test2(df) == bodo.jit(spawn=False, distributed=False)(test2)(df)
 
 
+@pytest.mark.gpu
 def test_join_non_equi_key_not_in_output():
     """Test for joins with non-equi keys that are not in the output and require special
     handling in column reordering of physical join.

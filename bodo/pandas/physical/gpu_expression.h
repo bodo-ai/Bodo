@@ -958,12 +958,30 @@ void tableFilterSetToCudfAST(
  *        resulting cudf::ast::expression reference.
  *
  */
-struct CudfASTOwner {
+class CudfASTOwner {
     cudf::ast::tree tree;
     std::vector<std::unique_ptr<cudf::scalar>> scalars;
+    const cudf::ast::expression *root{nullptr};
 
+   public:
     void insert_literal(const duckdb::Value &val,
                         rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &get_root() const {
+        if (!root) {
+            throw std::runtime_error("CudfASTOwner: tree is empty");
+        }
+        return *root;
+    }
+    template <typename ExprT>
+    const ExprT &push(ExprT expr) {
+        const ExprT &ref = tree.push(std::move(expr));
+        root = &ref;
+        return ref;
+    }
+
+    friend const cudf::ast::expression &duckdb_expr_to_cudf_ast(
+        const duckdb::Expression &, const std::unordered_set<duckdb::idx_t> &,
+        CudfASTOwner &, rmm::cuda_stream_view &);
 };
 
 /**
@@ -986,9 +1004,6 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  * found in @p left_table_indices.
  *
  * @param expr              Root of the duckdb expression subtree to convert.
- * @param col_ref_map       Maps (table_idx, col_idx) -> flat index into the
- *                          appropriate left_conditional / right_conditional
- *                          table_view column.
  * @param left_table_indices
  *                          Set of duckdb table indices that belong to the left
  *                          side of the join.  Any table index NOT in this set
@@ -1004,8 +1019,6 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  */
 const cudf::ast::expression &duckdb_expr_to_cudf_ast(
     const duckdb::Expression &expr,
-    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
-        &col_ref_map,
     const std::unordered_set<duckdb::idx_t> &left_table_indices,
     CudfASTOwner &owner, rmm::cuda_stream_view &stream);
 /**
@@ -1013,7 +1026,6 @@ const cudf::ast::expression &duckdb_expr_to_cudf_ast(
  *        combining them with LOGICAL_AND.
  *
  * @param exprs             The duckdb expressions to combine.
- * @param col_ref_map       Maps (table_idx, col_idx) -> flat conditional column
  * index.
  * @param left_table_indices Set of duckdb table indices on the left side of the
  * join.
@@ -1022,7 +1034,5 @@ const cudf::ast::expression &duckdb_expr_to_cudf_ast(
  */
 CudfASTOwner build_mixed_join_predicate(
     const std::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
-    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
-        &col_ref_map,
     const std::unordered_set<duckdb::idx_t> &left_table_indices,
     rmm::cuda_stream_view &stream);

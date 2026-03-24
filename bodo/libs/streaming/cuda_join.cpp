@@ -7,6 +7,7 @@
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/filling.hpp>
+#include <cudf/join/join.hpp>
 #include <cudf/reduction.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <memory>
@@ -409,11 +410,13 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
         build_indices;
+    cudf::join_kind cudf_join_kind;
     switch (this->join_type) {
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
             std::tie(probe_indices, build_indices) =
                 _join_handle->inner_join(selected, {}, stream);
+            cudf_join_kind = cudf::join_kind::INNER_JOIN;
         } break;
         // Use left join for outer because it will give us all probe rows, and
         // for the build rows we can use the matched_build_rows boolean mask to
@@ -424,12 +427,20 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         case duckdb::JoinType::LEFT: {
             std::tie(probe_indices, build_indices) =
                 _join_handle->left_join(selected, {}, stream);
+            cudf_join_kind = cudf::join_kind::LEFT_JOIN;
         } break;
         default: {
             throw std::runtime_error(
                 "Unsupported join type " +
                 duckdb::EnumUtil::ToString(this->join_type));
         }
+    }
+
+    if (this->non_equi_expression != nullptr) {
+        std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
+            probe_chunk->view(), this->_build_table->view(), *probe_indices,
+            *build_indices, this->non_equi_expression->get_root(),
+            cudf_join_kind, stream);
     }
 
     // Create views for the columns we want to keep
@@ -481,4 +492,37 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     return {produce_unmatched_build_rows(std::move(output_table),
                                          global_is_last, stream),
             global_is_last && this->build_matches_synced};
+}
+CudaHashJoin::CudaHashJoin(std::vector<cudf::size_type> build_keys,
+                           std::vector<cudf::size_type> probe_keys,
+                           std::shared_ptr<bodo::Schema> build_schema,
+                           std::shared_ptr<bodo::Schema> probe_schema,
+                           std::vector<int64_t> build_kept_cols,
+                           std::vector<int64_t> probe_kept_cols,
+                           std::shared_ptr<bodo::Schema> output_schema,
+                           duckdb::JoinType join_type,
+                           std::unique_ptr<CudfASTOwner> non_equi_expression,
+                           cudf::null_equality null_eq, bool is_broadcast)
+    : output_schema(std::move(output_schema)),
+      build_key_indices(std::move(build_keys)),
+      probe_key_indices(std::move(probe_keys)),
+      build_kept_cols(std::move(build_kept_cols)),
+      probe_kept_cols(std::move(probe_kept_cols)),
+      build_table_schema(std::move(build_schema)),
+      probe_table_schema(std::move(probe_schema)),
+      join_type(join_type),
+      non_equi_expression(std::move(non_equi_expression)),
+      null_equality(null_eq),
+      is_broadcast_join(is_broadcast) {
+    probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+
+    if (is_broadcast_join) {
+        build_broadcast_manager = std::make_shared<GpuTableBroadcastManager>();
+        if (duckdb::IsRightOuterJoin(this->join_type)) {
+            // This is the only case we need to sync build matches
+            this->build_matches_synced = false;
+        }
+    } else {
+        build_shuffle_manager = std::make_shared<GpuShuffleManager>();
+    }
 }

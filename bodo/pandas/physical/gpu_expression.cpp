@@ -955,8 +955,6 @@ void tableFilterSetToCudfAST(
 
 CudfASTOwner build_mixed_join_predicate(
     const std::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
-    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
-        col_ref_map,
     const std::unordered_set<duckdb::idx_t>& left_table_indices,
     rmm::cuda_stream_view& stream) {
     if (exprs.empty()) {
@@ -967,16 +965,16 @@ CudfASTOwner build_mixed_join_predicate(
     CudfASTOwner owner;
 
     // Convert the first expression — its root becomes the accumulator.
-    const cudf::ast::expression* acc = &duckdb_expr_to_cudf_ast(
-        *exprs[0], col_ref_map, left_table_indices, owner, stream);
+    const cudf::ast::expression* acc =
+        &duckdb_expr_to_cudf_ast(*exprs[0], left_table_indices, owner, stream);
 
     // Each subsequent expression is converted into the same owner and
     // AND-ed with the accumulated root. Because all nodes live in the
     // same tree, the references remain valid.
     for (size_t i = 1; i < exprs.size(); ++i) {
         const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
-            *exprs[i], col_ref_map, left_table_indices, owner, stream);
-        acc = &owner.tree.push(cudf::ast::operation(
+            *exprs[i], left_table_indices, owner, stream);
+        acc = &owner.push(cudf::ast::operation(
             cudf::ast::ast_operator::LOGICAL_AND, *acc, rhs));
     }
 
@@ -985,8 +983,6 @@ CudfASTOwner build_mixed_join_predicate(
 
 const cudf::ast::expression& duckdb_expr_to_cudf_ast(
     const duckdb::Expression& expr,
-    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
-        col_ref_map,
     const std::unordered_set<duckdb::idx_t>& left_table_indices,
     CudfASTOwner& owner, rmm::cuda_stream_view& stream) {
     switch (expr.expression_class) {
@@ -996,23 +992,11 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
             duckdb::idx_t table_idx = col_ref.binding.table_index;
             duckdb::idx_t col_idx = col_ref.binding.column_index;
 
-            auto key = std::make_pair(table_idx, col_idx);
-            auto it = col_ref_map.find(key);
-            if (it == col_ref_map.end()) {
-                throw std::runtime_error(
-                    "duckdb_expr_to_cudf_ast: column ref (" +
-                    std::to_string(table_idx) + ", " + std::to_string(col_idx) +
-                    ") not found in col_ref_map");
-            }
-
-            cudf::size_type flat_col = static_cast<cudf::size_type>(it->second);
             cudf::ast::table_reference table_ref =
                 left_table_indices.count(table_idx)
                     ? cudf::ast::table_reference::LEFT
                     : cudf::ast::table_reference::RIGHT;
-
-            return owner.tree.push(
-                cudf::ast::column_reference(flat_col, table_ref));
+            return owner.push(cudf::ast::column_reference(col_idx, table_ref));
         } break;
 
         case duckdb::ExpressionClass::BOUND_CONSTANT: {
@@ -1028,13 +1012,12 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
             auto& cmp = expr.Cast<duckdb::BoundComparisonExpression>();
 
             const cudf::ast::expression& lhs = duckdb_expr_to_cudf_ast(
-                *cmp.left, col_ref_map, left_table_indices, owner, stream);
+                *cmp.left, left_table_indices, owner, stream);
             const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
-                *cmp.right, col_ref_map, left_table_indices, owner, stream);
+                *cmp.right, left_table_indices, owner, stream);
 
             cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
-
-            return owner.tree.push(cudf::ast::operation(op, lhs, rhs));
+            return owner.push(cudf::ast::operation(op, lhs, rhs));
         }
 
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
@@ -1048,17 +1031,14 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
 
             cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
 
-            const cudf::ast::expression* acc =
-                &duckdb_expr_to_cudf_ast(*conj.children[0], col_ref_map,
-                                         left_table_indices, owner, stream);
+            const cudf::ast::expression* acc = &duckdb_expr_to_cudf_ast(
+                *conj.children[0], left_table_indices, owner, stream);
 
             for (size_t i = 1; i < conj.children.size(); ++i) {
-                const cudf::ast::expression& rhs =
-                    duckdb_expr_to_cudf_ast(*conj.children[i], col_ref_map,
-                                            left_table_indices, owner, stream);
-                acc = &owner.tree.push(cudf::ast::operation(op, *acc, rhs));
+                const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
+                    *conj.children[i], left_table_indices, owner, stream);
+                acc = &owner.push(cudf::ast::operation(op, *acc, rhs));
             }
-
             return *acc;
         } break;
 
@@ -1071,10 +1051,9 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
                         "duckdb_expr_to_cudf_ast: NOT must have exactly 1 "
                         "child");
                 }
-                const cudf::ast::expression& child =
-                    duckdb_expr_to_cudf_ast(*op_expr.children[0], col_ref_map,
-                                            left_table_indices, owner, stream);
-                return owner.tree.push(
+                const cudf::ast::expression& child = duckdb_expr_to_cudf_ast(
+                    *op_expr.children[0], left_table_indices, owner, stream);
+                return owner.push(
                     cudf::ast::operation(cudf::ast::ast_operator::NOT, child));
             }
 
@@ -1098,7 +1077,7 @@ void CudfASTOwner::insert_literal(const duckdb::Value& val,
     auto push_literal = [&](auto typed_scalar) {
         using ScalarT = std::decay_t<decltype(*typed_scalar)>;
         ScalarT* raw = typed_scalar.get();
-        this->tree.push(cudf::ast::literal(*raw));
+        this->push(cudf::ast::literal(*raw));
         this->scalars.push_back(std::move(typed_scalar));
     };
 

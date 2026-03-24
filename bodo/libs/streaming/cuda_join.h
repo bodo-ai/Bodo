@@ -11,7 +11,7 @@
 #include "duckdb/common/enums/join_type.hpp"
 
 // Forward declaration to avoid import loop
-struct CudfASTOwner;
+class CudfASTOwner;
 
 struct CudaHashJoin {
     std::unique_ptr<cudf::table> _build_table;
@@ -118,30 +118,7 @@ struct CudaHashJoin {
                  duckdb::JoinType join_type,
                  std::unique_ptr<CudfASTOwner> non_equi_expression,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL,
-                 bool is_broadcast = false)
-        : output_schema(std::move(output_schema)),
-          build_key_indices(std::move(build_keys)),
-          probe_key_indices(std::move(probe_keys)),
-          build_kept_cols(std::move(build_kept_cols)),
-          probe_kept_cols(std::move(probe_kept_cols)),
-          build_table_schema(std::move(build_schema)),
-          probe_table_schema(std::move(probe_schema)),
-          join_type(join_type),
-          null_equality(null_eq),
-          is_broadcast_join(is_broadcast) {
-        probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
-
-        if (is_broadcast_join) {
-            build_broadcast_manager =
-                std::make_shared<GpuTableBroadcastManager>();
-            if (duckdb::IsRightOuterJoin(this->join_type)) {
-                // This is the only case we need to sync build matches
-                this->build_matches_synced = false;
-            }
-        } else {
-            build_shuffle_manager = std::make_shared<GpuShuffleManager>();
-        }
-    }
+                 bool is_broadcast = false);
 
     CudaHashJoin() = default;
 
