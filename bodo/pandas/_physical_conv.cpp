@@ -368,6 +368,28 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalJoin>,
+                 std::shared_ptr<PhysicalGPUJoin>>
+        physical_join;
+    if (node_run_on_gpu(op)) {
+        physical_join = std::make_shared<PhysicalGPUJoin>(op);
+        (*this->join_on_gpu).insert({op.join_id, true});
+    } else {
+        // Move non-equi join conditions into a filter node.
+        std::unique_ptr<duckdb::LogicalOperator> split =
+            SplitNonEquiFromComparisonJoin(op);
+        // If there were non-equi join conditions then create the physical plan
+        // based on the filter returned by the above function.
+        if (split != nullptr) {
+            Visit(*split);
+            return;
+        }
+
+        physical_join = std::make_shared<PhysicalJoin>(op);
+        (*this->join_on_gpu).insert({op.join_id, false});
+    }
+#else
     // Move non-equi join conditions into a filter node.
     std::unique_ptr<duckdb::LogicalOperator> split =
         SplitNonEquiFromComparisonJoin(op);
@@ -378,18 +400,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         return;
     }
 
-#ifdef USE_CUDF
-    std::variant<std::shared_ptr<PhysicalJoin>,
-                 std::shared_ptr<PhysicalGPUJoin>>
-        physical_join;
-    if (node_run_on_gpu(op)) {
-        physical_join = std::make_shared<PhysicalGPUJoin>(op);
-        (*this->join_on_gpu).insert({op.join_id, true});
-    } else {
-        physical_join = std::make_shared<PhysicalJoin>(op);
-        (*this->join_on_gpu).insert({op.join_id, false});
-    }
-#else
     std::shared_ptr<PhysicalJoin> physical_join =
         std::make_shared<PhysicalJoin>(op);
 #endif
