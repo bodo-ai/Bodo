@@ -2,13 +2,23 @@ import argparse
 import datetime
 import os
 
+import dask
 import dask_cudf
+from dask.dataframe import DataFrame
 from dask_cuda import LocalCUDACluster
 from distributed import Client
 from linetimer import CodeTimer
 
 
-def q(root):
+def q5(root: str) -> DataFrame:
+    """Implementation of TPC-H Query 5 using Dask-CuDF.
+
+    Args:
+        root: Path to the root directory containing the parquet files.
+
+    Returns:
+        DataFrame: A Dask DataFrame representing the query result.
+    """
     region = dask_cudf.read_parquet(f"{root}/region.pq")
     nation = dask_cudf.read_parquet(f"{root}/nation.pq")
     customer = dask_cudf.read_parquet(f"{root}/customer.pq")
@@ -34,17 +44,16 @@ def q(root):
     jn5 = jn5[(jn5["O_ORDERDATE"] >= var2) & (jn5["O_ORDERDATE"] < var3)]
     jn5["REVENUE"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
     gb = jn5.groupby("N_NAME")["REVENUE"].sum()
-    return gb.reset_index().sort_values("REVENUE", ascending=False).compute()
+    return gb.reset_index().sort_values("REVENUE", ascending=False)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    # Common Args
     parser.add_argument(
         "--root",
         type=str,
         default=os.path.join(
-            os.path.dirname(__file__), os.pardir, "data", "tpch_dask", "SF10"
+            os.path.dirname(__file__), os.pardir, "data", "tpch", "SF10"
         ),
     )
     parser.add_argument("--n_workers", type=int, default=1)
@@ -53,6 +62,16 @@ def main():
         "--log_timings",
         type=str,
         default=None,
+        help="Path to CSV file where timings will be logged.",
+    )
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="If set, a warmup run of the query will be executed before timing.",
+    )
+    parser.add_argument(
+        "--print_output",
+        action="store_true",
     )
     args = parser.parse_args()
 
@@ -66,14 +85,27 @@ def main():
     else:
         scale_factor = 0
 
-    _ = Client(LocalCUDACluster(n_workers=args.n_workers))
+    # Configure Dask to have longer worker timeouts for long-running tasks.
+    dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
+    dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
+    _ = Client(LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True))
+
+    if args.warmup:
+        try:
+            print("Running warmup...")
+            q5(args.root).compute()
+            print("Warmup complete.")
+        except Exception as e:
+            print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
             with CodeTimer(
                 f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i}", unit="s"
             ) as timer:
-                print(q(args.root))
+                result = q5(args.root).compute()
+                if args.print_output:
+                    print(result)
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:

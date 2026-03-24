@@ -77,18 +77,13 @@ def main():
         help="Path to CSV file where timings will be logged.",
     )
     parser.add_argument(
-        "--visualize_plan",
-        type=str,
-        default="",
-        help="Base name for visualized query plans. If provided, both optimized and unoptimized plans will be visualized and saved as <name>_optimized.png and <name>_unoptimized.png.",
-    )
-    parser.add_argument(
         "--warmup",
         action="store_true",
         help="If set, a warmup run of the query will be executed before timing.",
     )
     parser.add_argument(
-        "--engine", type=str, default="cudf", choices=["cudf", "dask", "cpu"]
+        "--print_output",
+        action="store_true",
     )
     parser.add_argument(
         "--store_output",
@@ -96,8 +91,13 @@ def main():
         help="If set, the output of each query execution will be saved to a parquet file named q5_polars_<engine>_sf<scale_factor>.pq",
     )
     parser.add_argument(
-        "--print_output",
-        action="store_true",
+        "--engine", type=str, default="cudf", choices=["cudf", "dask", "cpu"]
+    )
+    parser.add_argument(
+        "--visualize_plan",
+        type=str,
+        default="",
+        help="Base name for visualized query plans. If provided, both optimized and unoptimized plans will be visualized and saved as <name>_optimized.png and <name>_unoptimized.png.",
     )
     args = parser.parse_args()
 

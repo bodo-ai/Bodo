@@ -213,9 +213,12 @@ def main():
                 n_correct += 1
 
             if args.log_timings:
+                batch_size_str = (
+                    f"batch_size={args.batch_size}" if args.batch_size else ""
+                )
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{storage_type},{args.n_workers},{args.library},{timer.took:.4f},batch_size={args.batch_size}\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},{args.library},{timer.took:.4f},{batch_size_str}\n"
                     )
         except Exception as e:
             print(
