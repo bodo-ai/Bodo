@@ -9,7 +9,8 @@ from pandas import DataFrame
 
 
 def q5(root: str, pd) -> DataFrame:
-    """Implementation of of TPC-H Query 5 using the Pandas API.
+    """Implementation of of TPC-H Query 5 using the Pandas API
+    derived from the following SQL query:
 
     select
         n_name,
@@ -70,7 +71,6 @@ def q5(root: str, pd) -> DataFrame:
     jn5["REVENUE"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
 
     gb = jn5.groupby("N_NAME", as_index=False)["REVENUE"].sum()
-    result_df = gb
     result_df = gb.sort_values("REVENUE", ascending=False)
 
     return result_df
@@ -96,6 +96,7 @@ def main():
         "--log_timings",
         type=str,
         default=None,
+        help="Path to CSV file where timings will be logged.",
     )
     parser.add_argument(
         "--print_output",

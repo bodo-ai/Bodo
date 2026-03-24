@@ -26,8 +26,8 @@ def get_filesystem_and_path(path):
 
 def rewrite_table(src_path, dst_path):
     """
-    Read Parquet files and convert date columns to timestamp.
-    Supports local or S3 paths.
+    Read Parquet files and convert date columns to timestamp while preserving
+    number of files and row groups.
     """
 
     src_fs, src_path = get_filesystem_and_path(src_path)
