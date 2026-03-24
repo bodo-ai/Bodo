@@ -22,7 +22,7 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, temp_config_override
+from bodo.tests.utils import _test_equal, set_broadcast_join, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -1219,12 +1219,14 @@ def test_project_after_filter(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
-def test_merge(how):
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_merge(how, broadcast):
     """Simple test for DataFrame merge."""
 
     # Make sure bdf3 is unevaluated in the process.
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"],
