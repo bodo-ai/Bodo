@@ -35,7 +35,7 @@ GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     MPI_Comm_size(mpi_comm, &this->n_ranks);
 
     // Create CUDA stream
-    CHECK_CUDA(cudaStreamCreateWithFlags(&this->stream, cudaStreamNonBlocking));
+    this->stream = cudf::get_default_stream();
 }
 
 GpuMpiManager::~GpuMpiManager() {
@@ -268,6 +268,7 @@ GpuShuffleSendState::GpuShuffleSendState(
     }
 
     // Send data
+    cudaDeviceSynchronize();
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
@@ -337,6 +338,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
 
     // recv data
     MPI_Request data_recv_req;
+    cudaDeviceSynchronize();
     CHECK_MPI(MPI_Irecv(this->packed_recv_buffer->data(),
                         this->packed_recv_buffer->size(), MPI_UINT8_T, source,
                         curr_tag + 1, shuffle_comm, &data_recv_req),
@@ -465,6 +467,7 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
 
     // Wait for buffers to be ready.
     CHECK_CUDA(cudaStreamSynchronize(stream));
+    cudaDeviceSynchronize();
 
     std::vector<MPI_Request> recv_reqs(n_ranks, MPI_REQUEST_NULL);
 
