@@ -98,6 +98,10 @@ def main():
         default=None,
     )
     parser.add_argument(
+        "--print_output",
+        action="store_true",
+    )
+    parser.add_argument(
         "--library",
         type=str,
         default="bodo",
@@ -190,7 +194,9 @@ def main():
     if args.warmup:
         try:
             print("Running warmup...")
-            q5(args.root, pd_impl).execute_plan()
+            warmup_res = q5(args.root, pd_impl)
+            if args.library == "bodo":
+                warmup_res = warmup_res.execute_plan()
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
@@ -198,11 +204,14 @@ def main():
         try:
             t0 = time.time()
             result = q5(args.root, pd_impl)
-            print(result)
+            if args.library == "bodo":
+                result = result.execute_plan()
             total_time = time.time() - t0
             print(
                 f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
             )
+            if args.print_output:
+                print(result)
 
             if args.answer_path:
                 from bodo.tests.utils import _test_equal

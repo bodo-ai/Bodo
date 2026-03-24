@@ -66,15 +66,15 @@ def main():
     parser.add_argument("--n_workers", type=int, default=1)
     parser.add_argument("--n_iters", type=int, default=1)
     parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="If set, a warmup run of the query will be executed before timing.",
+    )
+    parser.add_argument(
         "--log_timings",
         type=str,
         default=None,
         help="Path to CSV file where timings will be logged.",
-    )
-    parser.add_argument(
-        "--warmup",
-        action="store_true",
-        help="If set, a warmup run of the query will be executed before timing.",
     )
     parser.add_argument(
         "--print_output",
@@ -181,11 +181,12 @@ def main():
         try:
             t0 = time.time()
             result = q5(args.root, scale_factor).collect(engine=pl_engine)
-            print(result)
             total_time = time.time() - t0
             print(
                 f"Q5 Polars GPU Streaming (sf={scale_factor} engine={args.engine}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
             )
+            if args.print_output:
+                print(result)
 
             if args.store_output:
                 output_path = f"q5_polars_{args.engine}_sf{scale_factor}.pq"

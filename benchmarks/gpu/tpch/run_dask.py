@@ -69,6 +69,10 @@ def main():
         default=None,
         help="Path to CSV file where timings will be logged.",
     )
+    parser.add_argument(
+        "--print_output",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if args.log_timings and not os.path.exists(args.log_timings):
@@ -98,11 +102,12 @@ def main():
         try:
             t0 = time.time()
             result = q5(args.root).compute()
-            print(result)
             total_time = time.time() - t0
             print(
                 f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
             )
+            if args.print_output:
+                print(result)
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:

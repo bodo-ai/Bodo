@@ -271,6 +271,7 @@ pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
 
+
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
 
