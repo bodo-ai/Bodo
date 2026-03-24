@@ -1,5 +1,4 @@
 #include "gpu_utils.h"
-#include "vendored/simd-block-fixed-fpp.h"
 
 bool g_use_async = false;
 
@@ -14,6 +13,7 @@ bool g_use_async = false;
 #include <cudf/hashing.hpp>
 #include <cudf/partitioning.hpp>
 #include <cudf/table/table_view.hpp>
+#include <cudf/utilities/bit.hpp>
 #include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>

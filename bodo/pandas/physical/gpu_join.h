@@ -23,9 +23,18 @@ struct PhysicalGPUJoinMetrics {
 };
 
 inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
-    if (logical_join.join_type != duckdb::JoinType::INNER) {
-        return false;
+    switch (logical_join.join_type) {
+        case duckdb::JoinType::OUTER:
+        case duckdb::JoinType::RIGHT:
+        case duckdb::JoinType::LEFT:
+        case duckdb::JoinType::INNER: {
+            return true;
+        }
+        default: {
+            return false;
+        }
     }
+
     for (const duckdb::JoinCondition& cond : logical_join.conditions) {
         if (cond.IsComparison() &&
             cond.GetComparisonType() != duckdb::ExpressionType::COMPARE_EQUAL) {
@@ -75,9 +84,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
           is_broadcast_join(doBroadcastJoin(*logical_join.children[1],
-                                            *logical_join.children[0])) {
-        assert(logical_join.join_type == duckdb::JoinType::INNER);
-    }
+                                            *logical_join.children[0])) {}
 
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
@@ -214,7 +221,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         this->cuda_join = std::make_unique<CudaHashJoin>(
             build_keys, probe_keys, build_table_schema, probe_table_schema,
             build_kept_cols, probe_kept_cols, output_schema,
-            cudf::null_equality::UNEQUAL, is_broadcast_join);
+            logical_join.join_type, cudf::null_equality::UNEQUAL,
+            is_broadcast_join);
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
