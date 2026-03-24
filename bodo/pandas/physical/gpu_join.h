@@ -317,7 +317,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {
             output_table != nullptr ? std::move(output_table) : nullptr,
             this->arrow_schema, se};
-        if (cuda_join->is_probe_complete()) {
+        if (cuda_join->shuffle_buffer_full()) {
             request_input = false;
         }
 
