@@ -158,12 +158,14 @@ class RankBatchGenerator {
                        std::size_t target_rows,
                        const std::vector<std::string> &_selected_columns,
                        std::shared_ptr<arrow::Schema> _arrow_schema,
+                       std::shared_ptr<arrow::Schema> _output_arrow_schema,
                        MPI_Comm comm)
         : path_(dataset_path),
           filesystem_(nullptr),
           target_rows_(target_rows),
           selected_columns(_selected_columns),
-          arrow_schema(std::move(_arrow_schema)) {
+          arrow_schema(std::move(_arrow_schema)),
+          output_arrow_schema(std::move(_output_arrow_schema)) {
         tableFilterSetToCudfAST(*filter_exprs, arrow_schema->field_names(),
                                 filter_ast_tree, filter_scalars);
 
@@ -205,7 +207,7 @@ class RankBatchGenerator {
         std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
             // nothing assigned to this rank
-            return {empty_table_from_arrow_schema(arrow_schema), true};
+            return {empty_table_from_arrow_schema(output_arrow_schema), true};
         }
 
         std::vector<std::unique_ptr<cudf::table>> gpu_tables;
@@ -298,7 +300,7 @@ class RankBatchGenerator {
         if (gpu_tables.empty()) {
             // If we've exhausted all parts, EOF true; otherwise false but no
             // data (shouldn't happen)
-            return {empty_table_from_arrow_schema(arrow_schema),
+            return {empty_table_from_arrow_schema(output_arrow_schema),
                     read_finished()};
         }
 
@@ -604,7 +606,10 @@ class RankBatchGenerator {
     std::vector<std::string> files_;
     std::vector<FilePart> parts_;
     const std::vector<std::string> &selected_columns;
+    // Arrow schema of all columns (not just the selected columns)
     std::shared_ptr<arrow::Schema> arrow_schema;
+    // Arrow schema of the selected columns
+    std::shared_ptr<arrow::Schema> output_arrow_schema;
     // Current chunked reader responsible for reading a subset of parts assigned
     // to this rank.
     std::unique_ptr<cudf::io::chunked_parquet_reader> curr_reader;
@@ -646,6 +651,7 @@ std::shared_ptr<arrow::Schema> MakeNullableSchema(
 /// @brief Physical node for reading Parquet files in pipelines.
 class PhysicalGPUReadParquet : public PhysicalGPUSource {
    private:
+    // Schema of the output (just the selected columns)
     std::shared_ptr<bodo::Schema> output_schema;
 
     JoinFilterColStats join_filter_col_stats;
@@ -682,6 +688,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             arrow_schema->metadata()->values());
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
+        this->output_arrow_schema = output_schema->ToArrowSchema();
 
         this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
         if (!this->schema_fields || !PyList_Check(this->schema_fields)) {
@@ -763,7 +770,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         // Non-GPU ranks return nullptr to avoid any GPU work
         if (!is_gpu_rank()) {
-            return {GPU_DATA(nullptr, arrow_schema, se),
+            return {GPU_DATA(nullptr, output_arrow_schema, se),
                     OperatorResult::FINISHED};
         }
 
@@ -775,7 +782,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
         std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
-            GPU_DATA(std::move(next_batch_tup.first), arrow_schema, se),
+            GPU_DATA(std::move(next_batch_tup.first), output_arrow_schema, se),
             result);
 
         this->metrics.produce_time += end_timer(start_produce);
@@ -799,7 +806,10 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
    private:
     PhysicalGPUReadParquetMetrics metrics;
     std::shared_ptr<RankBatchGenerator> batch_gen;
+    // Arrow schema for all the columns in the dataset (not just selected
+    // columns)
     std::shared_ptr<arrow::Schema> arrow_schema;
+    std::shared_ptr<arrow::Schema> output_arrow_schema;
 
     // Communicator for GPU ranks (for part assignments)
     MPI_Comm comm;
@@ -820,6 +830,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         batch_gen = std::make_shared<RankBatchGenerator>(
             path, filter_exprs, batch_size, output_schema->column_names,
-            arrow_schema, comm);
+            arrow_schema, output_arrow_schema, comm);
     }
 };
