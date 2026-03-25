@@ -112,7 +112,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     /**
      * @brief Determine output schema based on the logical
-     * operator and input schemas. Constructs the CudaHashJoin object.
+     * operator and input schemas. Constructs the CudaJoin object.
      *
      * @param logical_join - the logical join operator
      * @param conditions - the join conditions
@@ -259,11 +259,18 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             std::vector<std::string>({}), std::vector<std::string>({}));
         this->arrow_schema = this->output_schema->ToArrowSchema();
 
-        this->cuda_join = std::make_unique<CudaHashJoin>(
-            build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, output_schema,
-            logical_join.join_type, std::move(physExprTree),
-            cudf::null_equality::UNEQUAL, is_broadcast_join);
+        if (build_keys.empty()) {
+            this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+                build_table_schema, probe_table_schema, build_kept_cols,
+                probe_kept_cols, output_schema, logical_join.join_type,
+                std::move(physExprTree), is_broadcast_join);
+        } else {
+            this->cuda_join = std::make_unique<CudaHashJoin>(
+                build_keys, probe_keys, build_table_schema, probe_table_schema,
+                build_kept_cols, probe_kept_cols, output_schema,
+                logical_join.join_type, std::move(physExprTree),
+                cudf::null_equality::UNEQUAL, is_broadcast_join);
+        }
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
@@ -305,9 +312,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
-        std::cout << "probing with batch of " << input_batch.table->num_rows()
-                  << " rows" << std::endl;
-        std::cout << "local_is_last: " << local_is_last << std::endl;
 
         // TODO(ehsan): implement buffering output similar to CPU join
         bool request_input = true;
@@ -349,7 +353,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
 
-    CudaHashJoin* getJoinStatePtr() { return this->cuda_join.get(); }
+    CudaJoin* getJoinStatePtr() { return this->cuda_join.get(); }
 
    private:
     std::shared_ptr<bodo::Schema> output_schema;
@@ -360,6 +364,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     PhysicalGPUJoinMetrics metrics;
 
-    std::unique_ptr<CudaHashJoin> cuda_join;
+    std::unique_ptr<CudaJoin> cuda_join;
     bool is_broadcast_join = false;
 };
