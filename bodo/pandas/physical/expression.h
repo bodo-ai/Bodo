@@ -27,14 +27,6 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
-#define ARROW_THROW_NOT_OK(expr, err_msg)                     \
-    do {                                                      \
-        ::arrow::Status _s = (expr);                          \
-        if (ARROW_PREDICT_FALSE(!_s.ok())) {                  \
-            throw std::runtime_error(err_msg + _s.message()); \
-        }                                                     \
-    } while (false)
-
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.
