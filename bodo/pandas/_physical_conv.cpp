@@ -295,73 +295,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
     FinishPipelineOneOperator(physical_sort);
 }
 
-// Remove all non-equi join conditions from `conditions` and return them
-// as JoinConditions.
-// After this call, `conditions` will contain only equi-join conditions.
-duckdb::vector<duckdb::JoinCondition> extractNonEquiConditions(
-    std::vector<duckdb::JoinCondition>& conditions) {
-    duckdb::vector<duckdb::JoinCondition> non_equi_exprs;
-    size_t i = 0;
-    while (i < conditions.size()) {
-        auto& cond = conditions[i];
-
-        if (cond.IsComparison() &&
-            cond.GetComparisonType() == duckdb::ExpressionType::COMPARE_EQUAL) {
-            ++i;
-        } else {
-            // Move the JoinCondition into CreateExpression to produce an
-            // Expression
-            non_equi_exprs.push_back(std::move(cond));
-
-            // Remove the moved-out element from the vector efficiently by
-            // swapping with back
-            conditions[i] = std::move(conditions.back());
-            conditions.pop_back();
-            // do not increment i, because we swapped a new element into
-            // position i
-        }
-    }
-
-    return non_equi_exprs;
-}
-
-std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
-    duckdb::LogicalComparisonJoin& comp_join) {
-    // Extract non-equi expressions and remove them from comp_join.conditions
-    duckdb::vector<duckdb::JoinCondition> non_equi_exprs =
-        extractNonEquiConditions(comp_join.conditions);
-
-    // If there are no non-equi conditions, nothing to do
-    if (non_equi_exprs.empty()) {
-        return nullptr;
-    }
-
-    duckdb::unique_ptr<duckdb::Expression> combined_pred =
-        duckdb::JoinCondition::CreateExpression(std::move(non_equi_exprs));
-
-    auto new_comp_join =
-        duckdb::make_uniq<duckdb::LogicalComparisonJoin>(comp_join.join_type);
-    new_comp_join->children.push_back(std::move(comp_join.children[0]));
-    new_comp_join->children.push_back(std::move(comp_join.children[1]));
-    new_comp_join->conditions = std::move(comp_join.conditions);
-    new_comp_join->join_id = comp_join.join_id;
-
-    // Create a LogicalFilter node with the combined predicate and the modified
-    // join as child
-    auto filter =
-        duckdb::make_uniq<duckdb::LogicalFilter>(std::move(combined_pred));
-    // Move the join (which now only contains equi conditions) under the filter
-    filter->children.push_back(std::move(new_comp_join));
-
-    // Preserve estimated cardinality / properties if needed
-    if (filter->children[0]->has_estimated_cardinality) {
-        filter->SetEstimatedCardinality(
-            filter->children[0]->estimated_cardinality);
-    }
-
-    return std::move(filter);
-}
-
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // See DuckDB code for background:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_plan/plan_comparison_join.cpp#L65
@@ -376,30 +309,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         physical_join = std::make_shared<PhysicalGPUJoin>(op);
         (*this->join_on_gpu).insert({op.join_id, true});
     } else {
-        // Move non-equi join conditions into a filter node.
-        std::unique_ptr<duckdb::LogicalOperator> split =
-            SplitNonEquiFromComparisonJoin(op);
-        // If there were non-equi join conditions then create the physical plan
-        // based on the filter returned by the above function.
-        if (split != nullptr) {
-            Visit(*split);
-            return;
-        }
-
         physical_join = std::make_shared<PhysicalJoin>(op);
         (*this->join_on_gpu).insert({op.join_id, false});
     }
 #else
-    // Move non-equi join conditions into a filter node.
-    std::unique_ptr<duckdb::LogicalOperator> split =
-        SplitNonEquiFromComparisonJoin(op);
-    // If there were non-equi join conditions then create the physical plan
-    // based on the filter returned by the above function.
-    if (split != nullptr) {
-        Visit(*split);
-        return;
-    }
-
     std::shared_ptr<PhysicalJoin> physical_join =
         std::make_shared<PhysicalJoin>(op);
 #endif

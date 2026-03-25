@@ -16,6 +16,7 @@ struct PhysicalFilterMetrics {
     time_t expr_eval_time = 0;
     time_t filtering_time = 0;
 };
+
 /**
  * @brief Physical node for filter.
  *

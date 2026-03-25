@@ -161,6 +161,10 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownJoin(unique_ptr<LogicalOpera
 	LogicalJoin::GetTableReferences(*op->children[1], right_bindings);
 
 	unique_ptr<LogicalOperator> result;
+    return FinishPushdown(std::move(op));
+
+    // Bodo Change: don't pushdown filters into joins
+#if 0
 	switch (join.join_type) {
 	case JoinType::OUTER:
 		result = PushdownOuterJoin(std::move(op), left_bindings, right_bindings);
@@ -208,7 +212,9 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownJoin(unique_ptr<LogicalOpera
 		}
 	}
 	return result;
+#endif // 0
 }
+
 FilterResult FilterPushdown::PushFilters() {
 	for (auto &f : filters) {
 		auto result = combiner.AddFilter(std::move(f->filter));

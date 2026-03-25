@@ -1174,7 +1174,7 @@ void Vector::Flatten(const SelectionVector &sel, idx_t count) {
 	case VectorType::FLAT_VECTOR:
 		// already a flat vector
 		break;
-	// Bodo Chnage: Remove compression code
+	// Bodo Change: Remove compression code
 	//case VectorType::FSST_VECTOR: {
 	//	// create a new flat vector of this type
 	//	Vector other(GetType(), count);
