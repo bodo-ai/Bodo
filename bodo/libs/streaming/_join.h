@@ -594,8 +594,7 @@ class JoinPartition {
     void FinalizeProbeForInactivePartition(
         cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols,
-        const std::shared_ptr<ChunkedTableBuilder>& output_buffer,
-        cond_expr_fn_right_batch_t cond_right_batch_func);
+        const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
 
     /**
      * @brief Activate this partition as part of the FinalizeBuild process.
@@ -677,7 +676,6 @@ class JoinState {
     // Join properties
     const uint64_t n_keys;
     cond_expr_fn_t cond_func;
-    cond_expr_fn_right_batch_t cond_right_batch_func;
     const bool build_table_outer;
     const bool probe_table_outer;
     const bool force_broadcast;
@@ -758,8 +756,7 @@ class JoinState {
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
               int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
-              bool is_na_equal_ = false, bool is_mark_join_ = false,
-              cond_expr_fn_right_batch_t cond_batch_func = nullptr);
+              bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     virtual ~JoinState() {}
 
@@ -960,8 +957,7 @@ class HashJoinState : public JoinState {
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
-                  bool is_na_equal_ = false, bool is_mark_join_ = false,
-                  cond_expr_fn_right_batch_t cond_batch_func = nullptr);
+                  bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 

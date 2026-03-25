@@ -228,7 +228,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             (logical_join.join_type == duckdb::JoinType::OUTER) || is_left_anti;
 
         cond_expr_fn_t join_func = nullptr;
-        cond_expr_fn_right_batch_t join_right_batch_func = nullptr;
         size_t n_equality_keys = left_keys.size();
         if (n_equality_keys == 0) {
             if (has_non_equi_cond) {
@@ -245,8 +244,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         } else {
             if (has_non_equi_cond) {
                 join_func = PhysicalExpression::join_expr;
-                join_right_batch_func =
-                    PhysicalExpression::join_expr_right_batch;
             }
             this->join_state_ = std::make_shared<HashJoinState>(
                 build_table_schema_reordered, probe_table_schema_reordered,
@@ -255,7 +252,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 false, join_func, true, true, get_streaming_batch_size(), -1,
                 //  TODO: support query profiling
                 getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
-                /*is_na_equal*/ true, is_mark_join, join_right_batch_func);
+                /*is_na_equal*/ true, is_mark_join);
         }
 
         this->initOutputSchema(build_table_schema_reordered,

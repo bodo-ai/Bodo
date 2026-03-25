@@ -852,30 +852,6 @@ void PhysicalExpression::join_expr_batch(
     }
 }
 
-void PhysicalExpression::join_expr_right_batch(
-    array_info** left_table, array_info** right_table, void** left_data,
-    void** right_data, void** left_null_bitmap, void** right_null_bitmap,
-    uint8_t* match_arr, int64_t right_size, int64_t l_ind,
-    size_t* right_selected) {
-    arrow::Datum res = cur_join_expr->join_expr_right_batch_internal(
-        left_table, right_table, left_data, right_data, left_null_bitmap,
-        right_null_bitmap, match_arr, right_size, l_ind, right_selected);
-    if (!res.is_array()) {
-        throw std::runtime_error("Expected array datum");
-    }
-    arrow::compute::CastOptions opts;
-    opts.to_type = arrow::uint8();
-
-    auto uint8res = arrow::compute::Cast(res, opts).ValueOrDie();
-    auto uint8_arr =
-        std::static_pointer_cast<arrow::UInt8Array>(uint8res.make_array());
-    if (uint8_arr->length() != right_size) {
-        throw std::runtime_error("uint8_arr and right_size mismatch");
-    }
-
-    std::memcpy(match_arr, uint8_arr->raw_values(), uint8_arr->length());
-}
-
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
 
 template <typename ArrowType, typename ModOp>
