@@ -1202,6 +1202,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
+        # If the number of possible values is small then it will be faster to run them as
+        # a conjunction of equality checks rather than with an expensive UDF.
         if len(values) <= 4:
             ret = self == values[0]
             for val in values[1:]:
