@@ -85,6 +85,8 @@ def main():
     else:
         scale_factor = 0
 
+    storage_type = "s3" if args.root.startswith("s3://") else "local"
+
     # Configure Dask to have longer worker timeouts for long-running tasks.
     dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
     dask.config.set({"distributed.comm.timeouts.connect": "600s"})
@@ -111,7 +113,9 @@ def main():
 
             if args.log_timings:
                 with open(args.log_timings, "a") as f:
-                    f.write(f"{scale_factor},{args.n_workers},dask,{total_time:.4f},\n")
+                    f.write(
+                        f"{scale_factor},{storage_type},{args.n_workers},dask,{total_time:.4f},\n"
+                    )
         except Exception as e:
             print(
                 f"Error executing query sf={scale_factor}, n_gpus={args.n_workers}: {e}"

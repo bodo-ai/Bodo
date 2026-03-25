@@ -28,6 +28,7 @@ def main():
         .groupby(
             by=["implementation", "n_gpus", "scale_factor", "storage_type", "params"],
             as_index=False,
+            dropna=False,
         )["time_seconds"]
         .mean()
     )
@@ -35,10 +36,12 @@ def main():
         index=["storage_type", "scale_factor", "n_gpus"],
         columns=["implementation", "params"],
         values="time_seconds",
-    ).reset_index()
+    )
     agg_df.columns = [
-        f"{impl}[{params}]" if params else impl for impl, params in agg_df.columns
+        f"{impl}[{params}]" if pd.notna(params) else impl
+        for impl, params in agg_df.columns
     ]
+    agg_df = agg_df.reset_index()
     agg_df.to_csv(args.output_csv, index=False)
 
 
