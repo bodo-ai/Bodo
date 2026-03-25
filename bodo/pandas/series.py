@@ -1205,9 +1205,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # If the number of possible values is small then it will be faster to run them as
         # a conjunction of equality checks rather than with an expensive UDF.
         if len(values) <= 4:
-            ret = self == values[0]
-            for val in values[1:]:
-                ret = ret | (self == val)
+            ret = None
+            for val in values:
+                if ret is None:
+                    ret = self == val
+                else:
+                    ret = ret | (self == val)
             return ret
 
         new_metadata = pd.Series(
