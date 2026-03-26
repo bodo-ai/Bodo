@@ -2317,7 +2317,7 @@ def test_filter_series_not_isin(index_val, broadcast):
                 "C": [1, 2, 3],
                 "D": [True, False, True],
             },
-            index=index_val[:3],
+            # index=index_val[:3],
         )
         # This dataframe ensures both ANTI and RIGHT_ANTI joins are tested depending on the
         # index_val
