@@ -2275,6 +2275,7 @@ def test_filter_source_matching():
     )
 
 
+@pytest.mark.gpu
 def test_filter_series_isin():
     """Test dataframe filter with isin case"""
     with assert_executed_plan_count(0):
@@ -2628,6 +2629,7 @@ def test_series_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_isin(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
