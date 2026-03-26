@@ -1215,7 +1215,8 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
-                   scalar_func_data.arrow_func_name == "starts_with") {
+                   scalar_func_data.arrow_func_name == "starts_with" ||
+                   scalar_func_data.arrow_func_name == "ends_with") {
             if (!PyTuple_Check(scalar_func_data.args) ||
                 PyTuple_Size(scalar_func_data.args) != 1) {
                 throw std::runtime_error(

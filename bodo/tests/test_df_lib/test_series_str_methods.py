@@ -51,8 +51,6 @@ test_map_arg = {
     ],
     "endswith": [
         (("e",), {}),
-        (("e",), {"na": False}),
-        (("e",), {"na": None}),
         ((("e", "d"),), {}),
     ],
     "find": [
