@@ -9,6 +9,14 @@ if [ -z "$GITHUB_TOKEN" ]; then
  read GITHUB_TOKEN
 fi
 
+echo -n "Enter pixi environment to use [platform-dev]: "
+read PIXI_ENV
+
+# Default if empty
+PIXI_ENV=${PIXI_ENV:-platform-dev}
+
+echo "Using pixi environment: $PIXI_ENV"
+
 # Clone the repo and checkout the desired branch
 psh git clone -b main https://$GITHUB_TOKEN@github.com/bodo-ai/Bodo.git
 
@@ -18,11 +26,15 @@ source ~/.bashrc
 
 # Install development deps
 cd ~/Bodo
-psh pixi install -e platform-dev
+psh pixi install -e $PIXI_ENV
 # Remove conda install mpi to prefer intel MPI on the platform
-psh env BODO_SKIP_CPP_TESTS=1 pixi run -e platform-dev build
+build_task=build
+if [[ "$PIXI_ENV" == "default-cuda" ]]; then
+    build_task=build-bodo-cudf
+fi
+psh env BODO_SKIP_CPP_TESTS=1 pixi run -e $PIXI_ENV $build_task
 
-pixi shell -e platform-dev
+pixi shell -e $PIXI_ENV
 cd bodo-platform-image/bodo-platform-utils/
 psh pip install -ve .
 # Ensure that modify time for bodosql wrapper is the same on all nodes. If it is
