@@ -9,6 +9,7 @@
 #include <cudf/filling.hpp>
 #include <cudf/join/conditional_join.hpp>
 #include <cudf/join/join.hpp>
+#include <cudf/join/mixed_join.hpp>
 #include <cudf/reduction.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <cudf/types.hpp>
@@ -473,6 +474,23 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                 _join_handle->left_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::LEFT_JOIN;
         } break;
+        case duckdb::JoinType::MARK: {
+            cudf::ast::tree true_tree;
+            cudf::numeric_scalar<bool> true_scalar =
+                cudf::numeric_scalar<bool>(true);
+            const cudf::ast::expression& always_true =
+                true_tree.emplace<cudf::ast::literal>(true_scalar);
+            const cudf::ast::expression& expr =
+                this->non_equi_expression
+                    ? this->non_equi_expression->get_root()
+                    : always_true;
+            probe_indices = cudf::mixed_left_semi_join(
+                selected,
+                this->_build_table->view().select(this->build_key_indices),
+                probe_to_select->view(), this->_build_table->view(), expr,
+                this->null_equality, stream);
+            cudf_join_kind = cudf::join_kind::INNER_JOIN;
+        } break;
         default: {
             throw std::runtime_error(
                 "Unsupported join type " +
@@ -480,11 +498,42 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         }
     }
 
-    if (this->non_equi_expression != nullptr) {
+    if (this->non_equi_expression != nullptr &&
+        this->join_type != duckdb::JoinType::MARK) {
         std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
             probe_to_select->view(), this->_build_table->view(), *probe_indices,
             *build_indices, this->non_equi_expression->get_root(),
             cudf_join_kind, stream);
+    }
+
+    if (this->join_type == duckdb::JoinType::MARK) {
+        // Create the mark column (all false)
+        auto mark_col = cudf::make_fixed_width_column(
+            cudf::data_type{cudf::type_id::BOOL8}, probe_to_select->num_rows(),
+            cudf::mask_state::ALL_VALID, stream);
+        cudaMemsetAsync(mark_col->mutable_view().head<uint8_t>(), 0,
+                        probe_to_select->num_rows() * sizeof(uint8_t),
+                        stream.value());
+
+        // Set matched indices to true
+        cudf_set_bools_true_from_indices(
+            mark_col->mutable_view(),
+            cudf::column_view(cudf::data_type{cudf::type_id::INT32},
+                              probe_indices->size(), probe_indices->data(),
+                              nullptr, 0),
+            stream);
+
+        // Prepare final columns: probe_kept_cols + mark_col
+        for (auto const& i : this->probe_kept_cols) {
+            final_columns.push_back(std::make_unique<cudf::column>(
+                probe_to_select->get_column(i), stream));
+        }
+        final_columns.push_back(std::move(mark_col));
+
+        std::unique_ptr<cudf::table> output_table =
+            std::make_unique<cudf::table>(std::move(final_columns));
+        return {std::move(output_table),
+                global_is_last && this->build_matches_synced};
     }
 
     // Create column views of the indices from the indices buffers
@@ -634,11 +683,46 @@ CudaNonEquiJoin::ProbeProcessBatch(
                                             this->_build_table->view(), root,
                                             {}, stream);
         } break;
+        case duckdb::JoinType::MARK: {
+            probe_indices = cudf::conditional_left_semi_join(
+                probe_to_select->view(), this->_build_table->view(), root, {},
+                stream);
+        } break;
         default: {
             throw std::runtime_error(
                 "Unsupported join type " +
                 duckdb::EnumUtil::ToString(this->join_type));
         }
+    }
+
+    if (this->join_type == duckdb::JoinType::MARK) {
+        // Create the mark column (all false)
+        auto mark_col = cudf::make_fixed_width_column(
+            cudf::data_type{cudf::type_id::BOOL8}, probe_to_select->num_rows(),
+            cudf::mask_state::ALL_VALID, stream);
+        cudaMemsetAsync(mark_col->mutable_view().head<uint8_t>(), 0,
+                        probe_to_select->num_rows() * sizeof(uint8_t),
+                        stream.value());
+
+        // Set matched indices to true
+        cudf_set_bools_true_from_indices(
+            mark_col->mutable_view(),
+            cudf::column_view(cudf::data_type{cudf::type_id::INT32},
+                              probe_indices->size(), probe_indices->data(),
+                              nullptr, 0),
+            stream);
+
+        // Prepare final columns: probe_kept_cols + mark_col
+        for (auto const& i : this->probe_kept_cols) {
+            final_columns.push_back(std::make_unique<cudf::column>(
+                probe_to_select->get_column(i), stream));
+        }
+        final_columns.push_back(std::move(mark_col));
+
+        std::unique_ptr<cudf::table> output_table =
+            std::make_unique<cudf::table>(std::move(final_columns));
+        return {std::move(output_table),
+                global_is_last && this->build_matches_synced};
     }
 
     // Create column views of the indices from the indices buffers

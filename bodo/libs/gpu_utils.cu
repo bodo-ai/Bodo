@@ -15,8 +15,8 @@
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 
-template <bool HasNulls>
-__global__ void set_bools_false_kernel(
+template <bool HasNulls, bool Value>
+__global__ void set_bools_kernel(
     bool* __restrict__ target_bools,
     int32_t const* __restrict__ indices,
     cudf::bitmask_type const* __restrict__ indices_mask,
@@ -34,7 +34,7 @@ __global__ void set_bools_false_kernel(
         if (is_valid) {
             // Fetch index using __ldg to hit the read-only data cache
             int32_t target_idx = __ldg(&indices[i]);
-            target_bools[target_idx] = false;
+            target_bools[target_idx] = Value;
         }
     }
 }
@@ -59,14 +59,14 @@ void cudf_set_bools_false_from_indices(
     );
 
     if (indices.has_nulls()) {
-        set_bools_false_kernel<true><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<true, false><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             d_mask,
             indices.size()
         );
     } else {
-        set_bools_false_kernel<false><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<false, false><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             nullptr,
@@ -75,3 +75,38 @@ void cudf_set_bools_false_from_indices(
     }
 }
 
+void cudf_set_bools_true_from_indices(
+    cudf::mutable_column_view target_bools, 
+    cudf::column_view const indices,
+    rmm::cuda_stream_view stream) {
+    if (indices.is_empty()) {
+        return;
+    }
+
+    bool* d_target = target_bools.head<bool>();
+    int32_t const* d_indices = indices.head<int32_t>();
+    
+    cudf::bitmask_type const* d_mask = indices.null_mask();
+
+    int constexpr block_size = 256;
+    int grid_size = std::min(
+        (indices.size() + block_size - 1) / block_size,
+        cudf::size_type{65536} 
+    );
+
+    if (indices.has_nulls()) {
+        set_bools_kernel<true, true><<<grid_size, block_size, 0, stream.value()>>>(
+            d_target,
+            d_indices,
+            d_mask,
+            indices.size()
+        );
+    } else {
+        set_bools_kernel<false, true><<<grid_size, block_size, 0, stream.value()>>>(
+            d_target,
+            d_indices,
+            nullptr,
+            indices.size()
+        );
+    }
+}
