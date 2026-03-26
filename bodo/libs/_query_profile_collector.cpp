@@ -87,9 +87,17 @@ void QueryProfileCollector::Init() {
             std::chrono::duration_cast<std::chrono::minutes>(seconds - hour);
         auto second = std::chrono::duration_cast<std::chrono::seconds>(
             seconds - hour - minute);
-        output_dir = fmt::format("{}/run_{}{:02}{:02}_{:02}{:02}{:02}",
-                                 parent_dir, year, month, day, hour.count(),
-                                 minute.count(), second.count());
+        std::string output_dir_base = fmt::format(
+            "{}/run_{}{:02}{:02}_{:02}{:02}{:02}", parent_dir, year, month, day,
+            hour.count(), minute.count(), second.count());
+
+        output_dir = output_dir_base;
+        int run_suffix = 0;
+        while (stat(output_dir.c_str(), &info) == 0) {
+            output_dir = output_dir_base + "_" + std::to_string(run_suffix);
+            run_suffix++;
+        }
+
         int res = makedir(output_dir.data(), 0700);
         if (res != 0) {
             // TODO XXX Needs error synchronization!
