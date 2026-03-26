@@ -1549,6 +1549,45 @@ class BodoStringMethods:
             is_method=False,
         )
 
+    @check_args_fallback(unsupported="na")
+    def startswith(self, pat, na=None):
+        """Support Series.str.startswith() method same as Pandas. Uses Arrow compute."""
+
+        validate_dtype("str.startswith", self)
+        if not (
+            isinstance(pat, str)
+            or (isinstance(pat, tuple) and all(isinstance(p, str) for p in pat))
+        ):
+            raise ValueError(
+                "Series.str.startswith() only supports string or tuple of strings as pattern."
+            )
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.bool_())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        # Implement tuple of strings case by combining multiple 'str.startswith' calls
+        # with OR since Arrow compute does not support tuple input for 'starts_with'.
+        if isinstance(pat, tuple):
+            out = _get_series_func_plan(
+                series._plan, new_metadata, "str.startswith", (pat[0],), {}
+            )
+            for p in pat[1:]:
+                out = out | _get_series_func_plan(
+                    series._plan, new_metadata, "str.startswith", (p,), {}
+                )
+            return out
+
+        return _get_series_func_plan(
+            series._plan, new_metadata, "str.startswith", (pat,), {}
+        )
+
     @check_args_fallback(unsupported="none")
     def join(self, sep):
         """
@@ -2887,6 +2926,7 @@ def _get_series_func_plan(
         "str.title",
         "str.reverse",
         "str.match",
+        "str.startswith",
     )
 
     def get_arrow_func(name):
@@ -2900,6 +2940,8 @@ def _get_series_func_plan(
             return "utf8_" + body[:2] + "_" + body[2:]
         if name == "str.match":
             return "match_substring_regex"
+        if name == "str.startswith":
+            return "starts_with"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
         return name.split(".")[1]
@@ -3338,7 +3380,6 @@ series_str_methods = [
             "isupper",
             "istitle",
             # args
-            "startswith",
             "endswith",
             "contains",
             "match",

@@ -1214,11 +1214,13 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
         } else if (scalar_func_data.arrow_func_name ==
-                   "match_substring_regex") {
+                       "match_substring_regex" ||
+                   scalar_func_data.arrow_func_name == "starts_with") {
             if (!PyTuple_Check(scalar_func_data.args) ||
                 PyTuple_Size(scalar_func_data.args) != 1) {
                 throw std::runtime_error(
-                    "match_substring_regex args not a 1-element tuple.");
+                    fmt::format("{} args not a 1-element tuple.",
+                                scalar_func_data.arrow_func_name));
             }
 
             // Get the first element (borrowed reference)
@@ -1226,15 +1228,16 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             if (!PyUnicode_Check(py_str)) {
                 throw std::runtime_error(
-                    "match_substring_regex args element is not a Python "
-                    "string.");
+                    fmt::format("{} args element is not a Python string.",
+                                scalar_func_data.arrow_func_name));
             }
 
             // Convert to UTF‑8 C string
             const char *c_str = PyUnicode_AsUTF8(py_str);
             if (!c_str) {
                 throw std::runtime_error(
-                    "match_substring_regex error extracting Python string.");
+                    fmt::format("{} error extracting Python string.",
+                                scalar_func_data.arrow_func_name));
             }
 
             arrow::compute::MatchSubstringOptions opts(c_str);
