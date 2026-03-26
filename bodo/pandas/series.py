@@ -1204,7 +1204,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # If the number of possible values is small then it will be faster to run them as
         # a conjunction of equality checks rather than with an expensive UDF.
-        if len(values) <= 4:
+        if not isinstance(values, BodoSeries) and len(values) <= 4:
             ret = None
             for val in values:
                 if ret is None:
