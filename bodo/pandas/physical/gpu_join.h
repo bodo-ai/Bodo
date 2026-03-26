@@ -27,6 +27,8 @@ struct PhysicalGPUJoinMetrics {
 
 inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
     switch (logical_join.join_type) {
+        case duckdb::JoinType::ANTI:
+        case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::MARK:
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::RIGHT:

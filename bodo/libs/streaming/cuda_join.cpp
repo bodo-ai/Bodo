@@ -112,7 +112,7 @@ CudaJoin::CudaJoin(std::shared_ptr<bodo::Schema> build_schema,
 
     if (is_broadcast_join) {
         build_broadcast_manager = std::make_shared<GpuTableBroadcastManager>();
-        if (duckdb::IsRightOuterJoin(this->join_type)) {
+        if (duckdb::PropagatesBuildSide(this->join_type)) {
             // This is the only case we need to sync build matches
             this->build_matches_synced = false;
         }
@@ -155,7 +155,7 @@ bool CudaJoin::BuildConsumeBatch(
 std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!global_is_last || !duckdb::IsRightOuterJoin(this->join_type)) {
+    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type)) {
         return table;
     }
 
@@ -353,7 +353,7 @@ void CudaHashJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table) {
+    if (duckdb::PropagatesBuildSide(this->join_type) && this->_build_table) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows = cudf::make_column_from_scalar(
@@ -382,7 +382,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // is a right/outer join, we need to synchronize which build rows have
         // been globally matched before terminating this operator.
         global_is_last =
-            duckdb::IsRightOuterJoin(this->join_type)
+            duckdb::PropagatesBuildSide(this->join_type)
                 ? probe_shuffle_manager->sync_is_last(local_is_last)
                 : local_is_last;
 
@@ -457,6 +457,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     cudf::join_kind cudf_join_kind;
     switch (this->join_type) {
+        case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
             std::tie(probe_indices, build_indices) =
@@ -473,6 +474,26 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             std::tie(probe_indices, build_indices) =
                 _join_handle->left_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::LEFT_JOIN;
+        } break;
+        case duckdb::JoinType::ANTI: {
+            cudf::ast::tree true_tree;
+            cudf::numeric_scalar<bool> true_scalar =
+                cudf::numeric_scalar<bool>(true);
+            const cudf::ast::expression& always_true =
+                true_tree.emplace<cudf::ast::literal>(true_scalar);
+            const cudf::ast::expression& expr =
+                this->non_equi_expression
+                    ? this->non_equi_expression->get_root()
+                    : always_true;
+            probe_indices = cudf::mixed_left_anti_join(
+                selected,
+                this->_build_table->view().select(this->build_key_indices),
+                probe_to_select->view(), this->_build_table->view(), expr,
+                this->null_equality, stream);
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
+            cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
         } break;
         case duckdb::JoinType::MARK: {
             cudf::ast::tree true_tree;
@@ -499,7 +520,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     }
 
     if (this->non_equi_expression != nullptr &&
-        this->join_type != duckdb::JoinType::MARK) {
+        this->join_type != duckdb::JoinType::MARK &&
+        this->join_type != duckdb::JoinType::ANTI) {
         std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
             probe_to_select->view(), this->_build_table->view(), *probe_indices,
             *build_indices, this->non_equi_expression->get_root(),
@@ -546,12 +568,21 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Update which build table indices we've matched if it's relevant
-    if (duckdb::IsRightOuterJoin(this->join_type) &&
+    if (duckdb::PropagatesBuildSide(this->join_type) &&
         // If this is nullptr we either don't have a build table on this rank
         // or we've already produced the unmatched output
         this->unmatched_build_rows && build_idx_view.size()) {
         cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
+    }
+
+    // Right anti joins only output unmatched build rows, so we can return early
+    if (this->join_type == duckdb::JoinType::RIGHT_ANTI) {
+        return {produce_unmatched_build_rows(
+                    empty_table_from_arrow_schema(
+                        this->output_schema->ToArrowSchema()),
+                    global_is_last, stream),
+                global_is_last && this->build_matches_synced};
     }
 
     // Materialize the selected rows
@@ -620,7 +651,7 @@ void CudaNonEquiJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table) {
+    if (duckdb::PropagatesBuildSide(this->join_type) && this->_build_table) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows = cudf::make_column_from_scalar(
@@ -639,7 +670,7 @@ CudaNonEquiJoin::ProbeProcessBatch(
     std::vector<std::unique_ptr<cudf::column>> final_columns;
     std::shared_ptr<cudf::table> probe_to_select;
 
-    global_is_last = duckdb::IsRightOuterJoin(this->join_type)
+    global_is_last = duckdb::PropagatesBuildSide(this->join_type)
                          ? probe_shuffle_manager->sync_is_last(local_is_last)
                          : local_is_last;
 
@@ -669,6 +700,7 @@ CudaNonEquiJoin::ProbeProcessBatch(
     const cudf::ast::expression& root = this->non_equi_expression->get_root();
 
     switch (this->join_type) {
+        case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
             std::tie(probe_indices, build_indices) =
@@ -682,6 +714,14 @@ CudaNonEquiJoin::ProbeProcessBatch(
                 cudf::conditional_left_join(probe_to_select->view(),
                                             this->_build_table->view(), root,
                                             {}, stream);
+        } break;
+        case duckdb::JoinType::ANTI: {
+            probe_indices = cudf::conditional_left_anti_join(
+                probe_to_select->view(), this->_build_table->view(), root, {},
+                stream);
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
         } break;
         case duckdb::JoinType::MARK: {
             probe_indices = cudf::conditional_left_semi_join(
@@ -735,10 +775,20 @@ CudaNonEquiJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Update which build table indices we've matched if it's relevant
-    if (duckdb::IsRightOuterJoin(this->join_type) &&
+    if (duckdb::PropagatesBuildSide(this->join_type) &&
         this->unmatched_build_rows && build_idx_view.size()) {
         cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
+    }
+
+    // Only output unmatched build rows for right anti joins, so we can return
+    // early
+    if (this->join_type == duckdb::JoinType::RIGHT_ANTI) {
+        return {produce_unmatched_build_rows(
+                    empty_table_from_arrow_schema(
+                        this->output_schema->ToArrowSchema()),
+                    global_is_last, stream),
+                global_is_last && this->build_matches_synced};
     }
 
     // Materialize the selected rows

@@ -2304,6 +2304,7 @@ def test_filter_series_isin():
     )
 
 
+@pytest.mark.gpu
 def test_filter_series_not_isin(index_val):
     """Test dataframe filter with not isin case"""
     with assert_executed_plan_count(0):
@@ -2316,10 +2317,12 @@ def test_filter_series_not_isin(index_val):
             },
             index=index_val[:3],
         )
+        # This dataframe ensures both ANTI and RIGHT_ANTI joins are tested depending on the
+        # index_val
         df2 = pd.DataFrame(
             {
-                "A": ["A", "B", "C", "D"],
-                "B": [11, 2, 2, 4],
+                "A": ["A", "B", "C", "D"] * 25,
+                "B": range(100),
             }
         )
 

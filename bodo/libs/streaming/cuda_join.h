@@ -151,7 +151,8 @@ struct CudaJoin {
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
-     * of a RIGHT or FULL OUTER join.
+     * of a join that propagates the build side (e.g. RIGHT, OUTER, or
+     * RIGHT_ANTI).
      *
      * On the last global probe batch, gathers all build rows that were never
      * matched (tracked via @c unmatched_build_rows), pairs them with
@@ -160,7 +161,7 @@ struct CudaJoin {
      * duplicate output.
      *
      * Returns @p table unmodified if @p global_is_last is @c false, the join
-     * type is not RIGHT or OUTER, or @c unmatched_build_rows is
+     * type does not propagate the build side, or @c unmatched_build_rows is
      * @c nullptr.
      *
      * @param table Accumulated join output for this batch; unmatched
