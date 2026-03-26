@@ -8,6 +8,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/filling.hpp>
 #include <cudf/join/conditional_join.hpp>
+#include <cudf/join/filtered_join.hpp>
 #include <cudf/join/join.hpp>
 #include <cudf/join/mixed_join.hpp>
 #include <cudf/reduction.hpp>
@@ -248,10 +249,21 @@ void CudaHashJoin::build_hash_table(
     //    This triggers the kernel that builds the hash table on the GPU.
     //    We maintain ownership of _join_handle to reuse it for probing.
     cudf::table_view build_view = _build_table->view();
+    cudf::table_view selected_build_view =
+        build_view.select(this->build_key_indices);
 
     if (build_view.num_rows() != 0 && this->build_key_indices.size() > 0) {
-        this->_join_handle = std::make_unique<cudf::hash_join>(
-            build_view.select(this->build_key_indices), this->null_equality);
+        if (this->join_type == duckdb::JoinType::MARK ||
+            this->join_type == duckdb::JoinType::ANTI) {
+            this->_join_handle = std::make_unique<cudf::filtered_join>(
+                selected_build_view, this->null_equality,
+                /* default args otherwise the compiler can't figure out which
+                   constructor to call */
+                cudf::set_as_build_table::RIGHT, 0.5);
+        } else {
+            this->_join_handle = std::make_unique<cudf::hash_join>(
+                selected_build_view, this->null_equality);
+        }
     }
 
     uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
@@ -434,7 +446,9 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::unique_ptr<cudf::table> coalesced_probe =
             cudf::concatenate(probe_views, stream);
 
-        if (coalesced_probe->num_rows() == 0 || this->_join_handle == nullptr) {
+        bool null_join_handle = std::visit(
+            [](const auto& ptr) { return ptr == nullptr; }, this->_join_handle);
+        if (coalesced_probe->num_rows() == 0 || null_join_handle) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
@@ -460,8 +474,10 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
+            auto& join_handle =
+                std::get<std::unique_ptr<cudf::hash_join>>(this->_join_handle);
             std::tie(probe_indices, build_indices) =
-                _join_handle->inner_join(selected, {}, stream);
+                join_handle->inner_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::INNER_JOIN;
         } break;
         // Use left join for outer because it will give us all probe rows,
@@ -471,46 +487,29 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // unmatched build rows every batch
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::LEFT: {
+            auto& join_handle =
+                std::get<std::unique_ptr<cudf::hash_join>>(this->_join_handle);
             std::tie(probe_indices, build_indices) =
-                _join_handle->left_join(selected, {}, stream);
+                join_handle->left_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::LEFT_JOIN;
         } break;
         case duckdb::JoinType::ANTI: {
-            cudf::ast::tree true_tree;
-            cudf::numeric_scalar<bool> true_scalar =
-                cudf::numeric_scalar<bool>(true);
-            const cudf::ast::expression& always_true =
-                true_tree.emplace<cudf::ast::literal>(true_scalar);
-            const cudf::ast::expression& expr =
-                this->non_equi_expression
-                    ? this->non_equi_expression->get_root()
-                    : always_true;
-            probe_indices = cudf::mixed_left_anti_join(
-                selected,
-                this->_build_table->view().select(this->build_key_indices),
-                probe_to_select->view(), this->_build_table->view(), expr,
-                this->null_equality, stream);
+            auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
+                this->_join_handle);
+            probe_indices = join_handle->anti_join(selected, stream);
             build_indices =
                 std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
                                                                        stream);
             cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
         } break;
         case duckdb::JoinType::MARK: {
-            cudf::ast::tree true_tree;
-            cudf::numeric_scalar<bool> true_scalar =
-                cudf::numeric_scalar<bool>(true);
-            const cudf::ast::expression& always_true =
-                true_tree.emplace<cudf::ast::literal>(true_scalar);
-            const cudf::ast::expression& expr =
-                this->non_equi_expression
-                    ? this->non_equi_expression->get_root()
-                    : always_true;
-            probe_indices = cudf::mixed_left_semi_join(
-                selected,
-                this->_build_table->view().select(this->build_key_indices),
-                probe_to_select->view(), this->_build_table->view(), expr,
-                this->null_equality, stream);
-            cudf_join_kind = cudf::join_kind::INNER_JOIN;
+            auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
+                this->_join_handle);
+            probe_indices = join_handle->semi_join(selected, stream);
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
+            cudf_join_kind = cudf::join_kind::LEFT_SEMI_JOIN;
         } break;
         default: {
             throw std::runtime_error(
@@ -519,9 +518,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         }
     }
 
-    if (this->non_equi_expression != nullptr &&
-        this->join_type != duckdb::JoinType::MARK &&
-        this->join_type != duckdb::JoinType::ANTI) {
+    if (this->non_equi_expression != nullptr) {
         std::tie(probe_indices, build_indices) = cudf::filter_join_indices(
             probe_to_select->view(), this->_build_table->view(), *probe_indices,
             *build_indices, this->non_equi_expression->get_root(),
