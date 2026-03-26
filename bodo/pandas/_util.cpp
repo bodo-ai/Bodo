@@ -959,7 +959,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
                                                          max_scalar);
             }
 #ifdef USE_CUDF
-            else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
+            else if constexpr (std::is_same_v<T, CudaJoin *>) {
                 std::shared_ptr<arrow::Table> min_max_values =
                     join_state->get_min_max_stats()[build_key_col];
 

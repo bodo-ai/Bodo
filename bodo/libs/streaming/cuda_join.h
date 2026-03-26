@@ -10,43 +10,36 @@
 #include "../gpu_utils.h"
 #include "duckdb/common/enums/join_type.hpp"
 
-struct CudaHashJoin {
+// Forward declaration to avoid import loop
+class CudfASTOwner;
+
+/**
+ * @brief Base class for CUDA join operators.
+ *
+ * This class contains common functionality for both hash joins and non-equi
+ * joins.
+ */
+struct CudaJoin {
     std::unique_ptr<cudf::table> _build_table;
 
     // Store build chunks until FinalizeBuild is called
     std::vector<std::shared_ptr<cudf::table>> _build_chunks;
-    std::shared_ptr<CudfBloomFilter> _build_bloom_filter;
-
-    // The hash map object (opaque handle to the GPU hash table)
-    std::unique_ptr<cudf::hash_join> _join_handle;
 
     // The output schema of the join probe phase, which is needed for
     // constructing empty result tables when there are no matches
     std::shared_ptr<bodo::Schema> output_schema;
 
-    /**
-     * @brief Build the hash table from the accumulated build chunks
-     * @param build_chunks Vector of build table chunks
-     */
-    void build_hash_table(
-        const std::vector<std::shared_ptr<cudf::table>>& build_chunks);
-
-    // What input columns to join on
-    std::vector<cudf::size_type> build_key_indices;
-    std::vector<cudf::size_type> probe_key_indices;
     // What columns to keep in the output
     std::vector<int64_t> build_kept_cols;
     std::vector<int64_t> probe_kept_cols;
-
-    // Stats for runtime join filter
-    std::vector<std::shared_ptr<arrow::Table>> min_max_stats;
 
     std::shared_ptr<bodo::Schema> build_table_schema;
     std::shared_ptr<bodo::Schema> probe_table_schema;
 
     duckdb::JoinType join_type;
 
-    cudf::null_equality null_equality = cudf::null_equality::EQUAL;
+    // Optional expression to evaluate
+    std::unique_ptr<CudfASTOwner> non_equi_expression;
 
     std::unique_ptr<cudf::column> unmatched_build_rows =
         nullptr;  // Used for right/outer joins to track which
@@ -58,6 +51,103 @@ struct CudaHashJoin {
     // rows, if false this means this is a broadcast join and we need to wait
     // for sync_build_matches_req to complete before proceeding.
     bool build_matches_synced = true;
+
+    bool is_broadcast_join;
+
+    std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
+    std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
+    GpuMpiManager gather_blooms;
+    std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
+
+    CudaJoin(std::shared_ptr<bodo::Schema> build_schema,
+             std::shared_ptr<bodo::Schema> probe_schema,
+             std::vector<int64_t> build_kept_cols,
+             std::vector<int64_t> probe_kept_cols,
+             std::shared_ptr<bodo::Schema> output_schema,
+             duckdb::JoinType join_type,
+             std::unique_ptr<CudfASTOwner> non_equi_expression,
+             bool is_broadcast = false);
+
+    virtual ~CudaJoin() = default;
+
+    /**
+     * @brief Finalize the build phase by constructing the join structures
+     * and collecting statistics
+     */
+    virtual void FinalizeBuild() = 0;
+
+    /**
+     * @brief Process input tables to build side of join
+     */
+    virtual bool BuildConsumeBatch(
+        std::shared_ptr<cudf::table> build_chunk,
+        std::shared_ptr<StreamAndEvent> input_stream_event, bool local_is_last);
+
+    /**
+     * @brief Run join probe on the input batch
+     * @param probe_chunk input batch to probe
+     * @param input_stream_event stream and event associated with the input
+     * batch
+     * @param stream CUDA stream to execute on
+     * @param local_is_last whether this is the last input batch on this rank
+     * @return output batch of probe and global is last flag
+     */
+    virtual std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
+        const std::shared_ptr<cudf::table>& probe_chunk,
+        std::shared_ptr<StreamAndEvent> input_stream_event,
+        rmm::cuda_stream_view& stream, bool local_is_last) = 0;
+
+    /**
+     * @brief Add to the previous mask of rows.
+     */
+    virtual void runtime_filter(
+        cudf::table_view const& probe_table,
+        std::vector<cudf::size_type> const& probe_key_indices,
+        std::unique_ptr<cudf::column>& prev_mask,
+        rmm::cuda_stream_view stream) {}
+
+    /**
+     * @brief Get the min-max statistics for runtime join filters
+     *
+     * @return std::vector<std::shared_ptr<arrow::Table>> vector of min-max
+     * stats one per build key column. The first column is "min" and the second
+     * column is "max".
+     */
+    virtual std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() {
+        return {};
+    }
+
+    /**
+     * @brief Signal this rank has completed its portion of the join.
+     */
+    bool is_build_complete() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->BuffersFull();
+        } else {
+            return build_shuffle_manager->BuffersFull();
+        }
+    }
+
+    /**
+     * @brief Signal this rank cannot accept new input since shuffle buffer is
+     * full.
+     */
+    bool shuffle_buffer_full() {
+        if (is_broadcast_join) {
+            // There is no shuffling in broadcast join
+            return false;
+        } else {
+            return probe_shuffle_manager->BuffersFull();
+        }
+    }
+
+    bool hasComm() {
+        if (is_broadcast_join) {
+            return build_broadcast_manager->get_mpi_comm() != MPI_COMM_NULL;
+        } else {
+            return build_shuffle_manager->get_mpi_comm() != MPI_COMM_NULL;
+        }
+    }
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
@@ -86,20 +176,29 @@ struct CudaHashJoin {
     std::unique_ptr<cudf::table> produce_unmatched_build_rows(
         std::unique_ptr<cudf::table> table, bool global_is_last,
         rmm::cuda_stream_view stream);
-    bool is_broadcast_join;
+};
 
-    std::shared_ptr<GpuShuffleManager> build_shuffle_manager;
-    std::shared_ptr<GpuShuffleManager> probe_shuffle_manager;
-    GpuMpiManager gather_blooms;
-    std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
+struct CudaHashJoin : public CudaJoin {
+    std::shared_ptr<CudfBloomFilter> _build_bloom_filter;
 
-    bool hasComm() {
-        if (is_broadcast_join) {
-            return build_broadcast_manager->get_mpi_comm() != MPI_COMM_NULL;
-        } else {
-            return build_shuffle_manager->get_mpi_comm() != MPI_COMM_NULL;
-        }
-    }
+    // The hash map object (opaque handle to the GPU hash table)
+    std::unique_ptr<cudf::hash_join> _join_handle;
+
+    /**
+     * @brief Build the hash table from the accumulated build chunks
+     * @param build_chunks Vector of build table chunks
+     */
+    void build_hash_table(
+        const std::vector<std::shared_ptr<cudf::table>>& build_chunks);
+
+    // What input columns to join on
+    std::vector<cudf::size_type> build_key_indices;
+    std::vector<cudf::size_type> probe_key_indices;
+
+    // Stats for runtime join filter
+    std::vector<std::shared_ptr<arrow::Table>> min_max_stats;
+
+    cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -110,104 +209,53 @@ struct CudaHashJoin {
                  std::vector<int64_t> probe_kept_cols,
                  std::shared_ptr<bodo::Schema> output_schema,
                  duckdb::JoinType join_type,
+                 std::unique_ptr<CudfASTOwner> non_equi_expression,
                  cudf::null_equality null_eq = cudf::null_equality::EQUAL,
-                 bool is_broadcast = false)
-        : output_schema(std::move(output_schema)),
-          build_key_indices(std::move(build_keys)),
-          probe_key_indices(std::move(probe_keys)),
-          build_kept_cols(std::move(build_kept_cols)),
-          probe_kept_cols(std::move(probe_kept_cols)),
-          build_table_schema(std::move(build_schema)),
-          probe_table_schema(std::move(probe_schema)),
-          join_type(join_type),
-          null_equality(null_eq),
-          is_broadcast_join(is_broadcast) {
-        probe_shuffle_manager = std::make_shared<GpuShuffleManager>();
+                 bool is_broadcast = false);
 
-        if (is_broadcast_join) {
-            build_broadcast_manager =
-                std::make_shared<GpuTableBroadcastManager>();
-            if (duckdb::IsRightOuterJoin(this->join_type)) {
-                // This is the only case we need to sync build matches
-                this->build_matches_synced = false;
-            }
-        } else {
-            build_shuffle_manager = std::make_shared<GpuShuffleManager>();
-        }
-    }
+    CudaHashJoin() = delete;
 
-    CudaHashJoin() = default;
+    void FinalizeBuild() override;
 
-    /**
-     * @brief Finalize the build phase by constructing the hash table
-     * and collecting statistics
-     */
-    void FinalizeBuild();
-
-    /**
-     * @brief Process input tables to build side of join
-     */
-    bool BuildConsumeBatch(std::shared_ptr<cudf::table> build_chunk,
-                           std::shared_ptr<StreamAndEvent> input_stream_event,
-                           bool local_is_last);
-
-    /**
-     * @brief Run join probe on the input batch
-     * @param probe_chunk input batch to probe
-     * @param input_stream_event stream and event associated with the input
-     * batch
-     * @param stream CUDA stream to execute on
-     * @param local_is_last whether this is the last input batch on this rank
-     * @return output batch of probe and global is last flag
-     */
     std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
         const std::shared_ptr<cudf::table>& probe_chunk,
         std::shared_ptr<StreamAndEvent> input_stream_event,
-        rmm::cuda_stream_view& stream, bool local_is_last);
+        rmm::cuda_stream_view& stream, bool local_is_last) override;
 
-    /**
-     * @brief Add to the previous mask of rows.
-     */
     void runtime_filter(cudf::table_view const& probe_table,
                         std::vector<cudf::size_type> const& probe_key_indices,
                         std::unique_ptr<cudf::column>& prev_mask,
-                        rmm::cuda_stream_view stream);
+                        rmm::cuda_stream_view stream) override;
 
-    /**
-     * @brief Get the min-max statistics for runtime join filters
-     *
-     * @return std::vector<std::shared_ptr<arrow::Table>> vector of min-max
-     * stats one per build key column. The first column is "min" and the second
-     * column is "max".
-     */
-    std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() {
+    std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() override {
         return min_max_stats;
     }
-
-    /**
-     * @brief Signal this rank has completed its portion of the join.
-     */
-    bool is_build_complete() {
-        if (is_broadcast_join) {
-            return build_broadcast_manager->BuffersFull();
-        } else {
-            return build_shuffle_manager->BuffersFull();
-        }
-    }
-
-    /**
-     * @brief Signal this rank cannot accept new input since shuffle buffer is
-     * full.
-     */
-    bool shuffle_buffer_full() {
-        if (is_broadcast_join) {
-            // There is no shuffling in broadcast join
-            return false;
-        } else {
-            return probe_shuffle_manager->BuffersFull();
-        }
-    }
 };
+
+/**
+ * @brief CUDA join operator for pure non-equi joins.
+ */
+struct CudaNonEquiJoin : public CudaJoin {
+   public:
+    CudaNonEquiJoin(std::shared_ptr<bodo::Schema> build_schema,
+                    std::shared_ptr<bodo::Schema> probe_schema,
+                    std::vector<int64_t> build_kept_cols,
+                    std::vector<int64_t> probe_kept_cols,
+                    std::shared_ptr<bodo::Schema> output_schema,
+                    duckdb::JoinType join_type,
+                    std::unique_ptr<CudfASTOwner> non_equi_expression,
+                    bool is_broadcast = false);
+
+    void FinalizeBuild() override;
+
+    std::pair<std::unique_ptr<cudf::table>, bool> ProbeProcessBatch(
+        const std::shared_ptr<cudf::table>& probe_chunk,
+        std::shared_ptr<StreamAndEvent> input_stream_event,
+        rmm::cuda_stream_view& stream, bool local_is_last) override;
+};
+
 #else
-struct CudaHashJoin {};
+struct CudaJoin {};
+struct CudaHashJoin : public CudaJoin {};
+struct CudaNonEquiJoin : public CudaJoin {};
 #endif

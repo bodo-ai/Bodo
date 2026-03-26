@@ -14,6 +14,15 @@
 #include <cudf/table/table_view.hpp>
 #include <cudf/types.hpp>
 
+#include "duckdb/planner/expression/bound_between_expression.hpp"
+#include "duckdb/planner/expression/bound_case_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
@@ -145,22 +154,22 @@ GPU_COLUMN do_cudf_compute_case(std::shared_ptr<ExprGPUResult> when_res,
     GPU_COLUMN res;
     if (then_as_array) {
         if (else_as_array) {
-            res = std::move(cudf::copy_if_else(then_as_array->result->view(),
-                                               else_as_array->result->view(),
-                                               when_col, se->stream));
+            res = cudf::copy_if_else(then_as_array->result->view(),
+                                     else_as_array->result->view(), when_col,
+                                     se->stream);
         } else if (else_as_scalar) {
-            res = std::move(cudf::copy_if_else(then_as_array->result->view(),
-                                               *(else_as_scalar->result),
-                                               when_col, se->stream));
+            res = cudf::copy_if_else(then_as_array->result->view(),
+                                     *(else_as_scalar->result), when_col,
+                                     se->stream);
         } else {
             throw std::runtime_error(
                 "do_cudf_compute_case right is neither array nor scalar.");
         }
     } else if (then_as_scalar) {
         if (else_as_array) {
-            res = std::move(cudf::copy_if_else(*(then_as_scalar->result),
-                                               else_as_array->result->view(),
-                                               when_col, se->stream));
+            res = cudf::copy_if_else(*(then_as_scalar->result),
+                                     else_as_array->result->view(), when_col,
+                                     se->stream);
         } else if (else_as_scalar) {
             throw std::runtime_error(
                 "do_cudf_compute_case both then and else are scalar.");
@@ -941,5 +950,231 @@ void tableFilterSetToCudfAST(
                 cudf::ast::operation(cudf::ast::ast_operator::LOGICAL_AND,
                                      *prev_cond, filter_ast_tree.back()));
         }
+    }
+}
+
+CudfASTOwner build_mixed_join_predicate(
+    const std::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
+    const std::unordered_set<duckdb::idx_t>& left_table_indices,
+    rmm::cuda_stream_view& stream) {
+    if (exprs.empty()) {
+        throw std::runtime_error(
+            "build_combined_predicate: no expressions provided");
+    }
+
+    CudfASTOwner owner;
+
+    // Convert the first expression — its root becomes the accumulator.
+    const cudf::ast::expression* acc =
+        &duckdb_expr_to_cudf_ast(*exprs[0], left_table_indices, owner, stream);
+
+    // Each subsequent expression is converted into the same owner and
+    // AND-ed with the accumulated root. Because all nodes live in the
+    // same tree, the references remain valid.
+    for (size_t i = 1; i < exprs.size(); ++i) {
+        const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
+            *exprs[i], left_table_indices, owner, stream);
+        acc = &owner.push(cudf::ast::operation(
+            cudf::ast::ast_operator::LOGICAL_AND, *acc, rhs));
+    }
+
+    return owner;
+}
+
+const cudf::ast::expression& duckdb_expr_to_cudf_ast(
+    const duckdb::Expression& expr,
+    const std::unordered_set<duckdb::idx_t>& left_table_indices,
+    CudfASTOwner& owner, rmm::cuda_stream_view& stream) {
+    switch (expr.expression_class) {
+        case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
+            auto& col_ref = expr.Cast<duckdb::BoundColumnRefExpression>();
+
+            duckdb::idx_t table_idx = col_ref.binding.table_index;
+            duckdb::idx_t col_idx = col_ref.binding.column_index;
+
+            cudf::ast::table_reference table_ref =
+                left_table_indices.count(table_idx)
+                    ? cudf::ast::table_reference::LEFT
+                    : cudf::ast::table_reference::RIGHT;
+            return owner.push(cudf::ast::column_reference(col_idx, table_ref));
+        } break;
+
+        case duckdb::ExpressionClass::BOUND_CONSTANT: {
+            auto& const_expr = expr.Cast<duckdb::BoundConstantExpression>();
+            const duckdb::Value& val = const_expr.value;
+
+            owner.insert_literal(val, stream);
+
+            return owner.tree.back();
+        } break;
+
+        case duckdb::ExpressionClass::BOUND_COMPARISON: {
+            auto& cmp = expr.Cast<duckdb::BoundComparisonExpression>();
+
+            const cudf::ast::expression& lhs = duckdb_expr_to_cudf_ast(
+                *cmp.left, left_table_indices, owner, stream);
+            const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
+                *cmp.right, left_table_indices, owner, stream);
+
+            cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
+            return owner.push(cudf::ast::operation(op, lhs, rhs));
+        }
+
+        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+            auto& conj = expr.Cast<duckdb::BoundConjunctionExpression>();
+
+            if (conj.children.size() < 2) {
+                throw std::runtime_error(
+                    "duckdb_expr_to_cudf_ast: conjunction has fewer than 2 "
+                    "children");
+            }
+
+            cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
+
+            const cudf::ast::expression* acc = &duckdb_expr_to_cudf_ast(
+                *conj.children[0], left_table_indices, owner, stream);
+
+            for (size_t i = 1; i < conj.children.size(); ++i) {
+                const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
+                    *conj.children[i], left_table_indices, owner, stream);
+                acc = &owner.push(cudf::ast::operation(op, *acc, rhs));
+            }
+            return *acc;
+        } break;
+
+        case duckdb::ExpressionClass::BOUND_OPERATOR: {
+            auto& op_expr = expr.Cast<duckdb::BoundOperatorExpression>();
+
+            if (expr.type == duckdb::ExpressionType::OPERATOR_NOT) {
+                if (op_expr.children.size() != 1) {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: NOT must have exactly 1 "
+                        "child");
+                }
+                const cudf::ast::expression& child = duckdb_expr_to_cudf_ast(
+                    *op_expr.children[0], left_table_indices, owner, stream);
+                return owner.push(
+                    cudf::ast::operation(cudf::ast::ast_operator::NOT, child));
+            }
+
+            throw std::runtime_error(
+                "duckdb_expr_to_cudf_ast: unsupported BOUND_OPERATOR type " +
+                std::to_string(static_cast<int>(expr.type)));
+        } break;
+
+        default:
+            throw std::runtime_error(
+                "duckdb_expr_to_cudf_ast: unsupported expression class " +
+                std::to_string(static_cast<int>(expr.expression_class)));
+    }
+}
+
+void CudfASTOwner::insert_literal(const duckdb::Value& val,
+                                  rmm::cuda_stream_view& stream) {
+    // Helper to push a typed literal and then transfer ownership of the
+    // scalar into the owner. Must happen in this order: literal holds a
+    // ref to the scalar so it must be pushed into the tree first.
+    auto push_literal = [&](auto typed_scalar) {
+        using ScalarT = std::decay_t<decltype(*typed_scalar)>;
+        ScalarT* raw = typed_scalar.get();
+        this->push(cudf::ast::literal(*raw));
+        this->scalars.push_back(std::move(typed_scalar));
+    };
+
+    switch (val.type().id()) {
+        case duckdb::LogicalTypeId::BOOLEAN:
+            push_literal(std::make_unique<cudf::numeric_scalar<int8_t>>(
+                static_cast<int8_t>(val.GetValue<bool>()), true, stream));
+            break;
+        case duckdb::LogicalTypeId::TINYINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<int8_t>>(
+                val.GetValue<int8_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::SMALLINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<int16_t>>(
+                val.GetValue<int16_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::INTEGER:
+            push_literal(std::make_unique<cudf::numeric_scalar<int32_t>>(
+                val.GetValue<int32_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::BIGINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<int64_t>>(
+                val.GetValue<int64_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::UTINYINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<uint8_t>>(
+                val.GetValue<uint8_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::USMALLINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<uint16_t>>(
+                val.GetValue<uint16_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::UINTEGER:
+            push_literal(std::make_unique<cudf::numeric_scalar<uint32_t>>(
+                val.GetValue<uint32_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::UBIGINT:
+            push_literal(std::make_unique<cudf::numeric_scalar<uint64_t>>(
+                val.GetValue<uint64_t>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::FLOAT:
+            push_literal(std::make_unique<cudf::numeric_scalar<float>>(
+                val.GetValue<float>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::DOUBLE:
+            push_literal(std::make_unique<cudf::numeric_scalar<double>>(
+                val.GetValue<double>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::VARCHAR:
+            push_literal(std::make_unique<cudf::string_scalar>(
+                val.GetValue<std::string>(), true, stream));
+            break;
+        case duckdb::LogicalTypeId::DATE:
+            push_literal(
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
+                    cudf::timestamp_D{
+                        cudf::duration_D{val.GetValue<int32_t>()}},
+                    true, stream));
+            break;
+        case duckdb::LogicalTypeId::TIMESTAMP:
+            push_literal(
+                std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
+                    cudf::timestamp_us{
+                        cudf::duration_us{val.GetValue<int64_t>()}},
+                    true, stream));
+            break;
+        default:
+            throw std::runtime_error(
+                "duckdb_value_to_cudf_ast_literal: unsupported duckdb type " +
+                val.type().ToString());
+    }
+}
+
+cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
+    duckdb::ExpressionType etype) {
+    switch (etype) {
+        case duckdb::ExpressionType::COMPARE_EQUAL:
+            return cudf::ast::ast_operator::EQUAL;
+        case duckdb::ExpressionType::COMPARE_NOTEQUAL:
+            return cudf::ast::ast_operator::NOT_EQUAL;
+        case duckdb::ExpressionType::COMPARE_GREATERTHAN:
+            return cudf::ast::ast_operator::GREATER;
+        case duckdb::ExpressionType::COMPARE_LESSTHAN:
+            return cudf::ast::ast_operator::LESS;
+        case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+            return cudf::ast::ast_operator::GREATER_EQUAL;
+        case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
+            return cudf::ast::ast_operator::LESS_EQUAL;
+        case duckdb::ExpressionType::CONJUNCTION_AND:
+            return cudf::ast::ast_operator::LOGICAL_AND;
+        case duckdb::ExpressionType::CONJUNCTION_OR:
+            return cudf::ast::ast_operator::LOGICAL_OR;
+        case duckdb::ExpressionType::OPERATOR_NOT:
+            return cudf::ast::ast_operator::NOT;
+        default:
+            throw std::runtime_error(
+                "duckdb_etype_to_cudf_ast_op: unsupported ExpressionType " +
+                std::to_string(static_cast<int>(etype)));
     }
 }

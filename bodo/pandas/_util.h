@@ -337,7 +337,7 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
 #ifdef USE_CUDF
-using join_state_t = std::variant<JoinState *, CudaHashJoin *>;
+using join_state_t = std::variant<JoinState *, CudaJoin *>;
 #else
 using join_state_t = std::variant<JoinState *>;
 #endif

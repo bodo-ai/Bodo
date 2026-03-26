@@ -8,7 +8,7 @@
 #include <arrow/status.h>
 #include <arrow/type_traits.h>
 #include <future>
-#include <mutex>
+#include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -19,7 +19,6 @@
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
 #include <cstdint>
@@ -33,6 +32,10 @@
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/unary.hpp>
+
+#include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 #define GPU_COLUMN std::unique_ptr<cudf::column>
 #define GPU_SCALAR std::unique_ptr<cudf::scalar>
@@ -948,3 +951,88 @@ void tableFilterSetToCudfAST(
     const std::vector<std::string> &column_names,
     cudf::ast::tree &filter_ast_tree,
     std::vector<std::unique_ptr<cudf::scalar>> &filter_scalars);
+
+/**
+ * @brief Owns all nodes and scalars created during a duckdb -> cudf AST
+ *        conversion so that they remain alive for the lifetime of the
+ *        resulting cudf::ast::expression reference.
+ *
+ */
+class CudfASTOwner {
+    cudf::ast::tree tree;
+    std::vector<std::unique_ptr<cudf::scalar>> scalars;
+    const cudf::ast::expression *root{nullptr};
+
+   public:
+    void insert_literal(const duckdb::Value &val,
+                        rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &get_root() const {
+        if (!root) {
+            throw std::runtime_error("CudfASTOwner: tree is empty");
+        }
+        return *root;
+    }
+    template <typename ExprT>
+    const ExprT &push(ExprT expr) {
+        const ExprT &ref = tree.push(std::move(expr));
+        root = &ref;
+        return ref;
+    }
+
+    friend const cudf::ast::expression &duckdb_expr_to_cudf_ast(
+        const duckdb::Expression &, const std::unordered_set<duckdb::idx_t> &,
+        CudfASTOwner &, rmm::cuda_stream_view &);
+};
+
+/**
+ * @brief Map a duckdb ExpressionType comparison operator to the
+ *        corresponding cudf::ast::ast_operator.
+ *
+ * @throws std::runtime_error for unsupported operators.
+ */
+cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
+    duckdb::ExpressionType etype);
+
+/**
+ * @brief Recursively convert a duckdb Expression tree into a cudf AST
+ *        expression suitable for use as the binary_predicate in a mixed_join.
+ *
+ * Column references are resolved using @p col_ref_map which maps
+ * (table_index, column_index) duckdb pairs to a flat column index into the
+ * *_conditional table_view passed to mixed_join.  The table_reference
+ * (LEFT vs RIGHT) is determined by whether the duckdb table_index is
+ * found in @p left_table_indices.
+ *
+ * @param expr              Root of the duckdb expression subtree to convert.
+ * @param left_table_indices
+ *                          Set of duckdb table indices that belong to the left
+ *                          side of the join.  Any table index NOT in this set
+ *                          is treated as belonging to the right side.
+ * @param owner             Keeps all allocated AST nodes and scalars alive.
+ *
+ * @param stream cuda stream to create scalars on
+ *
+ * @return Reference to the root cudf AST expression node, owned by @p owner.
+ *
+ * @throws std::runtime_error for unsupported expression types or if a
+ *         constant cannot be converted.
+ */
+const cudf::ast::expression &duckdb_expr_to_cudf_ast(
+    const duckdb::Expression &expr,
+    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    CudfASTOwner &owner, rmm::cuda_stream_view &stream);
+/**
+ * @brief Convert multiple duckdb expressions into a single CudfASTOwner,
+ *        combining them with LOGICAL_AND.
+ *
+ * @param exprs             The duckdb expressions to combine.
+ * index.
+ * @param left_table_indices Set of duckdb table indices on the left side of the
+ * join.
+ * @param stream to create scalars on
+ * @return CudfASTOwner whose tree root is the AND of all expressions.
+ */
+CudfASTOwner build_mixed_join_predicate(
+    const std::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
+    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    rmm::cuda_stream_view &stream);
