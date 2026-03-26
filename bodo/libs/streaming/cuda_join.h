@@ -177,6 +177,25 @@ struct CudaJoin {
     std::unique_ptr<cudf::table> produce_unmatched_build_rows(
         std::unique_ptr<cudf::table> table, bool global_is_last,
         rmm::cuda_stream_view stream);
+
+   protected:
+    /**
+     * @brief Return an empty output table for this join operator,
+     * potentially including unmatched build side rows.
+     */
+    std::pair<std::unique_ptr<cudf::table>, bool> get_empty_output_table(
+        bool global_is_last, rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Materialize the output table using the provided indices and
+     * views, and append unmatched build side rows if necessary.
+     */
+    std::pair<std::unique_ptr<cudf::table>, bool> materialize_and_output(
+        cudf::table_view const& probe_kept_view,
+        cudf::column_view const& probe_idx_view,
+        cudf::table_view const& build_kept_view,
+        cudf::column_view const& build_idx_view, bool global_is_last,
+        rmm::cuda_stream_view stream);
 };
 
 struct CudaHashJoin : public CudaJoin {
