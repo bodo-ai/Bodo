@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iostream>
 
+#include <boost/stacktrace.hpp>
 #include "../io/_io.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -29,6 +30,7 @@ int makedir(std::string path, int mode) {
 }
 
 void QueryProfileCollector::Init() {
+    std::cout << boost::stacktrace::stacktrace() << std::endl;
     QueryProfileCollector new_query_profile_collector;
     *this = new_query_profile_collector;
     tracing_level = getTracingLevel();
