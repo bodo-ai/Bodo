@@ -27,6 +27,7 @@ struct PhysicalGPUJoinMetrics {
 
 inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
     switch (logical_join.join_type) {
+        case duckdb::JoinType::MARK:
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::LEFT:
@@ -136,6 +137,10 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
             right_col_ref_map = getColRefMap(right_bindings);
 
+        bool is_left_anti = logical_join.join_type == duckdb::JoinType::ANTI;
+        bool is_right_anti =
+            logical_join.join_type == duckdb::JoinType::RIGHT_ANTI;
+
         std::vector<cudf::size_type> probe_keys;
         std::vector<cudf::size_type> build_keys;
 
@@ -171,27 +176,32 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         // Get the indices of kept build columns
         std::set<int64_t> bound_probe_inds;
         std::set<int64_t> bound_build_inds;
-        if (logical_join.left_projection_map.empty()) {
-            for (duckdb::idx_t i = 0;
-                 i < logical_join.children[0]->GetColumnBindings().size();
-                 i++) {
-                bound_probe_inds.insert(i);
-            }
-        } else {
-            for (const auto& c : logical_join.left_projection_map) {
-                bound_probe_inds.insert(c);
+
+        if (!is_right_anti) {
+            if (logical_join.left_projection_map.empty()) {
+                for (duckdb::idx_t i = 0;
+                     i < logical_join.children[0]->GetColumnBindings().size();
+                     i++) {
+                    bound_probe_inds.insert(i);
+                }
+            } else {
+                for (const auto& c : logical_join.left_projection_map) {
+                    bound_probe_inds.insert(c);
+                }
             }
         }
 
-        if (logical_join.right_projection_map.empty()) {
-            for (duckdb::idx_t i = 0;
-                 i < logical_join.children[1]->GetColumnBindings().size();
-                 i++) {
-                bound_build_inds.insert(i);
-            }
-        } else {
-            for (const auto& c : logical_join.right_projection_map) {
-                bound_build_inds.insert(c);
+        if (!this->is_mark_join && !is_left_anti) {
+            if (logical_join.right_projection_map.empty()) {
+                for (duckdb::idx_t i = 0;
+                     i < logical_join.children[1]->GetColumnBindings().size();
+                     i++) {
+                    bound_build_inds.insert(i);
+                }
+            } else {
+                for (const auto& c : logical_join.right_projection_map) {
+                    bound_build_inds.insert(c);
+                }
             }
         }
 
@@ -236,21 +246,48 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                 ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
                       duckdb_exprs, probe_table_inds, stream))
                 : nullptr;
-        ;
+
+        bool build_table_outer =
+            (logical_join.join_type == duckdb::JoinType::RIGHT) ||
+            (logical_join.join_type == duckdb::JoinType::OUTER) ||
+            is_right_anti;
+        bool probe_table_outer =
+            (logical_join.join_type == duckdb::JoinType::LEFT) ||
+            (logical_join.join_type == duckdb::JoinType::OUTER) || is_left_anti;
 
         this->output_schema = std::make_shared<bodo::Schema>();
+        std::vector<std::string> col_names;
         for (const auto& kept_col : probe_kept_cols) {
-            this->output_schema->column_types.push_back(
-                probe_table_schema->column_types[kept_col]->copy());
-            this->output_schema->column_names.push_back(
-                probe_table_schema->column_names[kept_col]);
+            std::unique_ptr<bodo::DataType> col_type =
+                probe_table_schema->column_types[kept_col]->copy();
+            if (build_table_outer) {
+                col_type = col_type->to_nullable_type();
+            }
+            this->output_schema->append_column(std::move(col_type));
+            col_names.push_back(probe_table_schema->column_names[kept_col]);
         }
+
+        // Add the mark output column if this is a mark join.
+        if (this->is_mark_join) {
+            if (!build_kept_cols.empty()) {
+                throw std::runtime_error(
+                    "Mark join should not output build table columns.");
+            }
+            output_schema->append_column(std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL));
+            col_names.push_back("");
+        }
+
         for (const auto& kept_col : build_kept_cols) {
-            this->output_schema->column_types.push_back(
-                build_table_schema->column_types[kept_col]->copy());
-            this->output_schema->column_names.push_back(
-                build_table_schema->column_names[kept_col]);
+            std::unique_ptr<bodo::DataType> col_type =
+                build_table_schema->column_types[kept_col]->copy();
+            if (probe_table_outer) {
+                col_type = col_type->to_nullable_type();
+            }
+            this->output_schema->append_column(std::move(col_type));
+            col_names.push_back(build_table_schema->column_names[kept_col]);
         }
+        this->output_schema->column_names = col_names;
         // Indexes are ignored in the Pandas merge if not joining on Indexes.
         // We designate empty metadata to indicate generating a trivial
         // RangeIndex.
