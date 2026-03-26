@@ -139,9 +139,6 @@ class Executor {
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
-        std::cout << __FILE__ << ":" << __LINE__
-                  << " - Initializing QueryProfileCollector\n"
-                  << std::endl;
         QueryProfileCollector::Default().Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);

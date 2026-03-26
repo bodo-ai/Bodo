@@ -31,7 +31,6 @@ int makedir(std::string path, int mode) {
 }
 
 void QueryProfileCollector::Init() {
-    std::cout << boost::stacktrace::stacktrace() << std::endl;
     QueryProfileCollector new_query_profile_collector;
     *this = new_query_profile_collector;
     tracing_level = getTracingLevel();
@@ -90,20 +89,27 @@ void QueryProfileCollector::Init() {
         std::string output_dir_base = fmt::format(
             "{}/run_{}{:02}{:02}_{:02}{:02}{:02}", parent_dir, year, month, day,
             hour.count(), minute.count(), second.count());
-
         output_dir = output_dir_base;
-        int run_suffix = 0;
-        while (stat(output_dir.c_str(), &info) == 0) {
-            output_dir = output_dir_base + "_" + std::to_string(run_suffix);
-            run_suffix++;
-        }
 
-        int res = makedir(output_dir.data(), 0700);
-        if (res != 0) {
-            // TODO XXX Needs error synchronization!
-            throw std::runtime_error(
-                fmt::format("Failed to create output directory {}: {}",
-                            output_dir, strerror(errno)));
+        int run_suffix = 0;
+        while (true) {
+            std::string candidate =
+                run_suffix == 0
+                    ? output_dir_base
+                    : output_dir_base + "_" + std::to_string(run_suffix);
+
+            if (mkdir(candidate.c_str(), 0700) == 0) {
+                output_dir = candidate;
+                break;
+            }
+
+            if (errno != EEXIST) {
+                throw std::runtime_error(
+                    fmt::format("Failed to create output directory {}: {}",
+                                candidate, strerror(errno)));
+            }
+
+            run_suffix++;
         }
     }
     // Broadcast the output_dir length to all ranks
@@ -343,9 +349,6 @@ void QueryProfileCollector::Finalize(int64_t verbose_level) {
 
 static void init_query_profile_collector_py_entry() {
     try {
-        std::cout << __FILE__ << ":" << __LINE__
-                  << " - Initializing QueryProfileCollector\n"
-                  << std::endl;
         QueryProfileCollector::Default().Init();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
