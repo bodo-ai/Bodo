@@ -51,6 +51,8 @@ void QueryProfileCollector::Init() {
     // We create the output directory only on rank 0 and assume the filesystem
     // is shared across all ranks.
     if (rank == 0) {
+        std::cout << " creating output directory for query profiles at "
+                  << parent_dir << "\n";
         // Check if the directory already exists
         struct stat info;
         bool exists = false;

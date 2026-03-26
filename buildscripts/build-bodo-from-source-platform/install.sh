@@ -6,7 +6,7 @@ set -e pipefail
 # Check if GITHUB_TOKEN is in the environment
 if [ -z "$GITHUB_TOKEN" ]; then
  echo -n "Enter your GitHub token: "
-  read GITHUB_TOKEN
+ read GITHUB_TOKEN
 fi
 
 # Clone the repo and checkout the desired branch
@@ -20,7 +20,7 @@ source ~/.bashrc
 cd ~/Bodo
 psh pixi install -e platform-dev
 # Remove conda install mpi to prefer intel MPI on the platform
-psh env BODO_SKIP_CPP_TESTS=1 pixi run build -e platform-dev
+psh env BODO_SKIP_CPP_TESTS=1 pixi run -e platform-dev build
 
 pixi shell -e platform-dev
 cd bodo-platform-image/bodo-platform-utils/
