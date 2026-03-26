@@ -1,6 +1,7 @@
 #include "./_query_profile_collector.h"
 #include <fmt/core.h>
 #include <sys/stat.h>
+#include <ostream>
 #ifdef _WIN32
 #include <direct.h>  // _mkdir
 #endif
@@ -334,6 +335,9 @@ void QueryProfileCollector::Finalize(int64_t verbose_level) {
 
 static void init_query_profile_collector_py_entry() {
     try {
+        std::cout << __FILE__ << ":" << __LINE__
+                  << " - Initializing QueryProfileCollector\n"
+                  << std::endl;
         QueryProfileCollector::Default().Init();
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
