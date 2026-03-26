@@ -460,11 +460,11 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
 bool is_gpu_rank();
 
 /**
- * @brief Sets specific elements in a boolean column to `true` based on an array
- * of indices.
+ * @brief Sets specific elements in a boolean column to `Value` based on an
+ * array of indices.
  *
  * @details This function iterates over the `indices` column and sets the
- * corresponding row in `target_bools` to `true`. If the `indices` column
+ * corresponding row in `target_bools` to `Value`. If the `indices` column
  * contains null values, those specific indices are safely ignored.
  * * @warning This function does **not** perform bounds checking. The caller is
  * strictly responsible for ensuring that all valid values in the `indices`
@@ -474,42 +474,18 @@ bool is_gpu_rank();
  * * @note This function only updates the data buffer of `target_bools`. It does
  * not modify the validity bitmask of the target column.
  *
+ * @tparam Value               The boolean value to set.
  * @param[in,out] target_bools A mutable view of the boolean column to update.
  * Must be of type `cudf::type_id::BOOL8`.
- * @param[in] indices          A view of the indices to set to true. Must be of
+ * @param[in] indices          A view of the indices to set. Must be of
  * type `cudf::type_id::INT32`. Can contain nulls.
  * @param[in] stream           CUDA stream used for device memory operations and
  * kernel launches.
  */
-void cudf_set_bools_false_from_indices(cudf::mutable_column_view target_bools,
-                                       cudf::column_view const indices,
-                                       rmm::cuda_stream_view stream);
-
-/**
- * @brief Sets specific elements in a boolean column to `true` based on an array
- * of indices.
- *
- * @details This function iterates over the `indices` column and sets the
- * corresponding row in `target_bools` to `true`. If the `indices` column
- * contains null values, those specific indices are safely ignored.
- * * @warning This function does **not** perform bounds checking. The caller is
- * strictly responsible for ensuring that all valid values in the `indices`
- * column are `>= 0` and
- * `< target_bools.size()`. Out-of-bounds indices will result in undefined
- * behavior or memory access violations.
- * * @note This function only updates the data buffer of `target_bools`. It does
- * not modify the validity bitmask of the target column.
- *
- * @param[in,out] target_bools A mutable view of the boolean column to update.
- * Must be of type `cudf::type_id::BOOL8`.
- * @param[in] indices          A view of the indices to set to true. Must be of
- * type `cudf::type_id::INT32`. Can contain nulls.
- * @param[in] stream           CUDA stream used for device memory operations and
- * kernel launches.
- */
-void cudf_set_bools_true_from_indices(cudf::mutable_column_view target_bools,
-                                      cudf::column_view const indices,
-                                      rmm::cuda_stream_view stream);
+template <bool Value>
+void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
+                                 cudf::column_view const indices,
+                                 rmm::cuda_stream_view stream);
 
 /**
  * @brief Get a cuda asynchronous memory resource instance.

@@ -516,7 +516,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                         stream.value());
 
         // Set matched indices to true
-        cudf_set_bools_true_from_indices(
+        cudf_set_bools_from_indices<true>(
             mark_col->mutable_view(),
             cudf::column_view(cudf::data_type{cudf::type_id::INT32},
                               probe_indices->size(), probe_indices->data(),
@@ -550,7 +550,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // If this is nullptr we either don't have a build table on this rank
         // or we've already produced the unmatched output
         this->unmatched_build_rows && build_idx_view.size()) {
-        cudf_set_bools_false_from_indices(
+        cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
 
@@ -705,7 +705,7 @@ CudaNonEquiJoin::ProbeProcessBatch(
                         stream.value());
 
         // Set matched indices to true
-        cudf_set_bools_true_from_indices(
+        cudf_set_bools_from_indices<true>(
             mark_col->mutable_view(),
             cudf::column_view(cudf::data_type{cudf::type_id::INT32},
                               probe_indices->size(), probe_indices->data(),
@@ -737,7 +737,7 @@ CudaNonEquiJoin::ProbeProcessBatch(
     // Update which build table indices we've matched if it's relevant
     if (duckdb::IsRightOuterJoin(this->join_type) &&
         this->unmatched_build_rows && build_idx_view.size()) {
-        cudf_set_bools_false_from_indices(
+        cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
 

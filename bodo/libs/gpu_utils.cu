@@ -39,7 +39,8 @@ __global__ void set_bools_kernel(
     }
 }
 
-void cudf_set_bools_false_from_indices(
+template <bool Value>
+void cudf_set_bools_from_indices(
     cudf::mutable_column_view target_bools, 
     cudf::column_view const indices,
     rmm::cuda_stream_view stream) {
@@ -59,14 +60,14 @@ void cudf_set_bools_false_from_indices(
     );
 
     if (indices.has_nulls()) {
-        set_bools_kernel<true, false><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<true, Value><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             d_mask,
             indices.size()
         );
     } else {
-        set_bools_kernel<false, false><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<false, Value><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             nullptr,
@@ -75,38 +76,5 @@ void cudf_set_bools_false_from_indices(
     }
 }
 
-void cudf_set_bools_true_from_indices(
-    cudf::mutable_column_view target_bools, 
-    cudf::column_view const indices,
-    rmm::cuda_stream_view stream) {
-    if (indices.is_empty()) {
-        return;
-    }
-
-    bool* d_target = target_bools.head<bool>();
-    int32_t const* d_indices = indices.head<int32_t>();
-    
-    cudf::bitmask_type const* d_mask = indices.null_mask();
-
-    int constexpr block_size = 256;
-    int grid_size = std::min(
-        (indices.size() + block_size - 1) / block_size,
-        cudf::size_type{65536} 
-    );
-
-    if (indices.has_nulls()) {
-        set_bools_kernel<true, true><<<grid_size, block_size, 0, stream.value()>>>(
-            d_target,
-            d_indices,
-            d_mask,
-            indices.size()
-        );
-    } else {
-        set_bools_kernel<false, true><<<grid_size, block_size, 0, stream.value()>>>(
-            d_target,
-            d_indices,
-            nullptr,
-            indices.size()
-        );
-    }
-}
+template void cudf_set_bools_from_indices<true>(cudf::mutable_column_view target_bools, cudf::column_view const indices, rmm::cuda_stream_view stream);
+template void cudf_set_bools_from_indices<false>(cudf::mutable_column_view target_bools, cudf::column_view const indices, rmm::cuda_stream_view stream);
