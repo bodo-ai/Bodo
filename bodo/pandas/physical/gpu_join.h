@@ -138,34 +138,38 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         std::vector<cudf::size_type> probe_keys;
         std::vector<cudf::size_type> build_keys;
+        std::vector<cudf::size_type> non_equi_build_keys;
 
-        // Handle equi-join conditions
+        // Handle join conditions
         for (const duckdb::JoinCondition& cond : logical_join.conditions) {
-            if (!cond.IsComparison() ||
-                cond.GetComparisonType() !=
-                    duckdb::ExpressionType::COMPARE_EQUAL) {
-                continue;
-            }
+            bool is_equi = cond.IsComparison() &&
+                           cond.GetComparisonType() ==
+                               duckdb::ExpressionType::COMPARE_EQUAL;
 
-            if (cond.GetLHS().GetExpressionClass() !=
+            if (cond.GetLHS().GetExpressionClass() ==
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Join condition left side is not a column reference.");
+                auto& left_bce =
+                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+                if (is_equi) {
+                    probe_keys.push_back(
+                        left_col_ref_map[{left_bce.binding.table_index,
+                                          left_bce.binding.column_index}]);
+                }
             }
-            if (cond.GetRHS().GetExpressionClass() !=
+            if (cond.GetRHS().GetExpressionClass() ==
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Join condition right side is not a column reference.");
+                auto& right_bce =
+                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
+                if (is_equi) {
+                    build_keys.push_back(
+                        right_col_ref_map[{right_bce.binding.table_index,
+                                           right_bce.binding.column_index}]);
+                } else {
+                    non_equi_build_keys.push_back(
+                        right_col_ref_map[{right_bce.binding.table_index,
+                                           right_bce.binding.column_index}]);
+                }
             }
-            auto& left_bce =
-                cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
-            auto& right_bce =
-                cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
-            probe_keys.push_back(left_col_ref_map[{
-                left_bce.binding.table_index, left_bce.binding.column_index}]);
-            build_keys.push_back(
-                right_col_ref_map[{right_bce.binding.table_index,
-                                   right_bce.binding.column_index}]);
         }
 
         // Get the indices of kept build columns
@@ -261,9 +265,10 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         if (build_keys.empty()) {
             this->cuda_join = std::make_unique<CudaNonEquiJoin>(
-                build_table_schema, probe_table_schema, build_kept_cols,
-                probe_kept_cols, output_schema, logical_join.join_type,
-                std::move(physExprTree), is_broadcast_join);
+                non_equi_build_keys, build_table_schema, probe_table_schema,
+                build_kept_cols, probe_kept_cols, output_schema,
+                logical_join.join_type, std::move(physExprTree),
+                is_broadcast_join);
         } else {
             this->cuda_join = std::make_unique<CudaHashJoin>(
                 build_keys, probe_keys, build_table_schema, probe_table_schema,

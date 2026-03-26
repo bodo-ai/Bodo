@@ -9,7 +9,7 @@
 #include "physical/operator.h"
 
 // enable and build to print debug info on the pipeline
-// #define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds data
+#define DEBUG_PIPELINE 2  // 1 for control flow, 2 adds data
 
 // comment out to generate separate rank<N> debug file per rank
 // requires DEBUG_PIPELINE above to be enabled
@@ -28,7 +28,7 @@ std::string getNodeString(T &t) {
 
 template <class T>
 uint64_t getBatchRows(T &t) {
-    uint64_t ret;
+    uint64_t ret = 0;
     std::visit(
         [&](auto &vt) {
             using U = std::decay_t<decltype(vt)>;

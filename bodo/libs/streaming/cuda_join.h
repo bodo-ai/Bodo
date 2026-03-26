@@ -59,6 +59,9 @@ struct CudaJoin {
     GpuMpiManager gather_blooms;
     std::shared_ptr<GpuTableBroadcastManager> build_broadcast_manager;
 
+    // Stats for runtime join filter
+    std::vector<std::shared_ptr<arrow::Table>> min_max_stats;
+
     CudaJoin(std::shared_ptr<bodo::Schema> build_schema,
              std::shared_ptr<bodo::Schema> probe_schema,
              std::vector<int64_t> build_kept_cols,
@@ -114,7 +117,7 @@ struct CudaJoin {
      * column is "max".
      */
     virtual std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() {
-        return {};
+        return min_max_stats;
     }
 
     /**
@@ -195,9 +198,6 @@ struct CudaHashJoin : public CudaJoin {
     std::vector<cudf::size_type> build_key_indices;
     std::vector<cudf::size_type> probe_key_indices;
 
-    // Stats for runtime join filter
-    std::vector<std::shared_ptr<arrow::Table>> min_max_stats;
-
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
    public:
@@ -226,10 +226,6 @@ struct CudaHashJoin : public CudaJoin {
                         std::vector<cudf::size_type> const& probe_key_indices,
                         std::unique_ptr<cudf::column>& prev_mask,
                         rmm::cuda_stream_view stream) override;
-
-    std::vector<std::shared_ptr<arrow::Table>> get_min_max_stats() override {
-        return min_max_stats;
-    }
 };
 
 /**
@@ -237,7 +233,8 @@ struct CudaHashJoin : public CudaJoin {
  */
 struct CudaNonEquiJoin : public CudaJoin {
    public:
-    CudaNonEquiJoin(std::shared_ptr<bodo::Schema> build_schema,
+    CudaNonEquiJoin(std::vector<cudf::size_type> build_keys,
+                    std::shared_ptr<bodo::Schema> build_schema,
                     std::shared_ptr<bodo::Schema> probe_schema,
                     std::vector<int64_t> build_kept_cols,
                     std::vector<int64_t> probe_kept_cols,
@@ -252,6 +249,9 @@ struct CudaNonEquiJoin : public CudaJoin {
         const std::shared_ptr<cudf::table>& probe_chunk,
         std::shared_ptr<StreamAndEvent> input_stream_event,
         rmm::cuda_stream_view& stream, bool local_is_last) override;
+
+   private:
+    std::vector<cudf::size_type> build_key_indices;
 };
 
 #else

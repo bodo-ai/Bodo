@@ -549,6 +549,7 @@ CudaHashJoin::CudaHashJoin(std::vector<cudf::size_type> build_keys,
       null_equality(null_eq) {}
 
 CudaNonEquiJoin::CudaNonEquiJoin(
+    std::vector<cudf::size_type> build_keys,
     std::shared_ptr<bodo::Schema> build_schema,
     std::shared_ptr<bodo::Schema> probe_schema,
     std::vector<int64_t> build_kept_cols, std::vector<int64_t> probe_kept_cols,
@@ -558,7 +559,8 @@ CudaNonEquiJoin::CudaNonEquiJoin(
                std::move(build_kept_cols), std::move(probe_kept_cols),
                std::move(output_schema), join_type,
                // Non-equi joins always broadcast the build table
-               std::move(non_equi_expression), true) {}
+               std::move(non_equi_expression), true),
+      build_key_indices(std::move(build_keys)) {}
 
 void CudaNonEquiJoin::FinalizeBuild() {
     if (is_gpu_rank()) {
@@ -568,6 +570,56 @@ void CudaNonEquiJoin::FinalizeBuild() {
         }
         this->_build_table = cudf::concatenate(build_views);
     }
+
+    std::shared_ptr<arrow::Schema> build_table_arrow_schema =
+        this->build_table_schema->ToArrowSchema();
+
+    for (const auto& col_idx : this->build_key_indices) {
+        std::shared_ptr<arrow::Table> local_stats;
+        if (is_gpu_rank() && this->_build_table->num_rows()) {
+            auto [min, max] =
+                cudf::minmax(this->_build_table->get_column(col_idx).view());
+            std::vector<std::unique_ptr<cudf::column>> columns;
+            columns.emplace_back(cudf::make_column_from_scalar(*min, 1));
+            columns.emplace_back(cudf::make_column_from_scalar(*max, 1));
+            std::shared_ptr<cudf::table> stats_table =
+                std::make_shared<cudf::table>(std::move(columns));
+
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
+                arrow::field("min",
+                             build_table_arrow_schema->field(col_idx)->type()),
+                arrow::field("max",
+                             build_table_arrow_schema->field(col_idx)->type())};
+            GPU_DATA stats_gpu_data = {
+                stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
+                make_stream_and_event(false)};
+            local_stats = convertGPUToArrow(stats_gpu_data);
+        } else {
+            // If we don't have a GPU, we still need to participate in the
+            // global stats reduction, so we create an table with null vals
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
+                arrow::field("min",
+                             build_table_arrow_schema->field(col_idx)->type()),
+                arrow::field("max",
+                             build_table_arrow_schema->field(col_idx)->type())};
+            local_stats = arrow::Table::Make(
+                std::make_shared<arrow::Schema>(std::move(fields)),
+                {arrow::MakeArrayOfNull(
+                     build_table_arrow_schema->field(col_idx)->type(), 1)
+                     .ValueOrDie(),
+                 arrow::MakeArrayOfNull(
+                     build_table_arrow_schema->field(col_idx)->type(), 1)
+                     .ValueOrDie()});
+        }
+        if (is_broadcast_join) {
+            this->min_max_stats.push_back(std::move(local_stats));
+        } else {
+            std::shared_ptr<arrow::Table> global_stats =
+                SyncAndReduceGlobalStats(std::move(local_stats));
+            this->min_max_stats.push_back(global_stats);
+        }
+    }
+
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 

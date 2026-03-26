@@ -137,7 +137,15 @@
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute in batch "            \
             << getNodeString(op) << " " << getBatchRows(batch) << std::endl; \
-        DEBUG_PrintTable(out, batch);                                        \
+        std::visit(                                                          \
+            [&](auto &batch) {                                               \
+                using T = std::decay_t<decltype(batch)>;                     \
+                if constexpr (std::is_same_v<T,                              \
+                                             std::shared_ptr<table_info>>) { \
+                    DEBUG_PrintTable(out, batch);                            \
+                }                                                            \
+            },                                                               \
+            batch);                                                          \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
