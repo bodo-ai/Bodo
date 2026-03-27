@@ -16,6 +16,7 @@
 #include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_uvector.hpp>
 #include <stdexcept>
 #include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
@@ -258,7 +259,7 @@ void CudaHashJoin::build_hash_table(
     cudf::table_view selected_build_view =
         build_view.select(this->build_key_indices);
 
-    if (this->build_key_indices.size() > 0) {
+    if (build_view.num_rows() != 0 && this->build_key_indices.size() > 0) {
         if (this->join_type == duckdb::JoinType::MARK ||
             this->join_type == duckdb::JoinType::ANTI) {
             this->_join_handle = std::make_unique<cudf::filtered_join>(
@@ -452,7 +453,14 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::unique_ptr<cudf::table> coalesced_probe =
             cudf::concatenate(probe_views, stream);
 
-        if (coalesced_probe->num_rows() == 0) {
+        bool null_handle =
+            std::visit([](auto&& handle) { return handle == nullptr; },
+                       this->_join_handle);
+        // ANTI joins with an empty build table (null join handle) should output
+        // all probe rows, and for other join types we can just return early
+        // since we know the probe rows can't match.
+        if (coalesced_probe->num_rows() == 0 &&
+            (!null_handle && this->join_type != duckdb::JoinType::ANTI)) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
@@ -500,7 +508,13 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         case duckdb::JoinType::ANTI: {
             auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
                 this->_join_handle);
-            probe_indices = join_handle->anti_join(selected, stream);
+            if (join_handle == nullptr) {
+                probe_indices =
+                    std::make_unique<rmm::device_uvector<cudf::size_type>>(
+                        make_uvector_iota(selected.num_rows(), stream));
+            } else {
+                probe_indices = join_handle->anti_join(selected, stream);
+            }
             cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
         } break;
         case duckdb::JoinType::MARK: {
