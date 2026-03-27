@@ -459,8 +459,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // ANTI joins with an empty build table (null join handle) should output
         // all probe rows, and for other join types we can just return early
         // since we know the probe rows can't match.
-        if (coalesced_probe->num_rows() == 0 &&
-            (!null_handle && this->join_type != duckdb::JoinType::ANTI)) {
+        if (coalesced_probe->num_rows() == 0 ||
+            (null_handle && this->join_type != duckdb::JoinType::ANTI)) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
