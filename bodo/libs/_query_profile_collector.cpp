@@ -7,9 +7,7 @@
 #endif
 #include <boost/json.hpp>
 #include <chrono>
-#include <iostream>
 
-#include <boost/stacktrace.hpp>
 #include "../io/_io.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -87,7 +85,6 @@ void QueryProfileCollector::Init() {
         std::string output_dir_base = fmt::format(
             "{}/run_{}{:02}{:02}_{:02}{:02}{:02}", parent_dir, year, month, day,
             hour.count(), minute.count(), second.count());
-        output_dir = output_dir_base;
 
         int run_suffix = 0;
         while (true) {
