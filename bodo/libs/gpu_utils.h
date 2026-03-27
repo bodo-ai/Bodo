@@ -497,6 +497,15 @@ void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
 
+/**
+ * @brief Get a device_uvector containing an iota sequence from 0 to n-1.
+ * @param n The length of the iota sequence.
+ * @param stream The CUDA stream to use for any device memory operations.
+ * @return the device_uvector containing the iota sequence.
+ */
+rmm::device_uvector<cudf::size_type> make_uvector_iota(
+    cudf::size_type n, rmm::cuda_stream_view stream);
+
 #else
 // Empty implementation when CUDF is not available
 class GpuShuffleManager {

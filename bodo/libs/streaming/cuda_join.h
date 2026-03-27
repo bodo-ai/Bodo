@@ -4,6 +4,7 @@
 #include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
+#include <cudf/join/filtered_join.hpp>
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
 #include "../gpu_bloom_filter.h"
@@ -202,7 +203,9 @@ struct CudaHashJoin : public CudaJoin {
     std::shared_ptr<CudfBloomFilter> _build_bloom_filter;
 
     // The hash map object (opaque handle to the GPU hash table)
-    std::unique_ptr<cudf::hash_join> _join_handle;
+    std::variant<std::unique_ptr<cudf::hash_join>,
+                 std::unique_ptr<cudf::filtered_join>>
+        _join_handle;
 
     /**
      * @brief Build the hash table from the accumulated build chunks

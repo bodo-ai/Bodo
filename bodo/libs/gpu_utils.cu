@@ -14,6 +14,8 @@
 #include <cudf/utilities/bit.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <thrust/sequence.h>
+#include <rmm/exec_policy.hpp>
 
 template <bool HasNulls, bool Value>
 __global__ void set_bools_kernel(
@@ -74,6 +76,12 @@ void cudf_set_bools_from_indices(
             indices.size()
         );
     }
+}
+
+rmm::device_uvector<cudf::size_type> make_uvector_iota(cudf::size_type n, rmm::cuda_stream_view stream) {
+    rmm::device_uvector<cudf::size_type> vec(n, stream);
+    thrust::sequence(rmm::exec_policy(stream), vec.begin(), vec.end(), 0);
+    return vec;
 }
 
 template void cudf_set_bools_from_indices<true>(cudf::mutable_column_view target_bools, cudf::column_view const indices, rmm::cuda_stream_view stream);
