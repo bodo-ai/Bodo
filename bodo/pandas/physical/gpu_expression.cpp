@@ -328,7 +328,9 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
                 }
 
                 if (!scalar_func_data.arrow_func_name.empty()) {
-                    throw std::runtime_error("Unimplemented");
+                    return std::static_pointer_cast<PhysicalGPUExpression>(
+                        std::make_shared<PhysicalGPUArrowExpression>(
+                            phys_children, scalar_func_data, result_type));
                 } else if (scalar_func_data.args) {
                     return std::static_pointer_cast<PhysicalGPUExpression>(
                         std::make_shared<PhysicalGPUUDFExpression>(
@@ -494,7 +496,8 @@ bool gpu_capable(duckdb::Expression& expr) {
                 }
 
                 if (!scalar_func_data.arrow_func_name.empty()) {
-                    throw std::runtime_error("Unimplemented");
+                    return scalar_func_data.arrow_func_name == "ends_with" ||
+                           scalar_func_data.arrow_func_name == "starts_with";
                 } else if (scalar_func_data.args) {
                     return false;
                 }

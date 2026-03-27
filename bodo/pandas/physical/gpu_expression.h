@@ -31,6 +31,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/strings/find.hpp>
 #include <cudf/unary.hpp>
 
 #include "duckdb/common/enums/expression_type.hpp"
@@ -871,6 +872,117 @@ std::shared_ptr<PhysicalGPUExpression> buildPhysicalGPUExprTree(
 bool gpu_capable(duckdb::unique_ptr<duckdb::Expression> &expr);
 
 bool gpu_capable(duckdb::Expression &expr);
+
+struct PhysicalGPUArrowExpressionMetrics {
+    using timer_t = MetricBase::TimerValue;
+    timer_t arrow_compute_time = 0;
+};
+
+/**
+ * @brief Physical expression tree node type for Arrow Compute functions that
+ * are also available in cudf.
+ *
+ */
+class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
+   public:
+    PhysicalGPUArrowExpression(
+        std::vector<std::shared_ptr<PhysicalGPUExpression>> &children,
+        BodoScalarFunctionData &_scalar_func_data,
+        duckdb::LogicalType _result_type)
+        : PhysicalGPUExpression(children),
+          scalar_func_data(_scalar_func_data),
+          result_type(std::move(_result_type)) {
+        if (scalar_func_data.arrow_func_name != "ends_with" &&
+            scalar_func_data.arrow_func_name != "starts_with") {
+            throw std::runtime_error(
+                "PhysicalGPUArrowExpression only supports ends_with and "
+                "starts_with for now.");
+        }
+    }
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
+        // Extract string argument from scalar_func_data.args for ends_with and
+        // starts_with
+        if (!PyTuple_Check(scalar_func_data.args) ||
+            PyTuple_Size(scalar_func_data.args) != 1) {
+            throw std::runtime_error(
+                fmt::format("{} args not a 1-element tuple.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Get the first element (borrowed reference)
+        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+        if (!PyUnicode_Check(py_str)) {
+            throw std::runtime_error(
+                fmt::format("{} args element is not a Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Convert to UTF‑8 C string
+        const char *c_str = PyUnicode_AsUTF8(py_str);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("{} error extracting Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        str_scalar_in = std::make_shared<cudf::string_scalar>(
+            std::string(c_str), true, se->stream);
+
+        std::shared_ptr<ExprGPUResult> in_res =
+            children[0]->ProcessBatch(input_batch, se);
+
+        std::shared_ptr<ArrayExprGPUResult> in_as_array =
+            std::dynamic_pointer_cast<ArrayExprGPUResult>(in_res);
+
+        std::unique_ptr<cudf::column> result;
+        if (scalar_func_data.arrow_func_name == "ends_with") {
+            result = cudf::strings::ends_with(in_as_array->result->view(),
+                                              *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "starts_with") {
+            result = cudf::strings::starts_with(in_as_array->result->view(),
+                                                *str_scalar_in, se->stream);
+        } else {
+            throw std::runtime_error(
+                fmt::format("Unsupported Arrow function: {}",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        std::shared_ptr<ExprGPUResult> ret =
+            std::make_shared<ArrayExprGPUResult>(
+                std::move(result),
+                "Arrow Compute " + scalar_func_data.arrow_func_name);
+        return ret;
+    }
+
+    arrow::Datum join_expr_internal(
+        cudf::column **left_table, cudf::column **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) override {
+        throw std::runtime_error(
+            "PhysicalGPUArrowExpression::join_expr_internal unimplemented");
+    }
+
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
+        metrics_out.push_back(
+            TimerMetric("arrow_compute_time", metrics.arrow_compute_time));
+    }
+
+   protected:
+    BodoScalarFunctionData scalar_func_data;
+    const duckdb::LogicalType result_type;
+    PhysicalGPUArrowExpressionMetrics metrics;
+
+    // Keeping reference to the cudf string scalar created from the Python
+    // string argument to ensure it stays alive during processing.
+    std::shared_ptr<cudf::string_scalar> str_scalar_in;
+};
 
 struct PhysicalGPUUDFExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
