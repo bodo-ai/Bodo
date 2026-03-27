@@ -258,7 +258,7 @@ void CudaHashJoin::build_hash_table(
     cudf::table_view selected_build_view =
         build_view.select(this->build_key_indices);
 
-    if (build_view.num_rows() != 0 && this->build_key_indices.size() > 0) {
+    if (this->build_key_indices.size() > 0) {
         if (this->join_type == duckdb::JoinType::MARK ||
             this->join_type == duckdb::JoinType::ANTI) {
             this->_join_handle = std::make_unique<cudf::filtered_join>(
@@ -452,9 +452,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::unique_ptr<cudf::table> coalesced_probe =
             cudf::concatenate(probe_views, stream);
 
-        bool null_join_handle = std::visit(
-            [](const auto& ptr) { return ptr == nullptr; }, this->_join_handle);
-        if (coalesced_probe->num_rows() == 0 || null_join_handle) {
+        if (coalesced_probe->num_rows() == 0) {
             return {produce_unmatched_build_rows(
                         empty_table_from_arrow_schema(
                             this->output_schema->ToArrowSchema()),
@@ -503,9 +501,6 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
                 this->_join_handle);
             probe_indices = join_handle->anti_join(selected, stream);
-            build_indices =
-                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
-                                                                       stream);
             cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
         } break;
         case duckdb::JoinType::MARK: {
@@ -602,6 +597,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     for (auto& col : gathered_probe->release()) {
         final_columns.push_back(std::move(col));
     }
+    // ANTI joins only output probe columns, so we don't need to gather build
+    // columns for those
     if (this->join_type != duckdb::JoinType::ANTI) {
         auto gathered_build =
             cudf::gather(build_kept_view, build_idx_view, oob_policy, stream);
