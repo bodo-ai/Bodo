@@ -775,12 +775,12 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             int SEND_RANK = 0;
             int RECV_RANK = 1;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            std::cout << "Rank: " << rank << std::endl;
-            std::cout << "Is GPU Rank: " << is_gpu_rank() << std::endl;
 
             if (rank != SEND_RANK && rank != RECV_RANK) {
                 break;
             }
+            std::cout << "Rank: " << rank << std::endl;
+            std::cout << "Is GPU Rank: " << is_gpu_rank() << std::endl;
             cudaFree(nullptr);
 
             // Host buffer
