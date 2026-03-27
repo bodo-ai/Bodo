@@ -1,7 +1,6 @@
 #include "./_query_profile_collector.h"
 #include <fmt/core.h>
 #include <sys/stat.h>
-#include <ostream>
 #ifdef _WIN32
 #include <direct.h>  // _mkdir
 #endif
