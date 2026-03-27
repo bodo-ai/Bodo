@@ -16,6 +16,7 @@
 #include "physical/gpu_join.h"
 #include "physical/gpu_join_filter.h"
 #include "physical/gpu_project.h"
+#include "physical/gpu_reduce.h"
 #endif
 #include "physical/join.h"
 #include "physical/join_filter.h"

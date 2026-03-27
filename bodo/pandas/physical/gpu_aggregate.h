@@ -19,6 +19,7 @@
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_distinct.hpp"
 #include "expression.h"
+#include "gpu_reduce.h"
 #include "operator.h"
 
 struct PhysicalGPUAggregateMetrics {
@@ -32,7 +33,7 @@ struct PhysicalGPUAggregateMetrics {
 inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
     // Temporarily don't support count_start and quantile on GPU.
     if (logical_aggregate.groups.empty()) {
-        return false;
+        return gpu_capable_reduce(logical_aggregate);
     }
 
     for (size_t i = 0; i < logical_aggregate.expressions.size(); i++) {
