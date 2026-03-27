@@ -218,13 +218,8 @@ struct BodoScalarFunctionData : public duckdb::FunctionData {
                 other.arrow_func_name == this->arrow_func_name);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        if (!arrow_func_name.empty()) {
-            return duckdb::make_uniq<BodoScalarFunctionData>(out_schema,
-                                                             arrow_func_name);
-        } else {
-            return duckdb::make_uniq<BodoScalarFunctionData>(
-                args, out_schema, is_cfunc, has_state);
-        }
+        return duckdb::make_uniq<BodoScalarFunctionData>(
+            args, out_schema, is_cfunc, has_state, arrow_func_name);
     }
 
     PyObject *args;  // If present then a UDF.
