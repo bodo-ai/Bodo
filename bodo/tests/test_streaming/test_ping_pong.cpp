@@ -25,13 +25,12 @@ static bodo::tests::suite tests([] {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        if (rank != SEND_RANK && rank != RECV_RANK) {
-            return;
-        }
-
         rmm::cuda_device_id device_id = get_gpu_id();
         if (device_id.value() >= 0) {
             cudaSetDevice(device_id.value());
+        }
+        if (rank != SEND_RANK && rank != RECV_RANK) {
+            return;
         }
         cudaFree(nullptr);
 
