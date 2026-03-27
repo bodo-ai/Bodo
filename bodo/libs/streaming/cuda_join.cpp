@@ -453,9 +453,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         std::unique_ptr<cudf::table> coalesced_probe =
             cudf::concatenate(probe_views, stream);
 
-        bool null_handle =
-            std::visit([](auto&& handle) { return handle == nullptr; },
-                       this->_join_handle);
+        bool null_handle = std::visit(
+            [](auto& handle) { return handle == nullptr; }, this->_join_handle);
         // ANTI joins with an empty build table (null join handle) should output
         // all probe rows, and for other join types we can just return early
         // since we know the probe rows can't match.
@@ -506,13 +505,17 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             cudf_join_kind = cudf::join_kind::LEFT_JOIN;
         } break;
         case duckdb::JoinType::ANTI: {
-            auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
-                this->_join_handle);
-            if (join_handle == nullptr) {
+            bool null_handle =
+                std::visit([](auto& handle) { return handle == nullptr; },
+                           this->_join_handle);
+            if (null_handle) {
                 probe_indices =
                     std::make_unique<rmm::device_uvector<cudf::size_type>>(
                         make_uvector_iota(selected.num_rows(), stream));
             } else {
+                auto& join_handle =
+                    std::get<std::unique_ptr<cudf::filtered_join>>(
+                        this->_join_handle);
                 probe_indices = join_handle->anti_join(selected, stream);
             }
             build_indices =
