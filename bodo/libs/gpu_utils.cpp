@@ -336,7 +336,7 @@ GpuShuffleSendState::GpuShuffleSendState(
     }
 
     // Send data
-    CHECK_CUDA(cudaStreamSynchronize(stream));
+    CHECK_CUDA(cudaDeviceSynchronize());
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
