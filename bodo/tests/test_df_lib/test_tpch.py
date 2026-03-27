@@ -99,10 +99,12 @@ def test_tpch_q02():
     run_tpch_query_test(tpch.tpch_q02, ctes_created=1)
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
