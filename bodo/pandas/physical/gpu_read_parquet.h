@@ -768,34 +768,18 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             this->metrics.init_time += end_timer(start_init);
         }
 
-        // Non-GPU ranks return nullptr to avoid any GPU work
-        if (!is_gpu_rank()) {
-            return {GPU_DATA(nullptr, output_arrow_schema, se),
-                    OperatorResult::FINISHED};
-        }
-
-        time_pt start_produce = start_timer();
-
-        std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
-            batch_gen->next(se);
-
-        auto result = next_batch_tup.second ? OperatorResult::FINISHED
-                                            : OperatorResult::HAVE_MORE_OUTPUT;
-        std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
-            GPU_DATA(std::move(next_batch_tup.first), output_arrow_schema, se),
-            result);
-
-        this->metrics.produce_time += end_timer(start_produce);
-        {
+        do {
             int rank;
             // Should use zero copy
             int N = (1 << 24);  // ~64MB
             int SEND_RANK = 0;
             int RECV_RANK = 1;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+            std::cout << "Rank: " << rank << std::endl;
+            std::cout << "Is GPU Rank: " << is_gpu_rank() << std::endl;
 
             if (rank != SEND_RANK && rank != RECV_RANK) {
-                return ret;
+                break;
             }
             cudaFree(nullptr);
 
@@ -843,7 +827,26 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             }
 
             cudaFree(d_buf);
+        } while (false);
+
+        // Non-GPU ranks return nullptr to avoid any GPU work
+        if (!is_gpu_rank()) {
+            return {GPU_DATA(nullptr, output_arrow_schema, se),
+                    OperatorResult::FINISHED};
         }
+
+        time_pt start_produce = start_timer();
+
+        std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
+            batch_gen->next(se);
+
+        auto result = next_batch_tup.second ? OperatorResult::FINISHED
+                                            : OperatorResult::HAVE_MORE_OUTPUT;
+        std::pair<GPU_DATA, OperatorResult> ret = std::make_pair(
+            GPU_DATA(std::move(next_batch_tup.first), output_arrow_schema, se),
+            result);
+
+        this->metrics.produce_time += end_timer(start_produce);
         return ret;
     }
 
