@@ -14,7 +14,8 @@
 #include <rmm/device_buffer.hpp>
 #include <vector>
 
-#define N (64)  // ~64MB
+// Should use zero copy
+#define N (1 << 24)  // ~64MB
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
