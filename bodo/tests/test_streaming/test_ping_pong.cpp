@@ -17,10 +17,17 @@
 // Should use zero copy
 #define N (1 << 24)  // ~64MB
 
+constexpr int SEND_RANK = 0;
+constexpr int RECV_RANK = 1;
+
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        if (rank != SEND_RANK && rank != RECV_RANK) {
+            return;
+        }
 
         rmm::cuda_device_id device_id = get_gpu_id();
         if (device_id.value() >= 0) {
@@ -35,7 +42,7 @@ static bodo::tests::suite tests([] {
         int* d_buf;
         cudaMalloc(&d_buf, N * sizeof(int));
 
-        if (rank == 0) {
+        if (rank == SEND_RANK) {
             // Fill on CPU
             for (int i = 0; i < N; i++) {
                 h_buf[i] = i % 100;
@@ -48,14 +55,14 @@ static bodo::tests::suite tests([] {
 
             std::cout << "Rank 0 sending GPU buffer..." << std::endl;
 
-            MPI_Send(d_buf, N, MPI_INT, 1, 0, MPI_COMM_WORLD);
+            MPI_Send(d_buf, N, MPI_INT, RECV_RANK, 0, MPI_COMM_WORLD);
         }
 
-        if (rank == 1) {
+        if (rank == RECV_RANK) {
             std::cout << "Rank 1 receiving GPU buffer..." << std::endl;
 
             cudaDeviceSynchronize();
-            MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
+            MPI_Recv(d_buf, N, MPI_INT, SEND_RANK, 0, MPI_COMM_WORLD,
                      MPI_STATUS_IGNORE);
 
             // Copy back to host
