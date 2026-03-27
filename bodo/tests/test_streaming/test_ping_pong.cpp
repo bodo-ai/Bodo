@@ -18,7 +18,7 @@
 #define N (1 << 24)  // ~64MB
 
 constexpr int SEND_RANK = 0;
-constexpr int RECV_RANK = 24;
+constexpr int RECV_RANK = 1;
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
