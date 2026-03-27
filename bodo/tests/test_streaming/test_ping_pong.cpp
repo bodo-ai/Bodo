@@ -18,7 +18,7 @@
 #define N (1 << 24)  // ~64MB
 
 constexpr int SEND_RANK = 0;
-constexpr int RECV_RANK = 24;
+constexpr int RECV_RANK = 1;
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
@@ -27,6 +27,8 @@ static bodo::tests::suite tests([] {
 
         rmm::cuda_device_id device_id = get_gpu_id();
         if (device_id.value() >= 0) {
+            std::cout << "Rank " << rank << " using GPU " << device_id.value()
+                      << std::endl;
             cudaSetDevice(device_id.value());
         }
         if (rank != SEND_RANK && rank != RECV_RANK) {
@@ -52,13 +54,15 @@ static bodo::tests::suite tests([] {
                        cudaMemcpyHostToDevice);
             cudaDeviceSynchronize();
 
-            std::cout << "Rank 0 sending GPU buffer..." << std::endl;
+            std::cout << "Rank " << rank << " sending GPU buffer..."
+                      << std::endl;
 
             MPI_Send(d_buf, N, MPI_INT, RECV_RANK, 0, MPI_COMM_WORLD);
         }
 
         if (rank == RECV_RANK) {
-            std::cout << "Rank 1 receiving GPU buffer..." << std::endl;
+            std::cout << "Rank " << rank << " receiving GPU buffer..."
+                      << std::endl;
 
             cudaDeviceSynchronize();
             MPI_Recv(d_buf, N, MPI_INT, SEND_RANK, 0, MPI_COMM_WORLD,
