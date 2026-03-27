@@ -515,6 +515,9 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             } else {
                 probe_indices = join_handle->anti_join(selected, stream);
             }
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
             cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
         } break;
         case duckdb::JoinType::MARK: {
