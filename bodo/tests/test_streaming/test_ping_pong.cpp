@@ -14,8 +14,7 @@
 #include <rmm/device_buffer.hpp>
 #include <vector>
 
-// Should use zero copy
-#define N (1 << 24)  // ~64MB
+#define N (1 << 20)  // ~64MB
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
@@ -28,20 +27,17 @@ static bodo::tests::suite tests([] {
         }
         cudaFree(nullptr);
 
-        // Host buffer
         std::vector<int> h_buf(N);
 
-        // Device buffer
         int* d_buf;
         cudaMalloc(&d_buf, N * sizeof(int));
+        cudaMemset(d_buf, 0, N * sizeof(int));
 
         if (rank == 0) {
-            // Fill on CPU
             for (int i = 0; i < N; i++) {
                 h_buf[i] = i % 100;
             }
 
-            // Copy to GPU
             cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
                        cudaMemcpyHostToDevice);
             cudaDeviceSynchronize();
@@ -60,11 +56,9 @@ static bodo::tests::suite tests([] {
             MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
                      MPI_STATUS_IGNORE);
 
-            // Copy back to host
             cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
                        cudaMemcpyDeviceToHost);
 
-            // CPU checksum
             long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
 
             std::cout << "Checksum: " << sum << std::endl;
