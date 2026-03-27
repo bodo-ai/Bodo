@@ -704,6 +704,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
   if (USE_CUDF)
         set(test_list "${test_list}"
         "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
+        "bodo/tests/test_streaming/test_ping_pong.cpp"
         "bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
         "bodo/tests/test_streaming/test_gpu_bloom_filter.cpp"
         )
