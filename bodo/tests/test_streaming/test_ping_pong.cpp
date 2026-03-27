@@ -22,13 +22,7 @@ static bodo::tests::suite tests([] {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        // rmm::cuda_device_id device_id = get_gpu_id();
-        if (device_id.value() >= 0) {
-            // std::cout << "Rank " << rank << " using GPU " <<
-            // device_id.value()
-            //           << std::endl;
-            cudaSetDevice(0);
-        }
+        cudaSetDevice(0);
         if (rank != 0 && rank != 1) {
             return;
         }
