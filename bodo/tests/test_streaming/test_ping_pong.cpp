@@ -15,7 +15,7 @@
 #include <vector>
 
 // Should use zero copy
-#define N (24)  // ~64MB
+#define N (1 << 24)  // ~64MB
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
