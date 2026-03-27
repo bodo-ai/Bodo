@@ -99,6 +99,7 @@ void QueryProfileCollector::Init() {
             }
 
             if (errno != EEXIST) {
+                // TODO XXX Needs error synchronization!
                 throw std::runtime_error(
                     fmt::format("Failed to create output directory {}: {}",
                                 candidate, strerror(errno)));
