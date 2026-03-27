@@ -237,10 +237,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             }
             // No equality keys, so we do a nested loop join.
             this->join_state_ = std::make_shared<NestedLoopJoinState>(
-                build_table_schema_reordered, probe_table_schema_reordered,
-                build_table_outer, probe_table_outer, std::vector<int64_t>(),
-                false, join_func, true, true, get_streaming_batch_size(), -1,
-                getOpId());
+                build_table_schema, probe_table_schema, build_table_outer,
+                probe_table_outer, std::vector<int64_t>(), false, join_func,
+                true, true, get_streaming_batch_size(), -1, getOpId());
         } else {
             if (has_non_equi_cond) {
                 join_func = PhysicalExpression::join_expr;
@@ -438,6 +437,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         OperatorResult prev_op_result) override {
         time_pt start_produce = start_timer();
         bool is_last = prev_op_result == OperatorResult::FINISHED;
+        bool out_is_last = true;
 
         if (has_non_equi_cond) {
             PhysicalExpression::cur_join_expr = physExprTree.get();
@@ -446,7 +446,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         bool request_input = true;
 
         if (join_state_->IsNestedLoopJoin()) {
-            is_last = nested_loop_join_probe_consume_batch(
+            out_is_last = nested_loop_join_probe_consume_batch(
                 (NestedLoopJoinState*)join_state_.get(), input_batch,
                 build_kept_cols, probe_kept_cols, is_last);
         } else {
@@ -604,7 +604,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         auto [out_table, chunk_size] = join_state_->output_buffer->PopChunk(
             /*force_return*/ is_last);
 
-        is_last = is_last && join_state_->output_buffer->total_remaining == 0;
+        out_is_last = out_is_last && is_last &&
+                      join_state_->output_buffer->total_remaining == 0;
         this->metrics.output_row_count += out_table->nrows();
         this->metrics.process_batch_time += end_timer(start_produce);
 

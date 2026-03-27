@@ -10,7 +10,7 @@ from bodo.pandas.plan import (
     LogicalParquetWrite,
     count_gpu_plan_nodes,
 )
-from bodo.tests.utils import _test_equal
+from bodo.tests.utils import _test_equal, set_broadcast_join
 
 
 def test_gpu_join(datapath):
@@ -40,7 +40,8 @@ def test_gpu_join(datapath):
         _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
-def test_project_filter1(datapath):
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_project_filter1(datapath, broadcast):
     """Test end-to-end projection and filter workflow on GPU."""
     df1_path = datapath("dataframe_library/df1.parquet")
 
@@ -49,18 +50,19 @@ def test_project_filter1(datapath):
         filt_df = proj_df[proj_df.D > 30]
         filt_df.to_parquet(out_path)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        df1_bodo = bd.read_parquet(df1_path)
-        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        filter_impl(df1_bodo, out_path_bodo)
+    with set_broadcast_join(broadcast):
+        with tempfile.TemporaryDirectory() as tmp:
+            df1_bodo = bd.read_parquet(df1_path)
+            out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+            filter_impl(df1_bodo, out_path_bodo)
 
-        df1_pd = pd.read_parquet(df1_path)
-        out_path_pd = os.path.join(tmp, "out_pd.pq")
-        filter_impl(df1_pd, out_path_pd)
+            df1_pd = pd.read_parquet(df1_path)
+            out_path_pd = os.path.join(tmp, "out_pd.pq")
+            filter_impl(df1_pd, out_path_pd)
 
-        result_bodo = pd.read_parquet(out_path_bodo)
-        result_pd = pd.read_parquet(out_path_pd)
-        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+            result_bodo = pd.read_parquet(out_path_bodo)
+            result_pd = pd.read_parquet(out_path_pd)
+            _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -175,7 +177,8 @@ def test_gpu_to_cpu_exchange(datapath):
     _test_equal(pdf, bdf)
 
 
-def test_gpu_join_bloom_filter(datapath):
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_gpu_join_bloom_filter(datapath, broadcast):
     """Test bloom join filter on GPU."""
     cust_path = datapath("tpch-test_data/parquet/customer.pq")
     orders_path = datapath("tpch-test_data/parquet/orders.pq")
@@ -189,18 +192,19 @@ def test_gpu_join_bloom_filter(datapath):
             orders_df, how="inner", left_on=["C_CUSTKEY"], right_on=["O_CUSTKEY"]
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        cust_bodo = bd.read_parquet(cust_path)
-        orders_bodo = bd.read_parquet(orders_path)
-        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        merged_bodo = merge_impl(cust_bodo, orders_bodo)
-        merged_bodo.to_parquet(out_path_bodo)
+    with set_broadcast_join(broadcast):
+        with tempfile.TemporaryDirectory() as tmp:
+            cust_bodo = bd.read_parquet(cust_path)
+            orders_bodo = bd.read_parquet(orders_path)
+            out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+            merged_bodo = merge_impl(cust_bodo, orders_bodo)
+            merged_bodo.to_parquet(out_path_bodo)
 
-        cust_pd = pd.read_parquet(cust_path)
-        orders_pd = pd.read_parquet(orders_path)
-        out_path_pd = os.path.join(tmp, "out_pd.pq")
-        merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
+            cust_pd = pd.read_parquet(cust_path)
+            orders_pd = pd.read_parquet(orders_path)
+            out_path_pd = os.path.join(tmp, "out_pd.pq")
+            merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
 
-        result_bodo = pd.read_parquet(out_path_bodo)
-        result_pd = pd.read_parquet(out_path_pd)
-        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+            result_bodo = pd.read_parquet(out_path_bodo)
+            result_pd = pd.read_parquet(out_path_pd)
+            _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)

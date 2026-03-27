@@ -1286,6 +1286,13 @@ std::pair<int64_t, PyObject *> execute_plan(
         output = executor.ExecutePipelines();
     }
 
+#ifdef USE_CUDF
+    if (prev_mr) {
+        // Reset device resource for GPU ranks.
+        cudf::set_current_device_resource(prev_mr);
+    }
+#endif
+
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
         PyObject *file_infos = std::get<PyObject *>(output);
@@ -1293,13 +1300,6 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 
     std::shared_ptr<table_info> output_table = std::get<0>(output);
-
-#ifdef USE_CUDF
-    if (prev_mr) {
-        // Reset device resource for GPU ranks.
-        cudf::set_current_device_resource(prev_mr);
-    }
-#endif
 
     // Parquet write doesn't return data
     if (output_table == nullptr) {

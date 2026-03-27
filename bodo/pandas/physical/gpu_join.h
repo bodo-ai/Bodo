@@ -4,12 +4,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <cudf/types.hpp>
+#include <cudf/utilities/default_stream.hpp>
+#include <rmm/cuda_stream_view.hpp>
 #include "../../libs/streaming/cuda_join.h"
 #include "../_util.h"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_cross_product.hpp"
 #include "operator.h"
+#include "physical/gpu_expression.h"
 
 struct PhysicalGPUJoinMetrics {
     using time_t = MetricBase::TimerValue;
@@ -23,15 +26,24 @@ struct PhysicalGPUJoinMetrics {
 };
 
 inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
-    if (logical_join.join_type != duckdb::JoinType::INNER) {
-        return false;
-    }
-    for (const duckdb::JoinCondition& cond : logical_join.conditions) {
-        if (cond.IsComparison() &&
-            cond.GetComparisonType() != duckdb::ExpressionType::COMPARE_EQUAL) {
+    switch (logical_join.join_type) {
+        case duckdb::JoinType::OUTER:
+        case duckdb::JoinType::RIGHT:
+        case duckdb::JoinType::LEFT:
+        case duckdb::JoinType::INNER: {
+            return true;
+        }
+        default: {
             return false;
         }
     }
+
+    for (duckdb::JoinCondition& cond : logical_join.conditions) {
+        if (!gpu_capable(cond.GetJoinExpression())) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -40,25 +52,67 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
  *
  */
 class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
+   private:
+    bool doBroadcastJoin(duckdb::LogicalComparisonJoin& join) {
+        duckdb::LogicalOperator& buildSide = *join.children[1];
+        duckdb::LogicalOperator& probeSide = *join.children[0];
+
+        // If we have no equality conditions we have to do
+        //  a broadcast join.
+        bool no_equality = true;
+        for (const duckdb::JoinCondition& cond : join.conditions) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
+                no_equality = false;
+                break;
+            }
+        }
+        if (no_equality) {
+            return true;
+        }
+
+        // Get build side row width.
+        uint64_t build_row_size = std::transform_reduce(
+            buildSide.types.begin(), buildSide.types.end(), 0LL, std::plus<>{},
+            [](auto const& s) { return GetTypeIdSize(s.InternalType()); });
+        // Get probe side row width.
+        uint64_t probe_row_size = std::transform_reduce(
+            probeSide.types.begin(), probeSide.types.end(), 0LL, std::plus<>{},
+            [](auto const& s) { return GetTypeIdSize(s.InternalType()); });
+        uint64_t build_total = buildSide.estimated_cardinality * build_row_size;
+        uint64_t probe_total = probeSide.estimated_cardinality * probe_row_size;
+
+        char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
+        if (bcast_threshold) {
+            return static_cast<int>(build_total) < std::stoi(bcast_threshold);
+        }
+
+        size_t free_bytes = 0;
+        size_t total_bytes = 0;
+        cudaMemGetInfo(&free_bytes, &total_bytes);
+        // Do broadcast join if probe table is order of magnitude smaller than
+        // probe and it fits on GPU with room for the hash table.
+        return (build_total < (probe_total * 0.1)) &&
+               ((build_total * 4) < total_bytes);
+    }
+
    public:
     explicit PhysicalGPUJoin(duckdb::LogicalComparisonJoin& logical_join)
-        : has_non_equi_cond(false),
-          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
+        : is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
-                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
-        assert(logical_join.join_type == duckdb::JoinType::INNER);
-    }
+                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
+          is_broadcast_join(doBroadcastJoin(logical_join)) {}
 
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
-                    const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false) {
+                    const std::shared_ptr<bodo::Schema> probe_table_schema) {
         throw std::runtime_error("Not implemented.");
     }
 
     /**
      * @brief Determine output schema based on the logical
-     * operator and input schemas. Constructs the CudaHashJoin object.
+     * operator and input schemas. Constructs the CudaJoin object.
      *
      * @param logical_join - the logical join operator
      * @param conditions - the join conditions
@@ -85,13 +139,14 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         std::vector<cudf::size_type> probe_keys;
         std::vector<cudf::size_type> build_keys;
 
+        // Handle equi-join conditions
         for (const duckdb::JoinCondition& cond : logical_join.conditions) {
             if (!cond.IsComparison() ||
                 cond.GetComparisonType() !=
                     duckdb::ExpressionType::COMPARE_EQUAL) {
-                throw std::runtime_error(
-                    "Non-equi join conditions are not supported in GPU join.");
+                continue;
             }
+
             if (cond.GetLHS().GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
@@ -158,6 +213,31 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             probe_kept_cols.push_back(idx);
         }
 
+        std::unordered_set<duckdb::idx_t> probe_table_inds;
+        for (auto [k, _] : left_col_ref_map) {
+            probe_table_inds.emplace(k.first);
+        }
+        std::vector<duckdb::unique_ptr<duckdb::Expression>> duckdb_exprs;
+        for (duckdb::JoinCondition& cond : conditions) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    duckdb::ExpressionType::COMPARE_EQUAL) {
+                // These cases are handled by the left_keys and right_keys
+                // above.  Only the non-equi tests are handled here.
+                continue;
+            }
+            duckdb_exprs.emplace_back(
+                bododuckdb::JoinCondition::CreateExpression(std::move(cond)));
+        }
+
+        rmm::cuda_stream_view stream = cudf::get_default_stream();
+        std::unique_ptr<CudfASTOwner> physExprTree =
+            duckdb_exprs.size()
+                ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
+                      duckdb_exprs, probe_table_inds, stream))
+                : nullptr;
+        ;
+
         this->output_schema = std::make_shared<bodo::Schema>();
         for (const auto& kept_col : probe_kept_cols) {
             this->output_schema->column_types.push_back(
@@ -179,10 +259,18 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             std::vector<std::string>({}), std::vector<std::string>({}));
         this->arrow_schema = this->output_schema->ToArrowSchema();
 
-        this->cuda_join = std::make_unique<CudaHashJoin>(
-            build_keys, probe_keys, build_table_schema, probe_table_schema,
-            build_kept_cols, probe_kept_cols, output_schema,
-            cudf::null_equality::UNEQUAL);
+        if (build_keys.empty()) {
+            this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+                build_table_schema, probe_table_schema, build_kept_cols,
+                probe_kept_cols, output_schema, logical_join.join_type,
+                std::move(physExprTree), is_broadcast_join);
+        } else {
+            this->cuda_join = std::make_unique<CudaHashJoin>(
+                build_keys, probe_keys, build_table_schema, probe_table_schema,
+                build_kept_cols, probe_kept_cols, output_schema,
+                logical_join.join_type, std::move(physExprTree),
+                cudf::null_equality::UNEQUAL, is_broadcast_join);
+        }
 
         assert(this->output_schema->ncols() ==
                logical_join.GetColumnBindings().size());
@@ -209,7 +297,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             input_batch.table, input_batch.stream_event, local_is_last);
 
         return global_is_last ? OperatorResult::FINISHED
-                              : (cuda_join->build_shuffle_manager.BuffersFull()
+                              : (cuda_join->is_build_complete()
                                      ? OperatorResult::HAVE_MORE_OUTPUT
                                      : OperatorResult::NEED_MORE_INPUT);
     }
@@ -233,7 +321,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         GPU_DATA output_gpu_data = {
             output_table != nullptr ? std::move(output_table) : nullptr,
             this->arrow_schema, se};
-        if (cuda_join->probe_shuffle_manager.BuffersFull()) {
+        if (cuda_join->shuffle_buffer_full()) {
             request_input = false;
         }
 
@@ -265,17 +353,17 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
 
-    CudaHashJoin* getJoinStatePtr() { return this->cuda_join.get(); }
+    CudaJoin* getJoinStatePtr() { return this->cuda_join.get(); }
 
    private:
     std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_schema;
 
-    bool has_non_equi_cond;
     bool is_mark_join = false;
     bool is_anti_join = false;
 
     PhysicalGPUJoinMetrics metrics;
 
-    std::unique_ptr<CudaHashJoin> cuda_join;
+    std::unique_ptr<CudaJoin> cuda_join;
+    bool is_broadcast_join = false;
 };

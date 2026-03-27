@@ -959,7 +959,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
                                                          max_scalar);
             }
 #ifdef USE_CUDF
-            else if constexpr (std::is_same_v<T, CudaHashJoin *>) {
+            else if constexpr (std::is_same_v<T, CudaJoin *>) {
                 std::shared_ptr<arrow::Table> min_max_values =
                     join_state->get_min_max_stats()[build_key_col];
 
@@ -1028,20 +1028,25 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     const std::vector<int> column_projection) {
     for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
         for (const auto &[min, max] : min_max_vec) {
-            duckdb::unique_ptr<duckdb::TableFilter> min_filter =
-                duckdb::make_uniq<duckdb::ConstantFilter>(
-                    duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                    ArrowScalarToDuckDBValue(min));
+            if (min->is_valid) {
+                duckdb::unique_ptr<duckdb::TableFilter> min_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(min));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(min_filter));
+            }
 
-            duckdb::unique_ptr<duckdb::TableFilter> max_filter =
-                duckdb::make_uniq<duckdb::ConstantFilter>(
-                    duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
-                    ArrowScalarToDuckDBValue(max));
-
-            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                std::move(min_filter));
-            filters->PushFilter(duckdb::ColumnIndex(column_projection[col_idx]),
-                                std::move(max_filter));
+            if (max->is_valid) {
+                duckdb::unique_ptr<duckdb::TableFilter> max_filter =
+                    duckdb::make_uniq<duckdb::ConstantFilter>(
+                        duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+                        ArrowScalarToDuckDBValue(max));
+                filters->PushFilter(
+                    duckdb::ColumnIndex(column_projection[col_idx]),
+                    std::move(max_filter));
+            }
         }
     }
     return filters;
@@ -1239,6 +1244,7 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                 return std::make_unique<cudf::numeric_scalar<int8_t>>(
                     static_cast<int8_t>(false), false);
 
+            case arrow::Type::LARGE_STRING:
             case arrow::Type::STRING:
                 return std::make_unique<cudf::string_scalar>("", false);
             case arrow::Type::BINARY:

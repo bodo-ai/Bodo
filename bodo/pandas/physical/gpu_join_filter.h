@@ -114,7 +114,7 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
                 [&](const auto& join_state) {
                     if constexpr (std::is_same_v<
                                       std::decay_t<decltype(join_state)>,
-                                      CudaHashJoin*>) {
+                                      CudaJoin*>) {
                         join_state->runtime_filter(input_batch.table->view(),
                                                    filter_columns[i],
                                                    row_bitmask, se->stream);

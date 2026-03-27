@@ -8,7 +8,7 @@
 #include <arrow/status.h>
 #include <arrow/type_traits.h>
 #include <future>
-#include <mutex>
+#include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -19,7 +19,6 @@
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
 #include <cstdint>
@@ -32,7 +31,12 @@
 #include <cudf/copying.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/strings/find.hpp>
 #include <cudf/unary.hpp>
+
+#include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 #define GPU_COLUMN std::unique_ptr<cudf::column>
 #define GPU_SCALAR std::unique_ptr<cudf::scalar>
@@ -869,6 +873,117 @@ bool gpu_capable(duckdb::unique_ptr<duckdb::Expression> &expr);
 
 bool gpu_capable(duckdb::Expression &expr);
 
+struct PhysicalGPUArrowExpressionMetrics {
+    using timer_t = MetricBase::TimerValue;
+    timer_t arrow_compute_time = 0;
+};
+
+/**
+ * @brief Physical expression tree node type for Arrow Compute functions that
+ * are also available in cudf.
+ *
+ */
+class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
+   public:
+    PhysicalGPUArrowExpression(
+        std::vector<std::shared_ptr<PhysicalGPUExpression>> &children,
+        BodoScalarFunctionData &_scalar_func_data,
+        duckdb::LogicalType _result_type)
+        : PhysicalGPUExpression(children),
+          scalar_func_data(_scalar_func_data),
+          result_type(std::move(_result_type)) {
+        if (scalar_func_data.arrow_func_name != "ends_with" &&
+            scalar_func_data.arrow_func_name != "starts_with") {
+            throw std::runtime_error(
+                "PhysicalGPUArrowExpression only supports ends_with and "
+                "starts_with for now.");
+        }
+    }
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
+        // Extract string argument from scalar_func_data.args for ends_with and
+        // starts_with
+        if (!PyTuple_Check(scalar_func_data.args) ||
+            PyTuple_Size(scalar_func_data.args) != 1) {
+            throw std::runtime_error(
+                fmt::format("{} args not a 1-element tuple.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Get the first element (borrowed reference)
+        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+        if (!PyUnicode_Check(py_str)) {
+            throw std::runtime_error(
+                fmt::format("{} args element is not a Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Convert to UTF‑8 C string
+        const char *c_str = PyUnicode_AsUTF8(py_str);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("{} error extracting Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        str_scalar_in = std::make_shared<cudf::string_scalar>(
+            std::string(c_str), true, se->stream);
+
+        std::shared_ptr<ExprGPUResult> in_res =
+            children[0]->ProcessBatch(input_batch, se);
+
+        std::shared_ptr<ArrayExprGPUResult> in_as_array =
+            std::dynamic_pointer_cast<ArrayExprGPUResult>(in_res);
+
+        std::unique_ptr<cudf::column> result;
+        if (scalar_func_data.arrow_func_name == "ends_with") {
+            result = cudf::strings::ends_with(in_as_array->result->view(),
+                                              *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "starts_with") {
+            result = cudf::strings::starts_with(in_as_array->result->view(),
+                                                *str_scalar_in, se->stream);
+        } else {
+            throw std::runtime_error(
+                fmt::format("Unsupported Arrow function: {}",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        std::shared_ptr<ExprGPUResult> ret =
+            std::make_shared<ArrayExprGPUResult>(
+                std::move(result),
+                "Arrow Compute " + scalar_func_data.arrow_func_name);
+        return ret;
+    }
+
+    arrow::Datum join_expr_internal(
+        cudf::column **left_table, cudf::column **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) override {
+        throw std::runtime_error(
+            "PhysicalGPUArrowExpression::join_expr_internal unimplemented");
+    }
+
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
+        metrics_out.push_back(
+            TimerMetric("arrow_compute_time", metrics.arrow_compute_time));
+    }
+
+   protected:
+    BodoScalarFunctionData scalar_func_data;
+    const duckdb::LogicalType result_type;
+    PhysicalGPUArrowExpressionMetrics metrics;
+
+    // Keeping reference to the cudf string scalar created from the Python
+    // string argument to ensure it stays alive during processing.
+    std::shared_ptr<cudf::string_scalar> str_scalar_in;
+};
+
 struct PhysicalGPUUDFExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t cpp_to_py_time = 0;
@@ -948,3 +1063,88 @@ void tableFilterSetToCudfAST(
     const std::vector<std::string> &column_names,
     cudf::ast::tree &filter_ast_tree,
     std::vector<std::unique_ptr<cudf::scalar>> &filter_scalars);
+
+/**
+ * @brief Owns all nodes and scalars created during a duckdb -> cudf AST
+ *        conversion so that they remain alive for the lifetime of the
+ *        resulting cudf::ast::expression reference.
+ *
+ */
+class CudfASTOwner {
+    cudf::ast::tree tree;
+    std::vector<std::unique_ptr<cudf::scalar>> scalars;
+    const cudf::ast::expression *root{nullptr};
+
+   public:
+    void insert_literal(const duckdb::Value &val,
+                        rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &get_root() const {
+        if (!root) {
+            throw std::runtime_error("CudfASTOwner: tree is empty");
+        }
+        return *root;
+    }
+    template <typename ExprT>
+    const ExprT &push(ExprT expr) {
+        const ExprT &ref = tree.push(std::move(expr));
+        root = &ref;
+        return ref;
+    }
+
+    friend const cudf::ast::expression &duckdb_expr_to_cudf_ast(
+        const duckdb::Expression &, const std::unordered_set<duckdb::idx_t> &,
+        CudfASTOwner &, rmm::cuda_stream_view &);
+};
+
+/**
+ * @brief Map a duckdb ExpressionType comparison operator to the
+ *        corresponding cudf::ast::ast_operator.
+ *
+ * @throws std::runtime_error for unsupported operators.
+ */
+cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
+    duckdb::ExpressionType etype);
+
+/**
+ * @brief Recursively convert a duckdb Expression tree into a cudf AST
+ *        expression suitable for use as the binary_predicate in a mixed_join.
+ *
+ * Column references are resolved using @p col_ref_map which maps
+ * (table_index, column_index) duckdb pairs to a flat column index into the
+ * *_conditional table_view passed to mixed_join.  The table_reference
+ * (LEFT vs RIGHT) is determined by whether the duckdb table_index is
+ * found in @p left_table_indices.
+ *
+ * @param expr              Root of the duckdb expression subtree to convert.
+ * @param left_table_indices
+ *                          Set of duckdb table indices that belong to the left
+ *                          side of the join.  Any table index NOT in this set
+ *                          is treated as belonging to the right side.
+ * @param owner             Keeps all allocated AST nodes and scalars alive.
+ *
+ * @param stream cuda stream to create scalars on
+ *
+ * @return Reference to the root cudf AST expression node, owned by @p owner.
+ *
+ * @throws std::runtime_error for unsupported expression types or if a
+ *         constant cannot be converted.
+ */
+const cudf::ast::expression &duckdb_expr_to_cudf_ast(
+    const duckdb::Expression &expr,
+    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    CudfASTOwner &owner, rmm::cuda_stream_view &stream);
+/**
+ * @brief Convert multiple duckdb expressions into a single CudfASTOwner,
+ *        combining them with LOGICAL_AND.
+ *
+ * @param exprs             The duckdb expressions to combine.
+ * index.
+ * @param left_table_indices Set of duckdb table indices on the left side of the
+ * join.
+ * @param stream to create scalars on
+ * @return CudfASTOwner whose tree root is the AND of all expressions.
+ */
+CudfASTOwner build_mixed_join_predicate(
+    const std::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
+    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    rmm::cuda_stream_view &stream);

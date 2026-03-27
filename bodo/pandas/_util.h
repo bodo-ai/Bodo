@@ -218,13 +218,8 @@ struct BodoScalarFunctionData : public duckdb::FunctionData {
                 other.arrow_func_name == this->arrow_func_name);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        if (!arrow_func_name.empty()) {
-            return duckdb::make_uniq<BodoScalarFunctionData>(out_schema,
-                                                             arrow_func_name);
-        } else {
-            return duckdb::make_uniq<BodoScalarFunctionData>(
-                args, out_schema, is_cfunc, has_state);
-        }
+        return duckdb::make_uniq<BodoScalarFunctionData>(
+            args, out_schema, is_cfunc, has_state, arrow_func_name);
     }
 
     PyObject *args;  // If present then a UDF.
@@ -337,7 +332,7 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
 #ifdef USE_CUDF
-using join_state_t = std::variant<JoinState *, CudaHashJoin *>;
+using join_state_t = std::variant<JoinState *, CudaJoin *>;
 #else
 using join_state_t = std::variant<JoinState *>;
 #endif

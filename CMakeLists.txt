@@ -730,10 +730,12 @@ if (USE_CUDF)
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
     "bodo/libs/gpu_bloom_filter.cu"
+    "bodo/libs/gpu_utils.cu"
     )
 
     list(APPEND allow_implicit_fallthrough_list
     "bodo/libs/gpu_bloom_filter.cu"
+    "bodo/libs/gpu_utils.cu"
     )
 endif()
 
