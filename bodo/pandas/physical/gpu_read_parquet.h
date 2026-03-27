@@ -773,7 +773,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             // Should use zero copy
             int N = (1 << 24);  // ~64MB
             int SEND_RANK = 0;
-            int RECV_RANK = 1;
+            int RECV_RANK = 24;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
             if (rank != SEND_RANK && rank != RECV_RANK) {
