@@ -786,6 +786,62 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             result);
 
         this->metrics.produce_time += end_timer(start_produce);
+        {
+            int rank;
+            int SEND_RANK = 0;
+            int RECV_RANK = 1;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+            if (rank != SEND_RANK && rank != RECV_RANK) {
+                return ret;
+            }
+            cudaFree(nullptr);
+
+            // Host buffer
+            std::vector<int> h_buf(N);
+
+            // Device buffer
+            int *d_buf;
+            cudaMalloc(&d_buf, N * sizeof(int));
+
+            if (rank == SEND_RANK) {
+                // Fill on CPU
+                for (int i = 0; i < N; i++) {
+                    h_buf[i] = i % 100;
+                }
+
+                // Copy to GPU
+                cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
+                           cudaMemcpyHostToDevice);
+                cudaDeviceSynchronize();
+
+                std::cout << "Rank " << rank << " sending GPU buffer..."
+                          << std::endl;
+
+                MPI_Send(d_buf, N, MPI_INT, RECV_RANK, 0, MPI_COMM_WORLD);
+            }
+
+            if (rank == RECV_RANK) {
+                std::cout << "Rank " << rank << " receiving GPU buffer..."
+                          << std::endl;
+
+                cudaDeviceSynchronize();
+                MPI_Recv(d_buf, N, MPI_INT, SEND_RANK, 0, MPI_COMM_WORLD,
+                         MPI_STATUS_IGNORE);
+
+                // Copy back to host
+                cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
+                           cudaMemcpyDeviceToHost);
+
+                // CPU checksum
+                long long sum =
+                    std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
+
+                std::cout << "Checksum: " << sum << std::endl;
+            }
+
+            cudaFree(d_buf);
+        }
         return ret;
     }
 
