@@ -788,6 +788,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         this->metrics.produce_time += end_timer(start_produce);
         {
             int rank;
+            // Should use zero copy
+            int N = (1 << 24);  // ~64MB
             int SEND_RANK = 0;
             int RECV_RANK = 1;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
