@@ -6,6 +6,7 @@
 #endif
 #include <boost/json.hpp>
 #include <chrono>
+#include <iostream>
 
 #include "../io/_io.h"
 #include "_bodo_common.h"
