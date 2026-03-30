@@ -1467,4 +1467,35 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
+MPI_Datatype cudf_dtype_to_mpi(cudf::data_type dtype) {
+    using cudf::type_id;
+
+    switch (dtype.id()) {
+        case type_id::INT8:
+            return MPI_INT8_T;
+        case type_id::INT16:
+            return MPI_INT16_T;
+        case type_id::INT32:
+            return MPI_INT32_T;
+        case type_id::INT64:
+            return MPI_INT64_T;
+        case type_id::UINT8:
+            return MPI_UINT8_T;
+        case type_id::UINT16:
+            return MPI_UINT16_T;
+        case type_id::UINT32:
+            return MPI_UINT32_T;
+        case type_id::UINT64:
+            return MPI_UINT64_T;
+        case type_id::FLOAT32:
+            return MPI_FLOAT;
+        case type_id::FLOAT64:
+            return MPI_DOUBLE;
+        default:
+            throw std::runtime_error(
+                "Unsupported cudf data_type for MPI conversion: " +
+                std::to_string(static_cast<int>(dtype.id())));
+    }
+}
+
 #endif  // USE_CUDF

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/array/util.h>
+#include <mpi.h>
 #include <cudf/column/column_factories.hpp>
 #include <memory>
 #include <stdexcept>
@@ -21,8 +22,12 @@ inline bool gpu_capable_reduce(duckdb::LogicalAggregate& logical_aggregate) {
         }
         auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
 
-        // Only support sum for now
-        if (agg_expr.function.name != "sum") {
+        // Only support sum, max, min, product, and count for now
+        if (agg_expr.function.name != "sum" &&
+            agg_expr.function.name != "max" &&
+            agg_expr.function.name != "min" &&
+            agg_expr.function.name != "product" &&
+            agg_expr.function.name != "count") {
             return false;
         }
     }
@@ -49,17 +54,19 @@ struct GPUReductionFunction {
     std::vector<GPUReductionType> reduction_types;
     std::vector<std::unique_ptr<cudf::scalar>> results;
     cudf::data_type out_dtype;
+    MPI_Op mpi_reduce_op;
     GPUReductionFunction(
         std::vector<std::string> function_names,
         std::vector<std::string> reduction_names,
         std::vector<GPUReductionType> reduction_types,
         std::vector<std::unique_ptr<cudf::scalar>> initial_results,
-        std::shared_ptr<arrow::DataType> dt)
+        std::shared_ptr<arrow::DataType> dt, MPI_Op mpi_reduce_op)
         : function_names(std::move(function_names)),
           reduction_names(std::move(reduction_names)),
           reduction_types(std::move(reduction_types)),
           results(std::move(initial_results)),
-          out_dtype(arrow_to_cudf_type(dt)) {
+          out_dtype(arrow_to_cudf_type(dt)),
+          mpi_reduce_op(mpi_reduce_op) {
         assert(this->function_names.size() == this->reduction_names.size());
         assert(this->function_names.size() == this->reduction_types.size());
         assert(this->function_names.size() == this->results.size());
@@ -93,7 +100,7 @@ struct GPUReductionFunctionMax : public GPUReductionFunction {
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction({"max"}, {"greater"},
                                {GPUReductionType::COMPARISON},
-                               make_vector_of_one_nullptr(), dt) {}
+                               make_vector_of_one_nullptr(), dt, MPI_MAX) {}
 };
 
 struct GPUReductionFunctionMin : public GPUReductionFunction {
@@ -101,7 +108,7 @@ struct GPUReductionFunctionMin : public GPUReductionFunction {
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction({"min"}, {"less"},
                                {GPUReductionType::COMPARISON},
-                               make_vector_of_one_nullptr(), dt) {}
+                               make_vector_of_one_nullptr(), dt, MPI_MIN) {}
 };
 
 struct GPUReductionFunctionSum : public GPUReductionFunction {
@@ -111,7 +118,7 @@ struct GPUReductionFunctionSum : public GPUReductionFunction {
               {"sum"}, {"add"}, {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
-              dt) {}
+              dt, MPI_SUM) {}
 };
 
 struct GPUReductionFunctionProduct : public GPUReductionFunction {
@@ -121,7 +128,7 @@ struct GPUReductionFunctionProduct : public GPUReductionFunction {
               {"product"}, {"multiply"}, {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 1).ValueOrDie(), output_stream)),
-              dt) {}
+              dt, MPI_PROD) {}
 };
 
 struct GPUReductionFunctionCount : public GPUReductionFunction {
@@ -131,7 +138,7 @@ struct GPUReductionFunctionCount : public GPUReductionFunction {
               {"count"}, {"add"}, {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
-              dt) {}
+              dt, MPI_SUM) {}
 };
 
 /**

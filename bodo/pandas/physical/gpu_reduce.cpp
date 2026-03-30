@@ -1,5 +1,7 @@
 #include "physical/gpu_reduce.h"
 #include <arrow/array/util.h>
+#include <mpi.h>
+#include <cstdint>
 #include <cudf/aggregation.hpp>
 #include <cudf/column/column_view.hpp>
 #include <cudf/reduction.hpp>
@@ -109,12 +111,22 @@ void GPUReductionFunction::CombineResults(
 }
 
 void GPUReductionFunction::Finalize() {
-    std::vector<std::shared_ptr<arrow::Array>> global_results;
-    int n_ranks, rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+    if (!is_gpu_rank()) {
+        return;
+    }
 
-    // TODO: parallel code
+    MPI_Comm comm = get_gpu_mpi_comm(get_gpu_id());
+
+    for (size_t i = 0; i < this->function_names.size(); i++) {
+        // TODO(ehsan): handle empty and all null cases
+        std::unique_ptr<cudf::scalar>& result = this->results[i];
+
+        void* result_ptr =
+            static_cast<cudf::numeric_scalar<int64_t>*>(result.get())->data();
+        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(out_dtype);
+        MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
+                      this->mpi_reduce_op, comm);
+    }
 }
 
 OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
