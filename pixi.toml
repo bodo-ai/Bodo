@@ -8,8 +8,9 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
 azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["py313", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
-platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
+platform =     { features = ["py313", "rcpp", "platform", "platform-mpich", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpich", "cpu"],       solve-group = "313-platform" }
+platform-gpu = { features = ["py313", "rcpp-openmpi", "cudf", "platform-openmpi"],          solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
@@ -425,12 +426,19 @@ mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
-[feature.platform-mpi]
+[feature.platform-mpich]
 channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
 dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
+
+[feature.platform-openmpi]
+channels = ["conda-forge", "conda-forge/label/broken"]
+platforms = ["linux-64"]
+# Want to use Intel MPI on platform, so use "external_*"
+# https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
+dependencies = { openmpi = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
