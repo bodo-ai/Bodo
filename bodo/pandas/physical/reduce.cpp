@@ -149,11 +149,6 @@ OperatorResult PhysicalReduce::ConsumeBatch(
         for (size_t i = 0; i < this->function_names.size(); i++) {
             const std::string func_name = this->function_names[i];
             if (func_name == "max") {
-                // Initialize with first value in the batch, we really should do
-                // this from the result of the first reduction but reductions
-                // happen within the reduciton_functions and for all the
-                // functions we support the result is the same type as the input
-                // so this is ok for now.
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMax>());
 
