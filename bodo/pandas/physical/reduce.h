@@ -186,7 +186,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         for (const auto& arr : arrow_arrays) {
             // Only rank 0 returns the single row with the result, other ranks
             // return an empty array
-            auto sliced_arr = arr->Slice(0, 1 ? rank == 0 : 0);
+            auto sliced_arr = arr->Slice(0, rank == 0 ? 1 : 0);
             std::shared_ptr<array_info> bodo_arr =
                 arrow_array_to_bodo(sliced_arr, bodo::BufferPool::DefaultPtr());
             bodo_arrays.push_back(bodo_arr);
