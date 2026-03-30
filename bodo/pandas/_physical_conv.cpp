@@ -253,11 +253,27 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 bodo_schema->column_types[0]->ToString());
 #undef CREATE_QUANTILE
         }
+#ifdef USE_CUDF
+        std::variant<std::shared_ptr<PhysicalReduce>,
+                     std::shared_ptr<PhysicalGPUReduce>>
+            physical_op;
 
+        bool run_on_gpu = node_run_on_gpu(op);
+        if (run_on_gpu) {
+            physical_op = std::make_shared<PhysicalGPUReduce>(bodo_schema,
+                                                              function_names);
+        } else {
+            physical_op =
+                std::make_shared<PhysicalReduce>(bodo_schema, function_names);
+        }
+        std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
+                   physical_op);
+#else   // USE_CUDF
         // Otherwise, create a PhysicalReduce operator
         auto physical_op =
             std::make_shared<PhysicalReduce>(bodo_schema, function_names);
         FinishPipelineOneOperator(physical_op);
+#endif  // USE_CUDF
         return;
     }
 
