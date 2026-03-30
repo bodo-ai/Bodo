@@ -16,6 +16,24 @@
 
 #define N (1 << 20)  // ~64MB
 
+// Helper macro to make an MPI call that returns an error code. In case of an
+// error, this raises a runtime_error (with MPI error details).
+#define CHECK_MPI(CALL, USER_ERR_MSG_PREFIX)                                  \
+    {                                                                         \
+        int err = CALL;                                                       \
+        int err_class;                                                        \
+        if (err) {                                                            \
+            char err_msg[MPI_MAX_ERROR_STRING + 1];                           \
+            int err_msg_len = 0;                                              \
+            MPI_Error_string(err, err_msg, &err_msg_len);                     \
+            MPI_Error_class(err, &err_class);                                 \
+            throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
+                                     std::to_string(err_class) +              \
+                                     std::string(" ") +                       \
+                                     std::string(err_msg, err_msg_len));      \
+        }                                                                     \
+    }
+
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
         int rank;
@@ -45,7 +63,8 @@ static bodo::tests::suite tests([] {
             std::cout << "Rank " << rank << " sending GPU buffer..."
                       << std::endl;
 
-            MPI_Send(d_buf, N, MPI_INT, 1, 0, MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, 1, 0, MPI_COMM_WORLD),
+                      "Error in MPI_SEND");
         }
 
         if (rank == 1) {
@@ -53,8 +72,9 @@ static bodo::tests::suite tests([] {
                       << std::endl;
 
             cudaDeviceSynchronize();
-            MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
-                     MPI_STATUS_IGNORE);
+            CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
+                               MPI_STATUS_IGNORE),
+                      "Error in MPI_RECV");
 
             cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
                        cudaMemcpyDeviceToHost);
@@ -67,3 +87,4 @@ static bodo::tests::suite tests([] {
         cudaFree(d_buf);
     });
 });
+#undef CHECK_MPI
