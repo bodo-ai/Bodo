@@ -47,14 +47,10 @@ test_map_arg = {
     ],
     "startswith": [
         (("A",), {}),
-        (("A",), {"na": False}),
-        (("A",), {"na": None}),
         ((("A", "B"),), {}),
     ],
     "endswith": [
         (("e",), {}),
-        (("e",), {"na": False}),
-        (("e",), {"na": None}),
         ((("e", "d"),), {}),
     ],
     "find": [

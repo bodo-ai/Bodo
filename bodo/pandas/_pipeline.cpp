@@ -147,7 +147,15 @@ using hrclock = std::chrono::high_resolution_clock;
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute in batch "            \
             << getNodeString(op) << " " << getBatchRows(batch) << std::endl; \
-        DEBUG_PrintTable(out, batch);                                        \
+        std::visit(                                                          \
+            [&](auto &x) {                                                   \
+                using T = std::decay_t<decltype(x)>;                         \
+                if constexpr (std::is_same_v<T,                              \
+                                             std::shared_ptr<table_info>>) { \
+                    DEBUG_PrintTable(out, x, true);                          \
+                }                                                            \
+            },                                                               \
+            batch);                                                          \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
@@ -208,8 +216,8 @@ bool Pipeline::midPipelineExecute(
                         if constexpr (std::is_same_v<
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
-                        } else {
 #ifdef USE_CUDF
+                        } else {
                             auto empty_se = make_stream_and_event(g_use_async);
                             x.stream_event->event.wait(empty_se->stream);
                             batch = GPU_DATA(make_empty_like(x.table, empty_se),
