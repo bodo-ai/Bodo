@@ -10,7 +10,7 @@ azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"
 # Platform
 platform =     { features = ["py313", "rcpp", "platform", "platform-mpich", "cpu"],  solve-group = "313-platform" }
 platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpich", "cpu"],       solve-group = "313-platform" }
-platform-gpu = { features = ["py313", "rcpp-openmpi", "cudf", "platform-openmpi"],          solve-group = "gpu" }
+platform-gpu = { features = ["py313", "dev", "rcpp-openmpi", "cudf", "platform-openmpi"],          solve-group = "gpu" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
