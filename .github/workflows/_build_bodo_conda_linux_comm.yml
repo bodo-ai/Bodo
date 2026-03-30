@@ -11,6 +11,11 @@ on:
         required: false
         type: boolean
         default: false
+      platform-build:
+        description: 'Build Platform Version of Bodo'
+        required: false
+        type: boolean
+        default: false
       arm:
         description: 'Is this an ARM build'
         required: true
@@ -69,12 +74,13 @@ jobs:
           # Sccache Creds
           AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
-          BUILD_WITH_V8: 0
+          IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
+          BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
 
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
-          name: bodo-conda-${{ inputs.python-version }}-linux-${{ inputs.arm && 'arm' || 'x86' }}
+          name: bodo-conda-${{ inputs.python-version }}-linux-${{ inputs.arm && 'arm' || 'x86' }}${{ inputs.platform-build && '-platform' || '' }}
           path: /github/home/conda-bld/
 
       - name: Publish to Artifactory / Anaconda
@@ -86,11 +92,11 @@ jobs:
 
           echo "BODO_VERSION: $BODO_VERSION"
           echo "ARTIFACTORY_CHANNEL: $ARTIFACTORY_CHANNEL"
-          ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $PLATFORM $BODO_VERSION
+          ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
-          ARTIFACTORY_CHANNEL: SKIP_ARTIFACTORY
+          ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || 'SKIP_ARTIFACTORY' }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
-          PLATFORM: ${{ inputs.arm && 'linux-aarch64' || 'linux-64' }}
+          OS_DIR: ${{ inputs.arm && 'linux-aarch64' || 'linux-64' }}

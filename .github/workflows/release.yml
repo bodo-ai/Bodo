@@ -57,12 +57,12 @@ jobs:
       os: ${{ matrix.os }}
     secrets: inherit
   bodo-conda-platform:
-    uses: ./.github/workflows/_build_bodo_conda_native.yml
+    uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: '3.13'
       platform-build: true
+      arm: false
       is-release: ${{ github.event_name == 'release' }}
-      os: ubuntu-latest
     secrets: inherit
 
   iceberg-conda:
