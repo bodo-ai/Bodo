@@ -344,6 +344,9 @@ else()
   set(MPI_LIB_DIR "/opt/amazon/openmpi/lib")
 endif()
 
+message(STATUS "MPI Includes: ${MPI_INCLUDE_DIR}")
+message(STATUS "MPI Lib Dirs: ${MPI_LIB_DIR}")
+
 # MPI implementation (Intel or MPICH)
 if (WIN32)
   set(MPI_LIBRARIES "impi")
