@@ -136,12 +136,10 @@ std::shared_ptr<arrow::Table> cudf_scalar_to_arrow_table(
     return arrow_table;
 }
 
-void GPUReductionFunction::Finalize() {
+void GPUReductionFunction::Finalize(MPI_Comm comm) {
     if (!is_gpu_rank()) {
         return;
     }
-
-    MPI_Comm comm = get_gpu_mpi_comm(get_gpu_id());
 
     for (size_t i = 0; i < this->function_names.size(); i++) {
         // TODO(ehsan): handle empty and all null cases

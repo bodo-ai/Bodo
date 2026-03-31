@@ -72,7 +72,7 @@ struct GPUReductionFunction {
         assert(this->function_names.size() == this->results.size());
         assert(!this->function_names.empty());
     }
-    virtual void Finalize();
+    virtual void Finalize(MPI_Comm comm);
     void ConsumeBatch(std::shared_ptr<cudf::table> input_table,
                       rmm::cuda_stream_view& output_stream);
     virtual void CombineResults(
@@ -155,8 +155,9 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     virtual ~PhysicalGPUReduce() = default;
 
     void FinalizeSink() override {
+        MPI_Comm comm = get_gpu_mpi_comm(get_gpu_id());
         for (auto& reduction_function : reduction_functions) {
-            reduction_function->Finalize();
+            reduction_function->Finalize(comm);
         }
     }
 
