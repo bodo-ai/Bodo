@@ -125,12 +125,20 @@ class GpuShuffleSendState {
     /**
      * @brief Construct a new send state.
      *
+     * @param tables Packed tables to send.
+     * @param stream CUDA stream for synchronizing packed tables with MPI.
      * @param starting_msg_tag Starting message tag to use for posting the
      * messages that send the data buffers.
+     * @param shuffle_comm MPI communicator for shuffle.
+     * @param n_ranks Number of ranks in the shuffle.
+     * @param broadcast If true, only one table is expected and it is sent to
+     * all ranks. Otherwise, one table per rank is expected and each is sent to
+     * the corresponding rank.
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
-                                 int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 size_t n_ranks, bool broadcast);
+                                 cudaStream_t stream, int starting_msg_tag_,
+                                 MPI_Comm shuffle_comm, size_t n_ranks,
+                                 bool broadcast);
 
     /**
      * @brief Getter for starting_msg_tag.
