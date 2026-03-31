@@ -1498,4 +1498,48 @@ MPI_Datatype cudf_dtype_to_mpi(cudf::data_type dtype) {
     }
 }
 
+std::shared_ptr<arrow::DataType> cudf_to_arrow_type(cudf::data_type &t) {
+    using cudf::type_id;
+    switch (t.id()) {
+        case type_id::BOOL8:
+            return arrow::boolean();
+        case type_id::INT8:
+            return arrow::int8();
+        case type_id::INT16:
+            return arrow::int16();
+        case type_id::INT32:
+            return arrow::int32();
+        case type_id::INT64:
+            return arrow::int64();
+        case type_id::UINT8:
+            return arrow::uint8();
+        case type_id::UINT16:
+            return arrow::uint16();
+        case type_id::UINT32:
+            return arrow::uint32();
+        case type_id::UINT64:
+            return arrow::uint64();
+        case type_id::FLOAT32:
+            return arrow::float32();
+        case type_id::FLOAT64:
+            return arrow::float64();
+        case type_id::STRING:
+            return arrow::large_utf8();
+        case type_id::TIMESTAMP_SECONDS:
+            return arrow::timestamp(arrow::TimeUnit::SECOND);
+        case type_id::TIMESTAMP_MILLISECONDS:
+            return arrow::timestamp(arrow::TimeUnit::MILLI);
+        case type_id::TIMESTAMP_MICROSECONDS:
+            return arrow::timestamp(arrow::TimeUnit::MICRO);
+        case type_id::TIMESTAMP_NANOSECONDS:
+            return arrow::timestamp(arrow::TimeUnit::NANO);
+        case type_id::TIMESTAMP_DAYS:
+            return arrow::date32();
+        default:
+            throw std::runtime_error(
+                "Unsupported cudf data_type for Arrow conversion: " +
+                std::to_string(static_cast<int>(t.id())));
+    }
+}
+
 #endif  // USE_CUDF

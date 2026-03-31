@@ -110,6 +110,32 @@ void GPUReductionFunction::CombineResults(
     }
 }
 
+/**
+ * @brief Convert a cudf scalar to an Arrow table on the host with a single
+ * column containing the scalar value.
+ *
+ */
+std::shared_ptr<arrow::Table> cudf_scalar_to_arrow_table(
+    std::unique_ptr<cudf::scalar>& scalar) {
+    cudf::data_type scalar_dtype = scalar->type();
+
+    // Convert scalar to a cudf table
+    std::unique_ptr<cudf::column> col =
+        cudf::make_column_from_scalar(*scalar, 1);
+    std::vector<std::unique_ptr<cudf::column>> cols;
+    cols.push_back(std::move(col));
+    auto scalar_table = std::make_unique<cudf::table>(std::move(cols));
+
+    /// Create an Arrow schema for conversion
+    std::shared_ptr<arrow::Schema> out_schema = std::make_shared<arrow::Schema>(
+        std::vector<std::shared_ptr<arrow::Field>>{
+            arrow::field("scalar_col", cudf_to_arrow_type(scalar_dtype))});
+
+    auto batch = GPU_DATA(std::move(scalar_table), out_schema, nullptr);
+    std::shared_ptr<arrow::Table> arrow_table = convertGPUToArrow(batch);
+    return arrow_table;
+}
+
 void GPUReductionFunction::Finalize() {
     if (!is_gpu_rank()) {
         return;
@@ -121,11 +147,24 @@ void GPUReductionFunction::Finalize() {
         // TODO(ehsan): handle empty and all null cases
         std::unique_ptr<cudf::scalar>& result = this->results[i];
 
-        void* result_ptr =
-            static_cast<cudf::numeric_scalar<int64_t>*>(result.get())->data();
-        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(out_dtype);
+        cudf::data_type result_dtype = result->type();
+        std::shared_ptr<arrow::Table> arrow_table =
+            cudf_scalar_to_arrow_table(result);
+
+        // Extract the pointer to the scalar value from the Arrow table
+        // All Arrow primitive types store data in the second buffer
+        void* result_ptr = reinterpret_cast<void*>(
+            arrow_table->column(0)->chunk(0)->data()->buffers[1]->address());
+
+        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(result_dtype);
+        // NOTE: OpenMPI collectives are not CUDA-aware
         MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
                       this->mpi_reduce_op, comm);
+
+        // Copy the reduced CPU result back to cudf scalar
+        std::shared_ptr<arrow::Scalar> arrow_scalar =
+            arrow_table->column(0)->GetScalar(0).ValueOrDie();
+        this->results[i] = std::move(arrow_scalar_to_cudf(arrow_scalar));
     }
 }
 

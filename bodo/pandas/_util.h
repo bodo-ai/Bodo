@@ -436,6 +436,8 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
 
 cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t);
 
+std::shared_ptr<arrow::DataType> cudf_to_arrow_type(cudf::data_type &t);
+
 MPI_Datatype cudf_dtype_to_mpi(cudf::data_type dtype);
 
 #endif
