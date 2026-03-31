@@ -42,7 +42,7 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 
 [tasks.configure-bodo-cudf-in-default-cuda]
-cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf -Ccmake.define.USE_CUDF=ON"
+cmd = "pip install --no-deps --no-build-isolation -ve . -Ccmake.executable=$(which cmake) -Cbuild-dir=build/cudf -Ccmake.define.USE_CUDF=ON"
 inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/cudf/CMakeCache.txt"]
 [tasks.configure-bodo-cudf-in-default-cuda.env]
