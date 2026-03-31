@@ -173,6 +173,12 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
     std::shared_ptr<StreamAndEvent> se) {
     time_pt start_consume_time = start_timer();
 
+    if (!is_gpu_rank()) {
+        return prev_op_result == OperatorResult::FINISHED
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
+    }
+
     if (iter == 0) {
         for (size_t i = 0; i < this->function_names.size(); i++) {
             const std::string func_name = this->function_names[i];
