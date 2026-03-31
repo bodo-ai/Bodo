@@ -14,7 +14,9 @@ platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],    
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py313", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
+default-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
+# TODO(scott): Fix solver issues with Python 3.13 + external openMPI
+platform-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "platform-cuda-mpi", "cudf"],          solve-group = "platform-gpu" }
 
 [activation.env]
 CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
@@ -251,6 +253,9 @@ python = "3.14.*"
 [feature.py313.dependencies]
 python = "3.13.*"
 
+[feature.py312.dependencies]
+python = "3.12.*"
+
 [feature.cpu.dependencies]
 numba = ">=0.62,<0.64.0"
 pyarrow = "23.0.*"
@@ -272,9 +277,14 @@ pyarrow = "21.0.*"
 libarrow = "21.0.*"
 pandas = ">=2.2.0"
 
-
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
+
+[feature.platform-cuda-mpi]
+channels = ["conda-forge/label/mpi-external", "conda-forge"]
+
+[feature.platform-cuda-mpi.dependencies]
+openmpi = { version = "*", channel = "conda-forge/label/mpi-external" }
 
 [feature.rcpp-openmpi.dependencies]
 zstd = "*"
