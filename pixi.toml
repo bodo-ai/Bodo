@@ -16,6 +16,9 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = 
 
 default-cuda =      { features = ["py313", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
 
+[activation.env]
+CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
+
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
 inputs = ["CMakeLists.txt", "pyproject.toml"]
@@ -40,13 +43,39 @@ SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
+[tasks.configure-bodo-debug]
+cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/debug -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/debug/CMakeCache.txt"]
+
+[tasks.build-bodo-debug]
+cmd = """
+cmake --build build/debug -j && \
+cmake --install build/debug --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/debug/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-debug"]
+
+[tasks.configure-bodo-san]
+cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/san -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/san/CMakeCache.txt"]
+
+[tasks.build-bodo-san]
+cmd = """
+cmake --build build/san -j && \
+cmake --install build/san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/san/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-san"]
 
 [tasks.configure-bodo-cudf-in-default-cuda]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf -Ccmake.define.USE_CUDF=ON"
 inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/cudf/CMakeCache.txt"]
 [tasks.configure-bodo-cudf-in-default-cuda.env]
-CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
@@ -129,35 +158,6 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 depends-on = [
   { task = "build-bodo-cudf-san-in-default-cuda", environment = "default-cuda" }
 ]
-
-[tasks.configure-bodo-debug]
-cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/debug -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
-inputs = ["CMakeLists.txt", "pyproject.toml"]
-outputs = ["build/debug/CMakeCache.txt"]
-
-[tasks.build-bodo-debug]
-cmd = """
-cmake --build build/debug -j && \
-cmake --install build/debug --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
-cmake -E copy build/debug/compile_commands.json compile_commands.json
-"""
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-depends-on = ["configure-bodo-debug"]
-
-
-[tasks.configure-bodo-san]
-cmd = "pip install --no-deps --no-build-isolation -Cbuild-dir=build/san -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
-inputs = ["CMakeLists.txt", "pyproject.toml"]
-outputs = ["build/san/CMakeCache.txt"]
-
-[tasks.build-bodo-san]
-cmd = """
-cmake --build build/san -j && \
-cmake --install build/san --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
-cmake -E copy build/san/compile_commands.json compile_commands.json
-"""
-inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
-depends-on = ["configure-bodo-san"]
 
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
