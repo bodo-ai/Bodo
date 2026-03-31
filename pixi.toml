@@ -46,6 +46,7 @@ cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf -
 inputs = ["CMakeLists.txt", "pyproject.toml"]
 outputs = ["build/cudf/CMakeCache.txt"]
 [tasks.configure-bodo-cudf-in-default-cuda.env]
+CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
 SCCACHE_BUCKET = "engine-codebuild-cache"
 SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
