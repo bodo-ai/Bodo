@@ -419,6 +419,7 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
     this->recv_requests.push_back(recv_req);
 
     // Make sure GPU buffers are ready before passing to MPI
+    // TODO(BSE-5359): Make this check async
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // recv data
@@ -557,7 +558,6 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
     }
 
     // Wait for buffers to be ready.
-    // TODO(BSE-5359): Make this check async
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
     std::vector<MPI_Request> recv_reqs(n_ranks, MPI_REQUEST_NULL);
