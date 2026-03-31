@@ -2275,9 +2275,11 @@ def test_filter_source_matching():
     )
 
 
-def test_filter_series_isin():
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_isin(broadcast):
     """Test dataframe filter with isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2303,9 +2305,11 @@ def test_filter_series_isin():
     )
 
 
-def test_filter_series_not_isin(index_val):
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_not_isin(index_val, broadcast):
     """Test dataframe filter with not isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2317,8 +2321,8 @@ def test_filter_series_not_isin(index_val):
         )
         df2 = pd.DataFrame(
             {
-                "A": ["A", "B", "C", "D"],
-                "B": [11, 2, 2, 4],
+                "A": ["A", "B", "C", "D"] * 25,
+                "B": range(100),
             }
         )
 
@@ -2628,6 +2632,7 @@ def test_series_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_isin(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

@@ -4,6 +4,7 @@
 #include <cudf/column/column_factories.hpp>
 #include "../_bodo_common.h"
 #ifdef USE_CUDF
+#include <cudf/join/filtered_join.hpp>
 #include <cudf/join/hash_join.hpp>
 #include <cudf/table/table.hpp>
 #include "../gpu_bloom_filter.h"
@@ -151,7 +152,8 @@ struct CudaJoin {
 
     /**
      * @brief Appends unmatched build-side rows to the output on the final batch
-     * of a RIGHT or FULL OUTER join.
+     * of a join that propagates the build side (e.g. RIGHT, OUTER, or
+     * RIGHT_ANTI).
      *
      * On the last global probe batch, gathers all build rows that were never
      * matched (tracked via @c unmatched_build_rows), pairs them with
@@ -160,7 +162,7 @@ struct CudaJoin {
      * duplicate output.
      *
      * Returns @p table unmodified if @p global_is_last is @c false, the join
-     * type is not RIGHT or OUTER, or @c unmatched_build_rows is
+     * type does not propagate the build side, or @c unmatched_build_rows is
      * @c nullptr.
      *
      * @param table Accumulated join output for this batch; unmatched
@@ -176,13 +178,34 @@ struct CudaJoin {
     std::unique_ptr<cudf::table> produce_unmatched_build_rows(
         std::unique_ptr<cudf::table> table, bool global_is_last,
         rmm::cuda_stream_view stream);
+
+   protected:
+    /**
+     * @brief Return an empty output table for this join operator,
+     * potentially including unmatched build side rows.
+     */
+    std::pair<std::unique_ptr<cudf::table>, bool> get_empty_output_table(
+        bool global_is_last, rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Materialize the output table using the provided indices and
+     * views, and append unmatched build side rows if necessary.
+     */
+    std::pair<std::unique_ptr<cudf::table>, bool> materialize_and_output(
+        cudf::table_view const& probe_kept_view,
+        cudf::column_view const& probe_idx_view,
+        cudf::table_view const& build_kept_view,
+        cudf::column_view const& build_idx_view, bool global_is_last,
+        rmm::cuda_stream_view stream);
 };
 
 struct CudaHashJoin : public CudaJoin {
     std::shared_ptr<CudfBloomFilter> _build_bloom_filter;
 
     // The hash map object (opaque handle to the GPU hash table)
-    std::unique_ptr<cudf::hash_join> _join_handle;
+    std::variant<std::unique_ptr<cudf::hash_join>,
+                 std::unique_ptr<cudf::filtered_join>>
+        _join_handle;
 
     /**
      * @brief Build the hash table from the accumulated build chunks
