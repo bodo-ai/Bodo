@@ -52,6 +52,26 @@ void setExprTreeLeftRight(
     const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
         left_col_ref_map);
 
+inline void DumpColumnBindings(
+    const std::vector<duckdb::ColumnBinding>& bindings,
+    const std::string& label = "bindings") {
+    std::cout << label << " (size=" << bindings.size() << "):\n";
+    for (size_t i = 0; i < bindings.size(); ++i) {
+        const auto& b = bindings[i];
+        std::cout << "  [" << i << "] table_index=" << b.table_index
+                  << " column_index=" << b.column_index << "\n";
+    }
+}
+
+inline void DumpVecIdx(const std::vector<duckdb::idx_t>& is,
+                       const std::string& label = "vecidx") {
+    std::cout << label << " (size=" << is.size() << "):\n";
+    for (size_t i = 0; i < is.size(); ++i) {
+        const auto& b = is[i];
+        std::cout << "  [" << i << "] = " << b << "\n";
+    }
+}
+
 /**
  * @brief Physical node for join.
  *
@@ -259,6 +279,17 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                                logical_join.GetColumnBindings().size(),
                                build_table_outer, probe_table_outer);
         this->metrics.init_time += end_timer(start_init);
+
+        std::cout << "Build table schema " << build_table_schema->ToString(true)
+                  << std::endl;
+        std::cout << "Probe table schema " << probe_table_schema->ToString(true)
+                  << std::endl;
+        DumpColumnBindings(left_bindings, "left_bindings");
+        DumpColumnBindings(right_bindings, "right_bindings");
+        DumpColumnBindings(join_bindings, "join_bindings");
+        DumpVecIdx(logical_join.left_projection_map, "left_projection_map");
+        DumpVecIdx(logical_join.right_projection_map, "right_projection_map");
+        DumpVecIdx(logical_join.GetTableIndex(), "table indices");
     }
 
     /**
