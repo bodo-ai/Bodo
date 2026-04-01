@@ -45,7 +45,8 @@ static bodo::tests::suite tests([] {
             std::cout << "Rank " << rank << " sending GPU buffer..."
                       << std::endl;
 
-            MPI_Send(d_buf, N, MPI_INT, 1, 0, MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, 1, 0, MPI_COMM_WORLD),
+                      "MPI_Send failed");
         }
 
         if (rank == 1) {
@@ -53,8 +54,9 @@ static bodo::tests::suite tests([] {
                       << std::endl;
 
             cudaDeviceSynchronize();
-            MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
-                     MPI_STATUS_IGNORE);
+            CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
+                               MPI_STATUS_IGNORE),
+                      "MPI_Recv failed");
 
             cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
                        cudaMemcpyDeviceToHost);
