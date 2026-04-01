@@ -16,7 +16,7 @@ pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = 
 
 # TODO(scott): Fix solver issues with Python 3.13 + external openMPI
 default-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "open-mpi", "cudf", "ompi-vars"],          solve-group = "gpu" }
-platform-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "platform-cuda-mpi", "cudf", "ompi-vars", "ompi-aws-build-vars"],          solve-group = "platform-gpu" }
+platform-cuda =      { features = ["py312", "rcpp", "dev", "platform-cuda-mpi", "cudf", "aws-build-vars"],          solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
@@ -25,11 +25,13 @@ CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
 [feature.ompi-vars.activation.env]
 OMPI_MCA_pml = "ucx"
 
-[feature.ompi-aws-build-vars.activation.env]
-LDFLAGS="$LDFLAGS -L/opt/amazon/openmpi/lib64"
-CXXFLAGS="$CXXFLAGS -I/opt/amazon/openmpi/include"
-CPPFLAGS="$CPPFLAGS -I/opt/amazon/openmpi/include"
-CFLAGS="$CFLAGS -I/opt/amazon/openmpi/include"
+[feature.aws-build-vars.activation.env]
+LD_LIBRARY_PATH="/opt/mpich/lib:$LD_LIBRARY_PATH"
+PATH="/opt/mpich/bin:$PATH"
+LDFLAGS="$LDFLAGS -L/opt/mpich/lib"
+CXXFLAGS="$CXXFLAGS -I/opt/mpich/include"
+CPPFLAGS="$CPPFLAGS -I/opt/mpich/include"
+CFLAGS="$CFLAGS -I/opt/mpich/include"
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
@@ -294,7 +296,7 @@ openmpi = { version = "*" }
 channels = ["conda-forge/label/mpi-external", "conda-forge"]
 
 [feature.platform-cuda-mpi.dependencies]
-openmpi = { version = "*", channel = "conda-forge/label/mpi-external" }
+mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
 
 [feature.rcpp-openmpi.dependencies]
 zstd = "*"

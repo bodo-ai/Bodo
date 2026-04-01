@@ -341,8 +341,8 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
 else()
   # TODO: avoid setting these vars manually
-  set(MPI_INCLUDE_DIR "/opt/amazon/openmpi/include")
-  set(MPI_LIB_DIR "/opt/amazon/openmpi/lib")
+  set(MPI_INCLUDE_DIR "/opt/mpich/include")
+  set(MPI_LIB_DIR "/opt/mpich/lib")
 endif()
 
 message(STATUS "MPI Includes: ${MPI_INCLUDE_DIR}")
