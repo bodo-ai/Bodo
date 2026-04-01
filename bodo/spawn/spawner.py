@@ -172,7 +172,7 @@ class Spawner:
                 info.Set("hostfile", "/home/bodo/hostfile")
                 info.Set("bind_to", "core")
                 info.Set(
-                    "ompi_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda/bin/mpiexec"
+                    "pimx_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda/bin/mpiexec"
                 )
 
             # run python with -u to prevent STDOUT from buffering
