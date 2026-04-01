@@ -166,6 +166,7 @@ class Spawner:
             command, args = self._get_spawn_command_args()
 
             # Create MPI info if OpenMPI
+            mpi_info = MPI.INFO_NULL
             if MPI.get_vendor()[0] == "Open MPI":
                 MPI.Info.Create()
                 mpi_info = MPI.Info.Create({"map_by": "node"})
