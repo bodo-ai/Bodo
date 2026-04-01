@@ -171,9 +171,7 @@ class Spawner:
                 info = MPI.Info.Create()
                 info.Set("hostfile", "/home/bodo/hostfile")
                 info.Set("bind_to", "core")
-                info.Set(
-                    "pimx_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda/bin/mpiexec"
-                )
+                info.Set("pimx_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda")
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
