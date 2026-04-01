@@ -171,6 +171,7 @@ class Spawner:
                 info = MPI.Info.Create()
                 info.Set("hostfile", "/home/bodo/hostfile")
                 info.Set("bind_to", "core")
+                info.Set("map-by", "ppr:1:node")
                 info.Set("pimx_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda")
 
             # run python with -u to prevent STDOUT from buffering
