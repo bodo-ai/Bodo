@@ -284,6 +284,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                   << std::endl;
         std::cout << "Probe table schema " << probe_table_schema->ToString(true)
                   << std::endl;
+        std::cout << "Output table schema " << output_schema->ToString(true)
+                  << std::endl;
         DumpColumnBindings(left_bindings, "left_bindings");
         DumpColumnBindings(right_bindings, "right_bindings");
         DumpColumnBindings(join_bindings, "join_bindings");
