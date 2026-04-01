@@ -165,13 +165,20 @@ class Spawner:
         with no_stdin():
             command, args = self._get_spawn_command_args()
 
+            # Create MPI info if OpenMPI
+            info = MPI.INFO_NULL
+            if MPI.get_vendor()[0] == "Open MPI":
+                info = MPI.Info.Create()
+                info.Set("hostfile", "~/hostfile")
+                info.Set("bind_to", "core")
+
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
                 command,
                 args,
                 n_pes,
-                MPI.INFO_NULL,
+                info,
                 0,
                 errcodes,
             )
