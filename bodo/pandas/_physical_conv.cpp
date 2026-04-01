@@ -505,6 +505,7 @@ std::vector<uint64_t> getJoinOutputOrder(const std::vector<uint64_t>& keys,
     std::vector<uint64_t> ret;
     ret.reserve(proj_map.size());
     std::sort(proj_map.begin(), proj_map.end());
+    return proj_map;
     // std::vector<uint64_t> sorted = proj_map;
     // std::sort(sorted.begin(), sorted.end());
     std::unordered_set<uint64_t> proj_set;
