@@ -28,6 +28,8 @@
 #include "physical/sort.h"
 #include "physical/union_all.h"
 
+// #define DEBUG_JOIN_SPLIT 1
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
@@ -299,7 +301,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
 // as JoinConditions.
 // After this call, `conditions` will contain only equi-join conditions.
 duckdb::vector<duckdb::JoinCondition> extractNonEquiConditions(
-    std::vector<duckdb::JoinCondition>& conditions) {
+    std::vector<duckdb::JoinCondition>& conditions, unsigned& num_equi_conds) {
+    num_equi_conds = 0;
     duckdb::vector<duckdb::JoinCondition> non_equi_exprs;
     size_t i = 0;
     while (i < conditions.size()) {
@@ -308,6 +311,7 @@ duckdb::vector<duckdb::JoinCondition> extractNonEquiConditions(
         if (cond.IsComparison() &&
             cond.GetComparisonType() == duckdb::ExpressionType::COMPARE_EQUAL) {
             ++i;
+            ++num_equi_conds;
         } else {
             // Move the JoinCondition into CreateExpression to produce an
             // Expression
@@ -434,7 +438,9 @@ void DumpTableBindings(const std::unordered_set<duckdb::idx_t>& v,
 
 void fill_if_empty(std::vector<duckdb::idx_t>& proj_map, int num_cols) {
     if (proj_map.size() == 0) {
+#ifdef DEBUG_JOIN_SPLIT
         std::cout << "fill_if_empty is filling " << num_cols << std::endl;
+#endif  // DEBUG_JOIN_SPLIT
         for (int i = 0; i < num_cols; ++i) {
             proj_map.push_back(i);
         }
@@ -487,7 +493,7 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
     }
     return ret;
 #if 0
-        int probe_added, int build_added, int left_total, int right_total) {
+    int probe_added, int build_added, int left_total, int right_total) {
     duckdb::vector<duckdb::idx_t> ret;
     std::cout << "todd " << left_total << " " << probe_added << " " << right_total << " " << build_added << std::endl;
     for (int i = 0; i < left_total - probe_added; ++i) {
@@ -500,12 +506,17 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
 #endif
 }
 
+std::vector<uint64_t> getJoinOutputOrder(std::vector<uint64_t>& proj_map) {
+    std::sort(proj_map.begin(), proj_map.end());
+    return proj_map;
+}
+
+#if 0
 std::vector<uint64_t> getJoinOutputOrder(const std::vector<uint64_t>& keys,
                                          std::vector<uint64_t>& proj_map) {
     std::vector<uint64_t> ret;
     ret.reserve(proj_map.size());
     std::sort(proj_map.begin(), proj_map.end());
-    return proj_map;
     // std::vector<uint64_t> sorted = proj_map;
     // std::sort(sorted.begin(), sorted.end());
     std::unordered_set<uint64_t> proj_set;
@@ -526,12 +537,14 @@ std::vector<uint64_t> getJoinOutputOrder(const std::vector<uint64_t>& keys,
     }
     return ret;
 }
+#endif
 
 std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::LogicalComparisonJoin& comp_join) {
+    unsigned num_equi_conds = 0;
     // Extract non-equi expressions and remove them from comp_join.conditions
     duckdb::vector<duckdb::JoinCondition> non_equi_exprs =
-        extractNonEquiConditions(comp_join.conditions);
+        extractNonEquiConditions(comp_join.conditions, num_equi_conds);
 
     // If there are no non-equi conditions, nothing to do
     if (non_equi_exprs.empty()) {
@@ -548,8 +561,10 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     comp_join.children[1]->ResolveOperatorTypes();
     fill_if_empty(probe_proj_map_copy, comp_join.children[0]->types.size());
     fill_if_empty(build_proj_map_copy, comp_join.children[1]->types.size());
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(probe_proj_map_copy, "probe_proj_map_copy after fill");
     DumpVecIdx(build_proj_map_copy, "build_proj_map_copy after fill");
+#endif  // DEBUG_JOIN_SPLIT
 
     std::unordered_set<duckdb::idx_t> probe_table_bindings,
         build_table_bindings;
@@ -557,38 +572,60 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
                                             probe_table_bindings);
     duckdb::LogicalJoin::GetTableReferences(*(comp_join.children[1]),
                                             build_table_bindings);
+#ifdef DEBUG_JOIN_SPLIT
+    DumpTableBindings(probe_table_bindings, "probe_table_bindings");
+    DumpTableBindings(build_table_bindings, "build_table_bindings");
+#endif  // DEBUG_JOIN_SPLIT
+#if 0
     if (probe_table_bindings.size() != 1) {
         throw std::runtime_error("probe_table_bindings size is not 1.");
     }
     if (build_table_bindings.size() != 1) {
         throw std::runtime_error("build_table_bindings size is not 1.");
     }
-    DumpTableBindings(probe_table_bindings, "probe_table_bindings");
-    DumpTableBindings(build_table_bindings, "build_table_bindings");
+#endif
     MissingBindingsResult mbr = FindMissingBindingsInProjectionMaps(
         combined_pred, probe_proj_map_copy, build_proj_map_copy,
         probe_table_bindings, build_table_bindings);
+#ifdef DEBUG_JOIN_SPLIT
     DumpColumnBindings(mbr.missing_in_probe, "missing_in_probe");
     DumpColumnBindings(mbr.missing_in_build, "missing_in_build");
     DumpColumnBindings(mbr.missing_everywhere, "missing_everywhere");
+#endif  // DEBUG_JOIN_SPLIT
 
     int probe_added, build_added;
     duckdb::vector<duckdb::idx_t> new_probe_proj_map = gen_new_proj_map(
         probe_proj_map_copy, mbr.missing_in_probe, probe_added);
     duckdb::vector<duckdb::idx_t> new_build_proj_map = gen_new_proj_map(
         build_proj_map_copy, mbr.missing_in_build, build_added);
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(new_probe_proj_map, "new_probe_proj_map");
     DumpVecIdx(new_build_proj_map, "new_build_proj_map");
+#endif  // DEBUG_JOIN_SPLIT
 
-    auto new_comp_join =
-        duckdb::make_uniq<duckdb::LogicalComparisonJoin>(comp_join.join_type);
-    new_comp_join->children.push_back(std::move(comp_join.children[0]));
-    new_comp_join->children.push_back(std::move(comp_join.children[1]));
-    new_comp_join->conditions = std::move(comp_join.conditions);
-    new_comp_join->join_id = comp_join.join_id;
-    new_comp_join->left_projection_map = new_probe_proj_map;
-    new_comp_join->right_projection_map = new_build_proj_map;
+    duckdb::unique_ptr<duckdb::LogicalOperator> new_comp_join;
+    if (num_equi_conds > 0) {
+        auto new_comp_join_join =
+            duckdb::make_uniq<duckdb::LogicalComparisonJoin>(
+                comp_join.join_type);
+        new_comp_join_join->children.push_back(
+            std::move(comp_join.children[0]));
+        new_comp_join_join->children.push_back(
+            std::move(comp_join.children[1]));
+        new_comp_join_join->conditions = std::move(comp_join.conditions);
+        new_comp_join_join->join_id = comp_join.join_id;
+        new_comp_join_join->left_projection_map = new_probe_proj_map;
+        new_comp_join_join->right_projection_map = new_build_proj_map;
+        new_comp_join = std::move(new_comp_join_join);
+    } else {
+        auto new_comp_join_cross =
+            duckdb::make_uniq<duckdb::LogicalCrossProduct>(
+                std::move(comp_join.children[0]),
+                std::move(comp_join.children[1]));
+        new_comp_join = std::move(new_comp_join_cross);
+    }
 
+#if 0
     std::vector<uint64_t> probe_keys;
     std::vector<uint64_t> build_keys;
     duckdb::vector<duckdb::ColumnBinding> probe_bindings =
@@ -602,15 +639,22 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     PhysicalJoin::extractKeys(new_comp_join->conditions, probe_keys, build_keys,
                               probe_col_ref_map, build_col_ref_map);
 
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(probe_keys, "probe_keys");
     DumpVecIdx(build_keys, "build_keys");
+#endif  // DEBUG_JOIN_SPLIT
+#endif
 
     std::vector<uint64_t> build_col_inds;
     std::vector<uint64_t> probe_col_inds;
-    build_col_inds = getJoinOutputOrder(build_keys, new_build_proj_map);
-    probe_col_inds = getJoinOutputOrder(probe_keys, new_probe_proj_map);
+    build_col_inds = getJoinOutputOrder(new_build_proj_map);
+    probe_col_inds = getJoinOutputOrder(new_probe_proj_map);
+    // build_col_inds = getJoinOutputOrder(build_keys, new_build_proj_map);
+    // probe_col_inds = getJoinOutputOrder(probe_keys, new_probe_proj_map);
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(build_col_inds, "split build_col_inds");
     DumpVecIdx(probe_col_inds, "split probe_col_inds");
+#endif  // DEBUG_JOIN_SPLIT
 
     std::vector<uint64_t> probe_proj_map_locations;
     std::vector<uint64_t> build_proj_map_locations;
@@ -624,8 +668,10 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
         build_proj_map_locations.push_back(
             index_of(build_col_inds, static_cast<uint64_t>(col)));
     }
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(probe_proj_map_locations, "probe_proj_map_locations");
     DumpVecIdx(build_proj_map_locations, "build_proj_map_locations");
+#endif  // DEBUG_JOIN_SPLIT
 
 #if 0
     auto binder = get_duckdb_binder();
@@ -658,7 +704,9 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
                                         build_proj_map_copy, build_col_inds);
     // filter->projection_map = gen_split_filter_projection_map(probe_added,
     // build_added, new_probe_proj_map.size(), new_build_proj_map.size());
+#ifdef DEBUG_JOIN_SPLIT
     DumpVecIdx(filter->projection_map, "new filter projection_map");
+#endif  // DEBUG_JOIN_SPLIT
 
     // Preserve estimated cardinality / properties if needed
     if (filter->children[0]->has_estimated_cardinality) {

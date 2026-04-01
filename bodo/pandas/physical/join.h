@@ -32,6 +32,8 @@
     }
 #endif
 
+// #define DEBUG_JOIN 1
+
 struct PhysicalJoinMetrics {
     using time_t = MetricBase::TimerValue;
     using stat_t = MetricBase::StatValue;
@@ -174,14 +176,18 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         initInputColumnMapping(probe_col_inds, left_keys, n_probe_cols);
         build_col_inds_rev = std::vector<int64_t>(build_col_inds.size());
         for (size_t i = 0; i < build_col_inds.size(); ++i) {
+#ifdef DEBUG_JOIN
             std::cout << "build_col_inds " << i << " " << build_col_inds[i]
                       << std::endl;
+#endif  // DEBUG_JOIN
             build_col_inds_rev[build_col_inds[i]] = i;
         }
         probe_col_inds_rev = std::vector<int64_t>(probe_col_inds.size());
         for (size_t i = 0; i < probe_col_inds.size(); ++i) {
+#ifdef DEBUG_JOIN
             std::cout << "probe_col_inds " << i << " " << probe_col_inds[i]
                       << std::endl;
+#endif  // DEBUG_JOIN
             probe_col_inds_rev[probe_col_inds[i]] = i;
         }
 
@@ -226,10 +232,14 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         }
         setExprTreeLeftRight(physExprTree, left_col_ref_map);
 
+#ifdef DEBUG_JOIN
         std::cout << "before build initOutputColumnMapping" << std::endl;
+#endif  // DEBUG_JOIN
         initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
                                 bound_right_inds, build_col_inds_rev);
+#ifdef DEBUG_JOIN
         std::cout << "before probe initOutputColumnMapping" << std::endl;
+#endif  // DEBUG_JOIN
         initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols,
                                 bound_left_inds, probe_col_inds_rev);
 
@@ -280,6 +290,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                                build_table_outer, probe_table_outer);
         this->metrics.init_time += end_timer(start_init);
 
+#ifdef DEBUG_JOIN
         std::cout << "Build table schema\n"
                   << build_table_schema->ToString(true) << std::endl;
         std::cout << "Probe table schema\n"
@@ -294,6 +305,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         DumpVecIdx(logical_join.left_projection_map, "left_projection_map");
         DumpVecIdx(logical_join.right_projection_map, "right_projection_map");
         DumpVecIdx(logical_join.GetTableIndex(), "table indices");
+#endif  // DEBUG_JOIN
     }
 
     /**
@@ -315,8 +327,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         }
 
         for (uint64_t i_col : probe_kept_cols) {
+#ifdef DEBUG_JOIN
             std::cout << "initOUtputSchema probe_kept_col " << i_col
                       << std::endl;
+#endif  // DEBUG_JOIN
             std::unique_ptr<bodo::DataType> col_type =
                 probe_table_schema_reordered->column_types[i_col]->copy();
             // In the build outer case, we need to make NUMPY arrays
@@ -328,8 +342,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             output_schema->append_column(std::move(col_type));
             col_names.push_back(
                 probe_table_schema_reordered->column_names[i_col]);
+#ifdef DEBUG_JOIN
             std::cout << "initOUtputSchema col_name "
                       << col_names[col_names.size() - 1] << std::endl;
+#endif  // DEBUG_JOIN
         }
 
         // Add the mark output column if this is a mark join.
@@ -344,8 +360,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         }
 
         for (uint64_t i_col : build_kept_cols) {
+#ifdef DEBUG_JOIN
             std::cout << "initOUtputSchema build_kept_col " << i_col
                       << std::endl;
+#endif  // DEBUG_JOIN
             std::unique_ptr<bodo::DataType> col_type =
                 build_table_schema_reordered->column_types[i_col]->copy();
             // In the probe outer case, we need to make NUMPY arrays
@@ -357,8 +375,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             output_schema->append_column(std::move(col_type));
             col_names.push_back(
                 build_table_schema_reordered->column_names[i_col]);
+#ifdef DEBUG_JOIN
             std::cout << "initOUtputSchema col_name "
                       << col_names[col_names.size() - 1] << std::endl;
+#endif  // DEBUG_JOIN
         }
         this->output_schema->column_names = col_names;
         // Indexes are ignored in the Pandas merge if not joining on Indexes.
@@ -701,6 +721,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::vector<uint64_t>& col_inds, const std::vector<uint64_t>& keys,
         uint64_t ncols, const std::set<int64_t>& bound_inds,
         const std::vector<int64_t>& col_inds_rev) {
+#ifdef DEBUG_JOIN
         std::cout << "initOutputColumnMapping ncols=" << ncols
                   << " bound_inds.size=" << bound_inds.size() << std::endl;
         DumpVecIdx(col_inds, "col_inds");
@@ -710,12 +731,15 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         for (auto& v : bound_inds) {
             std::cout << "    " << v << std::endl;
         }
+#endif  // DEBUG_JOIN
         for (uint64_t i = 0; i < ncols; i++) {
             if (bound_inds.find(i) == bound_inds.end()) {
                 continue;
             }
+#ifdef DEBUG_JOIN
             std::cout << "push_back " << i << " " << col_inds_rev[i]
                       << std::endl;
+#endif  // DEBUG_JOIN
             col_inds.push_back(col_inds_rev[i]);
         }
     }
