@@ -29,7 +29,13 @@ If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be s
 
 ```
 export PRTE_MCA_rmaps_default_mapping_policy=:OVERSUBSCRIBE
-````
+```
+
+A [hostfile](https://www.open-mpi.org/doc/v3.0/man1/orterun.1.php#sect6) must also be provided, e.g.
+
+```
+mpiexec -n 1 --hostfile hostfile python bodo_dataframe_script.py
+```
 
 ## How Placement is Decided
 
