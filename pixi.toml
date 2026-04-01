@@ -14,12 +14,22 @@ platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],    
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
 # TODO(scott): Fix solver issues with Python 3.13 + external openMPI
-platform-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "platform-cuda-mpi", "cudf"],          solve-group = "platform-gpu" }
+default-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "open-mpi", "cudf", "ompi-vars"],          solve-group = "gpu" }
+platform-cuda =      { features = ["py312", "rcpp-openmpi", "dev", "platform-cuda-mpi", "cudf", "ompi-vars", "ompi-aws-build-vars"],          solve-group = "platform-gpu" }
 
 [activation.env]
+# Avoid using system cmake during build-config step
 CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
+
+[feature.ompi-vars.activation.env]
+OMPI_MCA_pml = "ucx"
+
+[feature.ompi-aws-build-vars.activation.env]
+LDFLAGS="$LDFLAGS -L/opt/amazon/openmpi/lib64"
+CXXFLAGS="$CXXFLAGS -I/opt/amazon/openmpi/include"
+CPPFLAGS="$CPPFLAGS -I/opt/amazon/openmpi/include"
+CFLAGS="$CFLAGS -I/opt/amazon/openmpi/include"
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
