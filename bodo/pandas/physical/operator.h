@@ -455,6 +455,8 @@ using PhysicalCpuGpuProcessBatch =
 #ifdef USE_CUDF
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
                            std::shared_ptr<StreamAndEvent> se);
+GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
+                                std::shared_ptr<StreamAndEvent> se);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif

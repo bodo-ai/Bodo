@@ -137,7 +137,7 @@ void GpuTableManager::do_shuffle() {
             "available MPI tag for shuffle send. All tags are inflight.");
     }
 
-    this->send_states.emplace_back(std::move(packed_tables), start_tag,
+    this->send_states.emplace_back(std::move(packed_tables), stream, start_tag,
                                    mpi_comm, static_cast<size_t>(n_ranks),
                                    do_broadcast);
     this->inflight_tags.insert(start_tag);
@@ -264,8 +264,9 @@ GpuTableManager::consume_completed_recvs() {
 }
 
 GpuShuffleSendState::GpuShuffleSendState(
-    std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
-    MPI_Comm shuffle_comm, size_t n_ranks, bool broadcast)
+    std::vector<cudf::packed_table> packed_tables, cudaStream_t stream,
+    int starting_msg_tag_, MPI_Comm shuffle_comm, size_t n_ranks,
+    bool broadcast)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
@@ -334,6 +335,10 @@ GpuShuffleSendState::GpuShuffleSendState(
             "GpuShuffleSendState: MPI_Issend for metadata failed:");
         this->send_requests.push_back(req);
     }
+
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(BSE-5359): Make this check async
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // Send data
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -413,6 +418,10 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
                         curr_tag, shuffle_comm, &recv_req),
               "GpuShuffle::recv_metadata: MPI_Irecv failed:");
     this->recv_requests.push_back(recv_req);
+
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(BSE-5359): Make this check async
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // recv data
     CHECK_CUDA(cudaStreamSynchronize(stream));
