@@ -166,13 +166,9 @@ class Spawner:
             command, args = self._get_spawn_command_args()
 
             # Create MPI info if OpenMPI
-            info = MPI.INFO_NULL
+            mpi_info = MPI.INFO_NULL
             if MPI.get_vendor()[0] == "Open MPI":
-                info = MPI.Info.Create()
-                info.Set("hostfile", "/home/bodo/hostfile")
-                info.Set("bind_to", "core")
-                info.Set("map_by", "ppr:1:node")
-                info.Set("pimx_prefix", "/home/bodo/Bodo/.pixi/envs/default-cuda")
+                mpi_info = MPI.Info.Create({"map_by": "node"})
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
@@ -180,7 +176,7 @@ class Spawner:
                 command,
                 args,
                 n_pes,
-                info,
+                mpi_info,
                 0,
                 errcodes,
             )
