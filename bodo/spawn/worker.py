@@ -785,8 +785,6 @@ if __name__ == "__main__":
     comm_world: MPI.Intracomm = MPI.COMM_WORLD
     spawner_intercomm: MPI.Intercomm | None = comm_world.Get_parent()
 
-    print(f"Rank {MPI.COMM_WORLD.Get_rank()} running on {socket.gethostname()}")
-
     worker_loop(
         comm_world,
         spawner_intercomm,
