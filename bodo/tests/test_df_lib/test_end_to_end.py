@@ -2438,6 +2438,7 @@ def test_Series_constructor(index_val):
     _test_equal(pd_S, bodo_S, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
@@ -2459,6 +2460,9 @@ def test_series_min_max():
             ),
         },
     )
+    # TODO(ehsan): handle datetime, string, and decimal128 types on GPU
+    if bodo.gpu_enabled:
+        df = df.drop(columns=["E", "F", "G", "H"])
     bdf = bd.from_pandas(df)
     for c in df.columns:
         bodo_min = bdf[c].min()
@@ -2484,7 +2488,16 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        pytest.param("sum", marks=pytest.mark.gpu),
+        pytest.param("product", marks=pytest.mark.gpu),
+        pytest.param("count", marks=pytest.mark.gpu),
+        "mean",
+        "std",
+    ],
+)
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000

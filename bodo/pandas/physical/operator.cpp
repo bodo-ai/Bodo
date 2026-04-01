@@ -221,7 +221,11 @@ std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
                            std::shared_ptr<StreamAndEvent> se) {
     std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(batch);
+    return convertArrowTableToGPU(arrow_table, se);
+}
 
+GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
+                                std::shared_ptr<StreamAndEvent> se) {
     // Arrow tables can have fragmented columns (chunks). libcudf expects
     // contiguous memory. This merges all chunks into a single RecordBatch.
     std::shared_ptr<arrow::RecordBatch> arrow_batch;

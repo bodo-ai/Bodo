@@ -28,6 +28,7 @@
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_project.h"
+#include "physical/gpu_reduce.h"
 #endif
 
 // enable and build to print debug info on the pipeline
