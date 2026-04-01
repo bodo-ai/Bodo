@@ -1,3 +1,4 @@
+#include "../libs/_distributed.h"
 #include "../libs/gpu_utils.h"
 #include "../test.hpp"
 #include "cuda_runtime_api.h"
