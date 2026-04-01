@@ -297,6 +297,7 @@ channels = ["conda-forge/label/mpi-external", "conda-forge"]
 
 [feature.platform-cuda-mpi.dependencies]
 mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
+ucx = "*"
 
 [feature.rcpp-openmpi.dependencies]
 zstd = "*"
