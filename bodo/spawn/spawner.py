@@ -169,7 +169,7 @@ class Spawner:
             info = MPI.INFO_NULL
             if MPI.get_vendor()[0] == "Open MPI":
                 info = MPI.Info.Create()
-                info.Set("hostfile", "~/hostfile")
+                info.Set("hostfile", "/home/bodo/hostfile")
                 info.Set("bind_to", "core")
 
             # run python with -u to prevent STDOUT from buffering
