@@ -276,9 +276,9 @@ pandas = ">=3.0.0"
 [feature.cudf]
 platforms = ["linux-64"]
 channels = ["rapidsai", "nvidia", "conda-forge"]
+channel-priority = "disabled"
 
 [feature.cudf.dependencies]
-channel-priority = "disabled"
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
 cuda-nvcc = "13.*"
