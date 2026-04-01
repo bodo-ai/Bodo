@@ -169,7 +169,7 @@ class Spawner:
             mpi_info = MPI.INFO_NULL
             if MPI.get_vendor()[0] == "Open MPI":
                 MPI.Info.Create()
-                mpi_info = MPI.Info.Create({"map_by": "node"})
+                mpi_info = MPI.Info.Create({"map_by": "node", "bind_to": "core"})
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
