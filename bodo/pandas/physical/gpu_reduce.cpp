@@ -27,13 +27,13 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_cudf_scalar(
  */
 std::unique_ptr<cudf::reduce_aggregation> get_reduce_agg(
     const std::string& function_name) {
-    if (function_name == "max") {
+    if (function_name == "max" || function_name == "greater") {
         return cudf::make_max_aggregation<cudf::reduce_aggregation>();
-    } else if (function_name == "min") {
+    } else if (function_name == "min" || function_name == "less") {
         return cudf::make_min_aggregation<cudf::reduce_aggregation>();
-    } else if (function_name == "sum") {
+    } else if (function_name == "sum" || function_name == "add") {
         return cudf::make_sum_aggregation<cudf::reduce_aggregation>();
-    } else if (function_name == "product") {
+    } else if (function_name == "product" || function_name == "multiply") {
         return cudf::make_product_aggregation<cudf::reduce_aggregation>();
     } else if (function_name == "count") {
         return cudf::make_count_aggregation<cudf::reduce_aggregation>();
@@ -68,6 +68,7 @@ void GPUReductionFunction::CombineResults(
 
     for (size_t i = 0; i < this->function_names.size(); i++) {
         const std::string& function_name = this->function_names[i];
+        const std::string& combine_reduce_name = this->reduction_names[i];
         const GPUReductionType& reduction_type = this->reduction_types[i];
         // Current reduction result
         std::unique_ptr<cudf::scalar>& result = this->results[i];
@@ -83,7 +84,7 @@ void GPUReductionFunction::CombineResults(
         }
 
         std::unique_ptr<cudf::reduce_aggregation> agg =
-            get_reduce_agg(function_name);
+            get_reduce_agg(combine_reduce_name);
 
         std::unique_ptr<cudf::column> col1 =
             cudf::make_column_from_scalar(*other_result, 1, output_stream);
