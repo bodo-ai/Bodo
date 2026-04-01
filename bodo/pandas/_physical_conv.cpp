@@ -325,6 +325,207 @@ duckdb::vector<duckdb::JoinCondition> extractNonEquiConditions(
     return non_equi_exprs;
 }
 
+struct MissingBindingsResult {
+    std::vector<duckdb::ColumnBinding> missing_in_probe;
+    std::vector<duckdb::ColumnBinding> missing_in_build;
+    std::vector<duckdb::ColumnBinding> missing_everywhere;
+};
+
+// Check whether a child-column index appears in the projection map (proj_map
+// contains idx_t column indices)
+static bool BindingColumnIndexInProjMap(
+    const std::vector<duckdb::idx_t>& proj_map, duckdb::idx_t column_index) {
+    for (auto& idx : proj_map) {
+        if (idx == column_index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Find missing bindings relative to left/right projection maps.
+// probe_table_bindings and build_table_bindings are sets of table_index values
+// that belong to each side. left_projection_map and right_projection_map are
+// vectors of idx_t representing column indices produced by each child.
+MissingBindingsResult FindMissingBindingsInProjectionMaps(
+    duckdb::unique_ptr<duckdb::Expression>& expr,
+    const std::vector<duckdb::idx_t>& left_projection_map,
+    const std::vector<duckdb::idx_t>& right_projection_map,
+    const std::unordered_set<duckdb::idx_t>& probe_table_bindings,
+    const std::unordered_set<duckdb::idx_t>& build_table_bindings) {
+    // collect unique ColumnBinding references from the expression
+    std::unordered_set<uint64_t> seen;
+    std::vector<duckdb::ColumnBinding> referenced;
+
+    duckdb::ExpressionIterator::EnumerateExpression(
+        expr, [&](duckdb::Expression& child) {
+            if (child.GetExpressionClass() ==
+                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                auto& colref = child.Cast<duckdb::BoundColumnRefExpression>();
+                duckdb::ColumnBinding b = colref.binding;
+                uint64_t key = (static_cast<uint64_t>(b.table_index) << 32) |
+                               static_cast<uint64_t>(b.column_index);
+                if (seen.insert(key).second) {
+                    referenced.push_back(b);
+                }
+            }
+        });
+
+    MissingBindingsResult result;
+    for (auto& b : referenced) {
+        bool in_left_map =
+            BindingColumnIndexInProjMap(left_projection_map, b.column_index);
+        bool in_right_map =
+            BindingColumnIndexInProjMap(right_projection_map, b.column_index);
+
+        if (!in_left_map && !in_right_map) {
+            // Not present in either projection map
+            // Decide which side it logically belongs to using table_index sets
+            bool belongs_left = probe_table_bindings.find(b.table_index) !=
+                                probe_table_bindings.end();
+            bool belongs_right = build_table_bindings.find(b.table_index) !=
+                                 build_table_bindings.end();
+
+            if (belongs_left) {
+                result.missing_in_probe.push_back(b);
+            } else if (belongs_right) {
+                result.missing_in_build.push_back(b);
+            } else {
+                // Table index not found in either side: treat as
+                // missing_everywhere
+                result.missing_everywhere.push_back(b);
+            }
+            continue;
+        }
+
+        // If the binding's column index is present in one of the maps, but the
+        // table_index indicates it belongs to the other side, treat that as
+        // missing on the side it logically belongs to.
+        bool belongs_left = probe_table_bindings.find(b.table_index) !=
+                            probe_table_bindings.end();
+        bool belongs_right = build_table_bindings.find(b.table_index) !=
+                             build_table_bindings.end();
+
+        if (belongs_left && !in_left_map) {
+            result.missing_in_probe.push_back(b);
+        } else if (belongs_right && !in_right_map) {
+            result.missing_in_build.push_back(b);
+        } else {
+            // If it is present in a map consistent with its table_index,
+            // nothing is missing. If ambiguous (table_index in neither set),
+            // treat as missing_everywhere for safety.
+            if (!belongs_left && !belongs_right) {
+                result.missing_everywhere.push_back(b);
+            }
+        }
+    }
+
+    return result;
+}
+
+void DumpTableBindings(const std::unordered_set<duckdb::idx_t>& v,
+                       const std::string& label) {
+    std::cout << label << " ";
+    for (auto& i : v) {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+}
+
+void fill_if_empty(std::vector<duckdb::idx_t>& proj_map, int num_cols) {
+    if (proj_map.size() == 0) {
+        std::cout << "fill_if_empty is filling " << num_cols << std::endl;
+        for (int i = 0; i < num_cols; ++i) {
+            proj_map.push_back(i);
+        }
+    }
+}
+
+duckdb::vector<duckdb::idx_t> gen_new_proj_map(
+    const duckdb::vector<duckdb::idx_t>& orig_map,
+    const std::vector<duckdb::ColumnBinding>& needed, int& added) {
+    // start with the original projection map
+    duckdb::vector<duckdb::idx_t> ret = orig_map;
+
+    // build a fast lookup set of existing column_index values
+    std::unordered_set<duckdb::idx_t> seen;
+    seen.reserve(ret.size() + needed.size());
+    for (auto idx : ret) {
+        seen.insert(idx);
+    }
+
+    added = 0;
+    // ensure every needed.column_index is present in ret
+    for (const auto& b : needed) {
+        duckdb::idx_t col = b.column_index;
+        if (seen.find(col) == seen.end()) {
+            ret.push_back(col);
+            ++added;
+            seen.insert(col);
+        }
+    }
+
+    return ret;
+}
+
+template <typename T>
+int index_of(const std::vector<T>& v, const T& value) {
+    auto it = std::find(v.begin(), v.end(), value);
+    return it == v.end() ? -1 : int(it - v.begin());
+}
+
+duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
+    std::vector<uint64_t> probe_orig, std::vector<uint64_t> probe_new,
+    std::vector<uint64_t> build_orig, std::vector<uint64_t> build_new) {
+    duckdb::vector<duckdb::idx_t> ret;
+    for (auto& in_probe_orig : probe_orig) {
+        ret.push_back(index_of(probe_new, in_probe_orig));
+    }
+    uint64_t base = ret.size();
+    for (auto& in_build_orig : build_orig) {
+        ret.push_back(base + index_of(build_new, in_build_orig));
+    }
+    return ret;
+#if 0
+        int probe_added, int build_added, int left_total, int right_total) {
+    duckdb::vector<duckdb::idx_t> ret;
+    std::cout << "todd " << left_total << " " << probe_added << " " << right_total << " " << build_added << std::endl;
+    for (int i = 0; i < left_total - probe_added; ++i) {
+        ret.push_back(i);
+    }
+    for (int i = 0; i < right_total - build_added; ++i) {
+        ret.push_back(i + left_total);
+    }
+    return ret;
+#endif
+}
+
+std::vector<uint64_t> getJoinOutputOrder(const std::vector<uint64_t>& keys,
+                                         std::vector<uint64_t>& proj_map) {
+    std::vector<uint64_t> ret;
+    ret.reserve(proj_map.size());
+    std::sort(proj_map.begin(), proj_map.end());
+    // std::vector<uint64_t> sorted = proj_map;
+    // std::sort(sorted.begin(), sorted.end());
+    std::unordered_set<uint64_t> proj_set;
+    std::unordered_set<uint64_t> key_set;
+    for (auto& me : proj_map) {
+        proj_set.insert(me);
+    }
+    for (auto& k : keys) {
+        key_set.insert(k);
+        if (proj_set.find(k) != proj_set.end()) {
+            ret.push_back(k);
+        }
+    }
+    for (auto& me : proj_map) {
+        if (key_set.find(me) == key_set.end()) {
+            ret.push_back(me);
+        }
+    }
+    return ret;
+}
+
 std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::LogicalComparisonJoin& comp_join) {
     // Extract non-equi expressions and remove them from comp_join.conditions
@@ -339,19 +540,124 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::unique_ptr<duckdb::Expression> combined_pred =
         duckdb::JoinCondition::CreateExpression(std::move(non_equi_exprs));
 
+    auto probe_proj_map_copy = comp_join.left_projection_map;
+    auto build_proj_map_copy = comp_join.right_projection_map;
+    comp_join.ResolveOperatorTypes();
+    comp_join.children[0]->ResolveOperatorTypes();
+    comp_join.children[1]->ResolveOperatorTypes();
+    fill_if_empty(probe_proj_map_copy, comp_join.children[0]->types.size());
+    fill_if_empty(build_proj_map_copy, comp_join.children[1]->types.size());
+    DumpVecIdx(probe_proj_map_copy, "probe_proj_map_copy after fill");
+    DumpVecIdx(build_proj_map_copy, "build_proj_map_copy after fill");
+
+    std::unordered_set<duckdb::idx_t> probe_table_bindings,
+        build_table_bindings;
+    duckdb::LogicalJoin::GetTableReferences(*(comp_join.children[0]),
+                                            probe_table_bindings);
+    duckdb::LogicalJoin::GetTableReferences(*(comp_join.children[1]),
+                                            build_table_bindings);
+    if (probe_table_bindings.size() != 1) {
+        throw std::runtime_error("probe_table_bindings size is not 1.");
+    }
+    if (build_table_bindings.size() != 1) {
+        throw std::runtime_error("build_table_bindings size is not 1.");
+    }
+    DumpTableBindings(probe_table_bindings, "probe_table_bindings");
+    DumpTableBindings(build_table_bindings, "build_table_bindings");
+    MissingBindingsResult mbr = FindMissingBindingsInProjectionMaps(
+        combined_pred, probe_proj_map_copy, build_proj_map_copy,
+        probe_table_bindings, build_table_bindings);
+    DumpColumnBindings(mbr.missing_in_probe, "missing_in_probe");
+    DumpColumnBindings(mbr.missing_in_build, "missing_in_build");
+    DumpColumnBindings(mbr.missing_everywhere, "missing_everywhere");
+
+    int probe_added, build_added;
+    duckdb::vector<duckdb::idx_t> new_probe_proj_map = gen_new_proj_map(
+        probe_proj_map_copy, mbr.missing_in_probe, probe_added);
+    duckdb::vector<duckdb::idx_t> new_build_proj_map = gen_new_proj_map(
+        build_proj_map_copy, mbr.missing_in_build, build_added);
+    DumpVecIdx(new_probe_proj_map, "new_probe_proj_map");
+    DumpVecIdx(new_build_proj_map, "new_build_proj_map");
+
     auto new_comp_join =
         duckdb::make_uniq<duckdb::LogicalComparisonJoin>(comp_join.join_type);
     new_comp_join->children.push_back(std::move(comp_join.children[0]));
     new_comp_join->children.push_back(std::move(comp_join.children[1]));
     new_comp_join->conditions = std::move(comp_join.conditions);
     new_comp_join->join_id = comp_join.join_id;
+    new_comp_join->left_projection_map = new_probe_proj_map;
+    new_comp_join->right_projection_map = new_build_proj_map;
 
-    // Create a LogicalFilter node with the combined predicate and the modified
-    // join as child
+    std::vector<uint64_t> probe_keys;
+    std::vector<uint64_t> build_keys;
+    duckdb::vector<duckdb::ColumnBinding> probe_bindings =
+        new_comp_join->children[0]->GetColumnBindings();
+    duckdb::vector<duckdb::ColumnBinding> build_bindings =
+        new_comp_join->children[1]->GetColumnBindings();
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        probe_col_ref_map = getColRefMap(probe_bindings);
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        build_col_ref_map = getColRefMap(build_bindings);
+    PhysicalJoin::extractKeys(new_comp_join->conditions, probe_keys, build_keys,
+                              probe_col_ref_map, build_col_ref_map);
+
+    DumpVecIdx(probe_keys, "probe_keys");
+    DumpVecIdx(build_keys, "build_keys");
+
+    std::vector<uint64_t> build_col_inds;
+    std::vector<uint64_t> probe_col_inds;
+    build_col_inds = getJoinOutputOrder(build_keys, new_build_proj_map);
+    probe_col_inds = getJoinOutputOrder(probe_keys, new_probe_proj_map);
+    DumpVecIdx(build_col_inds, "split build_col_inds");
+    DumpVecIdx(probe_col_inds, "split probe_col_inds");
+
+    std::vector<uint64_t> probe_proj_map_locations;
+    std::vector<uint64_t> build_proj_map_locations;
+    probe_proj_map_locations.reserve(new_probe_proj_map.size());
+    build_proj_map_locations.reserve(new_build_proj_map.size());
+    for (auto& col : new_probe_proj_map) {
+        probe_proj_map_locations.push_back(
+            index_of(probe_col_inds, static_cast<uint64_t>(col)));
+    }
+    for (auto& col : new_build_proj_map) {
+        build_proj_map_locations.push_back(
+            index_of(build_col_inds, static_cast<uint64_t>(col)));
+    }
+    DumpVecIdx(probe_proj_map_locations, "probe_proj_map_locations");
+    DumpVecIdx(build_proj_map_locations, "build_proj_map_locations");
+
+#if 0
+    auto binder = get_duckdb_binder();
+    auto project_table_idx = binder.get()->GenerateTableIndex();
+
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
+#if 0
+    for (auto &expr : expr_vec) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        projection_expressions.push_back(std::move(expr_duck));
+    }
+#endif
+
+    // Create projection node.
+    duckdb::unique_ptr<duckdb::LogicalProjection> new_project =
+        duckdb::make_uniq<duckdb::LogicalProjection>(
+            project_table_idx, std::move(projection_expressions));
+
+    // Add the source of the projection.
+    new_project->children.push_back(std::move(new_comp_join));
+#endif
+
     auto filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(combined_pred));
     // Move the join (which now only contains equi conditions) under the filter
     filter->children.push_back(std::move(new_comp_join));
+    filter->projection_map =
+        gen_split_filter_projection_map(probe_proj_map_copy, probe_col_inds,
+                                        build_proj_map_copy, build_col_inds);
+    // filter->projection_map = gen_split_filter_projection_map(probe_added,
+    // build_added, new_probe_proj_map.size(), new_build_proj_map.size());
+    DumpVecIdx(filter->projection_map, "new filter projection_map");
 
     // Preserve estimated cardinality / properties if needed
     if (filter->children[0]->has_estimated_cardinality) {
