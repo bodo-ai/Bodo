@@ -80,6 +80,10 @@ static bodo::tests::suite tests([] {
         if (gpu_id.value() < 0) {
             return;
         }
+        std::cout << "Rank " << rank << " using GPU " << gpu_id.value()
+                  << std::endl;
+        std::cout << "Ranks per node: " << ranks_per_node
+                  << ", rank on node: " << rank_on_node << std::endl;
         cudaSetDevice(gpu_id.value());
 
         std::vector<int> h_buf(N);
