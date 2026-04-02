@@ -65,20 +65,8 @@ std::tuple<int, int> dist_get_ranks_on_node() {
     int rank;
     CHECK_MPI(MPI_Comm_rank(MPI_COMM_WORLD, &rank),
               "dist_get_ranks_on_node: MPI error on MPI_Comm_rank:");
-    int n_pes;
-    CHECK_MPI(MPI_Comm_size(MPI_COMM_WORLD, &n_pes),
-              "dist_get_ranks_on_node: MPI error on MPI_Comm_size:");
-    int n_nodes = n_pes / ncores_on_node;
-    // Calling from spawner
-    if (n_nodes == 0) {
-        return std::make_tuple(ncores_on_node, rank);
-    }
-    int rank_on_node = rank / n_nodes;
-    std::cout << "Total ranks: " << n_pes
-              << ", Cores per node: " << ncores_on_node
-              << ", Total nodes: " << n_nodes
-              << ", Rank on node: " << rank_on_node << ", Rank: " << rank
-              << std::endl;
+
+    int rank_on_node = rank % ncores_on_node;
 
     cached_result = std::make_tuple(ncores_on_node, rank_on_node);
     cache_initialized = true;
