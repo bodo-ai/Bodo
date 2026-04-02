@@ -341,7 +341,6 @@ GpuShuffleSendState::GpuShuffleSendState(
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // Send data
-    CHECK_CUDA(cudaDeviceSynchronize());
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
         MPI_Request req;
@@ -424,7 +423,6 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // recv data
-    CHECK_CUDA(cudaStreamSynchronize(stream));
     MPI_Request data_recv_req;
 #if BODO_MPI_HAS_LARGE_COUNT == 1
     CHECK_MPI(MPI_Irecv_c(this->packed_recv_buffer->data(),
