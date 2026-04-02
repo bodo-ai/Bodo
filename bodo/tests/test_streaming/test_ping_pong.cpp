@@ -18,7 +18,7 @@
 #include <rmm/device_buffer.hpp>
 #include <vector>
 
-#define N (1 << 24)  // ~64MB
+#define N (1 << 26)  // ~64MB
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_mpi_cuda_ping_pong", [] {
@@ -73,8 +73,8 @@ static bodo::tests::suite tests([] {
         cudaFree(d_buf);
     });
 
-    bodo::tests::test("test_mpi_cuda_ping_pong_block", [] {
-        int n_iters = 10;
+    bodo::tests::test("test_mpi_cuda_ping_pong_bench", [] {
+        int n_iters = 1000;
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
