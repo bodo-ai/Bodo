@@ -437,23 +437,3 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
 cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t);
 
 #endif
-
-inline void DumpColumnBindings(
-    const std::vector<duckdb::ColumnBinding> &bindings,
-    const std::string &label = "bindings") {
-    std::cout << label << " (size=" << bindings.size() << "):\n";
-    for (size_t i = 0; i < bindings.size(); ++i) {
-        const auto &b = bindings[i];
-        std::cout << "  [" << i << "] table_index=" << b.table_index
-                  << " column_index=" << b.column_index << "\n";
-    }
-}
-
-template <typename T>
-void DumpVecIdx(const std::vector<T> &is, const std::string &label = "vecidx") {
-    std::cout << label << " (size=" << is.size() << "):\n";
-    for (size_t i = 0; i < is.size(); ++i) {
-        const auto &b = is[i];
-        std::cout << "  [" << i << "] = " << b << "\n";
-    }
-}
