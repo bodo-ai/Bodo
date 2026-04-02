@@ -29,7 +29,8 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
                             public PhysicalGPUSink {
    public:
     explicit PhysicalGPUUnionAll(std::shared_ptr<bodo::Schema> input_schema)
-        : output_schema(input_schema) {}
+        : output_schema(input_schema),
+          arrow_output_schema(input_schema->ToArrowSchema()) {}
 
     virtual ~PhysicalGPUUnionAll() = default;
 
@@ -82,8 +83,10 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
         if (!is_gpu_rank()) {
-            return {GPU_DATA(nullptr, output_schema->ToArrowSchema(), se),
-                    OperatorResult::FINISHED};
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
+                    prev_op_result == OperatorResult::FINISHED
+                        ? OperatorResult::FINISHED
+                        : OperatorResult::NEED_MORE_INPUT};
         }
 
         if (!first_processed_batch.has_value()) {
@@ -117,6 +120,7 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
     std::vector<GPU_DATA> collected_rows;
     std::optional<GPU_DATA> first_processed_batch;
     const std::shared_ptr<bodo::Schema> output_schema;
+    const std::shared_ptr<arrow::Schema> arrow_output_schema;
     PhysicalGPUUnionAllMetrics metrics;
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         // No metrics to report for GPU union all yet
