@@ -72,6 +72,7 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_mpi_cuda_ping_pong_block", [] {
+        int n_iters = 1;
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -100,34 +101,31 @@ static bodo::tests::suite tests([] {
 
             cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
                        cudaMemcpyHostToDevice);
-            cudaDeviceSynchronize();
-
-            std::cout << "Rank " << rank << " sending GPU buffer..."
-                      << std::endl;
-
-            CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
-                               MPI_COMM_WORLD),
-                      "MPI_Send failed");
         }
 
-        // ranks on second node, receive first
-        if (rank >= ranks_per_node) {
-            std::cout << "Rank " << rank << " receiving GPU buffer..."
-                      << std::endl;
-
-            cudaDeviceSynchronize();
-            CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
-                               MPI_COMM_WORLD, MPI_STATUS_IGNORE),
-                      "MPI_Recv failed");
-
-            cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
-                       cudaMemcpyDeviceToHost);
-
-            long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
-
-            std::cout << "Checksum: " << sum << std::endl;
+        cudaDeviceSynchronize();
+        for (int i = 0; i < n_iters; ++i) {
+            if (rank < ranks_per_node) {
+                CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
+                                   MPI_COMM_WORLD),
+                          "MPI_Send failed");
+                CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
+                                   MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                          "MPI_Recv failed");
+            } else {
+                CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
+                                   MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                          "MPI_Recv failed");
+                CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
+                                   MPI_COMM_WORLD),
+                          "MPI_Send failed");
+            }
         }
 
+        cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
+                   cudaMemcpyDeviceToHost);
+        long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
+        std::cout << "Checksum: " << sum << std::endl;
         cudaFree(d_buf);
     });
 });
