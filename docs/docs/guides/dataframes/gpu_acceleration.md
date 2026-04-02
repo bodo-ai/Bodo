@@ -25,6 +25,21 @@ Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requir
 export OMPI_MCA_pml="ucx"
 ```
 
+If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be set to allow oversubscription due to the extra spawner rank.
+
+```
+export PRTE_MCA_rmaps_default_mapping_policy=:OVERSUBSCRIBE
+```
+
+A [hostfile](https://www.open-mpi.org/doc/v3.0/man1/orterun.1.php#sect6) must also be provided, e.g.
+
+```
+mpiexec -n 1 --hostfile hostfile python bodo_dataframe_script.py
+```
+
+Note, there is an [outstanding bug](https://github.com/open-mpi/ompi/issues/13521) in OpenMPI when using multiple nodes and UCX that can cause hangs/segfaults.
+Until this is resolved we recommend you build MPICH from source and use MPICH for multi-node GPU execution.
+
 ## How Placement is Decided
 
 Currently, when GPU execution is enabled, Bodo will run every operation on the GPU for which we have a GPU implementation (see supported capabilities below).  However, this approach will be replaced in the near future with an advanced device placement algorithm that will use a cost-model to determine which plan nodes should run on CPU versus GPU such that the plan execution achieves the lowest latency.  In either case, when adjacent nodes in a plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
