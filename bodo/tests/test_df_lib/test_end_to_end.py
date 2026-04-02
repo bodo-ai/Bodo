@@ -2275,9 +2275,11 @@ def test_filter_source_matching():
     )
 
 
-def test_filter_series_isin():
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_isin(broadcast):
     """Test dataframe filter with isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2303,9 +2305,11 @@ def test_filter_series_isin():
     )
 
 
-def test_filter_series_not_isin(index_val):
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_not_isin(index_val, broadcast):
     """Test dataframe filter with not isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2317,8 +2321,8 @@ def test_filter_series_not_isin(index_val):
         )
         df2 = pd.DataFrame(
             {
-                "A": ["A", "B", "C", "D"],
-                "B": [11, 2, 2, 4],
+                "A": ["A", "B", "C", "D"] * 25,
+                "B": range(100),
             }
         )
 
@@ -2434,6 +2438,7 @@ def test_Series_constructor(index_val):
     _test_equal(pd_S, bodo_S, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
@@ -2455,6 +2460,9 @@ def test_series_min_max():
             ),
         },
     )
+    # TODO(ehsan): handle datetime, string, and decimal128 types on GPU
+    if bodo.gpu_enabled:
+        df = df.drop(columns=["E", "F", "G", "H"])
     bdf = bd.from_pandas(df)
     for c in df.columns:
         bodo_min = bdf[c].min()
@@ -2480,7 +2488,16 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        pytest.param("sum", marks=pytest.mark.gpu),
+        pytest.param("product", marks=pytest.mark.gpu),
+        pytest.param("count", marks=pytest.mark.gpu),
+        "mean",
+        "std",
+    ],
+)
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000
@@ -2628,6 +2645,7 @@ def test_series_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_isin(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

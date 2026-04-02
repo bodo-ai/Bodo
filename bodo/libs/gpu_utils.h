@@ -125,12 +125,20 @@ class GpuShuffleSendState {
     /**
      * @brief Construct a new send state.
      *
+     * @param tables Packed tables to send.
+     * @param stream CUDA stream for synchronizing packed tables with MPI.
      * @param starting_msg_tag Starting message tag to use for posting the
      * messages that send the data buffers.
+     * @param shuffle_comm MPI communicator for shuffle.
+     * @param n_ranks Number of ranks in the shuffle.
+     * @param broadcast If true, only one table is expected and it is sent to
+     * all ranks. Otherwise, one table per rank is expected and each is sent to
+     * the corresponding rank.
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
-                                 int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 size_t n_ranks, bool broadcast);
+                                 cudaStream_t stream, int starting_msg_tag_,
+                                 MPI_Comm shuffle_comm, size_t n_ranks,
+                                 bool broadcast);
 
     /**
      * @brief Getter for starting_msg_tag.
@@ -460,11 +468,11 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
 bool is_gpu_rank();
 
 /**
- * @brief Sets specific elements in a boolean column to `true` based on an array
- * of indices.
+ * @brief Sets specific elements in a boolean column to `Value` based on an
+ * array of indices.
  *
  * @details This function iterates over the `indices` column and sets the
- * corresponding row in `target_bools` to `true`. If the `indices` column
+ * corresponding row in `target_bools` to `Value`. If the `indices` column
  * contains null values, those specific indices are safely ignored.
  * * @warning This function does **not** perform bounds checking. The caller is
  * strictly responsible for ensuring that all valid values in the `indices`
@@ -474,16 +482,18 @@ bool is_gpu_rank();
  * * @note This function only updates the data buffer of `target_bools`. It does
  * not modify the validity bitmask of the target column.
  *
+ * @tparam Value               The boolean value to set.
  * @param[in,out] target_bools A mutable view of the boolean column to update.
  * Must be of type `cudf::type_id::BOOL8`.
- * @param[in] indices          A view of the indices to set to true. Must be of
+ * @param[in] indices          A view of the indices to set. Must be of
  * type `cudf::type_id::INT32`. Can contain nulls.
  * @param[in] stream           CUDA stream used for device memory operations and
  * kernel launches.
  */
-void cudf_set_bools_false_from_indices(cudf::mutable_column_view target_bools,
-                                       cudf::column_view const indices,
-                                       rmm::cuda_stream_view stream);
+template <bool Value>
+void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
+                                 cudf::column_view const indices,
+                                 rmm::cuda_stream_view stream);
 
 /**
  * @brief Get a cuda asynchronous memory resource instance.
@@ -494,6 +504,15 @@ void cudf_set_bools_false_from_indices(cudf::mutable_column_view target_bools,
  */
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
+
+/**
+ * @brief Get a device_uvector containing an iota sequence from 0 to n-1.
+ * @param n The length of the iota sequence.
+ * @param stream The CUDA stream to use for any device memory operations.
+ * @return the device_uvector containing the iota sequence.
+ */
+rmm::device_uvector<cudf::size_type> make_uvector_iota(
+    cudf::size_type n, rmm::cuda_stream_view stream);
 
 #else
 // Empty implementation when CUDF is not available

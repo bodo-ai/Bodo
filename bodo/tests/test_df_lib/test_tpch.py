@@ -116,6 +116,7 @@ def test_tpch_q05(broadcast):
         run_tpch_query_test(tpch.tpch_q05)
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_tpch_q06():
     run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
 

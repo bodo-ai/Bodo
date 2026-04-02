@@ -14,9 +14,11 @@
 #include <cudf/utilities/bit.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
+#include <thrust/sequence.h>
+#include <rmm/exec_policy.hpp>
 
-template <bool HasNulls>
-__global__ void set_bools_false_kernel(
+template <bool HasNulls, bool Value>
+__global__ void set_bools_kernel(
     bool* __restrict__ target_bools,
     int32_t const* __restrict__ indices,
     cudf::bitmask_type const* __restrict__ indices_mask,
@@ -34,12 +36,13 @@ __global__ void set_bools_false_kernel(
         if (is_valid) {
             // Fetch index using __ldg to hit the read-only data cache
             int32_t target_idx = __ldg(&indices[i]);
-            target_bools[target_idx] = false;
+            target_bools[target_idx] = Value;
         }
     }
 }
 
-void cudf_set_bools_false_from_indices(
+template <bool Value>
+void cudf_set_bools_from_indices(
     cudf::mutable_column_view target_bools, 
     cudf::column_view const indices,
     rmm::cuda_stream_view stream) {
@@ -59,14 +62,14 @@ void cudf_set_bools_false_from_indices(
     );
 
     if (indices.has_nulls()) {
-        set_bools_false_kernel<true><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<true, Value><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             d_mask,
             indices.size()
         );
     } else {
-        set_bools_false_kernel<false><<<grid_size, block_size, 0, stream.value()>>>(
+        set_bools_kernel<false, Value><<<grid_size, block_size, 0, stream.value()>>>(
             d_target,
             d_indices,
             nullptr,
@@ -75,3 +78,11 @@ void cudf_set_bools_false_from_indices(
     }
 }
 
+rmm::device_uvector<cudf::size_type> make_uvector_iota(cudf::size_type n, rmm::cuda_stream_view stream) {
+    rmm::device_uvector<cudf::size_type> vec(n, stream);
+    thrust::sequence(rmm::exec_policy(stream), vec.begin(), vec.end(), 0);
+    return vec;
+}
+
+template void cudf_set_bools_from_indices<true>(cudf::mutable_column_view target_bools, cudf::column_view const indices, rmm::cuda_stream_view stream);
+template void cudf_set_bools_from_indices<false>(cudf::mutable_column_view target_bools, cudf::column_view const indices, rmm::cuda_stream_view stream);
