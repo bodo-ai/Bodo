@@ -354,7 +354,7 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
             std::size_t length = input_batch.table->num_rows();
             // create a column filled with that scalar
             std::unique_ptr<cudf::column> col =
-                cudf::make_column_from_scalar(*scalar, length, se->stream);
+                cudf::make_column_from_scalar(*invalid, length, se->stream);
             return std::make_shared<ArrayExprGPUResult>(
                 std::move(col), std::string("Constant"));
         } else {
