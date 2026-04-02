@@ -1275,8 +1275,8 @@ std::pair<int64_t, PyObject *> execute_plan(
                   << std::endl;
         device_guard.emplace(gpu_id);
 
-        mr = get_gpu_async_memory_resource();
-        prev_mr = cudf::set_current_device_resource(mr.get());
+        // mr = get_gpu_async_memory_resource();
+        // prev_mr = cudf::set_current_device_resource(mr.get());
     }
 #endif
 
@@ -1291,10 +1291,10 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 
 #ifdef USE_CUDF
-    if (prev_mr) {
-        // Reset device resource for GPU ranks.
-        cudf::set_current_device_resource(prev_mr);
-    }
+    // if (prev_mr) {
+    //     // Reset device resource for GPU ranks.
+    //     cudf::set_current_device_resource(prev_mr);
+    // }
 #endif
 
     // Iceberg write returns a PyObject* with file information
