@@ -31,10 +31,14 @@ psh git checkout scott/platform_gpu_debug
 psh pixi install -e $PIXI_ENV
 # Remove conda install mpi to prefer intel MPI on the platform
 build_task=build
+skip_tests="env BODO_SKIP_CPP_TESTS=1"
 if [[ "$PIXI_ENV" == "default-cuda" ]]; then
     build_task=build-bodo-cudf
+elif [[ "$PIXI_ENV" == "platform-cuda" ]]; then
+    build_task=build-platform-cudf
+    skip_tests=""
 fi
-psh env BODO_SKIP_CPP_TESTS=1 pixi run -e $PIXI_ENV $build_task
+psh $skip_tests pixi run -e $PIXI_ENV $build_task
 
 pixi shell -e $PIXI_ENV
 cd bodo-platform-image/bodo-platform-utils/

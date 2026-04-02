@@ -109,9 +109,13 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-platform-mpich-cudf]
-cmd = "chmod +x buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh && buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
+cmd = "chmod +x $BUILDSCRIPT && $BUILDSCRIPT"
+inputs = ["$BUILDSCRIPT"]
+outputs = ["/opt/mpich/lib/pkgconfig/mpich.pc"]
+[tasks.build-platform-mpich-cudf.env]
+BUILDSCRIPT="buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
 
-[tasks.build-platform-cuda]
+[tasks.build-platform-cudf]
 depends-on = ["build-platform-mpich-cudf", "build-bodo-cudf"]
 
 [tasks.configure-bodo-cudf-debug]
