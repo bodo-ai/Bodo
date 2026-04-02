@@ -165,15 +165,13 @@ class Spawner:
         with no_stdin():
             command, args = self._get_spawn_command_args()
 
-            mpi_info = MPI.Info.Create({"ppn": "24"})
-
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
                 command,
                 args,
                 n_pes,
-                mpi_info,
+                MPI.INFO_NULL,
                 0,
                 errcodes,
             )
