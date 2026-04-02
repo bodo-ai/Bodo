@@ -2595,6 +2595,7 @@ def test_df_state_change():
     print(bdf2)
 
 
+@pytest.mark.gpu
 def test_dataframe_concat(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[
@@ -2622,6 +2623,7 @@ def test_dataframe_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_concat(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
