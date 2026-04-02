@@ -1264,8 +1264,8 @@ std::pair<int64_t, PyObject *> execute_plan(
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
     std::optional<rmm::cuda_set_device_raii> device_guard;
-    std::shared_ptr<rmm::mr::device_memory_resource> mr = nullptr;
-    rmm::mr::device_memory_resource *prev_mr = nullptr;
+    // std::shared_ptr<rmm::mr::device_memory_resource> mr = nullptr;
+    // rmm::mr::device_memory_resource *prev_mr = nullptr;
     if (gpu_id.value() != -1) {
         // Set device (resets to previous device when device_guard goes out of
         // scope)
