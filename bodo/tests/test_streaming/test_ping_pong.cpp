@@ -132,8 +132,9 @@ static bodo::tests::suite tests([] {
             cudaFree(d_buf);
         }
 
-        MPI_Allreduce(MPI_IN_PLACE, &rank_time, 1, MPI_UINT64_T, MPI_MAX,
-                      MPI_COMM_WORLD);
+        CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &rank_time, 1, MPI_UINT64_T,
+                                MPI_MAX, MPI_COMM_WORLD),
+                  "MPI_Allreduce failed");
 
         if (rank == 0) {
             std::cout << "Max send/recv time across ranks: " << rank_time
