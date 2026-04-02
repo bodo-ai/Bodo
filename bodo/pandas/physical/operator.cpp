@@ -3,6 +3,7 @@
 #include <arrow/util/endian.h>
 #include <memory>
 #include <string>
+#include "mpi_proto.h"
 
 #ifdef USE_CUDF
 #include <cudf/concatenate.hpp>
@@ -13,6 +14,7 @@
 
 #include "../../libs/gpu_utils.h"
 #include "../libs/_table_builder_utils.h"
+#include "../libs/_utils.h"
 #endif
 
 int64_t PhysicalOperator::next_op_id = 1;
@@ -443,12 +445,16 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
 };
 
 RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
-    // Create a communicator for all ranks on the node
-    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
-                                  MPI_INFO_NULL, &this->shuffle_comm),
-              "RankDataExchange::RankDataExchange:: MPI error on "
-              "MPI_Comm_split_type:");
-    this->is_last_state = std::make_unique<IsLastState>(this->shuffle_comm);
+    // Create a communicator for all ranks on the node. Assumes block
+    // assignment.
+    int global_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &global_rank);
+    auto [ranks_per_node, rank_on_node] = dist_get_ranks_on_node();
+    int node_id = global_rank / ranks_per_node;
+    CHECK_MPI(
+        MPI_Comm_split(MPI_COMM_WORLD, node_id, rank_on_node, &shuffle_comm),
+        "RankDataExchange::RankDataExchange:: MPI error on MPI_Comm_split:");
+    this->is_last_state = std::make_unique<IsLastState>(shuffle_comm);
 
     // Get a list of all GPU ranks
     int n_pes;

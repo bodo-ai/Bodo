@@ -506,6 +506,17 @@ std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
 
 /**
+ * @brief Get the Cuda memory resource reference (uses CudaMalloc/CudaFree).
+ * This function is to be used when allocating buffers for MPI in order to use
+ * GPU Direct.
+ *
+ * NOTE: This function must be called after a rank's device id is set.
+ *
+ * @return rmm::device_async_resource_ref
+ */
+rmm::device_async_resource_ref get_cuda_memory_resource_ref();
+
+/**
  * @brief Get a device_uvector containing an iota sequence from 0 to n-1.
  * @param n The length of the iota sequence.
  * @param stream The CUDA stream to use for any device memory operations.
