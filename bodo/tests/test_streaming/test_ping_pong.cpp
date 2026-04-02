@@ -1,4 +1,5 @@
 #include "../libs/_distributed.h"
+#include "../libs/_query_profile_collector.h"
 #include "../libs/_utils.h"
 #include "../libs/gpu_utils.h"
 #include "../test.hpp"
@@ -104,6 +105,8 @@ static bodo::tests::suite tests([] {
         }
 
         cudaDeviceSynchronize();
+
+        auto start_send = start_timer();
         for (int i = 0; i < n_iters; ++i) {
             if (rank < ranks_per_node) {
                 CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
@@ -121,6 +124,9 @@ static bodo::tests::suite tests([] {
                           "MPI_Send failed");
             }
         }
+        MetricBase::TimerValue rank_time = end_timer(start_send);
+        std::cout << "Rank " << rank << " send/recv time: " << rank_time
+                  << " seconds" << std::endl;
 
         cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
                    cudaMemcpyDeviceToHost);
