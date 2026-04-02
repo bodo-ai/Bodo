@@ -109,7 +109,7 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-platform-mpich-cudf]
-cmd = "./buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
+cmd = "chmod +x buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh && buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
 
 [tasks.build-platform-cuda]
 depends-on = ["build-platform-mpich-cudf", "build-bodo-cudf"]
