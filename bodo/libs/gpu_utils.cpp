@@ -491,6 +491,8 @@ hash_partition_table(std::shared_ptr<cudf::table> table,
 
 rmm::cuda_device_id get_gpu_id() {
     auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
+    std::cout << "Rank " << rank_on_node << "/" << n_ranks
+              << " checking for GPU assignment..." << std::endl;
 
     int device_count;
     cudaGetDeviceCount(&device_count);
