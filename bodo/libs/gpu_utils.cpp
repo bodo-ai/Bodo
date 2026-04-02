@@ -99,8 +99,10 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
     std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
         partition_start_rows.begin() + 1, partition_start_rows.end());
     // Pack the tables for sending
+
     packed_tables =
-        cudf::contiguous_split(partitioned_table->view(), splits, stream);
+        cudf::contiguous_split(partitioned_table->view(), splits, stream,
+                               get_cuda_memory_resource_ref());
     return packed_tables;
 }
 
@@ -118,7 +120,8 @@ std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
 
     cudf::table_view tv = broadcast_table_info.table->view();
     // By doing only one return value signifies a broadcast.
-    packed_tables.emplace_back(tv, cudf::pack(tv, stream));
+    packed_tables.emplace_back(
+        tv, cudf::pack(tv, stream, get_cuda_memory_resource_ref()));
     return packed_tables;
 }
 
@@ -408,8 +411,8 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
 
     this->recv_metadata_buffer =
         std::make_unique<std::vector<uint8_t>>(metadata_size);
-    this->packed_recv_buffer =
-        std::make_unique<rmm::device_buffer>(data_size, stream);
+    this->packed_recv_buffer = std::make_unique<rmm::device_buffer>(
+        data_size, stream, get_cuda_memory_resource_ref());
 
     // recv metadata
     MPI_Request recv_req;
@@ -553,8 +556,8 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
             recv_buffers.push_back(nullptr);
         } else {
             // allocate device buffer on the provided stream
-            recv_buffers.push_back(
-                std::make_unique<rmm::device_buffer>(sz, stream));
+            recv_buffers.push_back(std::make_unique<rmm::device_buffer>(
+                sz, stream, get_cuda_memory_resource_ref()));
         }
     }
 
@@ -641,6 +644,12 @@ get_gpu_async_memory_resource() {
         return std::make_shared<rmm::mr::cuda_memory_resource>();
     }
     return std::make_shared<rmm::mr::cuda_async_memory_resource>();
+}
+
+rmm::device_async_resource_ref get_cuda_memory_resource_ref() {
+    static rmm::mr::cuda_memory_resource mr;
+    static rmm::device_async_resource_ref mr_ref{&mr};
+    return mr_ref;
 }
 
 #endif  // USE_CUDF
