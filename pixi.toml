@@ -108,6 +108,12 @@ SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
+[tasks.build-platform-mpich-cudf]
+cmd = "./buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
+
+[tasks.build-platform-cuda]
+depends-on = ["build-platform-mpich-cudf", "build-bodo-cudf"]
+
 [tasks.configure-bodo-cudf-debug]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf-debug -Ccmake.define.USE_CUDF=ON -Ccmake.build-type='Debug' -Cinstall.strip=false"
 inputs = ["CMakeLists.txt", "pyproject.toml"]
