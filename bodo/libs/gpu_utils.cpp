@@ -635,6 +635,11 @@ bool is_gpu_rank() {
 
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource() {
+    char* env_p = std::getenv("BODO_USE_SYNC_GPU_MEMORY_RESOURCE");
+    if (env_p != nullptr && std::string(env_p) == "1") {
+        std::cout << "Using synchronous GPU memory resource" << std::endl;
+        return std::make_shared<rmm::mr::cuda_memory_resource>();
+    }
     return std::make_shared<rmm::mr::cuda_async_memory_resource>();
 }
 
