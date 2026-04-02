@@ -74,7 +74,7 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_mpi_cuda_ping_pong_block", [] {
-        int n_iters = 1;
+        int n_iters = 10;
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -123,7 +123,7 @@ static bodo::tests::suite tests([] {
             }
             rank_time = end_timer(start_send);
             std::cout << "Rank " << rank << " send/recv time: " << rank_time
-                      << " seconds" << std::endl;
+                      << " us" << std::endl;
 
             cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
                        cudaMemcpyDeviceToHost);
@@ -138,7 +138,7 @@ static bodo::tests::suite tests([] {
 
         if (rank == 0) {
             std::cout << "Max send/recv time across ranks: " << rank_time
-                      << " seconds" << std::endl;
+                      << " us" << std::endl;
         }
     });
 });
