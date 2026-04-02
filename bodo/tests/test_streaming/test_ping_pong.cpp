@@ -1,3 +1,4 @@
+#include <mpi.h>
 #include "../libs/_distributed.h"
 #include "../libs/_query_profile_collector.h"
 #include "../libs/_utils.h"
@@ -77,61 +78,66 @@ static bodo::tests::suite tests([] {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+        MetricBase::TimerValue rank_time = 0;
+
         auto [ranks_per_node, rank_on_node] = dist_get_ranks_on_node();
         auto gpu_id = get_gpu_id();
-        if (gpu_id.value() < 0) {
-            return;
-        }
-        std::cout << "Rank " << rank << " using GPU " << gpu_id.value()
-                  << std::endl;
-        std::cout << "Ranks per node: " << ranks_per_node
-                  << ", rank on node: " << rank_on_node << std::endl;
-        cudaSetDevice(gpu_id.value());
+        if (gpu_id.value() >= 0) {
+            cudaSetDevice(gpu_id.value());
 
-        std::vector<int> h_buf(N);
+            std::vector<int> h_buf(N);
 
-        int* d_buf;
-        cudaMalloc(&d_buf, N * sizeof(int));
-        cudaMemset(d_buf, 0, N * sizeof(int));
+            int* d_buf;
+            cudaMalloc(&d_buf, N * sizeof(int));
+            cudaMemset(d_buf, 0, N * sizeof(int));
 
-        // Ranks on first node, copy buffer and send first
-        if (rank < ranks_per_node) {
-            for (int i = 0; i < N; i++) {
-                h_buf[i] = i % 100;
-            }
-
-            cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
-                       cudaMemcpyHostToDevice);
-        }
-
-        cudaDeviceSynchronize();
-
-        auto start_send = start_timer();
-        for (int i = 0; i < n_iters; ++i) {
+            // Ranks on first node, copy buffer and send first
             if (rank < ranks_per_node) {
-                CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
-                                   MPI_COMM_WORLD),
-                          "MPI_Send failed");
-                CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
-                                   MPI_COMM_WORLD, MPI_STATUS_IGNORE),
-                          "MPI_Recv failed");
-            } else {
-                CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
-                                   MPI_COMM_WORLD, MPI_STATUS_IGNORE),
-                          "MPI_Recv failed");
-                CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
-                                   MPI_COMM_WORLD),
-                          "MPI_Send failed");
-            }
-        }
-        MetricBase::TimerValue rank_time = end_timer(start_send);
-        std::cout << "Rank " << rank << " send/recv time: " << rank_time
-                  << " seconds" << std::endl;
+                for (int i = 0; i < N; i++) {
+                    h_buf[i] = i % 100;
+                }
 
-        cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
-                   cudaMemcpyDeviceToHost);
-        long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
-        std::cout << "Checksum: " << sum << std::endl;
-        cudaFree(d_buf);
+                cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
+                           cudaMemcpyHostToDevice);
+            }
+
+            cudaDeviceSynchronize();
+
+            auto start_send = start_timer();
+            for (int i = 0; i < n_iters; ++i) {
+                if (rank < ranks_per_node) {
+                    CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node,
+                                       0, MPI_COMM_WORLD),
+                              "MPI_Send failed");
+                    CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank + ranks_per_node,
+                                       0, MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                              "MPI_Recv failed");
+                } else {
+                    CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank - ranks_per_node,
+                                       0, MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                              "MPI_Recv failed");
+                    CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank - ranks_per_node,
+                                       0, MPI_COMM_WORLD),
+                              "MPI_Send failed");
+                }
+            }
+            rank_time = end_timer(start_send);
+            std::cout << "Rank " << rank << " send/recv time: " << rank_time
+                      << " seconds" << std::endl;
+
+            cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
+                       cudaMemcpyDeviceToHost);
+            long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
+            std::cout << "Checksum: " << sum << std::endl;
+            cudaFree(d_buf);
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &rank_time, 1, MPI_UINT64_T, MPI_MAX,
+                      MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            std::cout << "Max send/recv time across ranks: " << rank_time
+                      << " seconds" << std::endl;
+        }
     });
 });
