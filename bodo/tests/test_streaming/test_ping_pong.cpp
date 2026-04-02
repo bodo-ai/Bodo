@@ -1,4 +1,5 @@
 #include "../libs/_distributed.h"
+#include "../libs/_utils.h"
 #include "../libs/gpu_utils.h"
 #include "../test.hpp"
 #include "cuda_runtime_api.h"
@@ -57,6 +58,62 @@ static bodo::tests::suite tests([] {
             cudaDeviceSynchronize();
             CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, 0, 0, MPI_COMM_WORLD,
                                MPI_STATUS_IGNORE),
+                      "MPI_Recv failed");
+
+            cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
+                       cudaMemcpyDeviceToHost);
+
+            long long sum = std::accumulate(h_buf.begin(), h_buf.end(), 0LL);
+
+            std::cout << "Checksum: " << sum << std::endl;
+        }
+
+        cudaFree(d_buf);
+    });
+
+    bodo::tests::test("test_mpi_cuda_ping_pong_block", [] {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        auto [ranks_per_node, rank_on_node] = dist_get_ranks_on_node();
+        auto gpu_id = get_gpu_id();
+        if (gpu_id.value() < 0) {
+            return;
+        }
+        cudaSetDevice(gpu_id.value());
+
+        std::vector<int> h_buf(N);
+
+        int* d_buf;
+        cudaMalloc(&d_buf, N * sizeof(int));
+        cudaMemset(d_buf, 0, N * sizeof(int));
+
+        // Ranks on first node, copy buffer and send first
+        if (rank < ranks_per_node) {
+            for (int i = 0; i < N; i++) {
+                h_buf[i] = i % 100;
+            }
+
+            cudaMemcpy(d_buf, h_buf.data(), N * sizeof(int),
+                       cudaMemcpyHostToDevice);
+            cudaDeviceSynchronize();
+
+            std::cout << "Rank " << rank << " sending GPU buffer..."
+                      << std::endl;
+
+            CHECK_MPI(MPI_Send(d_buf, N, MPI_INT, rank + ranks_per_node, 0,
+                               MPI_COMM_WORLD),
+                      "MPI_Send failed");
+        }
+
+        // ranks on second node, receive first
+        if (rank >= ranks_per_node) {
+            std::cout << "Rank " << rank << " receiving GPU buffer..."
+                      << std::endl;
+
+            cudaDeviceSynchronize();
+            CHECK_MPI(MPI_Recv(d_buf, N, MPI_INT, rank - ranks_per_node, 0,
+                               MPI_COMM_WORLD, MPI_STATUS_IGNORE),
                       "MPI_Recv failed");
 
             cudaMemcpy(h_buf.data(), d_buf, N * sizeof(int),
