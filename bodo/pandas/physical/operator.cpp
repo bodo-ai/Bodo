@@ -443,11 +443,9 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
 };
 
 RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
-    // Create a communicator for all ranks on the node
-    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
-                                  MPI_INFO_NULL, &this->shuffle_comm),
+    CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm),
               "RankDataExchange::RankDataExchange:: MPI error on "
-              "MPI_Comm_split_type:");
+              "MPI_Comm_dup:");
     this->is_last_state = std::make_unique<IsLastState>(this->shuffle_comm);
 
     // Get a list of all GPU ranks
