@@ -72,6 +72,10 @@ std::tuple<int, int> dist_get_ranks_on_node() {
     std::cout << "Total ranks: " << n_pes
               << ", Cores per node: " << ncores_on_node
               << ", Total nodes: " << n_nodes << std::endl;
+    // Calling from spawner
+    if (n_nodes == 0) {
+        return std::make_tuple(ncores_on_node, rank);
+    }
     int rank_on_node = rank / n_nodes;
 
     cached_result = std::make_tuple(ncores_on_node, rank_on_node);
