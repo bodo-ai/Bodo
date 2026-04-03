@@ -98,7 +98,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
 
     // Regular Sampling
     std::vector<cudf::size_type> sample_indices;
-    if (local_table && local_table->num_rows() > 0) {
+    if (local_table->num_rows() > 0) {
         for (int i = 0; i < n_ranks; ++i) {
             sample_indices.push_back(static_cast<cudf::size_type>(
                 i * local_table->num_rows() / n_ranks));
