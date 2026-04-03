@@ -99,7 +99,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     MPI_Comm_rank(comm, &rank);
 
     // Regular Sampling
-    size_t n = local_table->num_rows();
+    size_t n = local_table ? local_table->num_rows() : 0;
     std::vector<cudf::size_type> sample_indices;
     for (int i = 0; i < n_ranks; ++i) {
         if (n > 0) {
