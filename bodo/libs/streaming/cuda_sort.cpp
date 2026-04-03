@@ -153,11 +153,8 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
     int n_ranks = 0;
     MPI_Comm_size(comm, &n_ranks);
 
-    // Combine local and received samples
+    // Combine received samples
     std::vector<cudf::table_view> all_sample_views;
-    if (local_samples && local_samples->num_rows() > 0) {
-        all_sample_views.push_back(local_samples->view());
-    }
     for (const auto& t : received_samples) {
         if (t && t->num_rows() > 0) {
             all_sample_views.push_back(t->view());
@@ -175,11 +172,10 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
         cudf::size_type n_total_samples = sorted_samples->num_rows();
         std::vector<cudf::size_type> pivot_indices;
         for (int i = 1; i < n_ranks; ++i) {
-            size_t idx = (static_cast<size_t>(i) * n_ranks) + (n_ranks / 2 - 1);
+            size_t idx = static_cast<size_t>(i) * n_ranks + n_ranks / 2 - 1;
             // If we have a rank with less data than nranks
             // we may end up with pivot indices that are out of bounds, so we
-            // clamp
-            // to n_total_samples
+            // clamp to n_total_samples
             if (idx < static_cast<size_t>(n_total_samples)) {
                 pivot_indices.push_back(static_cast<cudf::size_type>(idx));
             } else {
