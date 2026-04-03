@@ -40,37 +40,51 @@ void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
 }
 
 bool CudaSortState::FinalizeAccumulation(bool local_is_last) {
+    rmm::cuda_stream_view stream = cudf::get_default_stream();
+
     if (state == State::ACCUMULATING && local_is_last) {
-        ExecutePsrs(cudf::get_default_stream());
-        state = State::SHUFFLING;
+        this->ExecutePsrsStep1(stream);
+        state = State::GATHERING_SAMPLES;
     }
 
-    // Progress the shuffle
-    std::vector<std::shared_ptr<cudf::table>> shuffled_chunks =
-        shuffle_manager.progress(local_is_last);
+    if (state == State::GATHERING_SAMPLES) {
+        std::vector<std::shared_ptr<cudf::table>> received =
+            sample_gatherer.progress(true);
+        for (auto& t : received) {
+            received_samples.push_back(std::move(t));
+        }
 
-    for (auto& chunk : shuffled_chunks) {
-        if (chunk->num_rows() > 0) {
-            received_tables.push_back(std::move(chunk));
+        if (sample_gatherer.sync_is_last(true)) {
+            this->ExecutePsrsStep2(stream);
+            state = State::SHUFFLING;
         }
     }
 
-    bool global_is_last = shuffle_manager.sync_is_last(local_is_last);
-    if (global_is_last && state == State::SHUFFLING) {
-        state = State::MERGING;
+    if (state == State::SHUFFLING) {
+        // Progress the shuffle
+        std::vector<std::shared_ptr<cudf::table>> shuffled_chunks =
+            shuffle_manager.progress(local_is_last);
+
+        for (auto& chunk : shuffled_chunks) {
+            if (chunk->num_rows() > 0) {
+                received_tables.push_back(std::move(chunk));
+            }
+        }
+
+        if (shuffle_manager.sync_is_last(local_is_last)) {
+            state = State::MERGING;
+        }
     }
 
-    return global_is_last;
+    return (state == State::MERGING);
 }
 
-void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
+void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
     if (!is_gpu_rank()) {
         return;
     }
 
-    // Concatenate all accumulated batches
-    // and sort by the keys
-    std::shared_ptr<cudf::table> local_table;
+    // 1. Concatenate all accumulated batches
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
         for (const auto& table : accumulation_buffer) {
@@ -79,29 +93,25 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         local_table = cudf::concatenate(views, stream);
         accumulation_buffer.clear();
 
+        // 2. Local Sort
         local_table = cudf::sort_by_key(local_table->view(),
                                         local_table->select(key_indices),
                                         column_order, null_precedence, stream);
-        auto local_arrow_table = convertGPUToArrow(
-            {local_table, this->schema->ToArrowSchema(),
-             std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
     } else {
-        local_table =
-            empty_table_from_arrow_schema(this->schema->ToArrowSchema());
+        local_table = empty_table_from_arrow_schema(schema->ToArrowSchema());
     }
 
-    MPI_Comm comm = shuffle_manager.get_mpi_comm();
+    MPI_Comm comm = sample_gatherer.get_mpi_comm();
     int n_ranks = 0;
     MPI_Comm_size(comm, &n_ranks);
-    int rank = 0;
-    MPI_Comm_rank(comm, &rank);
 
-    // Regular Sampling
+    // 3. Regular Sampling
+    size_t n = local_table->num_rows();
     std::vector<cudf::size_type> sample_indices;
-    if (local_table->num_rows() > 0) {
-        for (int i = 0; i < n_ranks; ++i) {
-            sample_indices.push_back(static_cast<cudf::size_type>(
-                i * local_table->num_rows() / n_ranks));
+    for (int i = 0; i < n_ranks; ++i) {
+        if (n > 0) {
+            sample_indices.push_back(
+                static_cast<cudf::size_type>(i * n / n_ranks));
         }
     }
 
@@ -125,77 +135,48 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         sample_table = empty_table_from_arrow_schema(this->key_schema);
     }
 
-    //  Global Pivot Selection
-    // Convert samples to arrow for CPU processing on Rank 0
-    std::shared_ptr<arrow::Table> local_samples = convertGPUToArrow(
-        {std::shared_ptr<cudf::table>(std::move(sample_table)),
-         this->key_schema,
-         std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
+    // Start Broadcast of local samples
+    local_samples = std::move(sample_table);
+    auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
+    se->event.record(stream);
+    sample_gatherer.append_batch(local_samples, se);
+}
 
-    // Serialize local samples
-    auto local_buf = SerializeTableToIPC(local_samples);
-    int local_size = static_cast<int>(local_buf->size());
+void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
+    if (!is_gpu_rank()) {
+        return;
+    }
 
-    // Gather sizes from all ranks
-    std::vector<int> recv_counts(n_ranks);
-    CHECK_MPI(MPI_Gather(&local_size, 1, MPI_INT, recv_counts.data(), 1,
-                         MPI_INT, 0, comm),
-              "ExecutePsrs: Failed to gather sample sizes");
+    MPI_Comm comm = shuffle_manager.get_mpi_comm();
+    int n_ranks = 0;
+    MPI_Comm_size(comm, &n_ranks);
 
-    std::vector<int> displs(n_ranks, 0);
-    int total_bytes = 0;
-    if (rank == 0) {
-        for (int i = 0; i < n_ranks; ++i) {
-            displs[i] = total_bytes;
-            total_bytes += recv_counts[i];
+    // Combine local and received samples
+    std::vector<cudf::table_view> all_sample_views;
+    if (local_samples && local_samples->num_rows() > 0) {
+        all_sample_views.push_back(local_samples->view());
+    }
+    for (const auto& t : received_samples) {
+        if (t && t->num_rows() > 0) {
+            all_sample_views.push_back(t->view());
         }
     }
 
-    std::vector<uint8_t> recv_buffer(total_bytes);
-    CHECK_MPI(
-        MPI_Gatherv(local_buf->data(), local_size, MPI_BYTE, recv_buffer.data(),
-                    recv_counts.data(), displs.data(), MPI_BYTE, 0, comm),
-        "ExecutePsrs: Failed to gather sample buffers");
-
-    std::shared_ptr<cudf::table> global_pivots = nullptr;
-
-    if (rank == 0) {
-        std::vector<std::shared_ptr<arrow::Table>> all_samples;
-        for (int i = 0; i < n_ranks; ++i) {
-            if (recv_counts[i] > 0) {
-                auto buf = arrow::Buffer::Wrap(recv_buffer.data() + displs[i],
-                                               recv_counts[i]);
-                all_samples.push_back(DeserializeIPC(std::move(buf)));
-            }
-        }
-
-        arrow::ConcatenateTablesOptions options =
-            arrow::ConcatenateTablesOptions::Defaults();
-        // Empty cudf columns can't be made to be nullable
-        options.unify_schemas = true;
-        auto combined_samples =
-            arrow::ConcatenateTables(all_samples, options).ValueOrDie();
-
-        GPU_DATA samples_gpu = convertArrowTableToGPU(
-            combined_samples,
-            std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper()));
+    std::unique_ptr<cudf::table> global_pivots = nullptr;
+    if (!all_sample_views.empty()) {
+        std::unique_ptr<cudf::table> combined_samples =
+            cudf::concatenate(all_sample_views, stream);
         std::unique_ptr<cudf::table> sorted_samples = cudf::sort(
-            samples_gpu.table->view(), column_order, null_precedence, stream);
+            combined_samples->view(), column_order, null_precedence, stream);
 
         // Select P-1 pivots
+        cudf::size_type n_total_samples = sorted_samples->num_rows();
         std::vector<cudf::size_type> pivot_indices;
-
         for (int i = 1; i < n_ranks; ++i) {
-            cudf::size_type idx = (i * n_ranks) + (n_ranks / 2) - 1;
-            // Ensure idx is within bounds while guaranteeing
-            // pivot_indices has nranks - 1 pivots.
-            // This can happen if some ranks have less data
-            // than nranks, leading to fewer total samples than expected.
-            if (idx >= sorted_samples->num_rows()) {
-                idx = sorted_samples->num_rows() - 1;
+            size_t idx = (static_cast<size_t>(i) * n_total_samples) / n_ranks;
+            if (idx < (size_t)n_total_samples) {
+                pivot_indices.push_back(static_cast<cudf::size_type>(idx));
             }
-
-            pivot_indices.push_back(idx);
         }
 
         if (!pivot_indices.empty()) {
@@ -213,42 +194,11 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
             global_pivots =
                 cudf::gather(sorted_samples->view(), pivot_indices_view,
                              cudf::out_of_bounds_policy::DONT_CHECK, stream);
-        } else {
-            global_pivots = empty_table_from_arrow_schema(this->key_schema);
         }
     }
 
-    // Broadcast pivots
-    std::shared_ptr<arrow::Buffer> pivot_buf;
-    int pivot_buf_size = 0;
-    if (rank == 0) {
-        auto h_pivots = convertGPUToArrow(
-            {global_pivots, this->key_schema,
-             std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
-        pivot_buf = SerializeTableToIPC(h_pivots);
-        pivot_buf_size = static_cast<int>(pivot_buf->size());
-    }
-
-    CHECK_MPI(MPI_Bcast(&pivot_buf_size, 1, MPI_INT, 0, comm),
-              "ExecutePsrs: Failed to broadcast pivot buffer size");
-
-    std::vector<uint8_t> pivot_recv_buffer;
-    if (rank != 0) {
-        pivot_recv_buffer.resize(pivot_buf_size);
-    }
-    CHECK_MPI(MPI_Bcast(rank == 0 ? (void*)pivot_buf->data()
-                                  : pivot_recv_buffer.data(),
-                        pivot_buf_size, MPI_BYTE, 0, comm),
-              "ExecutePsrs: Failed to broadcast pivots");
-
-    if (rank != 0) {
-        auto buf =
-            arrow::Buffer::Wrap(pivot_recv_buffer.data(), pivot_buf_size);
-        auto h_pivots = DeserializeIPC(std::move(buf));
-        GPU_DATA pivots_gpu = convertArrowTableToGPU(
-            h_pivots,
-            std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper()));
-        global_pivots = std::move(pivots_gpu.table);
+    if (!global_pivots) {
+        global_pivots = empty_table_from_arrow_schema(this->key_schema);
     }
 
     //  Partitioning

@@ -412,6 +412,18 @@ class GpuTableBroadcastManager : public GpuTableManager {
     }
 };
 
+/**
+ * @brief Class for managing async all-gather of cudf::tables using MPI.
+ * Every rank broadcasts its table to all other ranks.
+ */
+class GpuTableAllGatherManager : public GpuTableBroadcastManager {
+   public:
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      std::shared_ptr<StreamAndEvent> se) {
+        this->broadcast_table(std::move(table), std::move(se));
+    }
+};
+
 class GpuRangeShuffleManager : public GpuTableManager {
    private:
     struct RangeShuffleTableInfo {

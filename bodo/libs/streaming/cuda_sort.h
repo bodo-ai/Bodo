@@ -65,14 +65,34 @@ class CudaSortState {
     std::unique_ptr<cudf::table> final_result = nullptr;
 
     GpuRangeShuffleManager shuffle_manager;
+    GpuTableAllGatherManager sample_gatherer;
 
-    enum class State { ACCUMULATING, SHUFFLING, MERGING, DONE };
+    enum class State {
+        ACCUMULATING,
+        GATHERING_SAMPLES,
+        SHUFFLING,
+        MERGING,
+        DONE
+    };
     State state = State::ACCUMULATING;
 
+    // Locally sorted data waiting for pivots
+    std::unique_ptr<cudf::table> local_table;
+    // Local samples being broadcasted
+    std::shared_ptr<cudf::table> local_samples;
+    // Samples received from other ranks
+    std::vector<std::shared_ptr<cudf::table>> received_samples;
+
     /**
-     * @brief Execute the PSRS algorithm after all data is accumulated.
+     * @brief Step 1 of PSRS: Local sort, sample, and start broadcast.
      */
-    void ExecutePsrs(rmm::cuda_stream_view stream);
+    void ExecutePsrsStep1(rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Step 2 of PSRS: Collect samples, pick pivots, partition, and start
+     * shuffle.
+     */
+    void ExecutePsrsStep2(rmm::cuda_stream_view stream);
 };
 
 #else
