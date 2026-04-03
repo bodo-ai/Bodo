@@ -541,7 +541,6 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
         ret.push_back(index_of(probe_new, in_probe_orig));
     }
     uint64_t base = probe_new.size();
-    // uint64_t base = ret.size();
     for (auto& in_build_orig : build_orig) {
         ret.push_back(base + index_of(build_new, in_build_orig));
     }
