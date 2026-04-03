@@ -175,8 +175,12 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
             }
         }
 
+        arrow::ConcatenateTablesOptions options =
+            arrow::ConcatenateTablesOptions::Defaults();
+        // Empty cudf columns can't be made to be nullable
+        options.unify_schemas = true;
         auto combined_samples =
-            arrow::ConcatenateTables(all_samples).ValueOrDie();
+            arrow::ConcatenateTables(all_samples, options).ValueOrDie();
 
         GPU_DATA samples_gpu = convertArrowTableToGPU(
             combined_samples,
