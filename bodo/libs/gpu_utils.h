@@ -498,7 +498,7 @@ void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
 /**
  * @brief Get a cuda asynchronous memory resource instance.
  *
- * NOTE: This function must be called after a rank's device id is set.
+ * @note This function must be called after a rank's device id is set.
  *
  * @return std::shared_ptr<rmm::mr::device_memory_resource>
  */
@@ -506,11 +506,10 @@ std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
 
 /**
- * @brief Get the Cuda memory resource reference (uses CudaMalloc/CudaFree).
- * This function is to be used when allocating buffers for MPI in order to use
- * GPU Direct.
+ * @brief Get a static Cuda memory resource reference for allocating buffers for
+ * MPI to enable GPU Direct paths.
  *
- * NOTE: This function must be called after a rank's device id is set.
+ * @note Device id must remain the same for all calls.
  *
  * @return rmm::device_async_resource_ref
  */
