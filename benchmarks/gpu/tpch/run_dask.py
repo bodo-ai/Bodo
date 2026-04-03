@@ -6,7 +6,6 @@ import time
 import dask
 import dask_cudf
 from dask.dataframe import DataFrame
-from dask_cuda import LocalCUDACluster
 from distributed import Client
 
 
@@ -91,7 +90,8 @@ def main():
     dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
     dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
-    _ = Client(LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True))
+    client = Client(scheduler_file="scheduler.json")
+    print(client)
 
     if args.warmup:
         try:
