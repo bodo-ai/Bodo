@@ -402,12 +402,62 @@ class GpuTableBroadcastManager : public GpuTableManager {
 
     bool is_available() const { return true; }
 
-    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() override {
         std::vector<std::shared_ptr<cudf::table>> out_tables;
         for (auto& shuffle_info : this->tables_to_broadcast) {
             out_tables.push_back(shuffle_info.table);
         }
         this->tables_to_broadcast.clear();
+        return out_tables;
+    }
+};
+
+class GpuRangeShuffleManager : public GpuTableManager {
+   private:
+    struct RangeShuffleTableInfo {
+        std::shared_ptr<cudf::table> table;
+        std::vector<cudf::size_type> split_indices;
+        cuda_event_wrapper event;
+
+        RangeShuffleTableInfo(std::shared_ptr<cudf::table> t,
+                              std::vector<cudf::size_type> s,
+                              cuda_event_wrapper e)
+            : table(std::move(t)),
+              split_indices(std::move(s)),
+              event(std::move(e)) {}
+    };
+    std::vector<RangeShuffleTableInfo> tables_to_shuffle;
+
+    bool tableReadyToSend() override {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
+
+    std::vector<cudf::packed_table> getNextPerRankTables(
+        bool& do_broadcast) override;
+
+    bool hasMoreTables() override { return !tables_to_shuffle.empty(); }
+
+   public:
+    /**
+     * @brief Shuffle a cudf table across all ranks using range partitioning
+     * @param table Input table to shuffle (already sorted)
+     * @param split_indices Row indices where the table should be split for each
+     * rank
+     * @param se Stream and event for synchronization
+     */
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      std::vector<cudf::size_type> split_indices,
+                      std::shared_ptr<StreamAndEvent> se);
+
+    bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() override {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& info : this->tables_to_shuffle) {
+            out_tables.push_back(info.table);
+        }
+        this->tables_to_shuffle.clear();
         return out_tables;
     }
 };
