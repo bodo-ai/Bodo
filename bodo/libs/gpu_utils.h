@@ -440,8 +440,10 @@ class GpuRangeShuffleManager : public GpuTableManager {
 
    public:
     /**
-     * @brief Shuffle a cudf table across all ranks using range partitioning
-     * @param table Input table to shuffle (already sorted)
+     * @brief Shuffle a cudf table across all ranks using range partitioning,
+     * essentially a IMPIAlltoallv. We use this since CUDA aware MPI
+     * doesn't support non-blocking alltoallv.
+     * @param table Input table to shuffle
      * @param split_indices Row indices where the table should be split for each
      * rank
      * @param se Stream and event for synchronization

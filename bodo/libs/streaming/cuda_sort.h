@@ -9,10 +9,9 @@
 #include <cudf/sorting.hpp>
 #include <cudf/table/table_view.hpp>
 
-/**
- * @brief State for distributed GPU PSRS sort.
- */
 class CudaSortState {
+    // Implements Parallel Sample Sort (PSRS) for distributed sorting of cudf
+    // tables across GPU ranks.
    public:
     CudaSortState(std::shared_ptr<bodo::Schema> schema,
                   std::vector<cudf::size_type> const& key_indices,

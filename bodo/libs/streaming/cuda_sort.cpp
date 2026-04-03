@@ -68,12 +68,8 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     if (!is_gpu_rank()) {
         return;
     }
-    if (accumulation_buffer.empty()) {
-        // Still need to participate in collectives if we have no data
-        accumulation_buffer.clear();  // Ensure it's empty
-    }
 
-    // 1. Concatenate all accumulated batches
+    // Concatenate all accumulated batches
     std::unique_ptr<cudf::table> local_table;
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
@@ -83,11 +79,10 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         local_table = cudf::concatenate(views, stream);
         accumulation_buffer.clear();
 
-        // 2. Local Sort
-        local_table = cudf::sort(local_table->view(), column_order,
-                                 null_precedence, stream);
-    } else {
-        local_table = empty_table_from_arrow_schema(schema->ToArrowSchema());
+        // Local Sort
+        local_table = cudf::sort_by_key(local_table->view(),
+                                        local_table->select(key_indices),
+                                        column_order, null_precedence, stream);
     }
 
     MPI_Comm comm = shuffle_manager.get_mpi_comm();
@@ -96,7 +91,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     int rank = 0;
     MPI_Comm_rank(comm, &rank);
 
-    // 3. Regular Sampling
+    // Regular Sampling
     size_t n = local_table->num_rows();
     std::vector<cudf::size_type> sample_indices;
     for (int i = 0; i < n_ranks; ++i) {
@@ -126,7 +121,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         sample_table = empty_table_from_arrow_schema(this->key_schema);
     }
 
-    // 4. Global Pivot Selection
+    //  Global Pivot Selection
     // Convert samples to arrow for CPU processing on Rank 0
     std::shared_ptr<arrow::Table> local_samples = convertGPUToArrow(
         {std::shared_ptr<cudf::table>(std::move(sample_table)),
@@ -244,7 +239,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         global_pivots = std::move(pivots_gpu.table);
     }
 
-    // 5. Partitioning
+    //  Partitioning
     std::vector<cudf::size_type> split_indices;
     if (global_pivots && global_pivots->num_rows() > 0) {
         auto d_splits = cudf::upper_bound(local_table->select(key_indices),
@@ -264,7 +259,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         }
     }
 
-    // 6. Start Shuffle
+    //  Start Shuffle
     shuffle_manager.append_batch(
         std::move(local_table), std::move(split_indices),
         std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper()));
@@ -286,7 +281,7 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
             for (const auto& table : received_tables) {
                 views.push_back(table->view());
             }
-            // 7. Multi-way Merge
+            // Multi-way Merge
             final_result = cudf::merge(views, key_indices, column_order,
                                        null_precedence, stream);
         }

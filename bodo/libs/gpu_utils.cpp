@@ -140,7 +140,10 @@ std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
 
 std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
     bool& do_broadcast) {
-    do_broadcast = false;
+    if (do_broadcast) {
+        throw std::runtime_error(
+            "GpuRangeShuffleManager does not support broadcast tables");
+    }
     if (!tableReadyToSend()) {
         throw std::runtime_error("getNextPerRankTables has no data");
     }
