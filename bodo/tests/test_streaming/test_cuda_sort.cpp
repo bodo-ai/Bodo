@@ -168,7 +168,6 @@ void run_cuda_sort_test(
         return !cudf::bit_is_set(h_mask.data(), i);
     };
 
-    // Conceptual value for comparison that accounts for nulls
     auto get_val = [&](int i) {
         if (is_null(i)) {
             // For these tests we always use NULLS BEFORE
@@ -183,7 +182,7 @@ void run_cuda_sort_test(
 
     bool ascending = column_order[0] == cudf::order::ASCENDING;
 
-    // 1. Check local sorting
+    // Check local sorting
     for (int i = 0; i < local_rows - 1; ++i) {
         if (ascending) {
             bodo::tests::check(get_val(i) <= get_val(i + 1));
@@ -192,7 +191,7 @@ void run_cuda_sort_test(
         }
     }
 
-    // 2. Check global ordering
+    // Check global ordering
     int64_t local_min, local_max;
     if (ascending) {
         local_min =
@@ -215,15 +214,6 @@ void run_cuda_sort_test(
     CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T, all_maxes.data(), 1,
                             MPI_INT64_T, gpu_comm),
               "MPI_Allgather failed");
-
-    std::cout << "All mins: ";
-    for (const auto& m : all_mins) {
-        std::cout << m << " ";
-    }
-    std::cout << "\nAll maxes: ";
-    for (const auto& m : all_maxes) {
-        std::cout << m << " ";
-    }
 
     int last_rank_with_data = -1;
     for (int r = 0; r < n_gpu_ranks; ++r) {
@@ -253,7 +243,6 @@ void run_cuda_sort_test(
 }
 
 static bodo::tests::suite cuda_sort_tests([] {
-    // Basic test: sort integers in ascending order
     bodo::tests::test("test_cuda_sort_integers_asc",
                       [] {
                           run_cuda_sort_test(
