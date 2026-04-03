@@ -70,7 +70,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     }
 
     // Concatenate all accumulated batches
-    std::unique_ptr<cudf::table> local_table;
+    std::shared_ptr<cudf::table> local_table;
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
         for (const auto& table : accumulation_buffer) {
@@ -83,6 +83,13 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         local_table = cudf::sort_by_key(local_table->view(),
                                         local_table->select(key_indices),
                                         column_order, null_precedence, stream);
+        auto local_arrow_table = convertGPUToArrow(
+            {local_table, this->schema->ToArrowSchema(),
+             std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
+        int rank;
+        MPI_Comm_rank(shuffle_manager.get_mpi_comm(), &rank);
+        std::cout << "local table Rank " << rank << std::endl;
+        std::cout << local_arrow_table->ToString() << std::endl;
     }
 
     MPI_Comm comm = shuffle_manager.get_mpi_comm();
