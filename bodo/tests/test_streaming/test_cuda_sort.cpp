@@ -96,12 +96,11 @@ void run_cuda_sort_test(
         create_input_fn,
     std::function<void(cudf::table_view, int, int, MPI_Comm)> extra_verify_fn =
         nullptr) {
+    CudaSortState sort_state(schema, key_indices, column_order,
+                             null_precedence);
     if (!is_gpu_rank()) {
         return;
     }
-
-    CudaSortState sort_state(schema, key_indices, column_order,
-                             null_precedence);
     MPI_Comm gpu_comm = sort_state.get_mpi_comm();
 
     if (gpu_comm == MPI_COMM_NULL) {
