@@ -1,9 +1,8 @@
 #include "_executor.h"
-#include <limits.h>
-#include <fstream>
 #include "_bodo_scan_function.h"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_set_operation.hpp"
 
 #ifdef USE_CUDF
 #include <cuda_runtime.h>
@@ -29,6 +28,7 @@
 #include "physical/gpu_join.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_union_all.h"
 #endif
 
 // enable and build to print debug info on the pipeline
@@ -171,7 +171,7 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_UNION:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalSetOperation>());
 
             case duckdb::LogicalOperatorType::LOGICAL_DISTINCT:
                 return ::gpu_capable(op.Cast<duckdb::LogicalDistinct>());
