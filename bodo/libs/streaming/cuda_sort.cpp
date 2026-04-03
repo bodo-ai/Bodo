@@ -108,7 +108,7 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
     for (int i = 0; i < n_ranks; ++i) {
         if (n > 0) {
             sample_indices.push_back(
-                static_cast<cudf::size_type>(i * n / n_ranks));
+                static_cast<cudf::size_type>(i * (n / n_ranks)));
         }
     }
 
