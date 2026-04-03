@@ -186,6 +186,14 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
 
         for (int i = 1; i < n_ranks; ++i) {
             cudf::size_type idx = (i * n_ranks) + (n_ranks / 2) - 1;
+            // Ensure idx is within bounds while guaranteeing
+            // pivot_indices has nranks - 1 pivots.
+            // This can happen if some ranks have less data
+            // than nranks, leading to fewer total samples than expected.
+            if (idx >= sorted_samples->num_rows()) {
+                idx = sorted_samples->num_rows() - 1;
+            }
+
             pivot_indices.push_back(idx);
         }
 
