@@ -276,8 +276,8 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -331,8 +331,8 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalGPUNullExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // The current rule is that if the expression infrastructure
         // is used for filtering then constants are treated as
         // scalars and if used for projection then constants become
@@ -354,7 +354,7 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
             std::size_t length = input_batch.table->num_rows();
             // create a column filled with that scalar
             std::unique_ptr<cudf::column> col =
-                cudf::make_column_from_scalar(*scalar, length, se->stream);
+                cudf::make_column_from_scalar(*invalid, length, se->stream);
             return std::make_shared<ArrayExprGPUResult>(
                 std::move(col), std::string("Constant"));
         } else {
