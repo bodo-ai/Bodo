@@ -342,7 +342,6 @@ GpuShuffleSendState::GpuShuffleSendState(
     // Make sure GPU buffers are ready before passing to MPI
     // TODO(BSE-5359): Make this check async
     CHECK_CUDA(cudaStreamSynchronize(stream));
-    std::cout << "Shuffling GPU data" << std::endl;
 
     // Send data
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();

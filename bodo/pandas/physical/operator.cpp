@@ -3,7 +3,6 @@
 #include <arrow/util/endian.h>
 #include <memory>
 #include <string>
-#include "mpi_proto.h"
 
 #ifdef USE_CUDF
 #include <cudf/concatenate.hpp>

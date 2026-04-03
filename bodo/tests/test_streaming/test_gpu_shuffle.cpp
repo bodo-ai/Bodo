@@ -113,8 +113,6 @@ static bodo::tests::suite tests([] {
 
             rmm::cuda_device_id device_id = get_gpu_id();
             if (device_id.value() >= 0) {
-                std::cout << "Rank " << rank << "/" << n_ranks << " using GPU "
-                          << device_id.value() << std::endl;
                 cudaSetDevice(device_id.value());
             }
 
@@ -187,8 +185,6 @@ static bodo::tests::suite tests([] {
 
             rmm::cuda_device_id device_id = get_gpu_id();
             if (device_id.value() >= 0) {
-                std::cout << "Rank " << rank << " using GPU "
-                          << device_id.value() << std::endl;
                 cudaSetDevice(device_id.value());
             }
 
