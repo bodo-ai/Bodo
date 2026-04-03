@@ -29,6 +29,7 @@
 #include <cudf/binaryop.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/datetime.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/strings/find.hpp>
@@ -893,10 +894,15 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
           scalar_func_data(_scalar_func_data),
           result_type(std::move(_result_type)) {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
-            scalar_func_data.arrow_func_name != "starts_with") {
+            scalar_func_data.arrow_func_name != "starts_with" &&
+            scalar_func_data.arrow_func_name != "year") {
             throw std::runtime_error(
-                "PhysicalGPUArrowExpression only supports ends_with and "
-                "starts_with for now.");
+                "PhysicalGPUArrowExpression only supports ends_with, "
+                "starts_with and year for now.");
+        }
+        if (scalar_func_data.arrow_func_name == "ends_with" ||
+            scalar_func_data.arrow_func_name == "starts_with") {
+            extract_string_arg_from_python();
         }
     }
 
@@ -906,35 +912,6 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
      */
     std::shared_ptr<ExprGPUResult> ProcessBatch(
         GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
-        // Extract string argument from scalar_func_data.args for ends_with and
-        // starts_with
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                fmt::format("{} args not a 1-element tuple.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                fmt::format("{} args element is not a Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Convert to UTF‑8 C string
-        const char *c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                fmt::format("{} error extracting Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        str_scalar_in = std::make_shared<cudf::string_scalar>(
-            std::string(c_str), true, se->stream);
-
         std::shared_ptr<ExprGPUResult> in_res =
             children[0]->ProcessBatch(input_batch, se);
 
@@ -948,6 +925,14 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "starts_with") {
             result = cudf::strings::starts_with(in_as_array->result->view(),
                                                 *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "year") {
+            result = cudf::datetime::extract_datetime_component(
+                in_as_array->result->view(),
+                cudf::datetime::datetime_component::YEAR, se->stream);
+            // Cast int16 to int64 to match frontend (and CPU side)
+            result =
+                cudf::cast(result->view(),
+                           cudf::data_type(cudf::type_id::INT64), se->stream);
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
@@ -978,6 +963,37 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     BodoScalarFunctionData scalar_func_data;
     const duckdb::LogicalType result_type;
     PhysicalGPUArrowExpressionMetrics metrics;
+
+    void extract_string_arg_from_python() {
+        // Extract string argument from scalar_func_data.args for ends_with and
+        // starts_with
+        if (!PyTuple_Check(scalar_func_data.args) ||
+            PyTuple_Size(scalar_func_data.args) != 1) {
+            throw std::runtime_error(
+                fmt::format("{} args not a 1-element tuple.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Get the first element (borrowed reference)
+        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+        if (!PyUnicode_Check(py_str)) {
+            throw std::runtime_error(
+                fmt::format("{} args element is not a Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Convert to UTF‑8 C string
+        const char *c_str = PyUnicode_AsUTF8(py_str);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("{} error extracting Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        str_scalar_in =
+            std::make_shared<cudf::string_scalar>(std::string(c_str), true);
+    }
 
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
