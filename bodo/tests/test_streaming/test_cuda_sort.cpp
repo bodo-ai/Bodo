@@ -77,7 +77,7 @@ std::shared_ptr<bodo::Schema> make_simple_int64_schema(int num_cols) {
         std::make_shared<bodo::TableMetadata>();
     for (int i = 0; i < num_cols; i++) {
         column_types.push_back(std::make_unique<bodo::DataType>(
-            bodo_array_type::NUMPY, Bodo_CTypes::INT64));
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64));
         column_names.push_back("col" + std::to_string(i));
     }
     return std::make_shared<bodo::Schema>(
