@@ -212,6 +212,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
             {std::shared_ptr<cudf::table>(std::move(global_pivots)),
              this->key_schema,
              std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
+        std::cout << "Pivots: \n" << h_pivots->ToString() << std::endl;
         pivot_buf = SerializeTableToIPC(h_pivots);
         pivot_buf_size = static_cast<int>(pivot_buf->size());
     }
@@ -259,6 +260,11 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
                 static_cast<cudf::size_type>(local_table->num_rows()));
         }
     }
+    std::cout << "Rank " << rank << " split indices: ";
+    for (auto idx : split_indices) {
+        std::cout << idx << " ";
+    }
+    std::cout << std::endl;
 
     // 6. Start Shuffle
     auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
