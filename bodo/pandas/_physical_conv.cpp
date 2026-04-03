@@ -614,45 +614,34 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::vector<duckdb::idx_t> new_build_proj_map = gen_new_proj_map(
         build_proj_map_copy, mbr.missing_in_build, build_col_ref_map);
 
-    duckdb::unique_ptr<duckdb::LogicalOperator> new_comp_join;
+    duckdb::unique_ptr<duckdb::LogicalOperator> new_op;
     // There might only be non-equi conditions and if so make a cross-product
     // node else the normal case of making a replacement join node with the
     // equi conditions.
     if (num_equi_conds > 0) {
-        auto new_comp_join_join =
-            duckdb::make_uniq<duckdb::LogicalComparisonJoin>(
-                comp_join.join_type);
-        new_comp_join_join->children.push_back(
-            std::move(comp_join.children[0]));
-        new_comp_join_join->children.push_back(
-            std::move(comp_join.children[1]));
-        new_comp_join_join->conditions = std::move(comp_join.conditions);
-        new_comp_join_join->join_id = comp_join.join_id;
-        new_comp_join_join->left_projection_map = new_probe_proj_map;
-        new_comp_join_join->right_projection_map = new_build_proj_map;
-        new_comp_join = std::move(new_comp_join_join);
+        auto new_op_join = duckdb::make_uniq<duckdb::LogicalComparisonJoin>(
+            comp_join.join_type);
+        new_op_join->children.push_back(std::move(comp_join.children[0]));
+        new_op_join->children.push_back(std::move(comp_join.children[1]));
+        new_op_join->conditions = std::move(comp_join.conditions);
+        new_op_join->join_id = comp_join.join_id;
+        new_op_join->left_projection_map = new_probe_proj_map;
+        new_op_join->right_projection_map = new_build_proj_map;
+        new_op = std::move(new_op_join);
     } else {
-        auto new_comp_join_cross =
-            duckdb::make_uniq<duckdb::LogicalCrossProduct>(
-                std::move(comp_join.children[0]),
-                std::move(comp_join.children[1]));
-        new_comp_join = std::move(new_comp_join_cross);
+        auto new_op_cross = duckdb::make_uniq<duckdb::LogicalCrossProduct>(
+            std::move(comp_join.children[0]), std::move(comp_join.children[1]));
+        new_op = std::move(new_op_cross);
     }
 
     // Create the new filter node and give it the expression to test.
     auto filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(combined_pred));
     // Move the join (which now only contains equi conditions) under the filter
-    filter->children.push_back(std::move(new_comp_join));
+    filter->children.push_back(std::move(new_op));
     filter->projection_map = gen_split_filter_projection_map(
         probe_proj_map_copy, new_probe_proj_map, build_proj_map_copy,
         new_build_proj_map);
-
-    // Preserve estimated cardinality / properties if needed
-    if (filter->children[0]->has_estimated_cardinality) {
-        filter->SetEstimatedCardinality(
-            filter->children[0]->estimated_cardinality);
-    }
 
     return std::move(filter);
 }
