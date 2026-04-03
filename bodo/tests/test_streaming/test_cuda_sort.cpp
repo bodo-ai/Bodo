@@ -103,6 +103,7 @@ void run_cuda_sort_test(
         while (!global_is_last) {
             global_is_last = sort_state.FinalizeAccumulation(true);
         }
+        return;
     }
     MPI_Comm gpu_comm = sort_state.get_mpi_comm();
 
