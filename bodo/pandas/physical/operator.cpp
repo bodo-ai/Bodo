@@ -445,8 +445,8 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
 };
 
 RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
-    // Create separate communicators for each node.
-    // Assume block assignment.
+    // Create a communicator for all ranks on the node. Assumes block
+    // assignment.
     int global_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &global_rank);
     auto [ranks_per_node, rank_on_node] = dist_get_ranks_on_node();
