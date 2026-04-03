@@ -1270,7 +1270,6 @@ std::pair<int64_t, PyObject *> execute_plan(
         // Set device (resets to previous device when device_guard goes out of
         // scope)
         device_guard.emplace(gpu_id);
-        std::cout << " device id" << gpu_id.value() << std::endl;
 
         mr = get_gpu_async_memory_resource();
         prev_mr = cudf::set_current_device_resource(mr.get());
