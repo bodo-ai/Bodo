@@ -633,12 +633,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 },
                 physical_union_all);
 
-#else
+#else   // USE_CUDF
             auto physical_union_all =
                 std::make_shared<PhysicalUnionAll>(rhs_table_schema);
             done_pipeline =
                 rhs_builder.active_pipeline->Build(physical_union_all);
-#endif
+#endif  // USE_CUDF
 
             // Left-child will feed into the same table.
             this->Visit(*op.children[0]);
