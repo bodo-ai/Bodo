@@ -7,6 +7,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/types.hpp>
+#include <cudf/utilities/bit.hpp>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 
@@ -145,22 +146,49 @@ void run_cuda_sort_test(
     bodo::tests::check(total_rows == expected_total);
 
     // Verify global order across ranks (on the first key column)
+    auto const& col = output->get_column(key_indices[0]);
     std::vector<int64_t> h_output(local_rows);
+    std::vector<cudf::bitmask_type> h_mask;
     if (local_rows > 0) {
-        CHECK_CUDA(cudaMemcpy(
-            h_output.data(),
-            output->get_column(key_indices[0]).view().head<int64_t>(),
-            local_rows * sizeof(int64_t), cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(h_output.data(), col.view().head<int64_t>(),
+                              local_rows * sizeof(int64_t),
+                              cudaMemcpyDeviceToHost));
+        if (col.nullable()) {
+            size_t mask_size = cudf::bitmask_allocation_size_bytes(local_rows);
+            h_mask.resize(mask_size / sizeof(cudf::bitmask_type));
+            CHECK_CUDA(cudaMemcpy(h_mask.data(), col.view().null_mask(),
+                                  mask_size, cudaMemcpyDeviceToHost));
+        }
     }
+
+    auto is_null = [&](int i) {
+        if (!col.nullable()) {
+            return false;
+        }
+        return !cudf::bit_is_set(h_mask.data(), i);
+    };
+
+    // Conceptual value for comparison that accounts for nulls
+    auto get_val = [&](int i) {
+        if (is_null(i)) {
+            // For these tests we always use NULLS BEFORE
+            // In ASCENDING: NULL is -inf
+            // In DESCENDING: NULL is +inf
+            return (column_order[0] == cudf::order::ASCENDING)
+                       ? std::numeric_limits<int64_t>::min()
+                       : std::numeric_limits<int64_t>::max();
+        }
+        return h_output[i];
+    };
 
     bool ascending = column_order[0] == cudf::order::ASCENDING;
 
     // 1. Check local sorting
     for (int i = 0; i < local_rows - 1; ++i) {
         if (ascending) {
-            bodo::tests::check(h_output[i] <= h_output[i + 1]);
+            bodo::tests::check(get_val(i) <= get_val(i + 1));
         } else {
-            bodo::tests::check(h_output[i] >= h_output[i + 1]);
+            bodo::tests::check(get_val(i) >= get_val(i + 1));
         }
     }
 
@@ -168,14 +196,14 @@ void run_cuda_sort_test(
     int64_t local_min, local_max;
     if (ascending) {
         local_min =
-            local_rows > 0 ? h_output[0] : std::numeric_limits<int64_t>::max();
-        local_max = local_rows > 0 ? h_output[local_rows - 1]
+            local_rows > 0 ? get_val(0) : std::numeric_limits<int64_t>::max();
+        local_max = local_rows > 0 ? get_val(local_rows - 1)
                                    : std::numeric_limits<int64_t>::min();
     } else {
-        local_min = local_rows > 0 ? h_output[local_rows - 1]
+        local_min = local_rows > 0 ? get_val(local_rows - 1)
                                    : std::numeric_limits<int64_t>::max();
         local_max =
-            local_rows > 0 ? h_output[0] : std::numeric_limits<int64_t>::min();
+            local_rows > 0 ? get_val(0) : std::numeric_limits<int64_t>::min();
     }
 
     std::vector<int64_t> all_mins(n_gpu_ranks);
