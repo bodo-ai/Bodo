@@ -66,322 +66,300 @@ std::unique_ptr<cudf::table> create_masked_int_table(
     return std::make_unique<cudf::table>(std::move(cols));
 }
 
+/**
+ * @brief Helper to create a simple INT64 schema with a given number of columns.
+ */
+std::shared_ptr<bodo::Schema> make_simple_int64_schema(int num_cols) {
+    std::vector<std::unique_ptr<bodo::DataType>> column_types;
+    std::vector<std::string> column_names;
+    std::shared_ptr<bodo::TableMetadata> metadata =
+        std::make_shared<bodo::TableMetadata>();
+    for (int i = 0; i < num_cols; i++) {
+        column_types.push_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::NUMPY, Bodo_CTypes::INT64));
+        column_names.push_back("col" + std::to_string(i));
+    }
+    return std::make_shared<bodo::Schema>(
+        std::move(column_types), std::move(column_names), std::move(metadata));
+}
+
+/**
+ * @brief Common test runner for cuda_sort.
+ */
+void run_cuda_sort_test(
+    std::shared_ptr<bodo::Schema> schema,
+    std::vector<cudf::size_type> const& key_indices,
+    std::vector<cudf::order> const& column_order,
+    std::vector<cudf::null_order> const& null_precedence,
+    std::function<std::unique_ptr<cudf::table>(int, int, size_t&)>
+        create_input_fn,
+    std::function<void(cudf::table_view, int, int, MPI_Comm)> extra_verify_fn =
+        nullptr) {
+    if (!is_gpu_rank()) {
+        return;
+    }
+
+    CudaSortState sort_state(schema, key_indices, column_order,
+                             null_precedence);
+    MPI_Comm gpu_comm = sort_state.get_mpi_comm();
+
+    if (gpu_comm == MPI_COMM_NULL) {
+        return;
+    }
+
+    int gpu_rank, n_gpu_ranks;
+    MPI_Comm_rank(gpu_comm, &gpu_rank);
+    MPI_Comm_size(gpu_comm, &n_gpu_ranks);
+
+    size_t local_input_rows_count = 0;
+    auto input_table =
+        create_input_fn(gpu_rank, n_gpu_ranks, local_input_rows_count);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
+
+    sort_state.ConsumeBatch(std::move(input_table), se);
+
+    bool global_is_last = false;
+    while (!global_is_last) {
+        global_is_last = sort_state.FinalizeAccumulation(true);
+    }
+
+    bool out_is_last = false;
+    auto output =
+        sort_state.GetOutputBatch(out_is_last, cudf::get_default_stream());
+
+    bodo::tests::check(out_is_last == true);
+
+    // Total rows should be preserved
+    int local_rows = output->num_rows();
+    int total_rows = 0;
+    CHECK_MPI(
+        MPI_Allreduce(&local_rows, &total_rows, 1, MPI_INT, MPI_SUM, gpu_comm),
+        "MPI_Allreduce failed");
+
+    int expected_total = 0;
+    int local_input_rows = static_cast<int>(local_input_rows_count);
+    CHECK_MPI(MPI_Allreduce(&local_input_rows, &expected_total, 1, MPI_INT,
+                            MPI_SUM, gpu_comm),
+              "MPI_Allreduce failed");
+
+    bodo::tests::check(total_rows == expected_total);
+
+    // Verify global order across ranks (on the first key column)
+    std::vector<int64_t> h_output(local_rows);
+    if (local_rows > 0) {
+        CHECK_CUDA(cudaMemcpy(
+            h_output.data(),
+            output->get_column(key_indices[0]).view().head<int64_t>(),
+            local_rows * sizeof(int64_t), cudaMemcpyDeviceToHost));
+    }
+
+    bool ascending = column_order[0] == cudf::order::ASCENDING;
+
+    // 1. Check local sorting
+    for (int i = 0; i < local_rows - 1; ++i) {
+        if (ascending) {
+            bodo::tests::check(h_output[i] <= h_output[i + 1]);
+        } else {
+            bodo::tests::check(h_output[i] >= h_output[i + 1]);
+        }
+    }
+
+    // 2. Check global ordering
+    int64_t local_min, local_max;
+    if (ascending) {
+        local_min =
+            local_rows > 0 ? h_output[0] : std::numeric_limits<int64_t>::max();
+        local_max = local_rows > 0 ? h_output[local_rows - 1]
+                                   : std::numeric_limits<int64_t>::min();
+    } else {
+        local_min = local_rows > 0 ? h_output[local_rows - 1]
+                                   : std::numeric_limits<int64_t>::max();
+        local_max =
+            local_rows > 0 ? h_output[0] : std::numeric_limits<int64_t>::min();
+    }
+
+    std::vector<int64_t> all_mins(n_gpu_ranks);
+    std::vector<int64_t> all_maxes(n_gpu_ranks);
+
+    CHECK_MPI(MPI_Allgather(&local_min, 1, MPI_INT64_T, all_mins.data(), 1,
+                            MPI_INT64_T, gpu_comm),
+              "MPI_Allgather failed");
+    CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T, all_maxes.data(), 1,
+                            MPI_INT64_T, gpu_comm),
+              "MPI_Allgather failed");
+
+    int last_rank_with_data = -1;
+    for (int r = 0; r < n_gpu_ranks; ++r) {
+        if (ascending) {
+            if (all_mins[r] == std::numeric_limits<int64_t>::max()) {
+                continue;
+            }
+            if (last_rank_with_data != -1) {
+                bodo::tests::check(all_mins[r] >=
+                                   all_maxes[last_rank_with_data]);
+            }
+        } else {
+            if (all_maxes[r] == std::numeric_limits<int64_t>::min()) {
+                continue;
+            }
+            if (last_rank_with_data != -1) {
+                bodo::tests::check(all_maxes[r] <=
+                                   all_mins[last_rank_with_data]);
+            }
+        }
+        last_rank_with_data = r;
+    }
+
+    if (extra_verify_fn) {
+        extra_verify_fn(output->view(), gpu_rank, n_gpu_ranks, gpu_comm);
+    }
+}
+
 static bodo::tests::suite cuda_sort_tests([] {
     // Basic test: sort integers in ascending order
-    bodo::tests::test(
-        "test_cuda_sort_integers_asc",
-        [] {
-            int rank, n_ranks;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+    bodo::tests::test("test_cuda_sort_integers_asc",
+                      [] {
+                          run_cuda_sort_test(
+                              make_simple_int64_schema(1), {0},
+                              {cudf::order::ASCENDING},
+                              {cudf::null_order::BEFORE},
+                              [](int rank, int n_ranks, size_t& rows_count) {
+                                  std::vector<int64_t> vals;
+                                  if (rank == 0) {
+                                      vals = {50, 10, 80, 30};
+                                  } else if (rank == 1 % n_ranks) {
+                                      vals = {20, 70, 40, 60};
+                                  }
+                                  rows_count = vals.size();
+                                  return create_int_table_to_sort(vals);
+                              });
+                      },
+                      {"gpu_cpp"});
 
-            if (!is_gpu_rank()) {
-                return;
-            }
-
-            // Schema: 1 INT64 column
-            std::vector<std::unique_ptr<bodo::DataType>> column_types;
-            std::vector<std::string> column_names;
-            std::shared_ptr<bodo::TableMetadata> metadata =
-                std::make_shared<bodo::TableMetadata>();
-            column_types.push_back(std::make_unique<bodo::DataType>(
-                bodo_array_type::NUMPY, Bodo_CTypes::INT64));
-            column_names.emplace_back("col0");
-            auto schema = std::make_shared<bodo::Schema>(
-                std::move(column_types), std::move(column_names),
-                std::move(metadata));
-
-            std::vector<cudf::size_type> key_indices = {0};
-            std::vector<cudf::order> column_order = {cudf::order::ASCENDING};
-            std::vector<cudf::null_order> null_precedence = {
-                cudf::null_order::BEFORE};
-
-            CudaSortState sort_state(schema, key_indices, column_order,
-                                     null_precedence);
-            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
-
-            if (gpu_comm == MPI_COMM_NULL) {
-                return;
-            }
-
-            int gpu_rank, n_gpu_ranks;
-            MPI_Comm_rank(gpu_comm, &gpu_rank);
-            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
-
-            // Data: unsorted
-            std::vector<int64_t> vals;
-            if (gpu_rank == 0) {
-                vals = {50, 10, 80, 30};
-            } else if (gpu_rank == 1 % n_gpu_ranks) {
-                vals = {20, 70, 40, 60};
-            }
-
-            auto input_table = create_int_table_to_sort(vals);
-            std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-
-            sort_state.ConsumeBatch(std::move(input_table), se);
-
-            bool global_is_last = false;
-            while (!global_is_last) {
-                global_is_last = sort_state.FinalizeAccumulation(true);
-            }
-
-            bool out_is_last = false;
-            auto output = sort_state.GetOutputBatch(out_is_last,
-                                                    cudf::get_default_stream());
-
-            bodo::tests::check(out_is_last == true);
-
-            // Total rows should be preserved
-            int local_rows = output->num_rows();
-            int total_rows = 0;
-            CHECK_MPI(MPI_Allreduce(&local_rows, &total_rows, 1, MPI_INT,
-                                    MPI_SUM, gpu_comm),
-                      "MPI_Allreduce failed");
-
-            int expected_total = 0;
-            int local_input_rows = static_cast<int>(vals.size());
-            CHECK_MPI(MPI_Allreduce(&local_input_rows, &expected_total, 1,
-                                    MPI_INT, MPI_SUM, gpu_comm),
-                      "MPI_Allreduce failed");
-
-            bodo::tests::check(total_rows == expected_total);
-
-            // Verify global order across ranks
-            std::vector<int64_t> h_output(local_rows);
-            if (local_rows > 0) {
-                CHECK_CUDA(cudaMemcpy(
-                    h_output.data(),
-                    output->get_column(0).view().head<int64_t>(),
-                    local_rows * sizeof(int64_t), cudaMemcpyDeviceToHost));
-            }
-
-            // 1. Check local sorting
-            for (int i = 0; i < local_rows - 1; ++i) {
-                bodo::tests::check(h_output[i] <= h_output[i + 1]);
-            }
-
-            // 2. Check global ordering (min of current rank >= max of previous
-            // rank)
-            int64_t local_min = local_rows > 0
-                                    ? h_output[0]
-                                    : std::numeric_limits<int64_t>::max();
-            int64_t local_max = local_rows > 0
-                                    ? h_output[local_rows - 1]
-                                    : std::numeric_limits<int64_t>::min();
-
-            std::vector<int64_t> all_mins(n_gpu_ranks);
-            std::vector<int64_t> all_maxes(n_gpu_ranks);
-
-            CHECK_MPI(MPI_Allgather(&local_min, 1, MPI_INT64_T, all_mins.data(),
-                                    1, MPI_INT64_T, gpu_comm),
-                      "MPI_Allgather failed");
-            CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T,
-                                    all_maxes.data(), 1, MPI_INT64_T, gpu_comm),
-                      "MPI_Allgather failed");
-
-            int last_rank_with_data = -1;
-            for (int r = 0; r < n_gpu_ranks; ++r) {
-                if (all_mins[r] == std::numeric_limits<int64_t>::max())
-                    continue;
-
-                if (last_rank_with_data != -1) {
-                    bodo::tests::check(all_mins[r] >=
-                                       all_maxes[last_rank_with_data]);
-                }
-                last_rank_with_data = r;
-            }
-        },
-        {"gpu_cpp"});
-
-    // Test with nulls: NULLS BEFORE
     bodo::tests::test(
         "test_cuda_sort_nulls_before",
         [] {
-            int rank, n_ranks;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
-
-            if (!is_gpu_rank()) {
-                return;
-            }
-
-            std::vector<std::unique_ptr<bodo::DataType>> column_types;
-            std::vector<std::string> column_names;
-            std::shared_ptr<bodo::TableMetadata> metadata =
-                std::make_shared<bodo::TableMetadata>();
-            column_types.push_back(std::make_unique<bodo::DataType>(
-                bodo_array_type::NUMPY, Bodo_CTypes::INT64));
-            column_names.emplace_back("col0");
-
-            auto schema = std::make_shared<bodo::Schema>(
-                std::move(column_types), std::move(column_names),
-                std::move(metadata));
-
-            std::vector<cudf::size_type> key_indices = {0};
-            std::vector<cudf::order> column_order = {cudf::order::ASCENDING};
-            std::vector<cudf::null_order> null_precedence = {
-                cudf::null_order::BEFORE};
-
-            CudaSortState sort_state(schema, key_indices, column_order,
-                                     null_precedence);
-            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
-
-            if (gpu_comm == MPI_COMM_NULL) {
-                return;
-            }
-
-            int gpu_rank, n_gpu_ranks;
-            MPI_Comm_rank(gpu_comm, &gpu_rank);
-            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
-
-            std::vector<int64_t> vals;
-            std::vector<uint8_t> mask_bytes = {0b00001010};
-            int null_count = 2;
-            if (gpu_rank == 0) {
-                vals = {0, 50, 0, 10};
-            } else if (gpu_rank == 1 % n_gpu_ranks) {
-                vals = {80, 0, 30, 0};
-            } else {
-                mask_bytes = {0b00000000};
-                null_count = 0;
-            }
-
-            auto input_table =
-                create_masked_int_table(vals, mask_bytes, null_count);
-            std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-
-            sort_state.ConsumeBatch(std::move(input_table), se);
-
-            bool global_is_last = false;
-            while (!global_is_last) {
-                global_is_last = sort_state.FinalizeAccumulation(true);
-            }
-
-            bool out_is_last = false;
-            auto output = sort_state.GetOutputBatch(out_is_last,
-                                                    cudf::get_default_stream());
-
-            bodo::tests::check(out_is_last == true);
-
-            int local_rows = output->num_rows();
-            int total_nulls = 0;
-            int local_nulls = output->get_column(0).null_count();
-            CHECK_MPI(MPI_Allreduce(&local_nulls, &total_nulls, 1, MPI_INT,
-                                    MPI_SUM, gpu_comm),
-                      "MPI_Allreduce failed");
-
-            int expected_nulls =
-                (n_gpu_ranks >= 2) ? 4 : (n_gpu_ranks == 1 ? 2 : 0);
-            bodo::tests::check(total_nulls == expected_nulls);
-
-            if (local_rows > 0) {
-                bodo::tests::check(output->get_column(0).view().null_count(
-                                       0, local_nulls) == local_nulls);
-                bodo::tests::check(output->get_column(0).view().null_count(
-                                       local_nulls, local_rows) == 0);
-            }
+            run_cuda_sort_test(
+                make_simple_int64_schema(1), {0}, {cudf::order::ASCENDING},
+                {cudf::null_order::BEFORE},
+                [](int rank, int n_ranks, size_t& rows_count) {
+                    std::vector<int64_t> vals;
+                    std::vector<uint8_t> mask_bytes = {0b00001010};
+                    int null_count = 2;
+                    if (rank == 0) {
+                        vals = {0, 50, 0, 10};
+                    } else if (rank == 1 % n_ranks) {
+                        vals = {80, 0, 30, 0};
+                    } else {
+                        mask_bytes = {0b00000000};
+                        null_count = 0;
+                    }
+                    rows_count = vals.size();
+                    return create_masked_int_table(vals, mask_bytes,
+                                                   null_count);
+                });
         },
         {"gpu_cpp"});
 
-    // Test descending
+    bodo::tests::test("test_cuda_sort_integers_desc",
+                      [] {
+                          run_cuda_sort_test(
+                              make_simple_int64_schema(1), {0},
+                              {cudf::order::DESCENDING},
+                              {cudf::null_order::BEFORE},
+                              [](int rank, int n_ranks, size_t& rows_count) {
+                                  std::vector<int64_t> vals;
+                                  if (rank == 0) {
+                                      vals = {10, 50, 30, 80};
+                                  } else if (rank == 1 % n_ranks) {
+                                      vals = {60, 40, 70, 20};
+                                  }
+                                  rows_count = vals.size();
+                                  return create_int_table_to_sort(vals);
+                              });
+                      },
+                      {"gpu_cpp"});
+
     bodo::tests::test(
-        "test_cuda_sort_integers_desc",
+        "test_cuda_sort_key_not_first",
         [] {
-            int rank, n_ranks;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+            run_cuda_sort_test(
+                make_simple_int64_schema(2), {1}, {cudf::order::ASCENDING},
+                {cudf::null_order::BEFORE},
+                [](int rank, int n_ranks, size_t& rows_count) {
+                    std::vector<int64_t> keys;
+                    std::vector<int64_t> data;
+                    if (rank == 0) {
+                        keys = {50, 10, 80, 30};
+                        data = {1, 2, 3, 4};
+                    } else if (rank == 1 % n_ranks) {
+                        keys = {20, 70, 40, 60};
+                        data = {5, 6, 7, 8};
+                    }
+                    rows_count = keys.size();
 
-            if (!is_gpu_rank())
-                return;
+                    auto data_col =
+                        std::move(create_int_table_to_sort(data)->release()[0]);
+                    auto key_col =
+                        std::move(create_int_table_to_sort(keys)->release()[0]);
+                    std::vector<std::unique_ptr<cudf::column>> cols;
+                    cols.push_back(std::move(data_col));
+                    cols.push_back(std::move(key_col));
+                    return std::make_unique<cudf::table>(std::move(cols));
+                },
+                [](cudf::table_view output, int rank, int n_ranks,
+                   MPI_Comm comm) {
+                    int num_rows = output.num_rows();
+                    std::vector<int64_t> h_data(num_rows);
+                    std::vector<int64_t> h_keys(num_rows);
+                    if (num_rows > 0) {
+                        CHECK_CUDA(cudaMemcpy(h_data.data(),
+                                              output.column(0).head<int64_t>(),
+                                              num_rows * sizeof(int64_t),
+                                              cudaMemcpyDeviceToHost));
+                        CHECK_CUDA(cudaMemcpy(h_keys.data(),
+                                              output.column(1).head<int64_t>(),
+                                              num_rows * sizeof(int64_t),
+                                              cudaMemcpyDeviceToHost));
+                    }
 
-            std::vector<std::unique_ptr<bodo::DataType>> column_types;
-            std::vector<std::string> column_names;
-            std::shared_ptr<bodo::TableMetadata> metadata =
-                std::make_shared<bodo::TableMetadata>();
-            column_types.push_back(std::make_unique<bodo::DataType>(
-                bodo_array_type::NUMPY, Bodo_CTypes::INT64));
-            column_names.emplace_back("col0");
-            auto schema = std::make_shared<bodo::Schema>(
-                std::move(column_types), std::move(column_names),
-                std::move(metadata));
-
-            std::vector<cudf::size_type> key_indices = {0};
-            std::vector<cudf::order> column_order = {cudf::order::DESCENDING};
-            std::vector<cudf::null_order> null_precedence = {
-                cudf::null_order::BEFORE};
-
-            CudaSortState sort_state(schema, key_indices, column_order,
-                                     null_precedence);
-            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
-
-            if (gpu_comm == MPI_COMM_NULL) {
-                return;
-            }
-
-            int gpu_rank, n_gpu_ranks;
-            MPI_Comm_rank(gpu_comm, &gpu_rank);
-            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
-
-            std::vector<int64_t> vals;
-            if (gpu_rank == 0) {
-                vals = {10, 50, 30, 80};
-            } else if (gpu_rank == 1 % n_gpu_ranks) {
-                vals = {60, 40, 70, 20};
-            }
-
-            auto input_table = create_int_table_to_sort(vals);
-            std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
-            sort_state.ConsumeBatch(std::move(input_table), se);
-
-            bool global_is_last = false;
-            while (!global_is_last) {
-                global_is_last = sort_state.FinalizeAccumulation(true);
-            }
-
-            bool out_is_last = false;
-            auto output = sort_state.GetOutputBatch(out_is_last,
-                                                    cudf::get_default_stream());
-
-            int local_rows = output->num_rows();
-            std::vector<int64_t> h_output(local_rows);
-            if (local_rows > 0) {
-                CHECK_CUDA(cudaMemcpy(
-                    h_output.data(),
-                    output->get_column(0).view().head<int64_t>(),
-                    local_rows * sizeof(int64_t), cudaMemcpyDeviceToHost));
-            }
-
-            for (int i = 0; i < local_rows - 1; ++i) {
-                bodo::tests::check(h_output[i] >= h_output[i + 1]);
-            }
-
-            int64_t local_min = local_rows > 0
-                                    ? h_output[local_rows - 1]
-                                    : std::numeric_limits<int64_t>::max();
-            int64_t local_max = local_rows > 0
-                                    ? h_output[0]
-                                    : std::numeric_limits<int64_t>::min();
-
-            std::vector<int64_t> all_mins(n_gpu_ranks);
-            std::vector<int64_t> all_maxes(n_gpu_ranks);
-            CHECK_MPI(MPI_Allgather(&local_min, 1, MPI_INT64_T, all_mins.data(),
-                                    1, MPI_INT64_T, gpu_comm),
-                      "MPI_Allgather failed");
-            CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T,
-                                    all_maxes.data(), 1, MPI_INT64_T, gpu_comm),
-                      "MPI_Allgather failed");
-
-            int last_rank_with_data = -1;
-            for (int r = 0; r < n_gpu_ranks; ++r) {
-                if (all_maxes[r] == std::numeric_limits<int64_t>::min())
-                    continue;
-                if (last_rank_with_data != -1) {
-                    bodo::tests::check(all_maxes[r] <=
-                                       all_mins[last_rank_with_data]);
-                }
-                last_rank_with_data = r;
-            }
+                    // Mapping based on input:
+                    // 10 -> 2, 20 -> 5, 30 -> 4, 40 -> 7,
+                    // 50 -> 1, 60 -> 8, 70 -> 6, 80 -> 3
+                    for (int i = 0; i < num_rows; i++) {
+                        int64_t k = h_keys[i];
+                        int64_t d = h_data[i];
+                        switch (k) {
+                            case 10:
+                                bodo::tests::check(d == 2);
+                                break;
+                            case 20:
+                                bodo::tests::check(d == 5);
+                                break;
+                            case 30:
+                                bodo::tests::check(d == 4);
+                                break;
+                            case 40:
+                                bodo::tests::check(d == 7);
+                                break;
+                            case 50:
+                                bodo::tests::check(d == 1);
+                                break;
+                            case 60:
+                                bodo::tests::check(d == 8);
+                                break;
+                            case 70:
+                                bodo::tests::check(d == 6);
+                                break;
+                            case 80:
+                                bodo::tests::check(d == 3);
+                                break;
+                            default:
+                                bodo::tests::check(false);
+                                break;
+                        }
+                    }
+                });
         },
         {"gpu_cpp"});
 });
