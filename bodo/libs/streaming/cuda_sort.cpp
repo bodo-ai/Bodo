@@ -86,10 +86,6 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         auto local_arrow_table = convertGPUToArrow(
             {local_table, this->schema->ToArrowSchema(),
              std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
-        int rank;
-        MPI_Comm_rank(shuffle_manager.get_mpi_comm(), &rank);
-        std::cout << "local table Rank " << rank << std::endl;
-        std::cout << local_arrow_table->ToString() << std::endl;
     } else {
         local_table =
             empty_table_from_arrow_schema(this->schema->ToArrowSchema());
@@ -231,7 +227,6 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         auto h_pivots = convertGPUToArrow(
             {global_pivots, this->key_schema,
              std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
-        std::cout << "Pivots: \n" << h_pivots->ToString() << std::endl;
         pivot_buf = SerializeTableToIPC(h_pivots);
         pivot_buf_size = static_cast<int>(pivot_buf->size());
     }
@@ -279,11 +274,6 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
                 static_cast<cudf::size_type>(local_table->num_rows()));
         }
     }
-    std::cout << "Rank " << rank << " split indices: ";
-    for (auto idx : split_indices) {
-        std::cout << idx << " ";
-    }
-    std::cout << std::endl;
 
     // 6. Start Shuffle
     auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
