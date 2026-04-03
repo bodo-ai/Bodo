@@ -107,6 +107,11 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
     std::vector<cudf::size_type> sample_indices;
     for (int i = 0; i < n_ranks; ++i) {
         if (n > 0) {
+            // PSRS says sample local indices by
+            // i(n/p**2) where n is the global data size
+            // and p is the number of ranks. We don't know n so we approximate
+            // it by assuming an even distribution of n/p per rank, which
+            // simplifies the formula to i(n/p)
             sample_indices.push_back(
                 static_cast<cudf::size_type>(i * (n / n_ranks)));
         }
