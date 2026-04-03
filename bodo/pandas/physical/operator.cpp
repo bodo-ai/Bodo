@@ -444,14 +444,9 @@ class SrcDestIncrementalShuffleState : public IncrementalShuffleState {
 };
 
 RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
-    // Create a communicator for all ranks on the node. Assumes block
-    // assignment.
-    int global_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &global_rank);
-    auto [ranks_per_node, rank_on_node] = dist_get_ranks_on_node();
-    int node_id = global_rank / ranks_per_node;
+    // Create a communicator for all ranks on the node.
     CHECK_MPI(
-        MPI_Comm_split(MPI_COMM_WORLD, node_id, rank_on_node, &shuffle_comm),
+        MPI_Comm_split(MPI_COMM_WORLD, get_node_id(), 0, &shuffle_comm),
         "RankDataExchange::RankDataExchange:: MPI error on MPI_Comm_split:");
     this->is_last_state = std::make_unique<IsLastState>(shuffle_comm);
 
