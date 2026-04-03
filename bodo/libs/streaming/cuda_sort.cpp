@@ -216,8 +216,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     int pivot_buf_size = 0;
     if (rank == 0) {
         auto h_pivots = convertGPUToArrow(
-            {std::shared_ptr<cudf::table>(std::move(global_pivots)),
-             this->key_schema,
+            {global_pivots, this->key_schema,
              std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper())});
         std::cout << "Pivots: \n" << h_pivots->ToString() << std::endl;
         pivot_buf = SerializeTableToIPC(h_pivots);
