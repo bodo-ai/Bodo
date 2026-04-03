@@ -99,13 +99,12 @@ void run_cuda_sort_test(
     CudaSortState sort_state(schema, key_indices, column_order,
                              null_precedence);
     if (!is_gpu_rank()) {
-        return;
+        bool global_is_last = false;
+        while (!global_is_last) {
+            global_is_last = sort_state.FinalizeAccumulation(true);
+        }
     }
     MPI_Comm gpu_comm = sort_state.get_mpi_comm();
-
-    if (gpu_comm == MPI_COMM_NULL) {
-        return;
-    }
 
     int gpu_rank, n_gpu_ranks;
     MPI_Comm_rank(gpu_comm, &gpu_rank);
