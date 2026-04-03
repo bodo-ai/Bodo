@@ -9,7 +9,6 @@
 #include "../_utils.h"
 #include "../gpu_utils.h"
 #include "_util.h"
-#include "physical/operator.h"
 
 #ifdef USE_CUDF
 
@@ -61,7 +60,6 @@ bool CudaSortState::FinalizeAccumulation(bool local_is_last) {
     }
 
     if (state == State::SHUFFLING) {
-        // Progress the shuffle
         std::vector<std::shared_ptr<cudf::table>> shuffled_chunks =
             shuffle_manager.progress(local_is_last);
 
@@ -84,7 +82,7 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
         return;
     }
 
-    // 1. Concatenate all accumulated batches
+    // Concatenate all accumulated batches
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
         for (const auto& table : accumulation_buffer) {
@@ -93,7 +91,6 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
         local_table = cudf::concatenate(views, stream);
         accumulation_buffer.clear();
 
-        // 2. Local Sort
         local_table = cudf::sort_by_key(local_table->view(),
                                         local_table->select(key_indices),
                                         column_order, null_precedence, stream);
@@ -105,7 +102,7 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
     int n_ranks = 0;
     MPI_Comm_size(comm, &n_ranks);
 
-    // 3. Regular Sampling
+    // Regular Sampling
     size_t n = local_table->num_rows();
     std::vector<cudf::size_type> sample_indices;
     for (int i = 0; i < n_ranks; ++i) {
@@ -173,9 +170,15 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
         cudf::size_type n_total_samples = sorted_samples->num_rows();
         std::vector<cudf::size_type> pivot_indices;
         for (int i = 1; i < n_ranks; ++i) {
-            size_t idx = (static_cast<size_t>(i) * n_total_samples) / n_ranks;
-            if (idx < (size_t)n_total_samples) {
+            size_t idx = (static_cast<size_t>(i) * n_ranks) + (n_ranks / 2 - 1);
+            // If we have a rank with less data than nranks
+            // we may end up with pivot indices that are out of bounds, so we
+            // clamp
+            // to n_total_samples
+            if (idx < static_cast<size_t>(n_total_samples)) {
                 pivot_indices.push_back(static_cast<cudf::size_type>(idx));
+            } else {
+                pivot_indices.push_back(n_total_samples - 1);
             }
         }
 
