@@ -21,6 +21,7 @@ std::unique_ptr<cudf::table> create_int_table_to_sort(
         cols.push_back(
             cudf::make_empty_column(cudf::data_type{cudf::type_id::INT64}));
         cols.back()->set_null_mask(rmm::device_buffer{}, 0);
+        std::cout << "cols nullable " << cols.back()->nullable() << std::endl;
         return std::make_unique<cudf::table>(std::move(cols));
     }
     std::vector<std::unique_ptr<cudf::column>> cols;
