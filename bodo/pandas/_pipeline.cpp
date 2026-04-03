@@ -9,6 +9,11 @@
 #include "physical/result_collector.h"
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+#include <chrono>
+using hrclock = std::chrono::high_resolution_clock;
+#endif
+
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out)       \
     do {                                                                     \
         for (unsigned i = 0; i < idx; ++i)                                   \
@@ -77,6 +82,7 @@
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out)         \
+    auto before_process_start = hrclock::now();                              \
     do {                                                                     \
         for (unsigned i = 0; i < idx; ++i)                                   \
             out << " ";                                                      \
@@ -91,13 +97,17 @@
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out)         \
-    do {                                                                    \
-        for (unsigned i = 0; i < idx; ++i)                                  \
-            out << " ";                                                     \
-        out << "Rank " << rank << " midPipelineExecute after ProcessBatch " \
-            << getNodeString(op) << " " << toString(prev_op_result)         \
-            << std::endl;                                                   \
+#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out)           \
+    do {                                                                      \
+        auto after_process_start = hrclock::now();                            \
+        auto diff_ms = std::chrono::duration_cast<std::chrono::microseconds>( \
+                           after_process_start - before_process_start)        \
+                           .count();                                          \
+        for (unsigned i = 0; i < idx; ++i)                                    \
+            out << " ";                                                       \
+        out << "Rank " << rank << " midPipelineExecute after ProcessBatch "   \
+            << getNodeString(op) << " " << toString(prev_op_result) << " "    \
+            << diff_ms << "us" << std::endl;                                  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out) \
@@ -137,7 +147,15 @@
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute in batch "            \
             << getNodeString(op) << " " << getBatchRows(batch) << std::endl; \
-        DEBUG_PrintTable(out, batch);                                        \
+        std::visit(                                                          \
+            [&](auto &x) {                                                   \
+                using T = std::decay_t<decltype(x)>;                         \
+                if constexpr (std::is_same_v<T,                              \
+                                             std::shared_ptr<table_info>>) { \
+                    DEBUG_PrintTable(out, x, true);                          \
+                }                                                            \
+            },                                                               \
+            batch);                                                          \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
@@ -198,8 +216,8 @@ bool Pipeline::midPipelineExecute(
                         if constexpr (std::is_same_v<
                                           T, std::shared_ptr<table_info>>) {
                             batch = RetrieveTable(x, std::vector<int64_t>());
-                        } else {
 #ifdef USE_CUDF
+                        } else {
                             auto empty_se = make_stream_and_event(g_use_async);
                             x.stream_event->event.wait(empty_se->stream);
                             batch = GPU_DATA(make_empty_like(x.table, empty_se),

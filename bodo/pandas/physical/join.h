@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <algorithm>
@@ -65,6 +64,46 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
     }
 
+    static bool extractKeys(duckdb::vector<duckdb::JoinCondition>& conditions,
+                            std::vector<uint64_t>& left_keys,
+                            std::vector<uint64_t>& right_keys,
+                            std::map<std::pair<duckdb::idx_t, duckdb::idx_t>,
+                                     size_t>& left_col_ref_map,
+                            std::map<std::pair<duckdb::idx_t, duckdb::idx_t>,
+                                     size_t>& right_col_ref_map) {
+        bool has_non_equi_cond = false;
+        // Check conditions and add key columns
+        for (const duckdb::JoinCondition& cond : conditions) {
+            if (cond.IsComparison() &&
+                cond.GetComparisonType() ==
+                    bododuckdb::ExpressionType::COMPARE_EQUAL) {
+                if (cond.GetLHS().GetExpressionClass() !=
+                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Join condition left side is not a column reference.");
+                }
+                if (cond.GetRHS().GetExpressionClass() !=
+                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Join condition right side is not a column reference.");
+                }
+                auto& left_bce =
+                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
+                auto& right_bce =
+                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
+                left_keys.push_back(
+                    left_col_ref_map[{left_bce.binding.table_index,
+                                      left_bce.binding.column_index}]);
+                right_keys.push_back(
+                    right_col_ref_map[{right_bce.binding.table_index,
+                                       right_bce.binding.column_index}]);
+            } else {
+                has_non_equi_cond = true;
+            }
+        }
+        return has_non_equi_cond;
+    }
+
     void buildProbeSchemas(
         duckdb::LogicalComparisonJoin& logical_join,
         duckdb::vector<duckdb::JoinCondition>& conditions,
@@ -123,35 +162,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             }
         }
 
-        // Check conditions and add key columns
-        for (const duckdb::JoinCondition& cond : conditions) {
-            if (cond.IsComparison() &&
-                cond.GetComparisonType() ==
-                    bododuckdb::ExpressionType::COMPARE_EQUAL) {
-                if (cond.GetLHS().GetExpressionClass() !=
-                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                    throw std::runtime_error(
-                        "Join condition left side is not a column reference.");
-                }
-                if (cond.GetRHS().GetExpressionClass() !=
-                    duckdb::ExpressionClass::BOUND_COLUMN_REF) {
-                    throw std::runtime_error(
-                        "Join condition right side is not a column reference.");
-                }
-                auto& left_bce =
-                    cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
-                auto& right_bce =
-                    cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
-                this->left_keys.push_back(
-                    left_col_ref_map[{left_bce.binding.table_index,
-                                      left_bce.binding.column_index}]);
-                this->right_keys.push_back(
-                    right_col_ref_map[{right_bce.binding.table_index,
-                                       right_bce.binding.column_index}]);
-            } else {
-                has_non_equi_cond = true;
-            }
-        }
+        has_non_equi_cond =
+            PhysicalJoin::extractKeys(conditions, left_keys, right_keys,
+                                      left_col_ref_map, right_col_ref_map);
 
         size_t n_build_cols = build_table_schema->ncols();
         size_t n_probe_cols = probe_table_schema->ncols();
@@ -645,7 +658,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    private:
     /**
      * @brief  Initialize mapping of output column orders to reorder keys that
-     * were moved to the beginning of of build/probe tables to match streaming
+     * were moved to the beginning of build/probe tables to match streaming
      * join APIs. See
      * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L746
      * @param col_inds output mapping to fill
@@ -658,12 +671,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::vector<uint64_t>& col_inds, const std::vector<uint64_t>& keys,
         uint64_t ncols, const std::set<int64_t>& bound_inds,
         const std::vector<int64_t>& col_inds_rev) {
-        // Map key column index to its position in keys vector
-        std::unordered_map<uint64_t, size_t> key_positions;
-        for (size_t i = 0; i < keys.size(); ++i) {
-            key_positions[keys[i]] = i;
-        }
-
         for (uint64_t i = 0; i < ncols; i++) {
             if (bound_inds.find(i) == bound_inds.end()) {
                 continue;
