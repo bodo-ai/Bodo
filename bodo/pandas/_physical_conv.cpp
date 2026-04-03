@@ -19,7 +19,7 @@
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
 #include "physical/gpu_union_all.h"
-#endif // USE_CUDF
+#endif  // USE_CUDF
 #include "physical/join.h"
 #include "physical/join_filter.h"
 #include "physical/limit.h"
