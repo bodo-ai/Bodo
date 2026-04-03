@@ -162,7 +162,7 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_LIMIT:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalLimit>());
 
             case duckdb::LogicalOperatorType::LOGICAL_TOP_N:
                 return false;
