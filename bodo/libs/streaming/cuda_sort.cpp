@@ -41,7 +41,6 @@ void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
 
 bool CudaSortState::FinalizeAccumulation(bool local_is_last) {
     if (state == State::ACCUMULATING && local_is_last) {
-        // Perform PSRS on the accumulated data
         ExecutePsrs(cudf::get_default_stream());
         state = State::SHUFFLING;
     }
@@ -70,6 +69,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     }
 
     // Concatenate all accumulated batches
+    // and sort by the keys
     std::shared_ptr<cudf::table> local_table;
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
@@ -79,7 +79,6 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         local_table = cudf::concatenate(views, stream);
         accumulation_buffer.clear();
 
-        // Local Sort
         local_table = cudf::sort_by_key(local_table->view(),
                                         local_table->select(key_indices),
                                         column_order, null_precedence, stream);
@@ -98,12 +97,11 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
     MPI_Comm_rank(comm, &rank);
 
     // Regular Sampling
-    size_t n = local_table ? local_table->num_rows() : 0;
     std::vector<cudf::size_type> sample_indices;
-    for (int i = 0; i < n_ranks; ++i) {
-        if (n > 0) {
-            sample_indices.push_back(
-                static_cast<cudf::size_type>(i * n / n_ranks));
+    if (local_table) {
+        for (int i = 0; i < n_ranks; ++i) {
+            sample_indices.push_back(static_cast<cudf::size_type>(
+                i * local_table->num_rows() / n_ranks));
         }
     }
 
@@ -275,7 +273,7 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         }
     }
 
-    // 6. Start Shuffle
+    // Start Shuffle
     auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
     se->event.record(stream);
     shuffle_manager.append_batch(std::move(local_table),

@@ -154,13 +154,6 @@ std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
     auto packed_tables =
         cudf::contiguous_split(info.table->view(), info.split_indices, stream,
                                get_cuda_memory_resource_ref());
-    int rank;
-    MPI_Comm_rank(mpi_comm, &rank);
-    std::cout << "Rank " << rank << " Packed table sizes: ";
-    for (const auto& pt : packed_tables) {
-        std::cout << pt.table.num_rows() << " ";
-    }
-    std::cout << std::endl;
     return packed_tables;
 }
 
