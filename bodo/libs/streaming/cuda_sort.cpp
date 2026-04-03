@@ -250,6 +250,8 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
                                    d_splits->view().head<cudf::size_type>(),
                                    d_splits->size() * sizeof(cudf::size_type),
                                    cudaMemcpyDeviceToHost, stream.value()));
+        // Ensure split_indices are ready on host before using them
+        CHECK_CUDA(cudaStreamSynchronize(stream.value()));
     } else {
         // Fallback for single rank or no pivots
         for (int i = 1; i < n_ranks; i++) {
@@ -258,10 +260,11 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         }
     }
 
-    //  Start Shuffle
-    shuffle_manager.append_batch(
-        std::move(local_table), std::move(split_indices),
-        std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper()));
+    // 6. Start Shuffle
+    auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
+    se->event.record(stream);
+    shuffle_manager.append_batch(std::move(local_table),
+                                 std::move(split_indices), se);
 }
 
 std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
