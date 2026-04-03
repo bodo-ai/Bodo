@@ -98,12 +98,21 @@ static bodo::tests::suite cuda_sort_tests([] {
 
             CudaSortState sort_state(schema, key_indices, column_order,
                                      null_precedence);
+            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
+
+            if (gpu_comm == MPI_COMM_NULL) {
+                return;
+            }
+
+            int gpu_rank, n_gpu_ranks;
+            MPI_Comm_rank(gpu_comm, &gpu_rank);
+            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
 
             // Data: unsorted
             std::vector<int64_t> vals;
-            if (rank == 0) {
+            if (gpu_rank == 0) {
                 vals = {50, 10, 80, 30};
-            } else if (rank == 1 % n_ranks) {
+            } else if (gpu_rank == 1 % n_gpu_ranks) {
                 vals = {20, 70, 40, 60};
             }
 
@@ -127,13 +136,13 @@ static bodo::tests::suite cuda_sort_tests([] {
             int local_rows = output->num_rows();
             int total_rows = 0;
             CHECK_MPI(MPI_Allreduce(&local_rows, &total_rows, 1, MPI_INT,
-                                    MPI_SUM, MPI_COMM_WORLD),
+                                    MPI_SUM, gpu_comm),
                       "MPI_Allreduce failed");
 
             int expected_total = 0;
             int local_input_rows = static_cast<int>(vals.size());
             CHECK_MPI(MPI_Allreduce(&local_input_rows, &expected_total, 1,
-                                    MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+                                    MPI_INT, MPI_SUM, gpu_comm),
                       "MPI_Allreduce failed");
 
             bodo::tests::check(total_rows == expected_total);
@@ -161,19 +170,18 @@ static bodo::tests::suite cuda_sort_tests([] {
                                     ? h_output[local_rows - 1]
                                     : std::numeric_limits<int64_t>::min();
 
-            std::vector<int64_t> all_mins(n_ranks);
-            std::vector<int64_t> all_maxes(n_ranks);
+            std::vector<int64_t> all_mins(n_gpu_ranks);
+            std::vector<int64_t> all_maxes(n_gpu_ranks);
 
             CHECK_MPI(MPI_Allgather(&local_min, 1, MPI_INT64_T, all_mins.data(),
-                                    1, MPI_INT64_T, MPI_COMM_WORLD),
+                                    1, MPI_INT64_T, gpu_comm),
                       "MPI_Allgather failed");
-            CHECK_MPI(
-                MPI_Allgather(&local_max, 1, MPI_INT64_T, all_maxes.data(), 1,
-                              MPI_INT64_T, MPI_COMM_WORLD),
-                "MPI_Allgather failed");
+            CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T,
+                                    all_maxes.data(), 1, MPI_INT64_T, gpu_comm),
+                      "MPI_Allgather failed");
 
             int last_rank_with_data = -1;
-            for (int r = 0; r < n_ranks; ++r) {
+            for (int r = 0; r < n_gpu_ranks; ++r) {
                 if (all_mins[r] == std::numeric_limits<int64_t>::max())
                     continue;
 
@@ -217,13 +225,22 @@ static bodo::tests::suite cuda_sort_tests([] {
 
             CudaSortState sort_state(schema, key_indices, column_order,
                                      null_precedence);
+            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
+
+            if (gpu_comm == MPI_COMM_NULL) {
+                return;
+            }
+
+            int gpu_rank, n_gpu_ranks;
+            MPI_Comm_rank(gpu_comm, &gpu_rank);
+            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
 
             std::vector<int64_t> vals;
             std::vector<uint8_t> mask_bytes = {0b00001010};
             int null_count = 2;
-            if (rank == 0) {
+            if (gpu_rank == 0) {
                 vals = {0, 50, 0, 10};
-            } else if (rank == 1 % n_ranks) {
+            } else if (gpu_rank == 1 % n_gpu_ranks) {
                 vals = {80, 0, 30, 0};
             } else {
                 mask_bytes = {0b00000000};
@@ -251,10 +268,11 @@ static bodo::tests::suite cuda_sort_tests([] {
             int total_nulls = 0;
             int local_nulls = output->get_column(0).null_count();
             CHECK_MPI(MPI_Allreduce(&local_nulls, &total_nulls, 1, MPI_INT,
-                                    MPI_SUM, MPI_COMM_WORLD),
+                                    MPI_SUM, gpu_comm),
                       "MPI_Allreduce failed");
 
-            int expected_nulls = (n_ranks >= 2) ? 4 : (n_ranks == 1 ? 2 : 0);
+            int expected_nulls =
+                (n_gpu_ranks >= 2) ? 4 : (n_gpu_ranks == 1 ? 2 : 0);
             bodo::tests::check(total_nulls == expected_nulls);
 
             if (local_rows > 0) {
@@ -295,11 +313,20 @@ static bodo::tests::suite cuda_sort_tests([] {
 
             CudaSortState sort_state(schema, key_indices, column_order,
                                      null_precedence);
+            MPI_Comm gpu_comm = sort_state.get_mpi_comm();
+
+            if (gpu_comm == MPI_COMM_NULL) {
+                return;
+            }
+
+            int gpu_rank, n_gpu_ranks;
+            MPI_Comm_rank(gpu_comm, &gpu_rank);
+            MPI_Comm_size(gpu_comm, &n_gpu_ranks);
 
             std::vector<int64_t> vals;
-            if (rank == 0) {
+            if (gpu_rank == 0) {
                 vals = {10, 50, 30, 80};
-            } else if (rank == 1 % n_ranks) {
+            } else if (gpu_rank == 1 % n_gpu_ranks) {
                 vals = {60, 40, 70, 20};
             }
 
@@ -336,18 +363,17 @@ static bodo::tests::suite cuda_sort_tests([] {
                                     ? h_output[0]
                                     : std::numeric_limits<int64_t>::min();
 
-            std::vector<int64_t> all_mins(n_ranks);
-            std::vector<int64_t> all_maxes(n_ranks);
+            std::vector<int64_t> all_mins(n_gpu_ranks);
+            std::vector<int64_t> all_maxes(n_gpu_ranks);
             CHECK_MPI(MPI_Allgather(&local_min, 1, MPI_INT64_T, all_mins.data(),
-                                    1, MPI_INT64_T, MPI_COMM_WORLD),
+                                    1, MPI_INT64_T, gpu_comm),
                       "MPI_Allgather failed");
-            CHECK_MPI(
-                MPI_Allgather(&local_max, 1, MPI_INT64_T, all_maxes.data(), 1,
-                              MPI_INT64_T, MPI_COMM_WORLD),
-                "MPI_Allgather failed");
+            CHECK_MPI(MPI_Allgather(&local_max, 1, MPI_INT64_T,
+                                    all_maxes.data(), 1, MPI_INT64_T, gpu_comm),
+                      "MPI_Allgather failed");
 
             int last_rank_with_data = -1;
-            for (int r = 0; r < n_ranks; ++r) {
+            for (int r = 0; r < n_gpu_ranks; ++r) {
                 if (all_maxes[r] == std::numeric_limits<int64_t>::min())
                     continue;
                 if (last_rank_with_data != -1) {

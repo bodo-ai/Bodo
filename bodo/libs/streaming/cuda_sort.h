@@ -43,6 +43,12 @@ class CudaSortState {
     std::unique_ptr<cudf::table> GetOutputBatch(bool& out_is_last,
                                                 rmm::cuda_stream_view stream);
 
+    /**
+     * @brief Get the underlying MPI communicator.
+     * @return MPI_Comm
+     */
+    MPI_Comm get_mpi_comm() { return shuffle_manager.get_mpi_comm(); }
+
    private:
     std::shared_ptr<bodo::Schema> schema;
     std::shared_ptr<arrow::Schema> key_schema;
