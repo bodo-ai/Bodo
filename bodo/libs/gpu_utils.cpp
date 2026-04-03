@@ -160,6 +160,8 @@ std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
     for (const auto& pt : packed_tables) {
         std::cout << pt.table.num_rows() << " ";
     }
+    std::cout << std::endl;
+    return packed_tables;
 }
 
 void GpuTableManager::do_shuffle() {
