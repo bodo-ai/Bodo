@@ -99,7 +99,7 @@ std::shared_ptr<CudfBloomFilter> build_empty_bloom_filter(
 
     // allocate bitset words
     std::size_t words = (bf->m_bits + 63) / 64;
-    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
+    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream, get_cuda_memory_resource_ref());
     // zero initialize
     CUDA_TRY(cudaMemsetAsync(bf->bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
     return bf;
