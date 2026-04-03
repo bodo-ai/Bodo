@@ -18,6 +18,7 @@
 #include "physical/gpu_join_filter.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_union_all.h"
 #endif  // USE_CUDF
 #include "physical/join.h"
 #include "physical/join_filter.h"
@@ -541,7 +542,6 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
         ret.push_back(index_of(probe_new, in_probe_orig));
     }
     uint64_t base = probe_new.size();
-    // uint64_t base = ret.size();
     for (auto& in_build_orig : build_orig) {
         ret.push_back(base + index_of(build_new, in_build_orig));
     }
@@ -967,10 +967,31 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();
             ::arrow::Schema rhs_arrow = *(rhs_table_schema->ToArrowSchema());
 
+            std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
+            std::variant<std::shared_ptr<PhysicalUnionAll>,
+                         std::shared_ptr<PhysicalGPUUnionAll>>
+                physical_union_all;
+            if (node_run_on_gpu(op)) {
+                physical_union_all =
+                    std::make_shared<PhysicalGPUUnionAll>(rhs_table_schema);
+            } else {
+                physical_union_all =
+                    std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+            }
+
+            std::visit(
+                [&](auto& vop) {
+                    done_pipeline = rhs_builder.active_pipeline->Build(vop);
+                },
+                physical_union_all);
+
+#else   // USE_CUDF
             auto physical_union_all =
                 std::make_shared<PhysicalUnionAll>(rhs_table_schema);
-            std::shared_ptr<Pipeline> done_pipeline =
+            done_pipeline =
                 rhs_builder.active_pipeline->Build(physical_union_all);
+#endif  // USE_CUDF
 
             // Left-child will feed into the same table.
             this->Visit(*op.children[0]);
@@ -984,7 +1005,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                     lhs_arrow.ToString() + " versus " + rhs_arrow.ToString());
             }
 
+#ifdef USE_CUDF
+            std::visit(
+                [&](auto& vop) { this->active_pipeline->AddOperator(vop); },
+                physical_union_all);
+#else
             this->active_pipeline->AddOperator(physical_union_all);
+#endif
             this->active_pipeline->addRunBefore(done_pipeline);
         } else {
             throw std::runtime_error(

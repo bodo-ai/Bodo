@@ -498,12 +498,22 @@ void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
 /**
  * @brief Get a cuda asynchronous memory resource instance.
  *
- * NOTE: This function must be called after a rank's device id is set.
+ * @note This function must be called after a rank's device id is set.
  *
  * @return std::shared_ptr<rmm::mr::device_memory_resource>
  */
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
+
+/**
+ * @brief Get a static Cuda memory resource reference for allocating buffers for
+ * MPI to enable GPU Direct paths.
+ *
+ * @note Device id must remain the same for all calls.
+ *
+ * @return rmm::device_async_resource_ref
+ */
+rmm::device_async_resource_ref get_cuda_memory_resource_ref();
 
 /**
  * @brief Get a device_uvector containing an iota sequence from 0 to n-1.
