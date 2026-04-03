@@ -188,6 +188,15 @@ void run_cuda_sort_test(
                             MPI_INT64_T, gpu_comm),
               "MPI_Allgather failed");
 
+    std::cout << "All mins: ";
+    for (const auto& m : all_mins) {
+        std::cout << m << " ";
+    }
+    std::cout << "\nAll maxes: ";
+    for (const auto& m : all_maxes) {
+        std::cout << m << " ";
+    }
+
     int last_rank_with_data = -1;
     for (int r = 0; r < n_gpu_ranks; ++r) {
         if (ascending) {
