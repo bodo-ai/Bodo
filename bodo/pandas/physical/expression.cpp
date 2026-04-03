@@ -119,22 +119,20 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
  * @brief Change nulls in arrow Datum to given val.
  *
  */
-arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
+arrow::Datum fill_null(arrow::Datum& src, const arrow::Datum& val) {
     if (src.is_array() || src.is_chunked_array()) {
         auto mask_result = arrow::compute::IsNull(src);
         if (!mask_result.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
-                mask_result.status().message());
+            throw std::runtime_error("fill_null: Error in Arrow compute: " +
+                                     mask_result.status().message());
         }
         arrow::Datum mask = mask_result.ValueOrDie();
 
         arrow::Result<arrow::Datum> src_res =
             arrow::compute::ReplaceWithMask(src, mask, val);
         if (!src_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
-                src_res.status().message());
+            throw std::runtime_error("fill_null: Error in Arrow compute: " +
+                                     src_res.status().message());
         }
         return src_res.ValueOrDie();
     } else if (src.is_scalar()) {
@@ -569,12 +567,21 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // processed first and then the resulting Bodo Physical expression
             // subtrees are combined with the expression sub-type (e.g., equal,
             // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
+            int left_child = 0;
+            int right_child = 1;
+            // With short-circuit evaluation, make expensive bound_function
+            // operators be on the right side.
+            if (bce.children[0]->GetExpressionClass() ==
+                duckdb::ExpressionClass::BOUND_FUNCTION) {
+                left_child = 1;
+                right_child = 0;
+            }
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce.children[0], col_ref_map,
+                    buildPhysicalExprTree(bce.children[left_child], col_ref_map,
                                           no_scalars),
-                    buildPhysicalExprTree(bce.children[1], col_ref_map,
-                                          no_scalars),
+                    buildPhysicalExprTree(bce.children[right_child],
+                                          col_ref_map, no_scalars),
                     expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_OPERATOR: {
