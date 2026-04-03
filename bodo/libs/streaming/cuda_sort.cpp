@@ -90,6 +90,9 @@ void CudaSortState::ExecutePsrs(rmm::cuda_stream_view stream) {
         MPI_Comm_rank(shuffle_manager.get_mpi_comm(), &rank);
         std::cout << "local table Rank " << rank << std::endl;
         std::cout << local_arrow_table->ToString() << std::endl;
+    } else {
+        local_table =
+            empty_table_from_arrow_schema(this->schema->ToArrowSchema());
     }
 
     MPI_Comm comm = shuffle_manager.get_mpi_comm();
